@@ -1,0 +1,287 @@
+Rebuild and optimize the entire Invoice & Billing system into a premium enterprise-grade invoicing platform with advanced permissions, real-time sync, WhatsApp integration, mobile-first UI/UX, branch management, and production-ready architecture.
+
+Main Goal:
+Merge Branches + Dashboard inside the Invoice & Billing module and redesign the complete system with next-level modern UI/UX, real-time syncing, advanced permissions, and mobile optimization.
+
+Current Problems:
+- Branches section separate and confusing
+- Dashboard separate from Invoice & Billing
+- Permissions are NOT working correctly
+- User permissions are assigned but access control fails
+- Missing advanced permissions
+- No real-time branch/database sync
+- Product data not syncing properly
+- Stock sync missing
+- Mobile invoice interface weak
+- UI/UX outdated and not smooth
+- Invoice system not optimized for mobile usage
+- No WhatsApp invoice sharing
+- Backend sync architecture weak
+
+========================
+1. MERGE BRANCHES + DASHBOARD INTO INVOICE & BILLING
+========================
+
+Restructure the system architecture.
+
+Requirements:
+- Merge Dashboard inside Invoice & Billing
+- Merge Branch Management inside Invoice & Billing
+- Create a centralized Invoice ERP module
+- Sidebar structure should feel modern and organized
+
+New Structure:
+Invoice & Billing
+ ├── Dashboard
+ ├── All Invoices
+ ├── Create Invoice
+ ├── Customers
+ ├── Products
+ ├── Stock
+ ├── Branches
+ ├── Staff
+ ├── Reports
+ ├── Payments
+ ├── WhatsApp
+ ├── Settings
+
+Branch switching should happen inside Invoice & Billing only.
+
+========================
+2. FIX PERMISSION SYSTEM COMPLETELY
+========================
+
+Current permission system is broken.
+
+Problem:
+When permissions are assigned to users/staff, they do NOT work properly.
+
+Fix:
+- Rebuild permission middleware
+- Add proper backend validation
+- Add frontend permission guards
+- Ensure permission checks happen on every route/API
+- Ensure restricted users cannot access unauthorized sections
+
+Create advanced RBAC system:
+- Super Admin
+- Branch Admin
+- Manager
+- Cashier
+- Staff
+- Custom Roles
+
+========================
+3. ADVANCED PERMISSIONS
+========================
+
+Add MANY MORE permissions.
+
+Permission categories:
+- Invoice Create
+- Invoice Edit
+- Invoice Delete
+- Invoice Print
+- Invoice Refund
+- Discounts
+- Returns
+- Customer Create/Edit/Delete
+- Product Create/Edit/Delete
+- Stock Management
+- Branch Management
+- Staff Management
+- Reports Access
+- Sales Analytics
+- WhatsApp Send
+- Sync Management
+- Settings Access
+- Payment Management
+- Order Management
+- Export Data
+- Import Data
+
+Requirements:
+- Permission grouping
+- Search permissions
+- Toggle-based permissions
+- Dynamic role templates
+- Branch-specific permissions
+- Real-time permission updates
+
+========================
+4. REAL-TIME DATA SYNC SYSTEM
+========================
+
+Create full real-time syncing architecture.
+
+Requirements:
+- Branch data sync
+- Product sync
+- Stock sync
+- Customer sync
+- Invoice sync
+- Payment sync
+
+Database sync requirements:
+- Real-time database updates
+- Background sync service
+- Auto retry failed syncs
+- Offline-safe syncing
+- Conflict resolution
+- Sync status indicators
+- Last sync time
+- Manual sync button
+- Auto background sync
+
+System must:
+- Sync continuously in background
+- Work in production
+- Work across all branches
+- Update UI instantly
+
+========================
+5. PRODUCT & STOCK SYNC
+========================
+
+All products and stock must sync properly.
+
+Requirements:
+- Auto import all products
+- Sync product names
+- Sync stock quantities
+- Sync SKU/barcodes
+- Sync pricing
+- Sync branch inventory
+- Real-time stock updates
+- Auto stock deduction after invoice
+
+Ensure:
+- Database always updated
+- No duplicate products
+- Fast product search
+- Product cache optimization
+
+========================
+6. WHATSAPP INTEGRATION
+========================
+
+Add WhatsApp invoice system.
+
+Requirements:
+- Send invoice directly to WhatsApp
+- Share PDF invoice
+- Share payment link
+- WhatsApp order confirmation
+- WhatsApp delivery updates
+- WhatsApp invoice reminders
+
+Add:
+- One-click WhatsApp button
+- Auto customer number detection
+- Custom WhatsApp templates
+- WhatsApp Business API support
+
+========================
+7. NEXT-LEVEL UI/UX REDESIGN
+========================
+
+Completely redesign UI/UX.
+
+Design style should feel like:
+- Shopify POS
+- Zoho Books
+- Enterprise ERP systems
+- Premium SaaS dashboards
+
+Requirements:
+- Ultra smooth UI
+- Modern cards
+- Premium typography
+- Better spacing
+- Professional colors
+- Smooth animations
+- Fast loading
+- Responsive layout
+- Premium tables
+- Modern modals
+- Beautiful forms
+- Sticky actions
+- Floating controls
+- Smooth transitions
+
+========================
+8. MOBILE-FIRST INVOICE UI
+========================
+
+Create mobile-optimized invoice experience.
+
+Requirements:
+- Invoice UI should feel like a real mobile app
+- Smooth mobile navigation
+- Touch-friendly controls
+- Responsive invoice layout
+- Fast mobile performance
+- Sticky mobile action buttons
+- Swipe actions
+- Mobile invoice preview
+- Mobile product search
+- Mobile barcode support
+- Mobile-friendly tables
+
+Mobile UI must:
+- Feel premium
+- Work smoothly on low-end Android devices
+- Be optimized for shopkeepers/cashiers
+
+========================
+9. PERFORMANCE & OPTIMIZATION
+========================
+
+Requirements:
+- Optimize backend queries
+- Reduce API calls
+- Use caching properly
+- Optimize real-time listeners
+- Reduce UI lag
+- Fast invoice rendering
+- Fast product search
+- Scalable architecture
+
+========================
+10. PRODUCTION READY
+========================
+
+Requirements:
+- Production-safe backend
+- Stable sync architecture
+- Secure APIs
+- Proper error handling
+- Logging system
+- Background job processing
+- Secure authentication
+- Optimized database structure
+
+========================
+11. FINAL DELIVERABLES
+========================
+
+Deliver:
+- Fully rebuilt Invoice & Billing system
+- Merged Dashboard + Branch architecture
+- Working advanced permissions
+- Real-time sync system
+- WhatsApp invoice system
+- Mobile-first UI/UX
+- Premium enterprise dashboard
+- Product + stock syncing
+- Production-ready architecture
+- Fast and scalable system
+
+Important:
+- Do not use temporary fixes
+- Fix root causes properly
+- Ensure permissions work perfectly
+- Ensure real-time sync is stable
+- Ensure UI feels premium and modern
+- Ensure mobile performance is excellent
+- Keep code modular and scalable

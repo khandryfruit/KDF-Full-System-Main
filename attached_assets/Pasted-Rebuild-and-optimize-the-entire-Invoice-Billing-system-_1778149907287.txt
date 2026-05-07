@@ -1,0 +1,348 @@
+Rebuild and optimize the entire Invoice & Billing system into a premium enterprise-grade invoicing, return management, stock, and branch management platform with advanced permissions, real-time sync, WhatsApp integration, mobile-first UI/UX, and production-ready architecture.
+
+Main Goal:
+Create ONE centralized smart ERP-style Invoice & Billing system where everything is merged together in a single smooth workflow.
+
+Merge Together:
+- Dashboard
+- Branches
+- Invoice Management
+- Returns
+- Products
+- Stock
+- Payments
+- Customers
+- Staff
+- Reports
+- WhatsApp
+- Analytics
+- Sync Center
+
+The system should feel like:
+- Shopify POS
+- Zoho Books
+- Oracle ERP
+- Modern SaaS Billing Systems
+
+========================
+1. CENTRALIZED ERP STRUCTURE
+========================
+
+Create ONE unified Invoice & Billing module.
+
+New Sidebar Structure:
+Invoice & Billing
+ ├── Dashboard
+ ├── Create Invoice
+ ├── All Invoices
+ ├── Edit Invoice
+ ├── Returns & Exchanges
+ ├── Customers
+ ├── Products
+ ├── Inventory & Stock
+ ├── Payments
+ ├── Branches
+ ├── Staff
+ ├── Reports
+ ├── Analytics
+ ├── WhatsApp Center
+ ├── Sync Center
+ ├── Settings
+
+Everything should work from ONE place with smooth workflow.
+
+========================
+2. RETURN & EXCHANGE SYSTEM
+========================
+
+Add complete Return & Exchange Management.
+
+Requirements:
+- Full return invoice system
+- Partial return support
+- Full return support
+- Exchange product support
+- Refund handling
+- Store credit support
+- Return reason tracking
+- Return approval workflow
+- Return history
+- Return analytics
+
+Add:
+- Return button inside invoice
+- Quick exchange flow
+- Auto stock adjustment
+- Auto payment adjustment
+- Auto customer balance update
+
+Return statuses:
+- Pending
+- Approved
+- Rejected
+- Refunded
+- Exchanged
+
+========================
+3. EDIT INVOICE SYSTEM
+========================
+
+Add powerful Edit Invoice functionality.
+
+Requirements:
+- Edit existing invoices
+- Update products
+- Change quantities
+- Apply/remove discounts
+- Change payment method
+- Update customer
+- Add/remove items
+- Update taxes
+- Recalculate totals automatically
+
+Security:
+- Permission-based editing
+- Edit history logs
+- Audit tracking
+- Approval workflow for edits
+
+========================
+4. ADVANCED INVOICE FEATURES
+========================
+
+Add premium invoicing features.
+
+Requirements:
+- Draft invoices
+- Saved carts
+- Hold invoices
+- Duplicate invoice
+- Quick invoice
+- Barcode scanning
+- Product search
+- Customer history
+- Split payments
+- Multiple payment methods
+- Discount coupons
+- Tax handling
+- Receipt printing
+- Thermal printer support
+- PDF invoice export
+- Invoice notes
+- Delivery notes
+- Due payments
+- Partial payments
+
+========================
+5. SMART ACTION SYSTEM
+========================
+
+Add quick action buttons everywhere.
+
+Invoice actions:
+- Print
+- WhatsApp
+- Download PDF
+- Return
+- Exchange
+- Duplicate
+- Edit
+- Share
+- Refund
+- Track
+- Add payment
+
+Requirements:
+- Floating action menus
+- Smooth action animations
+- Mobile swipe actions
+- Fast workflows
+
+========================
+6. REAL-TIME DATA SYNC SYSTEM
+========================
+
+Create full real-time syncing architecture.
+
+Requirements:
+- Branch data sync
+- Product sync
+- Stock sync
+- Customer sync
+- Invoice sync
+- Payment sync
+- Return sync
+
+Database sync requirements:
+- Real-time database updates
+- Background sync service
+- Auto retry failed syncs
+- Offline-safe syncing
+- Conflict resolution
+- Sync status indicators
+- Last sync time
+- Manual sync button
+- Auto background sync
+
+========================
+7. ADVANCED PERMISSIONS
+========================
+
+Fix and rebuild permission system properly.
+
+Current issue:
+Permissions are assigned but NOT working correctly.
+
+Fix:
+- Backend permission middleware
+- Frontend access guards
+- Route protection
+- API protection
+- Dynamic permission checks
+
+Add permissions for:
+- Invoice Create/Edit/Delete
+- Returns
+- Exchanges
+- Discounts
+- Refunds
+- Product Management
+- Stock Management
+- Branch Management
+- Staff Management
+- Reports
+- WhatsApp
+- Payments
+- Analytics
+- Sync Management
+
+========================
+8. PRODUCT & STOCK MANAGEMENT
+========================
+
+Requirements:
+- Real-time stock updates
+- Product sync
+- Stock alerts
+- Low stock warnings
+- Barcode support
+- SKU management
+- Branch inventory
+- Product variants
+- Product categories
+- Fast product search
+- Bulk product import/export
+
+========================
+9. WHATSAPP INTEGRATION
+========================
+
+Add WhatsApp Business integration.
+
+Requirements:
+- Send invoice on WhatsApp
+- Send PDF invoices
+- Send payment reminders
+- Send order updates
+- Send return updates
+- Auto customer number detection
+- WhatsApp templates
+- WhatsApp Business API support
+
+========================
+10. NEXT-LEVEL UI/UX REDESIGN
+========================
+
+Completely redesign UI/UX.
+
+Requirements:
+- Ultra smooth UI
+- Premium enterprise look
+- Beautiful invoice cards
+- Modern tables
+- Responsive layouts
+- Smooth animations
+- Fast navigation
+- Professional typography
+- Better spacing
+- Premium modals
+- Sticky actions
+- Mobile-first design
+
+========================
+11. MOBILE-FIRST EXPERIENCE
+========================
+
+Create mobile-optimized experience.
+
+Requirements:
+- App-like mobile UI
+- Fast mobile navigation
+- Swipe gestures
+- Sticky action buttons
+- Mobile invoice creation
+- Mobile product search
+- Mobile barcode support
+- Touch-friendly controls
+
+Mobile UI must:
+- Feel premium
+- Work smoothly
+- Be optimized for low-end Android devices
+
+========================
+12. REPORTS & ANALYTICS
+========================
+
+Add enterprise analytics.
+
+Requirements:
+- Sales reports
+- Branch reports
+- Return reports
+- Staff performance
+- Inventory analytics
+- Payment analytics
+- Profit/loss reports
+- Daily/monthly/yearly analytics
+
+========================
+13. PERFORMANCE & PRODUCTION
+========================
+
+Requirements:
+- Fast rendering
+- Optimized queries
+- Proper caching
+- Reduced API calls
+- Scalable backend
+- Secure APIs
+- Production-safe architecture
+- Error logging
+- Background jobs
+
+========================
+14. FINAL DELIVERABLES
+========================
+
+Deliver:
+- Fully centralized Invoice ERP system
+- Returns & Exchange system
+- Edit Invoice system
+- Real-time syncing
+- WhatsApp integration
+- Advanced permissions
+- Premium UI/UX
+- Mobile-first experience
+- Product & stock management
+- Production-ready architecture
+- Fast scalable system
+
+Important:
+- Do not use temporary fixes
+- Fix root causes properly
+- Ensure permissions work correctly
+- Ensure sync works in production
+- Ensure mobile performance is smooth
+- Ensure UI feels modern and enterprise-level
+- Keep architecture scalable and clean
