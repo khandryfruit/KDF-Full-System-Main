@@ -193,6 +193,9 @@ function CustomerPickerSheet({
 /* ═══ POS Tab ═══ */
 function PosTab({ token }: { token: string }) {
   const { toast } = useToast();
+  const { user } = useBranchAuth();
+  const perm = (p: string) => user?.role === "manager" || !!(user?.permissions?.[p]);
+
   const [customer, setCustomer]   = useState<Customer | null | undefined>(undefined); // undefined=not picked, null=walk-in
   const [showPicker, setShowPicker] = useState(false);
   const [items, setItems]         = useState<InvoiceItem[]>([]);
@@ -342,9 +345,11 @@ function PosTab({ token }: { token: string }) {
                 placeholder="Rate/kg"
                 className="h-10 text-sm w-[100px] shrink-0" />
             )}
-            <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
-              placeholder="Disc%"
-              className="h-10 text-sm w-[70px] shrink-0" />
+            {perm("apply_discount") && (
+              <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+                placeholder="Disc%"
+                className="h-10 text-sm w-[70px] shrink-0" />
+            )}
           </div>
           <Button onClick={addItem} className="w-full h-10 gap-2 font-bold">
             <Plus className="w-4 h-4" /> Add Item
@@ -382,11 +387,13 @@ function PosTab({ token }: { token: string }) {
       {items.length > 0 && (
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {/* Discount / Tax / Shipping */}
-          <div className="grid grid-cols-3 gap-2 p-4 border-b border-border">
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Discount %</p>
-              <Input type="number" value={invoiceDiscount || ""} onChange={e => setInvoiceDiscount(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
-            </div>
+          <div className={`grid gap-2 p-4 border-b border-border ${perm("apply_discount") ? "grid-cols-3" : "grid-cols-2"}`}>
+            {perm("apply_discount") && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Discount %</p>
+                <Input type="number" value={invoiceDiscount || ""} onChange={e => setInvoiceDiscount(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+              </div>
+            )}
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Tax %</p>
               <Input type="number" value={taxRate || ""} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
@@ -452,12 +459,16 @@ function PosTab({ token }: { token: string }) {
               <p className="text-[10px] text-muted-foreground">Grand Total</p>
               <p className="font-black text-lg text-primary tabular-nums">{fmtRs(grandTotal)}</p>
             </div>
-            <button onClick={handleWhatsApp} className="p-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
-              <MessageCircle className="w-5 h-5" />
-            </button>
-            <button onClick={handlePrint} className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors">
-              <Printer className="w-5 h-5 text-muted-foreground" />
-            </button>
+            {customer?.phone && (
+              <button onClick={handleWhatsApp} className="p-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors" title="Send WhatsApp">
+                <MessageCircle className="w-5 h-5" />
+              </button>
+            )}
+            {perm("print_invoice") && (
+              <button onClick={handlePrint} className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors" title="Print Invoice">
+                <Printer className="w-5 h-5 text-muted-foreground" />
+              </button>
+            )}
             <Button onClick={handleSave} disabled={saving} className="h-11 px-5 font-bold gap-2 rounded-xl">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save
@@ -1179,6 +1190,9 @@ function HistoryTab({ token }: { token: string }) {
 
 /* ═══ Customers Tab ═══ */
 function CustomersTab({ token }: { token: string }) {
+  const { user } = useBranchAuth();
+  const canAddCustomer = user?.role === "manager" || !!(user?.permissions?.add_customer);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading]     = useState(true);
   const [q, setQ]                 = useState("");
@@ -1216,12 +1230,14 @@ function CustomersTab({ token }: { token: string }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search customers…" className="pl-9 h-10 text-sm" />
         </div>
-        <Button onClick={() => setShowAdd(v => !v)} variant={showAdd ? "default" : "outline"} size="sm" className="h-10 px-3 shrink-0 gap-1.5">
-          <UserPlus className="w-4 h-4" /><span className="hidden sm:inline">Add</span>
-        </Button>
+        {canAddCustomer && (
+          <Button onClick={() => setShowAdd(v => !v)} variant={showAdd ? "default" : "outline"} size="sm" className="h-10 px-3 shrink-0 gap-1.5">
+            <UserPlus className="w-4 h-4" /><span className="hidden sm:inline">Add</span>
+          </Button>
+        )}
       </div>
 
-      {showAdd && (
+      {showAdd && canAddCustomer && (
         <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
           <p className="text-sm font-bold mb-3">New Customer</p>
           <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name *" className="h-10" />
@@ -1334,12 +1350,22 @@ export default function BranchPosPage() {
 
   if (!isAuthenticated || !token) return null;
 
-  const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: "pos",       label: "POS",      icon: Receipt   },
-    { id: "history",   label: "History",  icon: Clock     },
-    { id: "customers", label: "Customers",icon: Users     },
-    { id: "stats",     label: "Stats",    icon: BarChart2 },
+  const isManager = user?.role === "manager";
+  const hasPerm = (p: string) => isManager || !!(user?.permissions?.[p]);
+
+  const allTabs: { id: Tab; label: string; icon: any; perm?: string }[] = [
+    { id: "pos",       label: "POS",      icon: Receipt,  perm: "create_invoice"    },
+    { id: "history",   label: "History",  icon: Clock,    perm: "view_all_invoices" },
+    { id: "customers", label: "Customers",icon: Users                               },
+    { id: "stats",     label: "Stats",    icon: BarChart2,perm: "view_analytics"    },
   ];
+  const tabs = allTabs.filter(t => !t.perm || hasPerm(t.perm));
+
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.find(t => t.id === tab)) {
+      setTab(tabs[0].id);
+    }
+  }, [tabs.map(t => t.id).join(",")]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
