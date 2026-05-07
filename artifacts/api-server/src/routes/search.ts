@@ -6,6 +6,7 @@ const router = Router();
 
 /* ── Synonym / alias map — user input → search terms ── */
 const SYNONYMS: Record<string, string[]> = {
+  // Roman Urdu → English
   badam: ["almond"],
   kaju: ["cashew"],
   pista: ["pistachio"],
@@ -20,10 +21,32 @@ const SYNONYMS: Record<string, string[]> = {
   aarooy: ["apricot"],
   meva: ["dry fruit"],
   mewa: ["dry fruit"],
-  // common misspellings
+  chilgoza: ["pine nut"],
+  "pine nuts": ["pine nut"],
+  "pine nut": ["pine nut"],
+  rewari: ["rewari"],
+  // Urdu script → English
+  "اخروٹ": ["walnut"],
+  "بادام": ["almond"],
+  "کاجو": ["cashew"],
+  "پستہ": ["pistachio"],
+  "کشمش": ["raisin"],
+  "خشک میوہ": ["dry fruit"],
+  "میوہ": ["dry fruit"],
+  "انجیر": ["fig"],
+  "کھجور": ["date"],
+  "مونگ پھلی": ["peanut"],
+  "چلغوزہ": ["pine nut"],
+  "خوبانی": ["apricot"],
+  "اخروٹ گری": ["walnut"],
+  "بادام گری": ["almond"],
+  // Arabic
+  "لوز": ["almond"],
+  "جوز": ["walnut"],
+  // Plural / misspellings
   almonz: ["almond"],
   almonds: ["almond"],
-  "cashews": ["cashew"],
+  cashews: ["cashew"],
   pistachios: ["pistachio"],
   walnuts: ["walnut"],
   raisins: ["raisin"],
@@ -33,7 +56,7 @@ const SYNONYMS: Record<string, string[]> = {
   hazel: ["hazelnut"],
   "dry fruits": ["dry fruit"],
   "dried fruit": ["dry fruit"],
-  "nuts": ["nut"],
+  nuts: ["nut"],
 };
 
 export function expandQuery(q: string): string[] {

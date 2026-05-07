@@ -95,7 +95,7 @@ function buildSystemPrompt(chatbot: any, sameDayInfo = ""): string {
   const toolRules = `
 
 TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
-1. When user asks about ANY product, price, or availability → call search_products IMMEDIATELY. Never answer with product text.
+1. When user asks about ANY product, price, or availability → call search_products IMMEDIATELY with the EXACT product keyword the customer used. Never answer with product text.
 2. When user asks to "show categories", "kya categories hain", or wants to browse → call search_categories IMMEDIATELY. Never list categories as text.
 3. When user says "order karna hai", "buy", "mujhe chahiye", "place order" or clearly wants to buy → call trigger_order_form IMMEDIATELY. Never ask for details via chat.
 4. After calling a tool, reply with 1–2 short natural sentences only. The cards/form appear automatically.
@@ -104,7 +104,13 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 7. Never say you are AI or automated. Use Rs. for prices. If user writes Urdu/Roman Urdu, reply in kind.
 8. When customer mentions ANY product(s) with weight/quantity in one message → call auto_add_to_cart IMMEDIATELY with ALL products in the items array. CRITICAL: If multiple products are mentioned (e.g. "1kg almonds aur 500g pista", "badam aur kaju chahiye"), include ALL of them: items:[{query:"almonds",variantHint:"1kg",qty:1},{query:"pista",variantHint:"500g",qty:1}]. Never omit any mentioned product. Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews, kishmish=raisins, mungphali=peanuts, anjeer=figs, khajoor=dates, chilgoza=pine nuts, moongphali=peanuts.
 9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.
-10. When customer asks for recommendations, best sellers, popular products, viral products, or seems undecided → call get_recommendations IMMEDIATELY. Never list products as text.`;
+10. When customer asks for recommendations, best sellers, popular products, viral products, or seems undecided → call get_recommendations IMMEDIATELY. Never list products as text.
+
+CRITICAL PRODUCT SEARCH RULES:
+- Pass the EXACT product name/keyword to search_products. If customer says "اخروٹ", pass query="اخروٹ". If they say "walnuts", pass query="walnuts". If they say "akhrot", pass query="akhrot".
+- NEVER broaden the search. If customer asks for walnuts, search ONLY "walnuts" — not "nuts" or "dry fruits".
+- The search system automatically handles Urdu↔English translation (اخروٹ=walnuts, بادام=almonds, کاجو=cashews, پستہ=pistachios, کشمش=raisins, خشک میوہ=dry fruits).
+- Results are already filtered to show only the most relevant products. Trust the results shown.`;
 
   const orderInstructions = chatbot.orderingEnabled
     ? `
@@ -293,7 +299,7 @@ router.post("/chat/message", async (req, res) => {
       if (/(recommend|best seller|bestseller|popular|trending|konsa loon|konsa le|kya le|suggest|kya acha|viral|most order|sabse zyada|best quality|top products|popular products|kya popular|kya trending)/i.test(msg)) {
         return { type: "function", function: { name: "get_recommendations" } };
       }
-      if (/(almond|cashew|pistachio|walnut|raisin|peanut|hazelnut|nut|dry fruit|price|kitna|kitne|kya hai|show me|available|stock|rate|product)/i.test(msg)) {
+      if (/(almond|cashew|pistachio|walnut|raisin|peanut|hazelnut|nut|dry fruit|price|kitna|kitne|kya hai|show me|available|stock|rate|product|badam|kaju|pista|akhrot|kishmish|khajoor|anjeer|chilgoza|rewari|گری|اخروٹ|بادام|کاجو|پستہ|کشمش|خشک میوہ)/i.test(msg)) {
         return { type: "function", function: { name: "search_products" } };
       }
       return "auto";
@@ -352,6 +358,8 @@ router.post("/chat/message", async (req, res) => {
               imageUrl: shopifyProductsTable.imageUrl,
               variants: shopifyProductsTable.variants,
               inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+              productType: shopifyProductsTable.productType,
+              tags: shopifyProductsTable.tags,
             })
             .from(shopifyProductsTable)
             .where(and(
@@ -363,13 +371,49 @@ router.post("/chat/message", async (req, res) => {
               )
             ))
             .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-            .limit(10);
+            .limit(18);
 
           if (rows.length > 0) {
+            // Score each product by relevance:
+            // 30 = search term is at the VERY START of title (primary product, e.g. "Walnut Kernels...")
+            // 20 = search term within first 35 chars of title (product is primarily this item)
+            // 10 = search term appears later in title (likely ingredient in "Gift Box - Almonds, Walnuts...")
+            //  5 = product type matches
+            //  1 = tag-only match (lowest priority)
+            const scored = rows.map(p => {
+              const titleLow = p.title.toLowerCase();
+              const typeLow = (p.productType ?? "").toLowerCase();
+              let relevance = 0;
+              for (const t of terms) {
+                const tl = t.toLowerCase();
+                const pos = titleLow.indexOf(tl);
+                if (pos !== -1) {
+                  if (pos === 0) relevance = Math.max(relevance, 30);
+                  else if (pos <= 28) relevance = Math.max(relevance, 20);
+                  else relevance = Math.max(relevance, 10);
+                }
+              }
+              if (relevance === 0) {
+                for (const t of terms) {
+                  if (typeLow.includes(t.toLowerCase())) { relevance = 5; break; }
+                }
+              }
+              if (relevance === 0) relevance = 1;
+              return { ...p, relevance };
+            });
+
+            // If primary matches exist (term in first 35 chars of title), drop all weaker matches
+            const hasPrimaryMatch = scored.some(p => p.relevance >= 20);
+            const filtered = hasPrimaryMatch
+              ? scored.filter(p => p.relevance >= 20)
+              : scored.filter(p => p.relevance >= 5).length > 0
+                ? scored.filter(p => p.relevance >= 5)
+                : scored;
+
             const topSellers = Array.from(sellers.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
-            const ranked = rows
-              .map(p => ({ ...p, score: sellers.get(p.title.toLowerCase()) ?? 0 }))
-              .sort((a, b) => b.score - a.score)
+            const ranked = filtered
+              .map(p => ({ ...p, sellerScore: sellers.get(p.title.toLowerCase()) ?? 0 }))
+              .sort((a, b) => b.relevance - a.relevance || b.sellerScore - a.sellerScore)
               .slice(0, 6);
             foundProducts = ranked.map(p => {
               const vars = (p.variants as any[]) ?? [];
