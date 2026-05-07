@@ -49,6 +49,7 @@ import branchesRouter from "./branches";
 import branchInvoiceRouter from "./branch-invoice";
 import erpSettingsRouter from "./erp-settings";
 import branchStockRouter from "./branch-stock";
+import blogAdsRouter from "./blogAds";
 
 const router: IRouter = Router();
 
@@ -100,6 +101,7 @@ router.use(ridersRouter);
 router.use(ridersPortalRouter);
 router.use(branchesRouter);
 router.use(branchInvoiceRouter);
+router.use(blogAdsRouter);
 router.use("/admin/erp-settings",  erpSettingsRouter);
 router.use("/admin/stock",          branchStockRouter);
 router.use("/branch/stock",         branchStockRouter);

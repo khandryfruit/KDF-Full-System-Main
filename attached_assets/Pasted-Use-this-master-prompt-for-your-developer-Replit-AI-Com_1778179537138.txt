@@ -1,0 +1,299 @@
+Use this master prompt for your developer/Replit AI:
+
+---
+
+Complete Premium Blog Single Page Redesign + SEO + AdSense Integration Required
+
+Current blog single page design is too basic and not optimized for:
+
+* SEO
+* Google ranking
+* AdSense revenue
+* User engagement
+* Professional UI/UX
+
+This must be redesigned into a premium modern blog article experience similar to:
+
+* Medium
+* Healthline
+* HubSpot
+* Shopify Blog
+* Ahrefs Blog
+
+The page must look high-end, smooth, modern, mobile responsive, and optimized for Google search ranking.
+
+━━━━━━━━━━━━━━━━━━━
+
+1. Premium Blog Single Page UI/UX Redesign
+   ━━━━━━━━━━━━━━━━━━━
+
+Completely redesign the blog article page.
+
+Requirements:
+
+* Premium clean layout
+* Better typography hierarchy
+* Proper spacing
+* Luxury reading experience
+* Modern content width
+* Soft shadows
+* Rounded sections
+* Smooth hover animations
+* Sticky elements
+* Reading-focused layout
+
+Use brand colors:
+
+* Green #5FA800
+* Orange #F58300
+
+The article page should instantly look professional and trustworthy.
+
+━━━━━━━━━━━━━━━━━━━
+2. Advanced SEO Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Very Important.
+
+Implement full SEO optimization:
+
+Dynamic:
+
+* Meta title
+* Meta description
+* Meta keywords
+* Canonical URL
+* Open Graph tags
+* Twitter Card tags
+
+Add:
+
+* JSON-LD schema markup
+* Article schema
+* Breadcrumb schema
+* FAQ schema support
+* Author schema
+
+SEO URL structure:
+Example:
+`/blog/10-health-benefits-dry-fruits`
+
+NOT:
+`/blog/12`
+
+Generate dynamic slugs automatically.
+
+━━━━━━━━━━━━━━━━━━━
+3. Sticky Social Share Sidebar
+━━━━━━━━━━━━━━━━━━━
+
+Add beautiful floating social share icons.
+
+When user scrolls:
+
+* Social share bar remains sticky/floating
+* Smooth animation
+* Elegant design
+
+Include:
+
+* Facebook
+* WhatsApp
+* X/Twitter
+* LinkedIn
+* Pinterest
+* Copy Link
+
+Desktop:
+
+* Left side floating
+
+Mobile:
+
+* Bottom sticky share bar
+
+Add:
+
+* Share count
+* Smooth hover effects
+* Modern glassmorphism style
+
+━━━━━━━━━━━━━━━━━━━
+4. AdSense Advertisement System (Important)
+━━━━━━━━━━━━━━━━━━━
+
+Add full Google AdSense placement system in Admin Panel.
+
+Admin must be able to:
+
+* Add ad code
+* Enable/disable ads
+* Control placement
+* Add custom banner ads
+* Add HTML embed ads
+
+Create dynamic ad sections:
+
+A. Top Banner Ad
+Below title/meta
+
+B. In-Content Ads
+Automatically inject ads between paragraphs
+
+C. Sidebar Sticky Ad
+
+D. Bottom Ad Banner
+
+E. Related Posts Ad Area
+
+F. Mobile Sticky Ad
+
+Ads should automatically render beautifully.
+
+Requirements:
+
+* Lazy load ads
+* CLS safe
+* Performance optimized
+* Mobile responsive
+* AdSense policy friendly
+
+━━━━━━━━━━━━━━━━━━━
+5. Premium Article Layout
+━━━━━━━━━━━━━━━━━━━
+
+Add:
+
+* Featured image hero section
+* Reading progress bar
+* Estimated reading time
+* Table of contents
+* Jump links
+* Smooth scrolling
+
+Add stylish:
+
+* Headings
+* Blockquotes
+* Bullet points
+* Info cards
+* Highlight boxes
+
+Typography should feel premium.
+
+━━━━━━━━━━━━━━━━━━━
+6. Related Blog Posts Section
+━━━━━━━━━━━━━━━━━━━
+
+At article bottom add:
+
+* Related articles
+* Trending posts
+* Latest posts
+
+Card design should look modern and engaging.
+
+━━━━━━━━━━━━━━━━━━━
+7. Author Box
+━━━━━━━━━━━━━━━━━━━
+
+Add professional author section:
+
+* Author image
+* Bio
+* Social links
+* Published date
+* Updated date
+
+━━━━━━━━━━━━━━━━━━━
+8. Comment System
+━━━━━━━━━━━━━━━━━━━
+
+Create premium comments section:
+
+* Nested replies
+* Like comments
+* Spam protection
+* Guest commenting
+* Google login optional
+
+━━━━━━━━━━━━━━━━━━━
+9. Performance Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Very Important:
+
+* Fast loading
+* Lazy load images
+* Optimized CSS
+* Optimized JS
+* SEO optimized HTML
+* Accessibility optimized
+* Core Web Vitals optimized
+
+Target:
+
+* 90+ Lighthouse SEO
+* 90+ Performance
+
+━━━━━━━━━━━━━━━━━━━
+10. Mobile Experience
+━━━━━━━━━━━━━━━━━━━
+
+Mobile UI must feel premium:
+
+* Sticky share buttons
+* Responsive typography
+* Proper spacing
+* Optimized ads
+* Smooth scrolling
+* Thumb-friendly design
+
+━━━━━━━━━━━━━━━━━━━
+11. Backend Admin Features
+━━━━━━━━━━━━━━━━━━━
+
+Admin panel should support:
+
+* Add/Edit/Delete blogs
+* Categories
+* Tags
+* Featured image
+* SEO fields
+* Ad management
+* Author management
+* Draft/publish scheduling
+* Rich text editor
+* FAQ sections
+* Internal linking
+
+━━━━━━━━━━━━━━━━━━━
+12. Google Indexing Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Automatically:
+
+* Add blogs to sitemap.xml
+* Generate robots-friendly pages
+* Generate structured metadata
+* Improve crawlability
+
+━━━━━━━━━━━━━━━━━━━
+13. Production Deployment
+━━━━━━━━━━━━━━━━━━━
+
+This is not demo UI.
+
+Deploy directly on LIVE PRODUCTION SERVER.
+
+Requirements:
+
+* Fully tested
+* No layout breaking
+* No CLS issues
+* Fully responsive
+* SEO safe
+* Existing blogs migrate automatically
+
+Goal:
+The blog page should look world-class, highly engaging, SEO optimized, monetizable with AdSense, and premium enough to compete with top modern content websites.

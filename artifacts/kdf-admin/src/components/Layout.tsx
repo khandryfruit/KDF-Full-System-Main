@@ -64,6 +64,7 @@ import {
   HardDrive,
   GitBranch,
   Calculator,
+  DollarSign,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,7 @@ const NAV_ITEMS = [
   { href: "/website-settings",   label: "Website Settings",     icon: Paintbrush     },
   { href: "/abandoned-checkouts",label: "Abandoned Checkouts",  icon: ShoppingBag    },
   { href: "/blog",               label: "Blog / Posts",         icon: BookOpen       },
+  { href: "/adsense",            label: "Blog Ads & Comments",  icon: DollarSign     },
   { href: "/seo",                label: "SEO Settings",         icon: Search         },
   { href: "/announcements",      label: "Announcements",        icon: Megaphone      },
   { href: "/footer",             label: "Footer",               icon: LayoutTemplate },
