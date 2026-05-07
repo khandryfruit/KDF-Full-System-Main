@@ -1,0 +1,211 @@
+2026-05-07T12:51:13Z info: Deployment: f07869f6-70da-42e7-b99a-afaaaf4f0c8f
+2026-05-07T12:51:13Z info: Build: eb45440b-6c80-414b-983a-c927230a19e4
+2026-05-07T12:51:16Z info: Running Security Scan
+2026-05-07T12:52:03Z info: Security Scan Complete
+2026-05-07T12:52:09Z info: Installing packages
+--> pnpm install
+
+Scope: all 15 workspace projects
+
+Lockfile is up to date, resolution step is skipped
+
+
+   ╭─────────────────────────────────────────╮
+   │                                         │
+   │   Update available! 10.33.4 → 11.0.8.   │
+   │   Changelog: https://pnpm.io/v/11.0.8   │
+   │    To update, run: pnpm add -g pnpm     │
+   │                                         │
+   ╰─────────────────────────────────────────╯
+
+
+Already up to date
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+
+. preinstall: Done
+
+Done in 4s using pnpm v10.33.4
+
+2026-05-07T12:52:15Z info: Starting Build
+
+> @workspace/kdf-plus@0.0.0 build /home/runner/workspace/artifacts/kdf-plus
+> vite build --config vite.config.ts
+
+
+vite v7.3.2 building client environment for production...
+
+transforming...
+
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/sheet.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 1887 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                              1.56 kB │ gzip:  0.67 kB
+dist/public/assets/index-CVzRapi6.css             180.06 kB │ gzip: 27.03 kB
+
+dist/public/assets/skeleton-B3gdv0KX.js             0.22 kB │ gzip:  0.19 kB
+dist/public/assets/label-4LJ-Nosn.js                0.37 kB │ gzip:  0.27 kB
+dist/public/assets/separator-BORNjmgz.js            0.40 kB │ gzip:  0.28 kB
+dist/public/assets/input-DdEPI23a.js                0.60 kB │ gzip:  0.38 kB
+dist/public/assets/badge-Baij13gw.js                0.78 kB │ gzip:  0.42 kB
+dist/public/assets/CategoryPage-Cvoniggp.js         2.39 kB │ gzip:  1.11 kB
+dist/public/assets/PolicyPage-C6PVqb-v.js           2.93 kB │ gzip:  1.23 kB
+dist/public/assets/CategoriesPage-wGUaKMWJ.js       3.08 kB │ gzip:  1.31 kB
+dist/public/assets/LoginPage-DEMGy31w.js            3.56 kB │ gzip:  1.55 kB
+dist/public/assets/BlogPage-BdduRU4I.js             4.16 kB │ gzip:  1.64 kB
+dist/public/assets/RegisterPage-OpYOUxAy.js         4.58 kB │ gzip:  1.70 kB
+dist/public/assets/BlogPostPage-DGaNBFz_.js         4.79 kB │ gzip:  1.73 kB
+dist/public/assets/CartPage-CZLpptIJ.js             7.55 kB │ gzip:  2.37 kB
+dist/public/assets/ProductCard-BJ4yLcNA.js          9.69 kB │ gzip:  3.05 kB
+dist/public/assets/TrackOrderPage-D7aSQlMK.js      10.50 kB │ gzip:  3.41 kB
+dist/public/assets/ProductsPage-C5xtjjhq.js        12.70 kB │ gzip:  3.97 kB
+dist/public/assets/icons-B7XI3-_y.js               17.09 kB │ gzip:  6.31 kB
+dist/public/assets/OrderSuccessPage-C8lbrRvt.js    18.17 kB │ gzip:  5.46 kB
+dist/public/assets/CheckoutPage-B7_eM1KB.js        18.76 kB │ gzip:  5.32 kB
+
+dist/public/assets/HomePage-zp2f13s2.js            19.14 kB │ gzip:  5.45 kB
+dist/public/assets/AccountPage-BzOJDMyi.js         24.93 kB │ gzip:  6.29 kB
+dist/public/assets/ProductDetailPage-DAGUPPi4.js   37.26 kB │ gzip: 10.07 kB
+dist/public/assets/query-vendor-BUVTIE8Q.js        38.97 kB │ gzip: 11.63 kB
+dist/public/assets/form-CmvY1m8b.js                56.41 kB │ gzip: 13.40 kB
+dist/public/assets/radix-BG2NSph8.js              119.87 kB │ gzip: 38.25 kB
+dist/public/assets/index-CZtKPlCj.js              134.63 kB │ gzip: 37.77 kB
+dist/public/assets/react-vendor-Btn9Fy8m.js       240.55 kB │ gzip: 77.96 kB
+
+✓ built in 3.72s
+
+
+> @workspace/kdf-admin@0.0.0 build /home/runner/workspace/artifacts/kdf-admin
+> vite build --config vite.config.ts
+
+
+vite v7.3.2 building client environment for production...
+
+transforming...
+
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/sheet.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 2300 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                     0.75 kB │ gzip:   0.41 kB
+dist/public/assets/index-Cs2o7Bq_.css    212.80 kB │ gzip:  30.63 kB
+
+dist/public/assets/index-DvpUnaxr.js   2,501.71 kB │ gzip: 616.79 kB
+
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+✓ built in 7.01s
+
+
+> @workspace/api-server@0.0.0 build /home/runner/workspace/artifacts/api-server
+> node ./build.mjs
+
+
+
+  dist/index.mjs                       6.1mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.1kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                  11.8mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 769ms
+
+
+> @workspace/kdf-admin@0.0.0 build /home/runner/workspace/artifacts/kdf-admin
+> vite build --config vite.config.ts
+
+
+vite v7.3.2 building client environment for production...
+
+transforming...
+
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/sheet.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 2300 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                     0.75 kB │ gzip:   0.41 kB
+dist/public/assets/index-Cs2o7Bq_.css    212.80 kB │ gzip:  30.63 kB
+
+dist/public/assets/index-DvpUnaxr.js   2,501.71 kB │ gzip: 616.79 kB
+
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+✓ built in 6.12s
+
+
+> @workspace/kdf-central@0.0.0 build /home/runner/workspace/artifacts/kdf-central
+> vite build --config vite.config.ts
+
+
+vite v7.3.2 building client environment for production...
+
+transforming...
+
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+src/components/ui/progress.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 2445 modules transformed.
+
+rendering chunks...
+
+computing gzip size...
+
+dist/public/index.html                   0.78 kB │ gzip:   0.44 kB
+
+dist/public/assets/index-D9r8EDcu.css  100.47 kB │ gzip:  16.63 kB
+dist/public/assets/index-CKNhLTcG.js   816.64 kB │ gzip: 237.78 kB
+
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
