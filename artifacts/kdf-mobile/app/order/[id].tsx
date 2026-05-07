@@ -26,7 +26,7 @@ import { PriorityBanner } from "@/components/PriorityTimer";
 const C = colors.light;
 
 /* Production domain for clean invoice URLs */
-const PROD_DOMAIN = "https://khandryfruits.com";
+const PROD_DOMAIN = "https://khanbabadryfruits.com";
 
 const WORKFLOW: Array<{ status: string; label: string; icon: string; color: string }> = [
   { status: "picked",           label: "Picked Up",  icon: "archive",      color: C.statusPicked    },

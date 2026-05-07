@@ -4,11 +4,35 @@ import { sql } from "drizzle-orm";
 
 const router = Router();
 
+/* ── Dynamic domain detection (same logic as social.ts getPublicDomain) ── */
+function getSiteDomain(req: Request): string {
+  /* 1. Explicit env override */
+  const override = (process.env.META_DOMAIN_OVERRIDE ?? "").trim();
+  if (override) return override.startsWith("http") ? override : `https://${override}`;
+
+  /* 2. X-Forwarded-Host — custom domain (skip replit.* domains) */
+  const fwdHost = ((req.headers["x-forwarded-host"] as string) ?? "").split(",")[0].trim();
+  const fwdProto = ((req.headers["x-forwarded-proto"] as string) ?? "https").split(",")[0].trim();
+  if (fwdHost && !fwdHost.includes("replit.dev") && !fwdHost.includes("replit.app")) {
+    return `${fwdProto}://${fwdHost}`;
+  }
+
+  /* 3. Replit production domains */
+  const prodPrimary = (process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim();
+  if (prodPrimary) return `https://${prodPrimary}`;
+
+  /* 4. Replit dev tunnel fallback */
+  const devDomain = (process.env.REPLIT_DEV_DOMAIN ?? "").trim();
+  if (devDomain) return `https://${devDomain}`;
+
+  return "https://khanbabadryfruits.com";
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    PUBLIC INVOICE — no token required
    GET /invoice/:orderNumber
    
-   Clean production URL: https://khandryfruits.com/invoice/20039
+   Clean production URL: https://khanbabadryfruits.com/invoice/20039
    ════════════════════════════════════════════════════════════════ */
 router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> => {
   const orderNumber = req.params["orderNumber"] as string;
@@ -81,10 +105,8 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
       .toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
     const invoiceDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
-    /* ── Proto/host detection for share links ── */
-    const proto = req.headers["x-forwarded-proto"] ?? "https";
-    const host  = (req.headers["x-forwarded-host"] as string ?? req.headers.host ?? "").split(",")[0].trim();
-    const domain = `${proto}://${host}`;
+    /* ── Dynamic domain detection for share links ── */
+    const domain = getSiteDomain(req);
     const invoiceUrl = `${domain}/invoice/${num}`;
 
     /* ── WhatsApp share ── */
@@ -376,7 +398,7 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     <p>
       <strong>Khan Dry Fruits</strong> · Premium Quality Dry Fruits<br>
       Lahore, Pakistan · 📞 Contact via WhatsApp<br>
-      <a href="https://khandryfruits.com">khandryfruits.com</a>
+      <a href="https://khanbabadryfruits.com">khanbabadryfruits.com</a>
     </p>
     <p style="margin-top:10px;font-size:11px">
       Invoice #${escHtml(String(orderNum))} · Generated ${escHtml(invoiceDate)} · This is a computer-generated invoice.
@@ -408,7 +430,7 @@ function renderError(msg: string): string {
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#F8FAFC;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}.card{background:#fff;border-radius:20px;padding:48px 40px;text-align:center;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.08)}.icon{font-size:52px;margin-bottom:18px}.title{font-size:20px;font-weight:800;color:#0D1F3C;margin-bottom:10px}.sub{font-size:14px;color:#6B7A99;line-height:1.6}.back{display:inline-block;margin-top:24px;padding:12px 28px;background:#00B85A;color:#fff;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px}</style>
 </head><body><div class="card"><div class="icon">📋</div><div class="title">${escHtml(msg)}</div>
 <div class="sub">Please verify the invoice number and try again.</div>
-<a class="back" href="https://khandryfruits.com">← Back to Store</a></div></body></html>`;
+<a class="back" href="https://khanbabadryfruits.com">← Back to Store</a></div></body></html>`;
 }
 
 export default router;
