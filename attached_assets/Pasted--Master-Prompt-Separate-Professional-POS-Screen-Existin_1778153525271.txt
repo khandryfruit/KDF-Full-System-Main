@@ -1,0 +1,328 @@
+# Master Prompt — Separate Professional POS Screen + Existing Invoice System Integration
+
+You now need to add a completely separate:
+
+# “POS Billing Screen”
+
+inside the ERP system.
+
+IMPORTANT:
+
+The current “Create Invoice” page already exists and should NOT be removed.
+
+Instead:
+
+✅ Keep existing invoice system
+✅ Add NEW professional POS screen
+✅ Both systems should work together
+✅ Same database + same inventory + same customers
+
+---
+
+# REQUIRED MENU STRUCTURE
+
+Inside Sidebar:
+
+## Invoice & Billing
+
+* Create Invoice
+* All Invoices
+* Purchase Bill
+* Purchase History
+* Branch POS ← NEW
+* Branches
+* Customers
+* Analytics
+
+---
+
+# 1. CREATE NEW “BRANCH POS” SCREEN
+
+The new POS screen should look similar to the screenshot provided.
+
+Style inspiration:
+
+* Supermarket POS
+* Grocery POS
+* Retail billing counter
+* Fast cashier systems
+
+---
+
+# 2. IMPORTANT DIFFERENCE
+
+## Existing Create Invoice
+
+Use for:
+
+* Detailed invoices
+* Office billing
+* Full ERP invoice management
+
+---
+
+## NEW Branch POS
+
+Use for:
+
+* Fast billing
+* Cash counter
+* Grocery sales
+* Barcode billing
+* Quick checkout
+
+---
+
+# 3. POS SCREEN LAYOUT
+
+Create professional fullscreen POS interface.
+
+---
+
+# LEFT SIDE
+
+## Product Billing Table
+
+Columns:
+
+| # | Item Code | Item Name | Qty | Unit | Price | Discount | Total |
+
+---
+
+# Product Search Bar
+
+Top search:
+
+* Barcode
+* SKU
+* Product name
+* Fast search
+
+Keyboard shortcut:
+
+```text id="w9ec5n"
+F1
+```
+
+---
+
+# RIGHT SIDE PANEL
+
+## Customer Search
+
+## Date
+
+## Salesman
+
+## Payment Method
+
+## Amount Received
+
+## Bill Summary
+
+---
+
+# Bottom Right
+
+## Save & Print Bill Button
+
+Shortcut:
+
+```text id="sj6d77"
+CTRL + P
+```
+
+---
+
+# 4. QUICK ACTION BUTTONS
+
+Bottom action buttons like screenshot:
+
+| Button             | Shortcut |
+| ------------------ | -------- |
+| Change Qty         | F2       |
+| Item Discount      | F3       |
+| Remove Item        | F4       |
+| Change Unit        | F6       |
+| Additional Charges | F8       |
+| Bill Discount      | F9       |
+| Loyalty Points     | F10      |
+| Remarks            | F12      |
+
+---
+
+# 5. FAST KEYBOARD POS SYSTEM (IMPORTANT)
+
+Cashier should operate WITHOUT mouse.
+
+---
+
+# REQUIRED KEYBOARD FLOW
+
+1. Scan/Search product
+2. Arrow navigation
+3. Enter product
+4. F2 change qty
+5. F3 discount
+6. CTRL+P print
+
+---
+
+# 6. FULL BARCODE SUPPORT
+
+Support:
+
+* USB barcode scanner
+* Fast scanning
+* Auto add item
+* Weighted barcode
+
+---
+
+# 7. SAME INVENTORY SYSTEM
+
+IMPORTANT:
+
+POS and Invoice system must use SAME:
+
+* Products
+* Inventory
+* Customers
+* Stock
+* Pricing
+
+---
+
+# Example
+
+If POS sells:
+250g Cashew
+
+Inventory deducts instantly from main stock.
+
+---
+
+# 8. SAME DATABASE
+
+Do NOT create separate inventory/database.
+
+Both systems must sync together.
+
+---
+
+# 9. POS FEATURES REQUIRED
+
+Add:
+
+✅ Fast billing
+✅ Live totals
+✅ Live tax
+✅ Discount system
+✅ Loyalty points
+✅ Split payments
+✅ Cash return calculation
+✅ Hold bill
+✅ Resume bill
+✅ Draft bill
+
+---
+
+# 10. POS PRINTING
+
+Support:
+
+* Thermal printer
+* 58mm
+* 80mm
+* Auto print
+* Silent print
+
+---
+
+# 11. MOBILE/TABLET POS
+
+POS should also support:
+
+* Tablet mode
+* Touch-friendly UI
+* Responsive layout
+
+---
+
+# 12. PERFORMANCE OPTIMIZATION
+
+POS must be VERY FAST.
+
+Use:
+
+* Optimized rendering
+* Debounced search
+* Cached products
+* Lazy loading
+
+Avoid lag.
+
+---
+
+# 13. SETTINGS INTEGRATION
+
+Inside Settings:
+
+## POS Settings
+
+Add:
+
+* Enable barcode
+* Auto print
+* Default payment mode
+* Thermal printer size
+* POS shortcuts
+
+---
+
+# 14. ROLE-BASED ACCESS
+
+Permissions:
+
+* Access POS
+* Apply discount
+* Refund
+* Hold bills
+* Delete item
+
+---
+
+# 15. ANALYTICS INTEGRATION
+
+POS sales should appear in:
+
+* Daily sales
+* Branch reports
+* Profit analytics
+* Inventory analytics
+
+---
+
+# 16. FINAL REQUIREMENT
+
+DO NOT:
+
+❌ Replace existing invoice system
+❌ Create separate inventory
+❌ Create duplicate products
+❌ Use dummy POS UI
+
+Instead:
+
+✅ Existing Invoice stays
+✅ NEW POS screen added
+✅ Same stock system
+✅ Same analytics
+✅ Same database
+✅ Fast cashier workflow
+✅ Barcode support
+✅ Keyboard shortcuts
+✅ Thermal printing
+✅ Real ERP integration
+
+This must behave like a real professional supermarket/grocery POS integrated with ERP invoicing system.
