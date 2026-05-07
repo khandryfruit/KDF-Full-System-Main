@@ -11,13 +11,14 @@ import { db } from "@workspace/db";
 import { seoSettingsTable } from "@workspace/db/schema";
 
 // Resolve static dist directories from project root
-const adminDist = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
-const mainDist  = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
-const nutsDist  = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
+const adminDist   = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
+const mainDist    = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
+const nutsDist    = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
+const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
 
-const adminStatic = express.static(adminDist, { index: false });
-const mainStatic  = express.static(mainDist,  { index: false });
-const nutsStatic  = express.static(nutsDist,  { index: false });
+const adminStatic = express.static(adminDist,    { index: false });
+const mainStatic  = express.static(mainDist,     { index: false });
+const nutsStatic  = express.static(nutsDist,     { index: false });
 
 const app: Express = express();
 
@@ -47,6 +48,12 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true }));
+
+/** Serve API server's own public assets (logo, etc.) at /api/static */
+app.use("/api/static", express.static(apiPublicDir));
+
+/** Public invoice — also at /api/invoice (must be BEFORE /api router so it isn't swallowed) */
+app.use("/api/invoice", publicInvoiceRouter);
 
 app.use("/api", router);
 

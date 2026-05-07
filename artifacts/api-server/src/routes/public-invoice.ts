@@ -1,8 +1,31 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { readFileSync, existsSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const router = Router();
+
+/* ── Brand logo — read at startup, cache as base64 data URL ──
+   Try multiple candidate paths since CWD varies between dev (package dir)
+   and production (workspace root). */
+function loadLogoDataUrl(): string {
+  const __dir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(__dir, "../public/khan-logo.png"),            // compiled dist/routes/ → dist/public/
+    path.resolve(__dir, "../../public/khan-logo.png"),          // src/routes/ → src/../public/ (tsx dev)
+    path.resolve(process.cwd(), "public/khan-logo.png"),        // CWD = artifacts/api-server/
+    path.resolve(process.cwd(), "artifacts/api-server/public/khan-logo.png"), // CWD = workspace root
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      return `data:image/png;base64,${readFileSync(p).toString("base64")}`;
+    }
+  }
+  return "";
+}
+const LOGO_DATA_URL = loadLogoDataUrl();
 
 /* ── Dynamic domain detection (same logic as social.ts getPublicDomain) ── */
 function getSiteDomain(req: Request): string {
@@ -95,7 +118,7 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     const cod      = Number(d.cod_amount ?? d.total_price ?? 0);
     const dc       = Number(d.delivery_charge ?? 0);
     const isPaid   = Boolean(d.is_paid) || d.financial_status === "paid";
-    const orderNum = d.shopify_order_number ?? d.so_order_number ?? d.order_number ?? num;
+    const orderNum = String(d.shopify_order_number ?? d.so_order_number ?? d.order_number ?? num).replace(/^#+/, "");
     const custName = d.customer_name ?? "Customer";
     const custPhone = d.customer_phone ?? "";
     const riderName = d.rider_name ?? "";
@@ -180,10 +203,11 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     .header-inner { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
     .brand { display: flex; align-items: center; gap: 12px; }
     .brand-logo {
-      width: 52px; height: 52px; border-radius: 14px;
-      background: var(--green); display: flex; align-items: center; justify-content: center;
-      font-size: 24px; font-weight: 900; color: #fff; letter-spacing: -1px; flex-shrink: 0;
-      box-shadow: 0 4px 16px rgba(0,184,90,.4);
+      width: 68px; height: 68px; border-radius: 16px;
+      object-fit: contain; flex-shrink: 0;
+      background: #fff;
+      box-shadow: 0 4px 16px rgba(0,184,90,.35);
+      padding: 4px;
     }
     .brand-name { font-size: 18px; font-weight: 800; letter-spacing: .3px; }
     .brand-sub  { color: rgba(255,255,255,.5); font-size: 12px; margin-top: 2px; }
@@ -298,7 +322,7 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
   <div class="header">
     <div class="header-inner">
       <div class="brand">
-        <div class="brand-logo">KD</div>
+        <img class="brand-logo" src="${LOGO_DATA_URL}" alt="Khan Dry Fruit">
         <div>
           <div class="brand-name">Khan Dry Fruits</div>
           <div class="brand-sub">کھان ڈرائی فروٹس — Premium Quality Since 2010</div>

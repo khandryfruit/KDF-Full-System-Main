@@ -108,6 +108,23 @@ function Router() {
       <Route path="/order/:id/tracking" component={OrderTrackingPage} />
       <Route path="/track" component={TrackOrderPage} />
 
+      {/* Public invoice — redirect to API server so custom domain SPA doesn't 404 */}
+      <Route path="/invoice/:orderNumber">
+        {(params: { orderNumber: string }) => {
+          if (typeof window !== "undefined") {
+            window.location.replace(`/api/invoice/${params.orderNumber}`);
+          }
+          return (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "system-ui, sans-serif", background: "#F8FAFC" }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+                <p style={{ color: "#0D1F3C", fontWeight: 700, fontSize: 16 }}>Loading invoice…</p>
+              </div>
+            </div>
+          );
+        }}
+      </Route>
+
       <Route component={NotFound} />
     </Switch>
     </>

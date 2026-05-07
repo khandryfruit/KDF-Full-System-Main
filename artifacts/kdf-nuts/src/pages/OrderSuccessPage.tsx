@@ -142,7 +142,7 @@ export function OrderSuccessPage() {
         discount: 0,
         deliveryFee: 0,
         total: urlTotal ?? 0,
-        shippingAddress: null,
+        shippingAddress: undefined,
         items: [],
       });
     }
