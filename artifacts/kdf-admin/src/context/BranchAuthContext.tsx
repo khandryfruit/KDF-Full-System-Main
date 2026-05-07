@@ -28,6 +28,7 @@ interface BranchAuthState {
 interface BranchAuthContextValue extends BranchAuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refresh: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -85,6 +86,11 @@ export function BranchAuthProvider({ children }: { children: ReactNode }) {
     setState({ token: data.token, user: data.user, branch: data.branch, isLoading: false });
   };
 
+  const refresh = useCallback(async () => {
+    const t = localStorage.getItem(TOKEN_KEY);
+    if (t) await fetchMe(t);
+  }, [fetchMe]);
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setState({ token: null, user: null, branch: null, isLoading: false });
@@ -92,7 +98,7 @@ export function BranchAuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <BranchAuthContext.Provider
-      value={{ ...state, login, logout, isAuthenticated: !!state.token && !!state.user }}
+      value={{ ...state, login, logout, refresh, isAuthenticated: !!state.token && !!state.user }}
     >
       {children}
     </BranchAuthContext.Provider>

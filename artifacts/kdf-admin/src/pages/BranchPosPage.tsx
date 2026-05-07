@@ -1514,23 +1514,9 @@ function StatsTab({ token }: { token: string }) {
 
 /* ═══ Main Page ═══ */
 export default function BranchPosPage() {
-  const { isAuthenticated, isLoading, token, user, branch, logout } = useBranchAuth();
+  const { isAuthenticated, isLoading, token, user, branch, logout, refresh } = useBranchAuth();
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("pos");
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) navigate("/branch-login");
-  }, [isAuthenticated, isLoading, navigate]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !token) return null;
 
   const isManager = user?.role === "manager";
   const hasPerm = (p: string) => isManager || !!(user?.permissions?.[p]);
@@ -1543,11 +1529,34 @@ export default function BranchPosPage() {
   ];
   const tabs = allTabs.filter(t => !t.perm || hasPerm(t.perm));
 
+  /* ALL hooks must be called before any early return */
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate("/branch-login");
+  }, [isAuthenticated, isLoading, navigate]);
+
+  /* Auto-refresh permissions when page becomes visible again */
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
+
   useEffect(() => {
     if (tabs.length > 0 && !tabs.find(t => t.id === tab)) {
       setTab(tabs[0].id);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.map(t => t.id).join(",")]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !token) return null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -1583,12 +1592,22 @@ export default function BranchPosPage() {
             })}
           </div>
 
-          <button
-            onClick={() => { logout(); navigate("/branch-login"); }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-xl hover:bg-muted ml-auto"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Logout
-          </button>
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              onClick={() => refresh()}
+              title="Refresh permissions"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1.5 rounded-xl hover:bg-muted"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Refresh</span>
+            </button>
+            <button
+              onClick={() => { logout(); navigate("/branch-login"); }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-xl hover:bg-muted"
+            >
+              <LogOut className="w-3.5 h-3.5" /> <span className="hidden md:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </div>
 

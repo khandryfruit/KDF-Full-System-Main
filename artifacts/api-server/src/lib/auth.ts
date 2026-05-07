@@ -66,6 +66,8 @@ export function adminMiddleware(req: AuthRequest, res: Response, next: NextFunct
   });
 }
 
+const BRANCH_ROLES = new Set(["cashier", "manager", "sales", "operator"]);
+
 export function branchMiddleware(req: BranchAuthRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) {
@@ -75,7 +77,7 @@ export function branchMiddleware(req: BranchAuthRequest, res: Response, next: Ne
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, SECRET) as any;
-    if (payload.role !== "cashier" && payload.role !== "manager") {
+    if (!BRANCH_ROLES.has(payload.role)) {
       res.status(403).json({ error: "Branch access required" });
       return;
     }
