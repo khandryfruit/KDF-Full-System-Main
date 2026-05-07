@@ -40,7 +40,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-production-server.com"
+        "EXPO_PUBLIC_API_URL": "https://9ecfbb16-cd8b-4004-a9f5-3af0282ac3e2-00-3atgiyeoiibd6.sisko.replit.dev"
       }
     }
   },
