@@ -19,6 +19,24 @@ function canDo(user: BranchAuthRequest["branchUser"] & { permissions?: Record<st
   return !!(user as any).permissions?.[perm];
 }
 
+/** Fetch user from DB and check a named permission. Sends 403 and returns false on failure. */
+async function requirePerm(req: BranchAuthRequest, res: any, perm: string): Promise<boolean> {
+  const bu = req.branchUser!;
+  if (bu.role === "manager") return true;
+  const [u] = await db
+    .select({ role: branchUsersTable.role, permissions: branchUsersTable.permissions })
+    .from(branchUsersTable)
+    .where(eq(branchUsersTable.id, bu.id))
+    .limit(1);
+  if (!u) { res.status(403).json({ error: "Forbidden" }); return false; }
+  if (u.role === "manager") return true;
+  if (!(u.permissions as Record<string, boolean> | null)?.[perm]) {
+    res.status(403).json({ error: `Permission denied: ${perm}` });
+    return false;
+  }
+  return true;
+}
+
 async function auditLog(opts: {
   branchId: number; invoiceId?: number | null; userId?: number | null;
   userName?: string; action: string; oldData?: any; newData?: any; note?: string;
@@ -199,6 +217,7 @@ router.post("/branch/invoices", branchMiddleware as any, async (req: BranchAuthR
   try {
     const branchId = req.branchUser!.branchId;
     const userId   = req.branchUser!.id;
+    if (!await requirePerm(req, res, "create_invoice")) return;
     const {
       type, invoiceNo, customerId, customerName, customerPhone, customerAddress,
       supplierName, supplierPhone, supplierCity, items,
@@ -244,6 +263,7 @@ router.put("/branch/invoices/:id", branchMiddleware as any, async (req: BranchAu
     const branchId = req.branchUser!.branchId;
     const userId   = req.branchUser!.id;
 
+    if (!await requirePerm(req, res, "edit_invoice")) return;
     const [existing] = await db.select().from(branchInvoicesTable)
       .where(and(eq(branchInvoicesTable.id, id), eq(branchInvoicesTable.branchId, branchId))).limit(1);
     if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -289,6 +309,7 @@ router.delete("/branch/invoices/:id", branchMiddleware as any, async (req: Branc
     const id = parseInt(req.params["id"] as string);
     const branchId = req.branchUser!.branchId;
     const userId   = req.branchUser!.id;
+    if (!await requirePerm(req, res, "delete_invoice")) return;
     const [existing] = await db.select().from(branchInvoicesTable)
       .where(and(eq(branchInvoicesTable.id, id), eq(branchInvoicesTable.branchId, branchId))).limit(1);
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -310,6 +331,7 @@ router.post("/branch/invoices/:id/return", branchMiddleware as any, async (req: 
     const branchId  = req.branchUser!.branchId;
     const userId    = req.branchUser!.id;
 
+    if (!await requirePerm(req, res, "return_invoice")) return;
     const [invoice] = await db.select().from(branchInvoicesTable)
       .where(and(eq(branchInvoicesTable.id, invoiceId), eq(branchInvoicesTable.branchId, branchId))).limit(1);
     if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }

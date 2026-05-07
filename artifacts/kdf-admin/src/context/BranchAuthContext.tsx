@@ -5,6 +5,8 @@ export interface BranchUser {
   name: string;
   username: string;
   role: string;
+  phone?: string;
+  permissions?: Record<string, boolean>;
 }
 
 export interface Branch {

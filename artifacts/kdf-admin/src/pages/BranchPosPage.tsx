@@ -262,7 +262,14 @@ function PosTab({ token }: { token: string }) {
   };
 
   const handlePrint = () => {
-    toast({ title: "Print", description: "Print dialog coming soon" });
+    if (items.length === 0) { toast({ variant: "destructive", title: "Add items first to print" }); return; }
+    const tempInv = {
+      invoiceNo: `DRAFT-${Date.now()}`, status: "draft",
+      customerName: customer?.name ?? null, customerPhone: customer?.phone ?? null,
+      items, subtotal, discountAmt, shipping, taxAmt, grandTotal,
+      paymentMethod, paymentStatus, createdAt: new Date().toISOString(), notes,
+    };
+    printInvoice(tempInv);
   };
 
   const handleWhatsApp = () => {
@@ -462,6 +469,37 @@ function PosTab({ token }: { token: string }) {
       <CustomerPickerSheet open={showPicker} onClose={() => setShowPicker(false)} token={token} onPick={setCustomer} />
     </div>
   );
+}
+
+/* ═══ Print Invoice ═══ */
+function printInvoice(inv: any, branchName = "KDF NUTS") {
+  const items: any[] = inv.items ?? [];
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice ${inv.invoiceNo ?? ""}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:12px;max-width:80mm;margin:0 auto;padding:8px}.center{text-align:center}.bold{font-weight:bold}.line{border-top:1px dashed #000;margin:5px 0}.row{display:flex;justify-content:space-between;padding:2px 0}.title{font-size:15px;font-weight:bold;margin-bottom:2px}.item-name{flex:1;word-break:break-word}.amount{text-align:right;white-space:nowrap;margin-left:8px}.total-row{font-size:13px;font-weight:bold;border-top:2px solid #000;margin-top:4px;padding-top:4px}.badge{display:inline-block;padding:1px 6px;border:1px solid #000;border-radius:3px;font-size:10px;margin-top:3px}.sub{color:#555;font-size:10px;padding-left:4px;margin-bottom:2px}@media print{body{padding:0}}</style>
+</head><body>
+<div class="center"><div class="title">${branchName}</div><div style="font-size:10px">Invoice Receipt</div><div class="badge">${(inv.status ?? "draft").toUpperCase()}</div></div>
+<div class="line"></div>
+<div class="row"><span>Invoice #:</span><span class="bold">${inv.invoiceNo ?? "DRAFT"}</span></div>
+<div class="row"><span>Date:</span><span>${new Date(inv.createdAt ?? Date.now()).toLocaleString("en-PK")}</span></div>
+${inv.customerName ? `<div class="row"><span>Customer:</span><span>${inv.customerName}</span></div>` : ""}
+${inv.customerPhone ? `<div class="row"><span>Phone:</span><span>${inv.customerPhone}</span></div>` : ""}
+<div class="line"></div>
+<div class="bold" style="margin-bottom:4px">Items</div>
+${items.map(it => `<div class="row"><span class="item-name">${it.name ?? it.sku ?? "Item"}</span><span class="amount">Rs ${Number(it.lineTotal ?? 0).toLocaleString()}</span></div><div class="sub">Qty: ${it.inputValue ?? 1}${it.discount ? ` | Disc: ${it.discount}%` : ""}</div>`).join("")}
+<div class="line"></div>
+<div class="row"><span>Subtotal</span><span>Rs ${Number(inv.subtotal ?? 0).toLocaleString()}</span></div>
+${Number(inv.discountAmt ?? 0) > 0 ? `<div class="row"><span>Discount</span><span>-Rs ${Number(inv.discountAmt).toLocaleString()}</span></div>` : ""}
+${Number(inv.shipping ?? 0) > 0 ? `<div class="row"><span>Shipping</span><span>Rs ${Number(inv.shipping).toLocaleString()}</span></div>` : ""}
+${Number(inv.taxAmt ?? 0) > 0 ? `<div class="row"><span>Tax</span><span>Rs ${Number(inv.taxAmt).toLocaleString()}</span></div>` : ""}
+<div class="row total-row"><span>GRAND TOTAL</span><span>Rs ${Number(inv.grandTotal ?? 0).toLocaleString()}</span></div>
+<div class="line"></div>
+<div class="row"><span>Payment:</span><span class="bold">${inv.paymentMethod ?? "cash"} — ${inv.paymentStatus ?? "unpaid"}</span></div>
+${inv.notes ? `<div class="sub" style="margin-top:4px">Note: ${inv.notes}</div>` : ""}
+<div class="line"></div>
+<div class="center" style="margin-top:6px;font-size:10px">Thank you for your purchase!</div>
+</body></html>`;
+  const w = window.open("", "_blank", "width=420,height=700,scrollbars=yes");
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => { w.focus(); w.print(); }, 400); }
 }
 
 /* ═══ Invoice Edit Modal ═══ */
@@ -818,7 +856,13 @@ function ReturnModal({
 
 /* ═══ History Tab ═══ */
 function HistoryTab({ token }: { token: string }) {
+  const { user, branch } = useBranchAuth();
+  const perm = (p: string) => user?.role === "manager" || !!(user?.permissions?.[p]);
+
   const [invoices, setInvoices]     = useState<Invoice[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [page, setPage]             = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading]       = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPay, setFilterPay]   = useState("all");
@@ -826,22 +870,29 @@ function HistoryTab({ token }: { token: string }) {
   const [editInv, setEditInv]       = useState<Invoice | null>(null);
   const [returnInv, setReturnInv]   = useState<Invoice | null>(null);
   const [detailInv, setDetailInv]   = useState<Invoice | null>(null);
+  const [deleteInv, setDeleteInv]   = useState<Invoice | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const { toast } = useToast();
 
-  const loadInvoices = useCallback(async () => {
-    setLoading(true);
+  const loadInvoices = useCallback(async (pg = 1, append = false) => {
+    if (!append) setLoading(true);
+    else setLoadingMore(true);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ page: String(pg), limit: "20" });
       if (filterStatus !== "all") params.set("status", filterStatus);
       const d = await branchFetch(`/api/branch/invoices?${params}`, token);
-      setInvoices(d.invoices ?? []);
+      if (append) setInvoices(prev => [...prev, ...(d.invoices ?? [])]);
+      else { setInvoices(d.invoices ?? []); setPage(1); }
+      if (!append) setPage(1); else setPage(pg);
+      setTotal(d.total ?? 0);
     } catch (err: any) {
       toast({ variant: "destructive", title: err.message });
     }
-    setLoading(false);
+    if (!append) setLoading(false);
+    else setLoadingMore(false);
   }, [token, filterStatus, toast]);
 
-  useEffect(() => { loadInvoices(); }, [loadInvoices]);
+  useEffect(() => { loadInvoices(1, false); }, [token, filterStatus]);
 
   const filtered = invoices.filter(inv => {
     const q = search.toLowerCase();
@@ -850,14 +901,57 @@ function HistoryTab({ token }: { token: string }) {
     return matchQ && matchPay;
   });
 
-  const canReturn = (inv: Invoice) => !["returned", "refunded"].includes(inv.status);
-  const canEdit   = (inv: Invoice) => !["returned", "refunded"].includes(inv.status);
+  const canReturn = (inv: Invoice) => perm("return_invoice") && !["returned", "refunded"].includes(inv.status);
+  const canEdit   = (inv: Invoice) => perm("edit_invoice") && !["returned", "refunded"].includes(inv.status);
+  const canDelete = () => perm("delete_invoice");
+
+  const handleDelete = async () => {
+    if (!deleteInv) return;
+    setDeleteLoading(true);
+    try {
+      await branchFetch(`/api/branch/invoices/${deleteInv.id}`, token, { method: "DELETE" });
+      toast({ title: "Invoice deleted", description: deleteInv.invoiceNo });
+      setDeleteInv(null);
+      loadInvoices(1, false);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: err.message });
+    }
+    setDeleteLoading(false);
+  };
 
   return (
     <div className="space-y-3 pb-24">
       {/* Edit / Return Modals */}
-      {editInv   && <InvoiceEditModal invoice={editInv}   token={token} onClose={() => setEditInv(null)}   onSaved={loadInvoices} />}
-      {returnInv && <ReturnModal      invoice={returnInv} token={token} onClose={() => setReturnInv(null)} onSaved={loadInvoices} />}
+      {editInv   && <InvoiceEditModal invoice={editInv}   token={token} onClose={() => setEditInv(null)}   onSaved={() => loadInvoices(1, false)} />}
+      {returnInv && <ReturnModal      invoice={returnInv} token={token} onClose={() => setReturnInv(null)} onSaved={() => loadInvoices(1, false)} />}
+
+      {/* Delete Confirmation Sheet */}
+      {deleteInv && (
+        <Sheet open onOpenChange={v => { if (!v) setDeleteInv(null); }}>
+          <SheetContent side="bottom" className="h-auto rounded-t-3xl p-0">
+            <SheetHeader className="px-5 pt-5 pb-3 border-b border-border">
+              <SheetTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" /> Delete Invoice
+              </SheetTitle>
+            </SheetHeader>
+            <div className="px-5 py-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1.5">
+                <p className="text-sm font-bold text-red-700">{deleteInv.invoiceNo}</p>
+                <p className="text-xs text-red-600">{deleteInv.customerName ?? "Walk-in"} · {fmtRs(Number(deleteInv.grandTotal))}</p>
+                <p className="text-xs text-red-500 mt-2 leading-relaxed">This action cannot be undone. The invoice will be permanently deleted and recorded in the audit log.</p>
+              </div>
+            </div>
+            <div className="px-4 pb-6 pt-1 flex gap-3">
+              <Button variant="outline" onClick={() => setDeleteInv(null)} className="flex-1 h-12">Cancel</Button>
+              <Button onClick={handleDelete} disabled={deleteLoading}
+                className="flex-1 h-12 font-bold bg-red-600 hover:bg-red-700 text-white gap-2">
+                {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Invoice Detail Sheet */}
       {detailInv && (
@@ -905,16 +999,26 @@ function HistoryTab({ token }: { token: string }) {
             </div>
             {/* Action buttons */}
             <div className="px-4 pb-6 pt-3 border-t border-border shrink-0 grid grid-cols-2 gap-2">
+              <Button variant="outline" className="h-11 gap-2 text-muted-foreground"
+                onClick={() => printInvoice(detailInv, branch?.name)}>
+                <Printer className="w-4 h-4" /> Print
+              </Button>
               {canEdit(detailInv) && (
                 <Button variant="outline" className="h-11 gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
                   onClick={() => { setEditInv(detailInv); setDetailInv(null); }}>
-                  <Pencil className="w-4 h-4" /> Edit Invoice
+                  <Pencil className="w-4 h-4" /> Edit
                 </Button>
               )}
               {canReturn(detailInv) && (
                 <Button variant="outline" className="h-11 gap-2 text-orange-600 border-orange-200 hover:bg-orange-50"
                   onClick={() => { setReturnInv(detailInv); setDetailInv(null); }}>
-                  <RotateCcw className="w-4 h-4" /> Return/Exchange
+                  <RotateCcw className="w-4 h-4" /> Return
+                </Button>
+              )}
+              {canDelete() && (
+                <Button variant="outline" className="h-11 gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => { setDeleteInv(detailInv); setDetailInv(null); }}>
+                  <Trash2 className="w-4 h-4" /> Delete
                 </Button>
               )}
             </div>
@@ -929,7 +1033,7 @@ function HistoryTab({ token }: { token: string }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoice or customer…" className="pl-9 h-10 text-sm" />
           </div>
-          <button onClick={loadInvoices} className="p-2.5 rounded-xl border border-border hover:bg-muted transition-colors shrink-0">
+          <button onClick={() => loadInvoices(1, false)} className="p-2.5 rounded-xl border border-border hover:bg-muted transition-colors shrink-0">
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -1000,7 +1104,11 @@ function HistoryTab({ token }: { token: string }) {
             </div>
             <div className="text-right shrink-0">
               <p className="font-black tabular-nums text-sm">{fmtRs(Number(inv.grandTotal))}</p>
-              <div className="flex items-center gap-1 justify-end mt-1">
+              <div className="flex items-center gap-0.5 justify-end mt-1">
+                <button onClick={e => { e.stopPropagation(); printInvoice(inv, branch?.name); }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Print">
+                  <Printer className="w-3.5 h-3.5" />
+                </button>
                 {canEdit(inv) && (
                   <button onClick={e => { e.stopPropagation(); setEditInv(inv); }}
                     className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors" title="Edit">
@@ -1013,11 +1121,36 @@ function HistoryTab({ token }: { token: string }) {
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
                 )}
+                {canDelete() && (
+                  <button onClick={e => { e.stopPropagation(); setDeleteInv(inv); }}
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors" title="Delete">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </button>
       ))}
+
+      {/* Load More */}
+      {!loading && invoices.length < total && (
+        <button
+          onClick={() => loadInvoices(page + 1, true)}
+          disabled={loadingMore}
+          className="w-full py-3 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {loadingMore ? "Loading…" : `Load More (${total - invoices.length} remaining)`}
+        </button>
+      )}
+
+      {/* Total loaded indicator */}
+      {!loading && total > 0 && invoices.length >= total && invoices.length > 0 && (
+        <p className="text-center text-xs text-muted-foreground py-2">
+          All {total} invoice{total !== 1 ? "s" : ""} loaded
+        </p>
+      )}
     </div>
   );
 }
