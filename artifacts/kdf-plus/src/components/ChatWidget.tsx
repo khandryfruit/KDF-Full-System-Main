@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap } from "lucide-react";
+import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin } from "lucide-react";
 import { useLocation } from "wouter";
 
 const SESSION_KEY = "kdfplus_chat_session";
@@ -121,14 +121,19 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
       <div className="p-2.5">
         <p className="font-semibold text-foreground text-sm leading-tight mb-1 truncate">{product.name}</p>
         {hasVariants && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {product.variants.map(v => (
-              <button key={v.id} onClick={() => setSelectedVariant(v)}
-                className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors ${selectedVariant?.id === v.id ? "text-white border-transparent" : "bg-background border-border text-muted-foreground hover:border-[#5FA800]"}`}
-                style={selectedVariant?.id === v.id ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : undefined}>
-                {v.value}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
+            {product.variants.map(v => {
+              const vPrice = v.price ?? product.price;
+              const isSelected = selectedVariant?.id === v.id;
+              return (
+                <button key={v.id} onClick={() => setSelectedVariant(v)}
+                  className={`flex flex-col items-center px-2.5 py-1.5 rounded-xl border-2 font-semibold transition-all active:scale-95 min-w-[52px] ${isSelected ? "text-white border-transparent shadow-sm" : "bg-background border-border text-muted-foreground"}`}
+                  style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : undefined}>
+                  <span className="text-[11px] font-bold">{v.value}</span>
+                  {v.price != null && <span className={`text-[9px] mt-0.5 font-medium ${isSelected ? "text-green-100" : "text-muted-foreground"}`}>Rs.{vPrice.toLocaleString()}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="flex items-center gap-1.5 mb-2">
@@ -503,7 +508,28 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
+  const [isDetectingLoc, setIsDetectingLoc] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const set = (k: keyof OrderFormData, v: string | number) => { setForm(f => ({ ...f, [k]: v })); setSubmitError(null); };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) { setLocError("Location not supported on this device"); return; }
+    setIsDetectingLoc(true); setLocError(null);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const res = await fetch("/api/locations/geocode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lng }) });
+        const d = await res.json();
+        if (d.fullAddress) set("address", d.fullAddress);
+        if (d.city) {
+          const matched = CITIES.find(c => c.toLowerCase() === d.city.toLowerCase());
+          if (matched) set("city", matched);
+          else { set("city", "Other"); set("cityCustom", d.city); }
+        }
+      } catch { setLocError("Could not fetch address. Please enter manually."); }
+      finally { setIsDetectingLoc(false); }
+    }, () => { setIsDetectingLoc(false); setLocError("Location access denied. Please type your address."); }, { timeout: 10000 });
+  };
 
   const updateCartQty = (idx: number, qty: number) => { if (qty < 1) return; setLocalCart(c => c.map((it, i) => i === idx ? { ...it, qty } : it)); };
   const removeCartItem = (idx: number) => setLocalCart(c => c.filter((_, i) => i !== idx));
@@ -603,6 +629,12 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
           </>
         ) : (
           <>
+            <button type="button" onClick={detectLocation} disabled={isDetectingLoc}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed font-semibold text-xs transition-all active:scale-95 disabled:opacity-60"
+              style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "#f0f9e8" }}>
+              {isDetectingLoc ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Detecting location…</> : <><MapPin className="w-3.5 h-3.5" />Auto-detect my address</>}
+            </button>
+            {locError && <p className="text-[10px] text-amber-600 -mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{locError}</p>}
             <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Full Name *</label><input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your full name" className={inputCls} /><Err f="name" /></div>
             <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Phone *</label><input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="03XX XXXXXXX" className={inputCls} /><Err f="phone" /></div>
             <div>
@@ -649,11 +681,13 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const msgCountRef = useRef(0);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadName, setLeadName] = useState("");
@@ -801,6 +835,33 @@ export function ChatWidget() {
 
   const handleOpenForm = () => setShowOrderForm(true);
 
+  const handleVoiceInput = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert("Voice input is not supported on this browser. Please use Chrome or Safari."); return; }
+    if (isListening) { recognitionRef.current?.stop(); setIsListening(false); return; }
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 3;
+    recognition.lang = "ur-PK";
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setInput(transcript);
+      setTimeout(() => sendMessage(transcript), 200);
+    };
+    recognition.onerror = (e: any) => {
+      setIsListening(false);
+      if (e.error === "language-not-supported" || e.error === "no-speech") {
+        recognition.lang = "en-US";
+        try { recognition.start(); } catch {}
+      }
+    };
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { setIsListening(false); }
+  }, [isListening, sendMessage]);
+
   const handleBuyNow = useCallback((product: Product, variant: ProductVariant | null, price: number) => {
     handleAddToCart(product, variant, price);
     setDefaultOrderProduct(product.name);
@@ -881,9 +942,15 @@ export function ChatWidget() {
           )}
           {/* Input */}
           <div className="bg-background border-t border-border px-3 flex gap-2 items-center flex-shrink-0" style={{ paddingTop: "10px", paddingBottom: "calc(10px + env(safe-area-inset-bottom, 0px))" }}>
+            <button onClick={handleVoiceInput} disabled={isLoading}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 flex-shrink-0 ${isListening ? "animate-pulse" : ""}`}
+              style={{ backgroundColor: isListening ? "#ef4444" : "#f3f4f6" }}
+              title={isListening ? "Stop recording" : "Speak your order (Urdu/English)"}>
+              {isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-500" />}
+            </button>
             <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Ask about products or place your order..."
+              placeholder={isListening ? "Listening… speak now" : "Type or speak your order…"}
               className="flex-1 bg-muted rounded-full px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#5FA800]/30 transition-all text-foreground placeholder:text-muted-foreground"
               disabled={isLoading} />
             <button onClick={() => sendMessage()} disabled={isLoading || !input.trim()} className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 flex-shrink-0" style={{ backgroundColor: "#5FA800" }}>
