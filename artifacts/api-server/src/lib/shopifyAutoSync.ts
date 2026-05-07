@@ -238,8 +238,46 @@ async function runIncrementalSync(store: any) {
       const { orders } = await resp.json() as any;
       if (!orders?.length) break;
       for (const o of orders) {
+        /* Check if this order is NEW before upserting */
+        const existCheck = await db
+          .select({ id: shopifyOrdersTable.id })
+          .from(shopifyOrdersTable)
+          .where(eq(shopifyOrdersTable.shopifyOrderId, String(o.id)))
+          .limit(1);
+        const isNewOrder = existCheck.length === 0;
+
         await upsertOrder(store, o);
         ordersSynced++;
+
+        /* For new orders: trigger rider assignment / WA automation */
+        if (isNewOrder) {
+          try {
+            const [savedOrder] = await db
+              .select()
+              .from(shopifyOrdersTable)
+              .where(eq(shopifyOrdersTable.shopifyOrderId, String(o.id)))
+              .limit(1);
+            if (savedOrder) {
+              const { triggerNewOrderAutomation } = await import("./ondriveEngine.js");
+              setImmediate(() =>
+                triggerNewOrderAutomation({
+                  shopifyOrderDbId:  savedOrder.id,
+                  shopifyOrderId:    String(o.id),
+                  orderNumber:       savedOrder.orderNumber ?? o.name ?? `#${o.order_number}`,
+                  customerPhone:     savedOrder.customerPhone,
+                  customerName:      savedOrder.customerName,
+                  shippingAddress:   savedOrder.shippingAddress,
+                  totalPrice:        savedOrder.totalPrice,
+                  financialStatus:   savedOrder.financialStatus,
+                  lineItems:         Array.isArray(savedOrder.lineItems) ? savedOrder.lineItems : [],
+                }).catch(e => logger.error(e, "triggerNewOrderAutomation (sync) failed")),
+              );
+              logger.info({ orderId: savedOrder.id, orderNumber: savedOrder.orderNumber }, "New order detected in sync — automation triggered");
+            }
+          } catch (e) {
+            logger.error(e, "Failed to trigger automation for new order during sync");
+          }
+        }
       }
       const next = parseNextPageInfo(resp.headers.get("Link"));
       path = next ? `/orders.json?page_info=${encodeURIComponent(next)}&limit=250` : null;

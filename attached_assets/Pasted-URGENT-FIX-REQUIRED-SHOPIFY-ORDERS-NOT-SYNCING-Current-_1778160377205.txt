@@ -1,0 +1,163 @@
+URGENT FIX REQUIRED — SHOPIFY ORDERS NOT SYNCING
+
+Current Issue:
+Shopify orders are NOT coming into the Rider App and Admin Dashboard properly.
+Orders are not syncing in development or production.
+Riders are not receiving new orders.
+Notifications are not coming.
+Background sync is failing.
+
+Please fully debug and fix the complete Shopify order sync system from admin/backend level.
+
+====================================
+MAIN ISSUES TO FIX
+====================================
+
+1. SHOPIFY ORDERS NOT ARRIVING
+- New Shopify orders are not appearing in admin
+- Rider app not receiving orders
+- Orders sometimes delayed
+- Real-time sync not working
+
+Please check:
+- Shopify Webhooks
+- API endpoints
+- Authentication
+- Queue system
+- Database inserts
+- Background workers
+- WebSocket/socket connections
+- Cron jobs
+- Production environment variables
+
+Fix completely.
+
+====================================
+2. BACKGROUND ORDER SYNC
+====================================
+
+Build proper background sync system.
+
+Requirements:
+- Orders sync automatically in background
+- Retry failed syncs
+- Auto reconnect if API fails
+- Queue-based syncing
+- Offline-safe syncing
+- Real-time updates
+
+If Shopify order comes:
+1. Save instantly in database
+2. Notify admin instantly
+3. Notify rider instantly
+4. Show in rider app immediately
+
+====================================
+3. REAL-TIME NOTIFICATIONS
+====================================
+
+Currently notifications are missing.
+
+Add proper:
+- Push notifications
+- Sound alerts
+- In-app notifications
+- New order popup
+- Critical order alerts
+
+When order arrives:
+- Rider instantly notified
+- Admin instantly notified
+
+Use:
+- Firebase Cloud Messaging (FCM)
+OR
+- Expo Notifications
+
+====================================
+4. ADMIN PANEL DEBUGGING
+====================================
+
+Please fully inspect admin backend.
+
+Check:
+- Shopify webhook logs
+- Failed requests
+- API response errors
+- Database sync status
+- Queue failures
+- Worker failures
+- Authentication issues
+
+Create:
+- Sync status dashboard
+- Failed order logs
+- Manual resync button
+- Live sync monitor
+
+====================================
+5. UI/UX IMPROVEMENT
+====================================
+
+Current design still looks outdated and cluttered.
+
+Please redesign:
+- Dashboard
+- Orders page
+- Delivery cards
+- Navigation
+- Buttons
+- Status badges
+- Notifications UI
+
+Requirements:
+- Modern enterprise UI
+- Smooth animations
+- Better spacing
+- Clear buttons
+- Better readability
+- Mobile-first design
+- Fast rendering
+
+====================================
+6. RIDER APP IMPROVEMENTS
+====================================
+
+Add:
+- Auto-refresh orders
+- Live updates
+- Pull-to-refresh
+- Real-time status changes
+- Better loading states
+- Better empty states
+
+====================================
+7. PRODUCTION FIXES
+====================================
+
+Please make entire system production-ready.
+
+Requirements:
+- Stable APIs
+- Proper error handling
+- Optimized database queries
+- Secure authentication
+- Environment configs fixed
+- Background services stable
+- Real-time sync stable
+
+====================================
+8. FINAL EXPECTED RESULT
+====================================
+
+Expected behavior:
+- Shopify order comes instantly
+- Admin sees order instantly
+- Rider receives order instantly
+- Notification arrives instantly
+- Background sync works continuously
+- Production works perfectly
+- UI looks premium and professional
+
+IMPORTANT:
+Please debug from backend/admin side properly and fix the root cause permanently instead of temporary fixes.
