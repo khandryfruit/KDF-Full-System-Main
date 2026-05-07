@@ -461,6 +461,105 @@ router.delete("/admin/branches/:id/users/:uid", adminMiddleware as any, async (r
 });
 
 /* ══════════════════════════════════════════════
+   ADMIN — INVOICE MANAGEMENT (CRUD)
+══════════════════════════════════════════════ */
+
+/** GET /api/admin/branch-invoices — list all invoices across all branches */
+router.get("/admin/branch-invoices", adminMiddleware as any, async (req, res) => {
+  try {
+    const { page = "1", limit = "20", status, type, q, branchId: bId } = req.query as Record<string, string>;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const conds: any[] = [];
+    if (type && type !== "all") conds.push(eq(branchInvoicesTable.type, type));
+    if (status && status !== "all") conds.push(eq(branchInvoicesTable.status, status));
+    if (q) conds.push(ilike(branchInvoicesTable.invoiceNo, `%${q}%`));
+    if (bId) conds.push(eq(branchInvoicesTable.branchId, parseInt(bId)));
+    const where = conds.length ? and(...conds) : undefined;
+    const [rows, countR] = await Promise.all([
+      db.select({
+        id: branchInvoicesTable.id, invoiceNo: branchInvoicesTable.invoiceNo,
+        type: branchInvoicesTable.type, status: branchInvoicesTable.status,
+        customerName: branchInvoicesTable.customerName, customerPhone: branchInvoicesTable.customerPhone,
+        grandTotal: branchInvoicesTable.grandTotal, subtotal: branchInvoicesTable.subtotal,
+        discountAmt: branchInvoicesTable.discountAmt, shipping: branchInvoicesTable.shipping,
+        taxAmt: branchInvoicesTable.taxAmt, paymentStatus: branchInvoicesTable.paymentStatus,
+        paymentMethod: branchInvoicesTable.paymentMethod, paidAmount: branchInvoicesTable.paidAmount,
+        notes: branchInvoicesTable.notes, createdAt: branchInvoicesTable.createdAt,
+        items: branchInvoicesTable.items, branchId: branchInvoicesTable.branchId,
+        branchName: branchesTable.name, branchCity: branchesTable.city,
+      })
+        .from(branchInvoicesTable)
+        .leftJoin(branchesTable, eq(branchInvoicesTable.branchId, branchesTable.id))
+        .where(where)
+        .orderBy(desc(branchInvoicesTable.createdAt))
+        .limit(parseInt(limit))
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` }).from(branchInvoicesTable).where(where),
+    ]);
+    res.json({ invoices: rows, total: countR[0]?.count ?? 0 });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
+/** PUT /api/admin/branch-invoices/:id — admin edit any invoice */
+router.put("/admin/branch-invoices/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const [existing] = await db.select().from(branchInvoicesTable).where(eq(branchInvoicesTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+    const { items, subtotal, discountAmt, grandTotal, paymentMethod, paymentStatus, paidAmount, notes, customerName, customerPhone, editReason } = req.body;
+    const updates: any = { status: "edited", updatedAt: new Date() };
+    if (items !== undefined)          updates.items = items;
+    if (subtotal !== undefined)       updates.subtotal = String(subtotal);
+    if (discountAmt !== undefined)    updates.discountAmt = String(discountAmt);
+    if (grandTotal !== undefined)     updates.grandTotal = String(grandTotal);
+    if (paymentMethod !== undefined)  updates.paymentMethod = paymentMethod;
+    if (paymentStatus !== undefined)  updates.paymentStatus = paymentStatus;
+    if (paidAmount !== undefined)     updates.paidAmount = String(paidAmount);
+    if (notes !== undefined)          updates.notes = notes;
+    if (customerName !== undefined)   updates.customerName = customerName;
+    if (customerPhone !== undefined)  updates.customerPhone = customerPhone;
+    const [invoice] = await db.update(branchInvoicesTable).set(updates).where(eq(branchInvoicesTable.id, id)).returning();
+    await auditLog({ branchId: existing.branchId, invoiceId: id, userId: null, userName: "Admin", action: "admin_edit", oldData: existing, newData: invoice, note: editReason });
+    res.json({ invoice });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
+/** DELETE /api/admin/branch-invoices/:id — admin delete any invoice */
+router.delete("/admin/branch-invoices/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const [existing] = await db.select().from(branchInvoicesTable).where(eq(branchInvoicesTable.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    await auditLog({ branchId: existing.branchId, invoiceId: id, userId: null, userName: "Admin", action: "admin_delete", oldData: existing });
+    await db.delete(branchInvoicesTable).where(eq(branchInvoicesTable.id, id));
+    res.json({ ok: true });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
+/** POST /api/admin/branch-invoices/:id/return — admin process return */
+router.post("/admin/branch-invoices/:id/return", adminMiddleware as any, async (req, res) => {
+  try {
+    const invoiceId = parseInt(req.params["id"] as string);
+    const [invoice] = await db.select().from(branchInvoicesTable).where(eq(branchInvoicesTable.id, invoiceId)).limit(1);
+    if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+    const { returnType = "full_return", items = [], exchangeItems = [], returnAmount = 0, refundMethod = "cash", reason, notes } = req.body;
+    const newStatus = returnType === "exchange" ? "exchanged" : returnType === "full_return" ? "returned" : "partially_returned";
+    const returnInvoiceNo = `RET-${Date.now()}`;
+    const [branchReturn] = await db.insert(branchReturnsTable).values({
+      branchId: invoice.branchId, originalInvoiceId: invoiceId, returnInvoiceNo,
+      processedByUserId: null, processedByName: "Admin",
+      returnType, items, exchangeItems: exchangeItems ?? [],
+      returnAmount: String(returnAmount), storeCredit: "0",
+      refundMethod, reason, notes,
+    }).returning();
+    await db.update(branchInvoicesTable).set({ status: newStatus, updatedAt: new Date() }).where(eq(branchInvoicesTable.id, invoiceId));
+    await auditLog({ branchId: invoice.branchId, invoiceId, userId: null, userName: "Admin", action: "admin_return",
+      oldData: { status: invoice.status }, newData: { status: newStatus, returnType, returnAmount }, note: reason });
+    res.status(201).json({ return: branchReturn });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
+/* ══════════════════════════════════════════════
    ADMIN — CENTRAL REPORTING
 ══════════════════════════════════════════════ */
 

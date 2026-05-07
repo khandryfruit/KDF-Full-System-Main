@@ -1,0 +1,436 @@
+## Master Prompt — Invoice Permissions + Full Functional System Fix
+
+You need to completely fix the Invoice & Staff Permission system.
+Right now the UI is showing options, but most buttons/features are NOT functional.
+
+This must now become a fully working production-level system with proper backend validation, permissions, APIs, database logic, role control, and real-time functionality.
+
+---
+
+# REQUIRED FIXES
+
+## 1. Invoice Actions Are Not Working
+
+Currently these buttons/icons are visible but not functional:
+
+* View Invoice
+* Edit Invoice
+* Print Invoice
+* Return Invoice
+* Payment Status Update
+* Partial Payment
+* Delete Invoice
+
+You must:
+
+### Make ALL invoice actions functional
+
+Every action must:
+
+* Open proper modal/page
+* Fetch real invoice data
+* Save updates to database
+* Validate permissions before action
+* Show loading state
+* Show success/error toast
+* Refresh table automatically
+* Prevent unauthorized access
+
+---
+
+# 2. STAFF PERMISSION SYSTEM IS BROKEN
+
+Currently permissions UI exists but does NOT control actual functionality.
+
+Example:
+
+* “Edit Invoice” permission checked
+* But user still cannot edit invoice
+
+OR
+
+* Permission disabled
+* But user can still access routes manually
+
+This is WRONG.
+
+---
+
+# FIX REQUIRED
+
+Implement FULL ROLE-BASED ACCESS CONTROL (RBAC)
+
+---
+
+# REQUIRED PERMISSION LOGIC
+
+## INVOICE MODULE
+
+### Create Invoice
+
+User can:
+
+* Create invoice
+* Save invoice
+* Add products
+* Add customer
+* Add discount
+
+Block if permission disabled.
+
+---
+
+### Edit Invoice
+
+User can:
+
+* Edit invoice items
+* Change quantity
+* Change price
+* Change customer
+* Update payment
+
+If disabled:
+
+* Hide edit icon/button
+* Protect API route
+* Prevent manual URL access
+
+---
+
+### Delete Invoice
+
+User can:
+
+* Delete invoice
+
+If disabled:
+
+* Hide delete button
+* Block backend API access
+
+---
+
+### Print Invoice
+
+User can:
+
+* Print invoice
+* Download PDF
+* Thermal print support
+
+If disabled:
+
+* Hide print button
+* Block API generation
+
+---
+
+### Process Returns
+
+User can:
+
+* Open return modal
+* Select products
+* Add return quantity
+* Save return invoice
+* Update stock automatically
+
+If disabled:
+
+* Hide return button
+* Block return API
+
+---
+
+### Apply Discounts
+
+User can:
+
+* Add fixed discount
+* Add percentage discount
+
+If disabled:
+
+* Discount field disabled
+
+---
+
+### View All Invoices
+
+If enabled:
+
+* Can view all branch invoices
+
+If disabled:
+
+* Only own invoices OR assigned branch invoices
+
+---
+
+# 3. PAYMENT MODULE FIX
+
+Currently payment options are incomplete.
+
+Implement:
+
+### Refund Payment
+
+* Full refund
+* Update payment status
+* Add logs
+
+### Partial Refund
+
+* Partial amount refund
+* Auto balance calculation
+
+### Edit Payment
+
+* Change payment method
+* Update transaction
+
+All actions require permission validation.
+
+---
+
+# 4. RETURN SYSTEM (IMPORTANT)
+
+The “Return” option was added but backend logic is missing.
+
+Build FULL return workflow:
+
+## Return Invoice Flow
+
+### When Return Clicked:
+
+Open modal with:
+
+* Invoice items
+* Quantity sold
+* Return quantity field
+* Return reason
+* Refund amount
+
+---
+
+# On Save Return
+
+System must:
+
+* Create return record
+* Update inventory stock
+* Update invoice totals
+* Update customer balance
+* Update payment status
+
+---
+
+# Return Status Support
+
+Add statuses:
+
+* Pending
+* Approved
+* Refunded
+* Rejected
+
+---
+
+# 5. UI/UX IMPROVEMENTS
+
+Current UI works visually only.
+
+Need PRODUCTION-LEVEL UX.
+
+---
+
+# Invoice Table Improvements
+
+Add:
+
+* Pagination
+* Skeleton loading
+* Search debounce
+* Filters
+* Date range filter
+* Export CSV/PDF
+* Responsive mobile table
+
+---
+
+# Action Icons
+
+Improve spacing + tooltip:
+
+* View
+* Edit
+* Print
+* Return
+
+Use professional icons.
+
+---
+
+# 6. BACKEND SECURITY (VERY IMPORTANT)
+
+Implement middleware:
+
+## Example:
+
+```js
+checkPermission("edit_invoice")
+```
+
+Protect ALL:
+
+* API routes
+* Dashboard pages
+* Actions
+* Mutations
+
+Never trust frontend only.
+
+---
+
+# 7. DATABASE REQUIREMENTS
+
+Ensure tables/models exist:
+
+## Staff
+
+* role
+* permissions[]
+
+## Invoices
+
+* payment_status
+* return_status
+* branch_id
+
+## Returns
+
+* invoice_id
+* product_id
+* qty
+* refund_amount
+* reason
+
+## Payments
+
+* payment_method
+* refunded_amount
+
+---
+
+# 8. REAL-TIME TABLE REFRESH
+
+After:
+
+* Edit
+* Return
+* Refund
+* Delete
+
+Invoice table should auto refresh WITHOUT page reload.
+
+Use:
+
+* React Query / SWR / WebSocket
+
+---
+
+# 9. ERROR HANDLING
+
+Add proper validation:
+
+* Invalid quantity
+* Over return quantity
+* Payment mismatch
+* Unauthorized action
+* Deleted invoice access
+
+Show proper toast messages.
+
+---
+
+# 10. AUDIT LOG SYSTEM
+
+Track ALL actions:
+
+* Who edited invoice
+* Who refunded
+* Who returned product
+* Time/date
+* Branch
+
+Create activity logs.
+
+---
+
+# 11. MULTI BRANCH SUPPORT
+
+Permissions must support:
+
+* Branch-level access
+* Global admin access
+* Branch manager restrictions
+
+Cashier should NOT access other branch invoices unless permission enabled.
+
+---
+
+# 12. REQUIRED TECHNICAL IMPLEMENTATION
+
+Frontend:
+
+* React
+* Tailwind
+* ShadCN UI
+* Responsive modals
+* Loading states
+
+Backend:
+
+* Proper controllers
+* Permission middleware
+* Validation layer
+* Secure APIs
+
+Database:
+
+* Transaction support
+* Rollback on failure
+
+---
+
+# 13. TESTING CHECKLIST
+
+Before completion verify:
+
+✅ Edit Invoice works
+✅ Print works
+✅ Return works
+✅ Refund works
+✅ Permissions actually block actions
+✅ Unauthorized APIs blocked
+✅ Inventory updates correctly
+✅ Partial payments calculate correctly
+✅ Mobile responsive
+✅ Real-time updates working
+✅ Logs generated properly
+
+---
+
+# 14. FINAL REQUIREMENT
+
+Do NOT leave:
+
+* Dummy buttons
+* Fake actions
+* Static modals
+* Placeholder APIs
+
+Everything must be FULLY FUNCTIONAL end-to-end.
+
+This is a production invoice management system — not UI only.

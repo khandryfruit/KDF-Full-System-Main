@@ -10,7 +10,7 @@ import {
   CheckCircle, XCircle, MinusCircle, Landmark,
   Smartphone, Package, ChevronRight, ChevronLeft,
   Minus, UserPlus, Users, MapPin, StickyNote,
-  ExternalLink,
+  ExternalLink, Pencil, Save, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1867,48 +1867,508 @@ function NewPurchaseView() {
 }
 
 /* ═══════════════════════════════════════════════
-   VIEW 4 — INVOICE HISTORY
+   VIEW 4 — INVOICE HISTORY — HELPERS & TYPES
 ═══════════════════════════════════════════════ */
-type HistoryEntry = typeof MOCK_HISTORY[0];
+interface BranchInvoice {
+  id: number; invoiceNo: string; type: string; status: string;
+  customerName?: string; customerPhone?: string;
+  grandTotal: string; subtotal: string; discountAmt: string;
+  shipping: string; taxAmt: string;
+  paymentStatus: string; paymentMethod: string; paidAmount: string;
+  notes?: string; createdAt: string; items: any[]; branchId: number;
+  branchName?: string; branchCity?: string;
+}
 
+function adminApiFetch(path: string, opts?: RequestInit) {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+  return fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
+  }).then(async r => {
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error ?? `HTTP ${r.status}`); }
+    return r.json();
+  });
+}
+
+function printBranchInvoice(inv: BranchInvoice) {
+  const items: any[] = inv.items ?? [];
+  const rows = items.map((it: any) => `
+    <tr>
+      <td style="padding:4px 6px;border-bottom:1px solid #f0f0f0">${it.name ?? it.productName ?? "Item"}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;text-align:center">${it.qty ?? it.quantity ?? 1}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;text-align:right">Rs.${Number(it.lineTotal ?? it.price ?? 0).toLocaleString("en-PK")}</td>
+    </tr>`).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${inv.invoiceNo}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:12px;color:#111;width:80mm;margin:0 auto}
+  .logo{text-align:center;padding:12px 0 4px}.brand{font-size:16px;font-weight:900;letter-spacing:2px}.sub{font-size:9px;color:#666;margin-top:2px}
+  .divider{border-top:1px dashed #ccc;margin:8px 0}.inv-no{text-align:center;font-weight:bold;font-size:13px;margin:4px 0}
+  .meta{font-size:10px;color:#555;text-align:center;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{font-size:10px;font-weight:bold;text-align:left;padding:4px 6px;border-bottom:2px solid #111}
+  .totals{margin-top:8px;font-size:11px}.totals tr td{padding:3px 6px}
+  .grand td{font-weight:900;font-size:13px;border-top:2px solid #111;padding-top:6px}
+  .footer{text-align:center;font-size:10px;color:#888;margin-top:12px;padding-top:8px;border-top:1px dashed #ccc}
+  @media print{body{width:80mm}}</style></head><body>
+  <div class="logo"><div class="brand">KDF NUTS</div><div class="sub">Khan Baba Dry Fruits · ${inv.branchName ?? "Branch"}</div></div>
+  <div class="divider"></div>
+  <div class="inv-no">${inv.invoiceNo}</div>
+  <div class="meta">Customer: ${inv.customerName ?? "Walk-in"}${inv.customerPhone ? " · " + inv.customerPhone : ""}</div>
+  <div class="meta">${new Date(inv.createdAt).toLocaleString("en-PK")}</div>
+  <div class="divider"></div>
+  <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows}</tbody></table>
+  <div class="divider"></div>
+  <table class="totals">
+    <tr><td>Subtotal</td><td style="text-align:right">Rs.${Number(inv.subtotal).toLocaleString("en-PK")}</td></tr>
+    ${Number(inv.discountAmt) > 0 ? `<tr><td>Discount</td><td style="text-align:right">-Rs.${Number(inv.discountAmt).toLocaleString("en-PK")}</td></tr>` : ""}
+    <tr class="grand"><td>TOTAL</td><td style="text-align:right">Rs.${Number(inv.grandTotal).toLocaleString("en-PK")}</td></tr>
+    <tr><td style="font-size:10px;color:#666">Payment</td><td style="text-align:right;font-size:10px;color:#666;text-transform:capitalize">${inv.paymentMethod.replace(/_/g," ")} · ${inv.paymentStatus}</td></tr>
+  </table>
+  <div class="footer">Thank you for shopping with KDF NUTS!<br>كاروبار كو سہارا ديں</div>
+  </body></html>`;
+  const w = window.open("", "_blank", "width=420,height=680");
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => { w.focus(); w.print(); }, 400); }
+}
+
+const INV_STATUS_COLORS: Record<string, string> = {
+  completed:         "bg-emerald-50 text-emerald-700 border-emerald-200",
+  edited:            "bg-blue-50 text-blue-700 border-blue-200",
+  draft:             "bg-gray-100 text-gray-600 border-gray-200",
+  returned:          "bg-red-50 text-red-700 border-red-200",
+  partially_returned:"bg-orange-50 text-orange-700 border-orange-200",
+  exchanged:         "bg-purple-50 text-purple-700 border-purple-200",
+  refunded:          "bg-rose-50 text-rose-700 border-rose-200",
+};
+const PAY_STATUS_COLORS: Record<string, string> = {
+  paid:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  unpaid:  "bg-red-50 text-red-700 border-red-200",
+  partial: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+/* ── Admin Edit Dialog ─────────────────────────────────────── */
+function AdminInvoiceEditDialog({ invoice, onClose, onSaved }: {
+  invoice: BranchInvoice; onClose: () => void; onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    customerName: invoice.customerName ?? "",
+    customerPhone: invoice.customerPhone ?? "",
+    paymentMethod: invoice.paymentMethod,
+    paymentStatus: invoice.paymentStatus,
+    paidAmount: invoice.paidAmount ?? "0",
+    notes: invoice.notes ?? "",
+    editReason: "",
+  });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.editReason.trim()) { toast({ variant: "destructive", title: "Please enter a reason for editing" }); return; }
+    setSaving(true);
+    try {
+      await adminApiFetch(`/api/admin/branch-invoices/${invoice.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          customerName: form.customerName || undefined,
+          customerPhone: form.customerPhone || undefined,
+          paymentMethod: form.paymentMethod,
+          paymentStatus: form.paymentStatus,
+          paidAmount: Number(form.paidAmount),
+          notes: form.notes,
+          editReason: form.editReason,
+        }),
+      });
+      toast({ title: "Invoice updated", description: invoice.invoiceNo });
+      onSaved();
+    } catch (err: any) { toast({ variant: "destructive", title: err.message }); }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Pencil className="w-4 h-4 text-blue-500" /> Edit Invoice — {invoice.invoiceNo}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Customer Name</Label>
+              <Input value={form.customerName} onChange={e => set("customerName", e.target.value)} placeholder="Walk-in" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Phone</Label>
+              <Input value={form.customerPhone} onChange={e => set("customerPhone", e.target.value)} placeholder="03xx…" className="h-9 text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Payment Method</Label>
+              <Select value={form.paymentMethod} onValueChange={v => set("paymentMethod", v)}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["cash","card","bank_transfer","easypaisa","jazzcash","cheque","credit"].map(m => (
+                    <SelectItem key={m} value={m}>{m.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Payment Status</Label>
+              <Select value={form.paymentStatus} onValueChange={v => set("paymentStatus", v)}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {form.paymentStatus === "partial" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Amount Paid (Rs.)</Label>
+              <Input type="number" value={form.paidAmount} onChange={e => set("paidAmount", e.target.value)} className="h-9 text-sm" />
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Notes</Label>
+            <Textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2} className="text-sm resize-none" placeholder="Internal notes…" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-red-600">Reason for Edit <span className="text-red-500">*</span></Label>
+            <Input value={form.editReason} onChange={e => set("editReason", e.target.value)} placeholder="e.g. Customer payment method changed" className="h-9 text-sm border-red-200 focus:border-red-400" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Admin Return Dialog ────────────────────────────────────── */
+function AdminReturnDialog({ invoice, onClose, onSaved }: {
+  invoice: BranchInvoice; onClose: () => void; onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [returnType, setReturnType] = useState("full_return");
+  const [returnAmount, setReturnAmount] = useState(String(Number(invoice.grandTotal)));
+  const [refundMethod, setRefundMethod] = useState("cash");
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const handleSave = async () => {
+    if (!reason.trim()) { toast({ variant: "destructive", title: "Please enter a return reason" }); return; }
+    if (!returnAmount || Number(returnAmount) <= 0) { toast({ variant: "destructive", title: "Enter a valid return amount" }); return; }
+    if (Number(returnAmount) > Number(invoice.grandTotal)) {
+      toast({ variant: "destructive", title: "Return amount cannot exceed invoice total" }); return;
+    }
+    setSaving(true);
+    try {
+      await adminApiFetch(`/api/admin/branch-invoices/${invoice.id}/return`, {
+        method: "POST",
+        body: JSON.stringify({ returnType, returnAmount: Number(returnAmount), refundMethod, reason, notes }),
+      });
+      toast({ title: "Return processed", description: `${invoice.invoiceNo} — Rs. ${Number(returnAmount).toLocaleString("en-PK")} refunded` });
+      onSaved();
+    } catch (err: any) { toast({ variant: "destructive", title: err.message }); }
+    setSaving(false);
+  };
+
+  const maxAmt = Number(invoice.grandTotal);
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4 text-orange-500" /> Process Return — {invoice.invoiceNo}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm">
+            <p className="font-semibold text-amber-800">{invoice.customerName ?? "Walk-in"}</p>
+            <p className="text-amber-700">Invoice Total: <span className="font-bold">Rs. {maxAmt.toLocaleString("en-PK")}</span></p>
+            <p className="text-xs text-amber-600 mt-1">{(invoice.items ?? []).length} item(s) · {invoice.paymentMethod.replace(/_/g, " ")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Return Type</Label>
+            <Select value={returnType} onValueChange={v => {
+              setReturnType(v);
+              if (v === "full_return") setReturnAmount(String(maxAmt));
+            }}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full_return">Full Return</SelectItem>
+                <SelectItem value="partial_return">Partial Return</SelectItem>
+                <SelectItem value="exchange">Exchange</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Return Amount (Rs.)</Label>
+              <Input type="number" value={returnAmount} max={maxAmt}
+                onChange={e => setReturnAmount(e.target.value)}
+                disabled={returnType === "full_return"}
+                className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Refund Method</Label>
+              <Select value={refundMethod} onValueChange={setRefundMethod}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["cash","card","bank_transfer","easypaisa","jazzcash","store_credit"].map(m => (
+                    <SelectItem key={m} value={m}>{m.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-red-600">Return Reason <span className="text-red-500">*</span></Label>
+            <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Defective product, wrong item…" className="h-9 text-sm border-red-200 focus:border-red-400" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Additional Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="text-sm resize-none" placeholder="Any additional notes…" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button className="flex-1 gap-2 bg-orange-600 hover:bg-orange-700 text-white" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />} Process Return
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Admin Invoice View Dialog ─────────────────────────────── */
+function AdminInvoiceViewDialog({ invoice, onClose, onEdit, onReturn, onDelete, onPrint }: {
+  invoice: BranchInvoice; onClose: () => void;
+  onEdit: () => void; onReturn: () => void; onDelete: () => void; onPrint: () => void;
+}) {
+  const items: any[] = invoice.items ?? [];
+  const canReturn = !["returned", "refunded", "exchanged"].includes(invoice.status);
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> {invoice.invoiceNo}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-1">
+          {/* Meta row */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-muted/40 rounded-xl p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Customer</p>
+              <p className="font-semibold">{invoice.customerName ?? "Walk-in"}</p>
+              {invoice.customerPhone && <p className="text-xs text-muted-foreground">{invoice.customerPhone}</p>}
+            </div>
+            <div className="bg-muted/40 rounded-xl p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Branch</p>
+              <p className="font-semibold">{invoice.branchName ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">{invoice.branchCity ?? ""}</p>
+            </div>
+          </div>
+          {/* Status badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`inline-flex px-2.5 py-1 rounded-full border text-xs font-semibold ${INV_STATUS_COLORS[invoice.status] ?? "bg-muted text-muted-foreground border-border"}`}>
+              {invoice.status.replace(/_/g, " ")}
+            </span>
+            <span className={`inline-flex px-2.5 py-1 rounded-full border text-xs font-semibold ${PAY_STATUS_COLORS[invoice.paymentStatus] ?? ""}`}>
+              {invoice.paymentMethod.replace(/_/g, " ")} · {invoice.paymentStatus}
+            </span>
+            <span className="text-xs text-muted-foreground ml-auto">{new Date(invoice.createdAt).toLocaleString("en-PK")}</span>
+          </div>
+          {/* Items */}
+          {items.length > 0 && (
+            <div className="border border-border rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 border-b border-border">
+                <p className="text-xs font-semibold text-muted-foreground">ITEMS ({items.length})</p>
+              </div>
+              <div className="divide-y divide-border">
+                {items.map((it: any, i: number) => (
+                  <div key={i} className="px-3 py-2 flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-medium">{it.name ?? it.productName ?? "Item"}</p>
+                      {it.sku && <p className="text-xs text-muted-foreground">{it.sku}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">{fmtRs(Number(it.lineTotal ?? it.price ?? 0))}</p>
+                      <p className="text-xs text-muted-foreground">Qty: {it.qty ?? it.quantity ?? 1}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Totals */}
+          <div className="bg-muted/30 rounded-xl p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{fmtRs(Number(invoice.subtotal))}</span></div>
+            {Number(invoice.discountAmt) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-red-600">-{fmtRs(Number(invoice.discountAmt))}</span></div>}
+            {Number(invoice.taxAmt) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{fmtRs(Number(invoice.taxAmt))}</span></div>}
+            <div className="flex justify-between font-black text-base border-t border-border pt-1.5 mt-1.5">
+              <span>Grand Total</span><span>{fmtRs(Number(invoice.grandTotal))}</span>
+            </div>
+            {invoice.paymentStatus === "partial" && (
+              <div className="flex justify-between text-amber-700"><span>Paid</span><span>{fmtRs(Number(invoice.paidAmount))}</span></div>
+            )}
+          </div>
+          {invoice.notes && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+              <p className="text-xs font-semibold text-amber-600 mb-1">NOTES</p>
+              {invoice.notes}
+            </div>
+          )}
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={onPrint}><Printer className="w-4 h-4" /> Print</Button>
+            <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={onEdit}><Pencil className="w-4 h-4" /> Edit</Button>
+            {canReturn && <Button size="sm" className="gap-1.5 bg-orange-500 hover:bg-orange-600 text-white" onClick={onReturn}><RotateCcw className="w-4 h-4" /> Return</Button>}
+            <Button size="sm" variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50 ml-auto" onClick={onDelete}><Trash2 className="w-4 h-4" /> Delete</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   VIEW 4 — INVOICE HISTORY (Real API)
+═══════════════════════════════════════════════ */
 function InvoiceHistoryView() {
   const [, navigate] = useLocation();
-  const [search, setSearch]   = useState("");
-  const [filter, setFilter]   = useState("all");
-  const [showPreview, setShowPreview] = useState(false);
-  const [selectedInv, setSelectedInv] = useState<HistoryEntry | null>(null);
+  const { toast } = useToast();
 
-  const filtered = MOCK_HISTORY
-    .filter(h => h.type === "invoice")
-    .filter(inv =>
-      inv.invoiceNo.toLowerCase().includes(search.toLowerCase()) ||
-      (inv.customer?.name ?? "").toLowerCase().includes(search.toLowerCase())
-    )
-    .filter(inv => filter === "all" || inv.status === filter);
+  const [invoices, setInvoices] = useState<BranchInvoice[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [search, setSearch]         = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPay, setFilterPay]   = useState("all");
 
-  const handleView = (inv: HistoryEntry) => {
-    setSelectedInv(inv);
-    setShowPreview(true);
+  const [editInv, setEditInv]     = useState<BranchInvoice | null>(null);
+  const [returnInv, setReturnInv] = useState<BranchInvoice | null>(null);
+  const [deleteInv, setDeleteInv] = useState<BranchInvoice | null>(null);
+  const [viewInv, setViewInv]     = useState<BranchInvoice | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const loadInvoices = useCallback(async (pg = 1, append = false) => {
+    if (!append) setLoading(true); else setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ page: String(pg), limit: "20", type: "invoice" });
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      if (search.trim()) params.set("q", search.trim());
+      const d = await adminApiFetch(`/api/admin/branch-invoices?${params}`);
+      if (append) setInvoices(prev => [...prev, ...(d.invoices ?? [])]);
+      else { setInvoices(d.invoices ?? []); }
+      setPage(pg);
+      setTotal(d.total ?? 0);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Failed to load invoices", description: err.message });
+    }
+    if (!append) setLoading(false); else setLoadingMore(false);
+  }, [filterStatus, search, toast]);
+
+  useEffect(() => { loadInvoices(1, false); }, [filterStatus]);
+
+  useEffect(() => {
+    const t = setTimeout(() => loadInvoices(1, false), 450);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const displayed = filterPay === "all"
+    ? invoices
+    : invoices.filter(inv => inv.paymentStatus === filterPay);
+
+  const handleDelete = async () => {
+    if (!deleteInv) return;
+    setDeleteLoading(true);
+    try {
+      await adminApiFetch(`/api/admin/branch-invoices/${deleteInv.id}`, { method: "DELETE" });
+      toast({ title: "Invoice deleted", description: deleteInv.invoiceNo });
+      setDeleteInv(null);
+      loadInvoices(1, false);
+    } catch (err: any) { toast({ variant: "destructive", title: err.message }); }
+    setDeleteLoading(false);
   };
 
-  const handlePrint = (inv: HistoryEntry) => {
-    setSelectedInv(inv);
-    setShowPreview(true);
-    setTimeout(() => window.print(), 600);
-  };
-
-  const handleWhatsApp = (inv: HistoryEntry) => {
-    const msg = encodeURIComponent(
-      `*KDF NUTS Invoice*\nInvoice No: ${inv.invoiceNo}\nCustomer: ${inv.customer?.name ?? "Walk-in"}\nTotal: Rs. ${inv.total.toLocaleString("en-PK")}\nStatus: ${inv.status.toUpperCase()}\n\nThank you for shopping with KDF NUTS!`
-    );
-    const phone = inv.customer?.phone?.replace(/\D/g, "") ?? "";
+  const handleWhatsApp = (inv: BranchInvoice) => {
+    if (!inv.customerPhone) { toast({ variant: "destructive", title: "No customer phone number" }); return; }
+    const phone = inv.customerPhone.replace(/\D/g, "");
     const waPhone = phone.startsWith("0") ? "92" + phone.slice(1) : phone;
+    const msg = encodeURIComponent(
+      `*KDF NUTS Invoice*\nInvoice: ${inv.invoiceNo}\nCustomer: ${inv.customerName ?? "Walk-in"}\nTotal: Rs. ${Number(inv.grandTotal).toLocaleString("en-PK")}\nStatus: ${inv.status.toUpperCase()}\n\nThank you for shopping with KDF NUTS!`
+    );
     window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank");
+  };
+
+  const exportCsv = () => {
+    const rows = [["Invoice No","Customer","Phone","Branch","Date","Payment","Amount","Status","Pay Status"]];
+    invoices.forEach(inv => rows.push([
+      inv.invoiceNo, inv.customerName ?? "Walk-in", inv.customerPhone ?? "",
+      inv.branchName ?? "", new Date(inv.createdAt).toLocaleDateString("en-PK"),
+      inv.paymentMethod, inv.grandTotal, inv.status, inv.paymentStatus,
+    ]));
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `invoices-${Date.now()}.csv`; a.click();
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Modals ── */}
+      {editInv && (
+        <AdminInvoiceEditDialog invoice={editInv} onClose={() => setEditInv(null)}
+          onSaved={() => { setEditInv(null); loadInvoices(1, false); }} />
+      )}
+      {returnInv && (
+        <AdminReturnDialog invoice={returnInv} onClose={() => setReturnInv(null)}
+          onSaved={() => { setReturnInv(null); loadInvoices(1, false); }} />
+      )}
+      {deleteInv && (
+        <Dialog open onOpenChange={v => { if (!v) setDeleteInv(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-5 h-5" /> Delete Invoice
+              </DialogTitle>
+            </DialogHeader>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-2">
+              <p className="font-bold text-red-700">{deleteInv.invoiceNo}</p>
+              <p className="text-sm text-red-600">{deleteInv.customerName ?? "Walk-in"} · {fmtRs(Number(deleteInv.grandTotal))}</p>
+              <p className="text-xs text-red-500 mt-2">This action cannot be undone. The invoice will be permanently deleted and recorded in the audit log.</p>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteInv(null)}>Cancel</Button>
+              <Button className="flex-1 gap-2 bg-red-600 hover:bg-red-700 text-white" onClick={handleDelete} disabled={deleteLoading}>
+                {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Delete
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {viewInv && (
+        <AdminInvoiceViewDialog
+          invoice={viewInv}
+          onClose={() => setViewInv(null)}
+          onEdit={() => { setViewInv(null); setEditInv(viewInv); }}
+          onReturn={() => { setViewInv(null); setReturnInv(viewInv); }}
+          onDelete={() => { setViewInv(null); setDeleteInv(viewInv); }}
+          onPrint={() => printBranchInvoice(viewInv)}
+        />
+      )}
+
+      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <Breadcrumb items={[
@@ -1916,122 +2376,202 @@ function InvoiceHistoryView() {
             { label: "Invoice History" },
           ]} />
           <h1 className="text-xl font-black tracking-tight mt-2">Invoice History</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{total} total invoices across all branches</p>
         </div>
         <Button size="sm" className="gap-1.5 text-xs h-8 font-bold" onClick={() => navigate("/invoice/new")}>
           <Plus className="w-3.5 h-3.5" /> New Invoice
         </Button>
       </div>
 
-      {/* Table card */}
+      {/* ── Table Card ── */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        {/* Toolbar */}
         <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-muted-foreground">{filtered.length} invoice{filtered.length !== 1 ? "s" : ""}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-muted-foreground">{displayed.length} of {total}</span>
+            <button onClick={() => loadInvoices(1, false)} className="p-1.5 rounded-lg hover:bg-muted transition-colors" title="Refresh">
+              <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoice or customer…" className="pl-9 h-9 w-52 text-sm" />
+              <Input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search invoice or customer…" className="pl-9 h-9 w-52 text-sm" />
             </div>
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
+            <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); }}>
+              <SelectTrigger className="h-9 w-36 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="edited">Edited</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="returned">Returned</SelectItem>
+                <SelectItem value="partially_returned">Part. Returned</SelectItem>
+                <SelectItem value="exchanged">Exchanged</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterPay} onValueChange={setFilterPay}>
+              <SelectTrigger className="h-9 w-28 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Payment</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="unpaid">Unpaid</SelectItem>
                 <SelectItem value="partial">Partial</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" className="gap-1.5 h-9"><Download className="w-3.5 h-3.5" /> Export</Button>
+            <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCsv}>
+              <Download className="w-3.5 h-3.5" /> CSV
+            </Button>
           </div>
         </div>
-        {/* Mobile cards — visible on sm and below */}
-        <div className="sm:hidden divide-y divide-border">
-          {filtered.length === 0
-            ? <div className="py-14 text-center text-muted-foreground text-sm">No invoices found</div>
-            : filtered.map(inv => (
-              <div key={inv.id} className="px-4 py-3.5 flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-sm font-bold text-primary">{inv.invoiceNo}</span>
-                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_BADGE[inv.status]}`}>
-                    {STATUS_ICON[inv.status]}{STATUS_LABEL[inv.status]}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{inv.customer?.name ?? "Walk-in"} · {inv.createdAt.toLocaleDateString("en-PK", { day: "numeric", month: "short" })}</span>
-                  <span className="font-bold text-sm text-foreground tabular-nums">{fmtRs(inv.total)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="text-xs capitalize">{inv.paymentMethod.replace("_", " ")}</Badge>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleView(inv)}><Eye className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handlePrint(inv)}><Printer className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600" onClick={() => handleWhatsApp(inv)}><MessageCircle className="w-4 h-4" /></Button>
-                  </div>
-                </div>
-              </div>
-            ))
-          }
-        </div>
-        {/* Desktop table */}
-        <div className="hidden sm:block overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice No</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0
-                ? <TableRow><TableCell colSpan={7} className="text-center py-14 text-muted-foreground text-sm">No invoices found</TableCell></TableRow>
-                : filtered.map(inv => (
-                  <TableRow key={inv.id} className="hover:bg-muted/20">
-                    <TableCell className="font-mono text-sm font-bold text-primary">{inv.invoiceNo}</TableCell>
-                    <TableCell><p className="font-medium text-sm">{inv.customer?.name ?? "—"}</p></TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{inv.createdAt.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "2-digit" })}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-xs capitalize">{inv.paymentMethod.replace("_", " ")}</Badge></TableCell>
-                    <TableCell className="text-right font-bold text-sm tabular-nums">{fmtRs(inv.total)}</TableCell>
-                    <TableCell>
-                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_BADGE[inv.status]}`}>
-                        {STATUS_ICON[inv.status]}
-                        {STATUS_LABEL[inv.status]}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Invoice" onClick={() => handleView(inv)}><Eye className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Print Invoice" onClick={() => handlePrint(inv)}><Printer className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Send via WhatsApp" onClick={() => handleWhatsApp(inv)}><MessageCircle className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              }
-            </TableBody>
-          </Table>
-        </div>
-      </div>
 
-      <InvoicePreviewDialog
-        open={showPreview}
-        onClose={() => { setShowPreview(false); setSelectedInv(null); }}
-        invoiceNo={selectedInv?.invoiceNo ?? "INV-2026-001"}
-        customer={selectedInv?.customer ?? undefined}
-        items={[]}
-        invoiceStatus={selectedInv?.status ?? "paid"}
-        paymentMethod={selectedInv?.paymentMethod ?? "card"}
-        subtotal={selectedInv?.total ?? 0}
-        discountAmt={0}
-        shipping={0}
-        taxAmt={0}
-        grandTotal={selectedInv?.total ?? 0}
-        invoiceDiscount={0}
-        taxRate={0}
-      />
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="p-6 space-y-3">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="h-14 bg-muted/30 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Mobile cards */}
+            <div className="sm:hidden divide-y divide-border">
+              {displayed.length === 0 ? (
+                <div className="py-14 text-center text-muted-foreground text-sm">No invoices found</div>
+              ) : displayed.map(inv => (
+                <div key={inv.id} className="px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div>
+                      <span className="font-mono text-sm font-bold text-primary">{inv.invoiceNo}</span>
+                      <p className="text-xs text-muted-foreground">{inv.customerName ?? "Walk-in"} · {inv.branchName ?? "—"}</p>
+                    </div>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] font-semibold ${INV_STATUS_COLORS[inv.status] ?? ""}`}>
+                      {inv.status.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-sm">{fmtRs(Number(inv.grandTotal))}</span>
+                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full border ${PAY_STATUS_COLORS[inv.paymentStatus] ?? ""}`}>
+                        {inv.paymentStatus}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View" onClick={() => setViewInv(inv)}><Eye className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Print" onClick={() => printBranchInvoice(inv)}><Printer className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-500" title="Edit" onClick={() => setEditInv(inv)}><Pencil className="w-4 h-4" /></Button>
+                      {!["returned","refunded","exchanged"].includes(inv.status) && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-orange-500" title="Return" onClick={() => setReturnInv(inv)}><RotateCcw className="w-4 h-4" /></Button>
+                      )}
+                      {inv.customerPhone && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600" title="WhatsApp" onClick={() => handleWhatsApp(inv)}><MessageCircle className="w-4 h-4" /></Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500" title="Delete" onClick={() => setDeleteInv(inv)}><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice No</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right pr-4">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayed.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-14 text-muted-foreground text-sm">
+                        No invoices found
+                      </TableCell>
+                    </TableRow>
+                  ) : displayed.map(inv => (
+                    <TableRow key={inv.id} className="hover:bg-muted/20 cursor-default">
+                      <TableCell className="font-mono text-sm font-bold text-primary">{inv.invoiceNo}</TableCell>
+                      <TableCell>
+                        <p className="font-medium text-sm">{inv.customerName ?? "Walk-in"}</p>
+                        {inv.customerPhone && <p className="text-xs text-muted-foreground">{inv.customerPhone}</p>}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        <p>{inv.branchName ?? "—"}</p>
+                        {inv.branchCity && <p className="opacity-70">{inv.branchCity}</p>}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {new Date(inv.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "2-digit" })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <Badge variant="outline" className="text-xs capitalize">{inv.paymentMethod.replace(/_/g, " ")}</Badge>
+                          <div>
+                            <span className={`inline-flex text-[10px] px-1.5 py-0.5 rounded-full border ${PAY_STATUS_COLORS[inv.paymentStatus] ?? ""}`}>
+                              {inv.paymentStatus}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-sm tabular-nums">
+                        {fmtRs(Number(inv.grandTotal))}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] font-semibold ${INV_STATUS_COLORS[inv.status] ?? "bg-muted text-muted-foreground border-border"}`}>
+                          {inv.status.replace(/_/g, " ")}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-0.5 pr-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Invoice" onClick={() => setViewInv(inv)}>
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Print Invoice" onClick={() => printBranchInvoice(inv)}>
+                            <Printer className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-500" title="Edit Invoice" onClick={() => setEditInv(inv)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          {!["returned","refunded","exchanged"].includes(inv.status) && (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-orange-500" title="Return / Exchange" onClick={() => setReturnInv(inv)}>
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {inv.customerPhone && (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Send via WhatsApp" onClick={() => handleWhatsApp(inv)}>
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" title="Delete Invoice" onClick={() => setDeleteInv(inv)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Load More */}
+            {invoices.length < total && (
+              <div className="px-5 py-4 border-t border-border">
+                <Button variant="outline" className="w-full gap-2" onClick={() => loadInvoices(page + 1, true)} disabled={loadingMore}>
+                  {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {loadingMore ? "Loading…" : `Load More (${total - invoices.length} remaining)`}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
