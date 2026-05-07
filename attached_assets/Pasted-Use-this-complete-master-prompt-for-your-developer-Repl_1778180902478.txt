@@ -1,0 +1,340 @@
+Use this complete master prompt for your developer/Replit AI:
+
+---
+
+Complete Premium Header/Navbar Redesign Required (Enterprise-Level UI/UX)
+
+Current header/navbar design looks basic and outdated.
+It does not create a premium shopping experience or strong first impression.
+
+We need a world-class eCommerce header inspired by:
+
+* Amazon
+* Noon
+* Bagallery
+* Temu
+* Alibaba
+* Shopify Plus stores
+* Apple-level smoothness
+
+Goal:
+When users open the website, the header should instantly make them feel:
+
+* trusted
+* premium
+* modern
+* fast
+* professional
+* easy to shop
+
+The design must be visually stunning, user-friendly, conversion-focused, mobile optimized, and SEO friendly.
+
+━━━━━━━━━━━━━━━━━━━
+
+1. Complete Header UI/UX Redesign
+   ━━━━━━━━━━━━━━━━━━━
+
+Redesign the entire header from scratch.
+
+Requirements:
+
+* Modern premium layout
+* Better spacing
+* Better typography
+* Better alignment
+* Smooth hover animations
+* Glassmorphism/light shadows
+* Sticky premium navbar
+* Soft transitions
+* Professional icon system
+* Luxury feel
+
+Use brand colors:
+
+* Green #5FA800
+* Orange #F58300
+
+The header should feel alive and interactive.
+
+━━━━━━━━━━━━━━━━━━━
+2. Premium Announcement Bar
+━━━━━━━━━━━━━━━━━━━
+
+Current red announcement bars look repetitive and low-quality.
+
+Replace with:
+
+* Elegant auto-scrolling marquee
+* Dynamic offers slider
+* Premium animation
+* Countdown offers
+* Coupon highlights
+* Free delivery promotion
+* Ramadan/Eid/festival campaign support
+
+Add:
+
+* Pause on hover
+* Mobile optimization
+* Smooth transitions
+
+━━━━━━━━━━━━━━━━━━━
+3. Search Bar Upgrade (Very Important)
+━━━━━━━━━━━━━━━━━━━
+
+Current search looks basic.
+
+Create:
+
+* AI-style modern search bar
+* Rounded premium search
+* Animated focus effect
+* Search suggestions
+* Trending searches
+* Popular products
+* Instant results dropdown
+* Product thumbnails
+* Voice search icon
+* Mobile full-screen search experience
+
+Add:
+
+* Typing animation placeholder
+  Examples:
+  “Search almonds…”
+  “Search pistachio…”
+  “Search organic honey…”
+
+Search should feel similar to:
+
+* Amazon
+* Daraz
+* Noon
+
+━━━━━━━━━━━━━━━━━━━
+4. Mega Menu Navigation
+━━━━━━━━━━━━━━━━━━━
+
+Create modern mega menus for:
+
+* Dry Fruits
+* Nuts
+* Seeds
+* Organic
+* Deals
+
+Mega menu must include:
+
+* Category images
+* Featured products
+* Popular categories
+* Best sellers
+* Promotional banners
+* Hover animations
+
+Desktop:
+
+* Premium mega dropdown
+
+Mobile:
+
+* Smooth slide drawer menu
+
+━━━━━━━━━━━━━━━━━━━
+5. Premium User Actions
+━━━━━━━━━━━━━━━━━━━
+
+Redesign:
+
+* Cart
+* Wishlist
+* User account
+* Location selector
+
+Add:
+
+* Animated cart count
+* Mini cart preview
+* User dropdown
+* Loyalty points badge
+* Wallet balance
+* Recent orders quick access
+
+━━━━━━━━━━━━━━━━━━━
+6. Sticky Smart Header
+━━━━━━━━━━━━━━━━━━━
+
+When scrolling:
+
+* Header shrinks smoothly
+* Sticky navigation activates
+* Smooth transitions
+* Preserve search visibility
+
+Add:
+
+* Blur background effect
+* Floating premium effect
+
+━━━━━━━━━━━━━━━━━━━
+7. Mobile Header Redesign (Very Important)
+━━━━━━━━━━━━━━━━━━━
+
+Mobile header must look ultra-premium.
+
+Requirements:
+
+* Sticky bottom navigation
+* Thumb-friendly UI
+* Modern hamburger menu
+* Slide-out drawer
+* Mobile search overlay
+* Floating cart button
+* Sticky category shortcuts
+
+Bottom navigation:
+
+* Home
+* Categories
+* Search
+* Cart
+* Account
+
+Must feel like:
+
+* Modern mobile shopping apps
+
+━━━━━━━━━━━━━━━━━━━
+8. Hero Banner Integration
+━━━━━━━━━━━━━━━━━━━
+
+Improve hero area connection with header.
+
+Add:
+
+* Smooth transitions
+* Better overlay readability
+* Better CTA buttons
+* Professional arrows
+* Thumbnail previews
+* Auto-play controls
+* Swipe support
+* Dynamic banners
+
+Banner UI should feel luxury and high-converting.
+
+━━━━━━━━━━━━━━━━━━━
+9. Conversion Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Header should improve sales and trust.
+
+Add:
+
+* Trust badges
+* Delivery info
+* Secure payment indicator
+* Live support CTA
+* Flash sale indicator
+* Trending products strip
+
+━━━━━━━━━━━━━━━━━━━
+10. SEO Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Very Important:
+
+* Semantic HTML
+* Crawlable menus
+* Optimized navigation structure
+* Proper heading hierarchy
+* Schema markup
+* Accessibility optimization
+
+Improve:
+
+* Google indexing
+* Internal linking
+* User engagement
+
+━━━━━━━━━━━━━━━━━━━
+11. Performance Optimization
+━━━━━━━━━━━━━━━━━━━
+
+Must remain:
+
+* Lightweight
+* Fast loading
+* CLS safe
+* Optimized animations
+* Lazy loaded assets
+
+Target:
+
+* 90+ Lighthouse Performance
+* 90+ SEO
+
+━━━━━━━━━━━━━━━━━━━
+12. Advanced Premium Features
+━━━━━━━━━━━━━━━━━━━
+
+Add:
+
+* Dark/light mode support
+* Smooth micro-interactions
+* Hover glow effects
+* Elegant dropdown animations
+* Skeleton loading states
+* Smart sticky behavior
+* Backdrop blur
+* Floating action buttons
+
+━━━━━━━━━━━━━━━━━━━
+13. Accessibility & UX
+━━━━━━━━━━━━━━━━━━━
+
+Ensure:
+
+* Keyboard navigation
+* Large tap targets
+* Mobile friendliness
+* High readability
+* Proper contrast ratios
+
+━━━━━━━━━━━━━━━━━━━
+14. Technical Requirements
+━━━━━━━━━━━━━━━━━━━
+
+Code must be:
+
+* Production ready
+* Reusable
+* Clean
+* Component based
+* Responsive
+* SEO friendly
+
+Compatible with:
+
+* Laravel backend
+* Shopify-style architecture
+* Mobile apps
+
+━━━━━━━━━━━━━━━━━━━
+15. Production Deployment
+━━━━━━━━━━━━━━━━━━━
+
+This is NOT demo UI.
+
+Deploy directly on LIVE production server.
+
+Requirements:
+
+* Fully tested
+* Cross-browser compatible
+* Mobile optimized
+* No broken layout
+* No performance issues
+
+Goal:
+The header/navbar should look so premium, modern, smooth, and trustworthy that users immediately feel excited and confident to shop from the website.
