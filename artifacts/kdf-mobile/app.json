@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "KDF RIDER LAHORE",
-    "slug": "kdf-rider-lahore",
+    "slug": "kdf-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "kdf-rider-lahore",
+    "scheme": "kdf-mobile",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
