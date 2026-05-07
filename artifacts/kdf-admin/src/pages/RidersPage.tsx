@@ -8,7 +8,7 @@ import {
   Users, Phone, MessageCircle, MapPin, Plus, Pencil, Trash2,
   CheckCircle, XCircle, Package, TrendingUp, X, RefreshCw,
   DollarSign, CreditCard, Printer, BarChart2, Clock, AlertCircle,
-  RotateCcw, Bike,
+  RotateCcw, Bike, KeyRound, Eye, EyeOff,
 } from "lucide-react";
 
 const API = "/api";
@@ -131,6 +131,102 @@ function RiderModal({ rider, onClose, onSaved }: { rider?: any; onClose: () => v
   );
 }
 
+/* ── SET PASSWORD MODAL ──────────────────────────────── */
+function SetPasswordModal({ rider, onClose }: { rider: any; onClose: () => void }) {
+  const { toast } = useToast();
+  const [pw, setPw]         = useState("");
+  const [pw2, setPw2]       = useState("");
+  const [show, setShow]     = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (pw.length < 6) { toast({ title: "Password too short", description: "Minimum 6 characters required", variant: "destructive" }); return; }
+    if (pw !== pw2)    { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/admin/riders/${rider.id}/set-password`, {
+        method: "POST",
+        body: JSON.stringify({ password: pw }),
+      });
+      if (res.ok) {
+        toast({ title: "Password set!", description: `${rider.name} can now login to the rider app` });
+        onClose();
+      } else {
+        toast({ title: "Failed", description: res.error ?? "Could not set password", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-border">
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <KeyRound size={18} className="text-blue-700" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base">Set App Password</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{rider.name} — {rider.phone}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted">
+            <X size={16} className="text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+            <strong>Login Info for Rider App:</strong><br />
+            Phone: <span className="font-mono font-bold">{rider.phone}</span><br />
+            Password: جو آپ ابھی set کریں گے
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">New Password</label>
+            <div className="relative">
+              <Input
+                type={show ? "text" : "password"}
+                placeholder="Min 6 characters"
+                value={pw}
+                onChange={e => setPw(e.target.value)}
+                className="pr-10"
+              />
+              <button onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {show ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Confirm Password</label>
+            <Input
+              type={show ? "text" : "password"}
+              placeholder="Re-enter password"
+              value={pw2}
+              onChange={e => setPw2(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && save()}
+            />
+            {pw2 && pw !== pw2 && (
+              <p className="text-xs text-red-500 mt-1">Passwords don't match</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 p-5 border-t border-border">
+          <Button onClick={save} disabled={saving || !pw || !pw2} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-2">
+            {saving ? "Saving…" : <><KeyRound size={14} /> Set Password</>}
+          </Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── RIDER CARD ──────────────────────────────────────── */
 function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
   rider: any; onEdit: () => void; onDelete: () => void; onRefresh: () => void;
@@ -138,6 +234,7 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
   const { toast } = useToast();
   const [loadingDel, setLoadingDel] = useState(false);
   const [showDeliveries, setShowDeliveries] = useState(false);
+  const [showPwModal, setShowPwModal] = useState(false);
 
   const { data: delData } = useQuery({
     queryKey: ["rider-deliveries", rider.id],
@@ -184,10 +281,13 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
             <button onClick={printSheet} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors" title="Print delivery sheet">
               <Printer size={13} />
             </button>
-            <button onClick={onEdit} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            <button onClick={() => setShowPwModal(true)} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Set app password">
+              <KeyRound size={13} />
+            </button>
+            <button onClick={onEdit} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors" title="Edit rider">
               <Pencil size={13} />
             </button>
-            <button onClick={deleteRider} disabled={loadingDel} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors">
+            <button onClick={deleteRider} disabled={loadingDel} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete rider">
               <Trash2 size={13} />
             </button>
           </div>
@@ -264,6 +364,10 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
           </div>
         )}
       </div>
+
+      {showPwModal && (
+        <SetPasswordModal rider={rider} onClose={() => setShowPwModal(false)} />
+      )}
     </div>
   );
 }
