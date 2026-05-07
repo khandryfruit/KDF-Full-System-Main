@@ -327,14 +327,18 @@ const BLANK_ENTRY: PosEntry = {
   inputValue: "", gramsPerBox: 500, customPrice: "", discount: "",
 };
 
+interface ApiProduct { id: string; name: string; sku: string; pricePerKg: number; category: string; }
+
 interface PosEntryBarProps {
   onAdd: (item: InvoiceItem) => void;
 }
 function PosEntryBar({ onAdd }: PosEntryBarProps) {
   const { toast } = useToast();
   const [entry, setEntry] = useState<PosEntry>({ ...BLANK_ENTRY });
-  const [prodSuggestions, setProdSuggestions] = useState<typeof MOCK_PRODUCTS>([]);
+  const [allProducts, setAllProducts] = useState<ApiProduct[]>(MOCK_PRODUCTS);
+  const [prodSuggestions, setProdSuggestions] = useState<ApiProduct[]>([]);
   const [showDrop, setShowDrop] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const valueRef  = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -351,6 +355,31 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    setLoadingProducts(true);
+    fetch("/api/products?limit=300&active=true")
+      .then(r => r.json())
+      .then(data => {
+        if (data.items?.length) {
+          const mapped: ApiProduct[] = data.items.map((p: any) => {
+            const basePrice = parseFloat(p.price ?? "0");
+            const kgVariant = p.variants?.find((v: any) => v.value?.toLowerCase().includes("1kg") || v.value?.toLowerCase().includes("1 kg"));
+            const pricePerKg = kgVariant ? parseFloat(kgVariant.price ?? basePrice) : basePrice;
+            return {
+              id: String(p.id),
+              name: p.name,
+              sku: p.variants?.[0]?.id ? `SKU-${p.id}` : String(p.id),
+              pricePerKg: pricePerKg,
+              category: p.categoryId ? "Product" : "Other",
+            };
+          });
+          setAllProducts(mapped);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingProducts(false));
+  }, []);
+
   const preview = livePreview(entry);
   const canAdd = entry.name.trim() !== "" && parseFloat(entry.inputValue) > 0;
   const set = (patch: Partial<PosEntry>) => setEntry(e => ({ ...e, ...patch }));
@@ -359,16 +388,17 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
   const handleSearch = (val: string) => {
     set({ name: val, sku: "", pricePerKg: 0 });
     if (!val.trim()) { setProdSuggestions([]); setShowDrop(false); return; }
-    const matches = MOCK_PRODUCTS.filter(p =>
-      p.name.toLowerCase().includes(val.toLowerCase()) ||
-      p.sku.toLowerCase().includes(val.toLowerCase()) ||
-      p.category.toLowerCase().includes(val.toLowerCase())
-    );
+    const q = val.toLowerCase();
+    const matches = allProducts.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    ).slice(0, 12);
     setProdSuggestions(matches);
     setShowDrop(true);
   };
 
-  const pickProduct = (p: typeof MOCK_PRODUCTS[0]) => {
+  const pickProduct = (p: ApiProduct) => {
     set({ name: p.name, sku: p.sku, pricePerKg: p.pricePerKg });
     setProdSuggestions([]); setShowDrop(false);
     setTimeout(() => valueRef.current?.focus(), 50);
@@ -411,8 +441,12 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
             onChange={e => handleSearch(e.target.value)}
             onFocus={() => {
               if (entry.name.trim()) {
-                const m = MOCK_PRODUCTS.filter(p => p.name.toLowerCase().includes(entry.name.toLowerCase()) || p.sku.toLowerCase().includes(entry.name.toLowerCase()));
-                setProdSuggestions(m.length > 0 ? m : MOCK_PRODUCTS.slice(0, 6));
+                const q = entry.name.toLowerCase();
+                const m = allProducts.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
+                setProdSuggestions(m.length > 0 ? m.slice(0, 12) : allProducts.slice(0, 8));
+                setShowDrop(true);
+              } else {
+                setProdSuggestions(allProducts.slice(0, 8));
                 setShowDrop(true);
               }
             }}
@@ -514,7 +548,8 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
             <>
               <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  {prodSuggestions.length} Product{prodSuggestions.length !== 1 ? "s" : ""} found
+                  {loadingProducts ? "Loading products…" : `${prodSuggestions.length} Product${prodSuggestions.length !== 1 ? "s" : ""} found`}
+                  {!loadingProducts && allProducts.length > 12 && <span className="ml-1 text-primary font-normal">of {allProducts.length} total</span>}
                 </p>
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border text-[9px] font-mono">↵</kbd>
@@ -1834,11 +1869,14 @@ function NewPurchaseView() {
 /* ═══════════════════════════════════════════════
    VIEW 4 — INVOICE HISTORY
 ═══════════════════════════════════════════════ */
+type HistoryEntry = typeof MOCK_HISTORY[0];
+
 function InvoiceHistoryView() {
   const [, navigate] = useLocation();
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("all");
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedInv, setSelectedInv] = useState<HistoryEntry | null>(null);
 
   const filtered = MOCK_HISTORY
     .filter(h => h.type === "invoice")
@@ -1847,6 +1885,26 @@ function InvoiceHistoryView() {
       (inv.customer?.name ?? "").toLowerCase().includes(search.toLowerCase())
     )
     .filter(inv => filter === "all" || inv.status === filter);
+
+  const handleView = (inv: HistoryEntry) => {
+    setSelectedInv(inv);
+    setShowPreview(true);
+  };
+
+  const handlePrint = (inv: HistoryEntry) => {
+    setSelectedInv(inv);
+    setShowPreview(true);
+    setTimeout(() => window.print(), 600);
+  };
+
+  const handleWhatsApp = (inv: HistoryEntry) => {
+    const msg = encodeURIComponent(
+      `*KDF NUTS Invoice*\nInvoice No: ${inv.invoiceNo}\nCustomer: ${inv.customer?.name ?? "Walk-in"}\nTotal: Rs. ${inv.total.toLocaleString("en-PK")}\nStatus: ${inv.status.toUpperCase()}\n\nThank you for shopping with KDF NUTS!`
+    );
+    const phone = inv.customer?.phone?.replace(/\D/g, "") ?? "";
+    const waPhone = phone.startsWith("0") ? "92" + phone.slice(1) : phone;
+    window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank");
+  };
 
   return (
     <div className="space-y-6">
@@ -1885,7 +1943,36 @@ function InvoiceHistoryView() {
             <Button variant="outline" size="sm" className="gap-1.5 h-9"><Download className="w-3.5 h-3.5" /> Export</Button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile cards — visible on sm and below */}
+        <div className="sm:hidden divide-y divide-border">
+          {filtered.length === 0
+            ? <div className="py-14 text-center text-muted-foreground text-sm">No invoices found</div>
+            : filtered.map(inv => (
+              <div key={inv.id} className="px-4 py-3.5 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm font-bold text-primary">{inv.invoiceNo}</span>
+                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_BADGE[inv.status]}`}>
+                    {STATUS_ICON[inv.status]}{STATUS_LABEL[inv.status]}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{inv.customer?.name ?? "Walk-in"} · {inv.createdAt.toLocaleDateString("en-PK", { day: "numeric", month: "short" })}</span>
+                  <span className="font-bold text-sm text-foreground tabular-nums">{fmtRs(inv.total)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="text-xs capitalize">{inv.paymentMethod.replace("_", " ")}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleView(inv)}><Eye className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handlePrint(inv)}><Printer className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600" onClick={() => handleWhatsApp(inv)}><MessageCircle className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1916,9 +2003,9 @@ function InvoiceHistoryView() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowPreview(true)}><Eye className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Printer className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600"><MessageCircle className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Invoice" onClick={() => handleView(inv)}><Eye className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Print Invoice" onClick={() => handlePrint(inv)}><Printer className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" title="Send via WhatsApp" onClick={() => handleWhatsApp(inv)}><MessageCircle className="w-3.5 h-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1931,16 +2018,17 @@ function InvoiceHistoryView() {
 
       <InvoicePreviewDialog
         open={showPreview}
-        onClose={() => setShowPreview(false)}
-        invoiceNo="INV-2026-001"
+        onClose={() => { setShowPreview(false); setSelectedInv(null); }}
+        invoiceNo={selectedInv?.invoiceNo ?? "INV-2026-001"}
+        customer={selectedInv?.customer ?? undefined}
         items={[]}
-        invoiceStatus="paid"
-        paymentMethod="card"
-        subtotal={0}
+        invoiceStatus={selectedInv?.status ?? "paid"}
+        paymentMethod={selectedInv?.paymentMethod ?? "card"}
+        subtotal={selectedInv?.total ?? 0}
         discountAmt={0}
         shipping={0}
         taxAmt={0}
-        grandTotal={0}
+        grandTotal={selectedInv?.total ?? 0}
         invoiceDiscount={0}
         taxRate={0}
       />
@@ -1955,12 +2043,16 @@ function PurchaseHistoryView() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<HistoryEntry | null>(null);
 
   const filtered = MOCK_HISTORY
     .filter(h => h.type === "bill")
     .filter(bill =>
       bill.invoiceNo.toLowerCase().includes(search.toLowerCase())
     );
+
+  const handleViewBill = (bill: HistoryEntry) => { setSelectedBill(bill); setShowPreview(true); };
+  const handlePrintBill = (bill: HistoryEntry) => { setSelectedBill(bill); setShowPreview(true); setTimeout(() => window.print(), 600); };
 
   return (
     <div className="space-y-6">
@@ -2021,8 +2113,8 @@ function PurchaseHistoryView() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowPreview(true)}><Eye className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Printer className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="View Bill" onClick={() => handleViewBill(bill)}><Eye className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Print Bill" onClick={() => handlePrintBill(bill)}><Printer className="w-3.5 h-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -2035,17 +2127,17 @@ function PurchaseHistoryView() {
 
       <InvoicePreviewDialog
         open={showPreview}
-        onClose={() => setShowPreview(false)}
-        invoiceNo="BILL-2026-001"
+        onClose={() => { setShowPreview(false); setSelectedBill(null); }}
+        invoiceNo={selectedBill?.invoiceNo ?? "BILL-2026-001"}
         isPurchase
         items={[]}
-        invoiceStatus="paid"
-        paymentMethod="bank_transfer"
-        subtotal={0}
+        invoiceStatus={selectedBill?.status ?? "paid"}
+        paymentMethod={selectedBill?.paymentMethod ?? "bank_transfer"}
+        subtotal={selectedBill?.total ?? 0}
         discountAmt={0}
         shipping={0}
         taxAmt={0}
-        grandTotal={0}
+        grandTotal={selectedBill?.total ?? 0}
         invoiceDiscount={0}
         taxRate={0}
       />
