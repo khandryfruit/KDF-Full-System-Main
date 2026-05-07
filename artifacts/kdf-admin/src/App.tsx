@@ -66,6 +66,11 @@ import BranchLoginPage from "@/pages/BranchLoginPage";
 import BranchPosPage from "@/pages/BranchPosPage";
 import AdminPOSPage from "@/pages/AdminPOSPage";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
+import StockOverviewPage from "@/pages/StockOverviewPage";
+import StockProductsPage from "@/pages/StockProductsPage";
+import StockMovementPage from "@/pages/StockMovementPage";
+import StockAdjustmentPage from "@/pages/StockAdjustmentPage";
+import ERPSettingsPage from "@/pages/ERPSettingsPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -176,6 +181,17 @@ function Router() {
       <Route path="/branches/list"><ProtectedRoute component={BranchesPage} /></Route>
       <Route path="/branches"><ProtectedRoute component={BranchesPage} /></Route>
       <Route path="/profile"><ProtectedRoute component={AdminProfilePage} /></Route>
+
+      {/* ── Stock Management ── */}
+      <Route path="/stock/overview"><ProtectedRoute component={StockOverviewPage} /></Route>
+      <Route path="/stock/products"><ProtectedRoute component={StockProductsPage} /></Route>
+      <Route path="/stock/movement"><ProtectedRoute component={StockMovementPage} /></Route>
+      <Route path="/stock/adjustment"><ProtectedRoute component={StockAdjustmentPage} /></Route>
+      <Route path="/stock"><ProtectedRoute component={StockOverviewPage} /></Route>
+
+      {/* ── ERP Settings ── */}
+      <Route path="/erp-settings/:section"><ProtectedRoute component={ERPSettingsPage} /></Route>
+      <Route path="/erp-settings"><ProtectedRoute component={ERPSettingsPage} /></Route>
       <Route path="/">
         <ProtectedRoute component={DashboardPage} />
       </Route>

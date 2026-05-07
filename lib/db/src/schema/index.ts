@@ -33,3 +33,5 @@ export * from "./social";
 export * from "./meezan";
 export * from "./branches";
 export * from "./branchInvoice";
+export * from "./erpSettings";
+export * from "./branchStock";

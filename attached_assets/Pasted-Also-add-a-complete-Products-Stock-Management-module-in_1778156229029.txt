@@ -1,0 +1,184 @@
+Also add a complete “Products & Stock Management” module inside the sidebar.
+
+Required Sidebar Structure:
+
+## Products & Inventory
+
+* Add Product
+* Product List
+* Categories
+* Brands
+* Units
+* Barcode Labels
+* Stock Management
+* Inventory Logs
+* Low Stock Alerts
+* Warehouse Management
+* Stock Transfer
+* Damaged Stock
+* Stock Adjustment
+
+IMPORTANT:
+Add “Add Product” option properly in sidebar/navigation.
+
+---
+
+# Required Add Product Features
+
+Create professional product form:
+
+## Basic Information
+
+* Product Name
+* SKU
+* Barcode
+* Category
+* Brand
+* Product Image
+
+---
+
+## Pricing
+
+* Cost Price
+* Sale Price
+* Tax
+* Discount
+
+---
+
+## Stock Management
+
+* Stock Quantity
+* KG/Gram system
+* Unit selection
+* Minimum stock alert
+
+---
+
+## Units Support
+
+Support:
+
+* KG
+* Gram
+* PCS
+* Box
+* Litre
+
+---
+
+# KG/Gram Logic (IMPORTANT)
+
+Products should NOT be duplicated.
+
+Wrong:
+❌ Cashew 250g
+❌ Cashew 500g
+
+Correct:
+✅ Cashew Nuts
+
+Then cashier selects weight dynamically:
+
+* 250g
+* 500g
+* 1KG
+
+Stock auto deducts correctly.
+
+---
+
+# Inventory Features
+
+Add:
+
+## Live Stock Tracking
+
+* Current stock
+* Sold stock
+* Returned stock
+* Damaged stock
+
+---
+
+## Inventory Logs
+
+Track:
+
+* Stock added
+* Stock sold
+* Returns
+* Adjustments
+
+---
+
+## Low Stock Alerts
+
+Show alerts when stock becomes low.
+
+---
+
+# Warehouse & Branch Stock
+
+Support:
+
+* Multiple branch inventory
+* Warehouse stock
+* Stock transfer between branches
+
+---
+
+# Barcode Support
+
+Add:
+
+* Barcode generation
+* Barcode printing
+* Barcode scanning in POS
+
+---
+
+# Import/Export Products
+
+Allow:
+
+* Excel import
+* CSV import
+* Export product list
+
+---
+
+# Product Search
+
+Fast search using:
+
+* Barcode
+* SKU
+* Product name
+
+---
+
+# Permissions
+
+Add permissions:
+
+* add_product
+* edit_product
+* delete_product
+* manage_stock
+* stock_transfer
+
+---
+
+IMPORTANT:
+Use SAME existing database and inventory system.
+
+Do NOT create duplicate stock/product systems.
+
+Everything must sync with:
+✅ POS
+✅ Invoice
+✅ Analytics
+✅ Branch inventory
+✅ Mobile ERP
