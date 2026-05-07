@@ -87,6 +87,8 @@ export default function CheckoutPage() {
 
   const [referenceNumber, setReferenceNumber] = useState("");
   const [deliveryType, setDeliveryType] = useState<"standard" | "same_day">("standard");
+  const [locationFilling, setLocationFilling] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const { data: walletData } = useGetWalletBalance({ query: { enabled: true } as any });
   const walletBalance = walletData ? Number(walletData.balance) : 0;
 
@@ -358,14 +360,46 @@ export default function CheckoutPage() {
                           <FormLabel>Street Address</FormLabel>
                           <button
                             type="button"
-                            onClick={async () => { await detectLocation(); }}
-                            disabled={isDetecting}
+                            onClick={async () => {
+                              if (!navigator.geolocation) return;
+                              setLocationFilling(true);
+                              setLocationError("");
+                              try {
+                                const pos = await new Promise<GeolocationPosition>((res, rej) =>
+                                  navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
+                                );
+                                const r = await fetch("/api/geocode/reverse", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                                });
+                                if (!r.ok) throw new Error("Geocoding failed");
+                                const geo = await r.json();
+                                const parts = [geo.street, geo.area, geo.city].filter(Boolean);
+                                const addr = parts.join(", ") || geo.fullAddress || "";
+                                if (addr) form.setValue("address", addr, { shouldValidate: true });
+                                if (addressTextareaRef.current) addressTextareaRef.current.value = addr;
+                                if (geo.city) form.setValue("city", geo.city, { shouldValidate: true });
+                                if (geo.postalCode) form.setValue("postalCode", geo.postalCode, { shouldValidate: true });
+                              } catch (e: any) {
+                                setLocationError(e?.code === 1 ? "Location permission denied. Please allow access." : "Could not detect location. Try again.");
+                              } finally {
+                                setLocationFilling(false);
+                              }
+                            }}
+                            disabled={locationFilling}
                             className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-50"
                           >
                             <Navigation className="w-3 h-3" />
-                            {isDetecting ? "Detecting…" : "Use my location"}
+                            {locationFilling ? "Detecting…" : "Use my location"}
                           </button>
                         </div>
+                        {locationError && (
+                          <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-2">
+                            <span>{locationError}</span>
+                            <button type="button" className="ml-auto text-red-400 hover:text-red-600 underline text-xs" onClick={() => setLocationError("")}>Retry</button>
+                          </div>
+                        )}
                         <FormControl>
                           <div className="relative">
                             {/* Hidden input for Google Maps autocomplete — doesn't interfere with typing */}

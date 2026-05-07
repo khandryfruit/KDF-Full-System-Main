@@ -22,6 +22,11 @@ export const bannersTable = pgTable("banners", {
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   offerProductIds: jsonb("offer_product_ids").$type<number[]>().default([]),
+  videoUrl: text("video_url"),
+  mobileVideoUrl: text("mobile_video_url"),
+  videoAutoplay: boolean("video_autoplay").default(true),
+  videoMuted: boolean("video_muted").default(true),
+  videoLoop: boolean("video_loop").default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

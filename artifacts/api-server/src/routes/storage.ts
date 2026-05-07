@@ -126,7 +126,9 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     // Prevent browsers from rendering stored content as active HTML/SVG/scripts,
     // regardless of the stored Content-Type, to block same-origin XSS via uploads.
     const servedType = (response.headers.get("content-type") ?? "").toLowerCase();
-    const isSafeMedia = servedType.startsWith("image/") && !servedType.includes("svg");
+    const isSafeImage = servedType.startsWith("image/") && !servedType.includes("svg");
+    const isSafeVideo = servedType.startsWith("video/");
+    const isSafeMedia = isSafeImage || isSafeVideo;
     if (!isSafeMedia) {
       res.setHeader("Content-Disposition", "attachment");
       res.setHeader("Content-Type", "application/octet-stream");

@@ -181,6 +181,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
             : desktopImg;
           const bgImg = isMobile ? mobileImg : desktopImg;
 
+          const videoSrc = isMobile
+            ? ((banner as any).mobileVideoUrl || (banner as any).videoUrl || null)
+            : ((banner as any).videoUrl || null);
+
           return (
             <div
               key={banner.id}
@@ -189,8 +193,19 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               }`}
               onClick={() => handleBannerClick(banner)}
             >
-              {/* Full background image */}
-              {bgImg && (
+              {/* Video background (takes priority over image) */}
+              {videoSrc ? (
+                <video
+                  key={videoSrc}
+                  className="absolute inset-0 w-full h-full object-cover object-center"
+                  src={videoSrc.startsWith("http") ? videoSrc : `/api/storage/objects/${videoSrc}`}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload={i === 0 ? "auto" : "none"}
+                />
+              ) : bgImg && (
                 <img
                   src={bgImg}
                   alt={banner.title}

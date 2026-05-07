@@ -137,13 +137,22 @@ router.post("/geocode/reverse", async (req, res) => {
     }
 
     const result = geoData.results[0];
-    const cityComponent = result.address_components?.find(
+    const comps: any[] = result.address_components ?? [];
+
+    const find = (...types: string[]) =>
+      comps.find((c: any) => types.some(t => c.types.includes(t)))?.long_name ?? null;
+
+    const cityComponent = comps.find(
       (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_2")
     );
 
     return res.json({
       city: cityComponent?.long_name ?? null,
       fullAddress: result.formatted_address ?? null,
+      street: [find("street_number"), find("route")].filter(Boolean).join(" ") || null,
+      area: find("sublocality_level_1", "sublocality", "neighborhood") ?? null,
+      postalCode: find("postal_code") ?? null,
+      province: find("administrative_area_level_1") ?? null,
     });
   } catch (err) {
     req.log.error(err);

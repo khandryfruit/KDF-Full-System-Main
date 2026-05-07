@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Plus, Edit, Trash2, Upload, ImageOff, Loader2, AlertCircle,
-  CheckCircle2, Package, LayoutGrid, Link2, ChevronDown, Search,
+  CheckCircle2, Package, LayoutGrid, Link2, ChevronDown, Search, Video, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -167,6 +167,82 @@ function BannerImageUploader({
           <CheckCircle2 className="w-3.5 h-3.5" /> Image uploaded successfully
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Banner Video Uploader ──────────────────────────── */
+function BannerVideoUploader({
+  label, value, onChange,
+}: { label: string; value: string; onChange: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    setError(""); setSuccess(false);
+    if (file.size > 100 * 1024 * 1024) { setError("Video must be under 100MB"); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/storage/uploads/video", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Upload failed");
+      }
+      const { objectPath } = await res.json();
+      onChange(objectPath);
+      setSuccess(true);
+    } catch (e: any) {
+      setError(e.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">{label}</Label>
+      {value ? (
+        <div className="relative rounded-xl overflow-hidden border bg-black" style={{ aspectRatio: "16/5" }}>
+          <video src={value.startsWith("http") ? value : `/api/storage/objects/${value}`} className="w-full h-full object-cover opacity-80" muted loop autoPlay playsInline />
+          <div className="absolute inset-0 flex items-center justify-center gap-2">
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="bg-white/90 text-xs px-3 py-1.5 rounded-full font-semibold hover:bg-white transition flex items-center gap-1.5">
+              <Upload className="w-3 h-3" /> Replace
+            </button>
+            <button type="button" onClick={() => { onChange(""); setSuccess(false); }}
+              className="bg-red-500/90 text-white text-xs px-3 py-1.5 rounded-full font-semibold hover:bg-red-500 transition flex items-center gap-1.5">
+              <X className="w-3 h-3" /> Remove
+            </button>
+          </div>
+          <div className="absolute bottom-2 left-3 text-white/70 text-[10px] flex items-center gap-1">
+            <Video className="w-3 h-3" /> Video set
+          </div>
+        </div>
+      ) : (
+        <div onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-muted-foreground/20 rounded-xl flex flex-col items-center justify-center gap-2 p-6 cursor-pointer hover:border-green-500/50 hover:bg-green-50/30 transition-all"
+          style={{ aspectRatio: "16/5" }}>
+          {uploading ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/50" /> : (
+            <>
+              <Video className="w-6 h-6 text-muted-foreground/40" />
+              <p className="text-sm font-medium text-muted-foreground">Click to upload {label.toLowerCase()}</p>
+              <p className="text-xs text-muted-foreground/60">MP4, WebM · Max 100MB</p>
+            </>
+          )}
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="video/mp4,video/webm,video/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+      {error && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{error}</p>}
+      {success && <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Video uploaded</p>}
     </div>
   );
 }
@@ -353,6 +429,11 @@ const EMPTY_FORM = {
   subtitle: "",
   imageUrl: "",
   mobileImageUrl: "",
+  videoUrl: "",
+  mobileVideoUrl: "",
+  videoAutoplay: true,
+  videoMuted: true,
+  videoLoop: true,
   cta: "Shop Now",
   sortOrder: 0,
   active: true,
@@ -393,6 +474,11 @@ export default function BannersPage() {
       subtitle: banner.subtitle ?? "",
       imageUrl: banner.imageUrl ?? "",
       mobileImageUrl: banner.mobileImageUrl ?? "",
+      videoUrl: (banner as any).videoUrl ?? "",
+      mobileVideoUrl: (banner as any).mobileVideoUrl ?? "",
+      videoAutoplay: (banner as any).videoAutoplay ?? true,
+      videoMuted: (banner as any).videoMuted ?? true,
+      videoLoop: (banner as any).videoLoop ?? true,
       cta: banner.cta ?? "Shop Now",
       sortOrder: banner.sortOrder ?? 0,
       active: banner.active ?? true,
@@ -418,6 +504,8 @@ export default function BannersPage() {
       targetId: rest.targetId ?? undefined,
       linkUrl: rest.targetType === "page" ? rest.linkUrl : undefined,
       mobileImageUrl: rest.mobileImageUrl || undefined,
+      videoUrl: rest.videoUrl || undefined,
+      mobileVideoUrl: rest.mobileVideoUrl || undefined,
       countdownEndAt: rest.countdownEndAt ? new Date(rest.countdownEndAt).toISOString() : undefined,
       startDate: rest.startDate ? new Date(rest.startDate).toISOString() : undefined,
       endDate: rest.endDate ? new Date(rest.endDate).toISOString() : undefined,
@@ -426,8 +514,8 @@ export default function BannersPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.imageUrl) {
-      toast({ variant: "destructive", title: "Please upload a banner image" });
+    if (!formData.imageUrl && !formData.videoUrl) {
+      toast({ variant: "destructive", title: "Please upload a banner image or video" });
       return;
     }
     if (formData.targetType === "product" && !formData.targetId) {
@@ -523,6 +611,46 @@ export default function BannersPage() {
                 aspectRatio="2/1"
                 optional
               />
+
+              {/* Divider */}
+              <div className="h-px bg-border" />
+
+              {/* 1c. Video Banner (optional) */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Video className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-sm font-semibold">🎬 Video Banner (optional)</Label>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-1">
+                  When a video is set, it replaces the image on the banner. Supports MP4, WebM. Video takes priority over image.
+                </p>
+                <BannerVideoUploader
+                  label="Desktop Video"
+                  value={formData.videoUrl}
+                  onChange={(url) => setFormData({ ...formData, videoUrl: url })}
+                />
+                <BannerVideoUploader
+                  label="Mobile Video (optional)"
+                  value={formData.mobileVideoUrl}
+                  onChange={(url) => setFormData({ ...formData, mobileVideoUrl: url })}
+                />
+                {(formData.videoUrl || formData.mobileVideoUrl) && (
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+                      <input type="checkbox" checked={formData.videoAutoplay} onChange={e => setFormData({ ...formData, videoAutoplay: e.target.checked })} className="rounded" />
+                      Autoplay
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+                      <input type="checkbox" checked={formData.videoMuted} onChange={e => setFormData({ ...formData, videoMuted: e.target.checked })} className="rounded" />
+                      Muted
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+                      <input type="checkbox" checked={formData.videoLoop} onChange={e => setFormData({ ...formData, videoLoop: e.target.checked })} className="rounded" />
+                      Loop
+                    </label>
+                  </div>
+                )}
+              </div>
 
               {/* 2. Content */}
               <div className="space-y-3">

@@ -217,6 +217,59 @@ router.post(
   }
 );
 
+/**
+ * POST /storage/uploads/video
+ * Multipart video upload for banners. Requires admin auth.
+ * Accepts MP4, WebM up to 100 MB. Stored as public upload.
+ */
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
+
+const ALLOWED_VIDEO_MIME_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+]);
+
+router.post(
+  "/storage/uploads/video",
+  adminMiddleware as any,
+  videoUpload.single("file"),
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+    if (!ALLOWED_VIDEO_MIME_TYPES.has(req.file.mimetype)) {
+      res.status(400).json({ error: "Invalid file type. Only MP4, WebM, OGG, and MOV videos are allowed." });
+      return;
+    }
+
+    try {
+      const extMap: Record<string, string> = {
+        "video/mp4": "mp4",
+        "video/webm": "webm",
+        "video/ogg": "ogv",
+        "video/quicktime": "mov",
+      };
+      const ext = extMap[req.file.mimetype] ?? "mp4";
+      const objectPath = await uploadBufferToGcs(
+        req.file.buffer,
+        req.file.mimetype,
+        ext,
+        "public"
+      );
+      res.json({ objectPath, size: req.file.size, contentType: req.file.mimetype });
+    } catch (err) {
+      req.log.error({ err }, "Video upload failed");
+      res.status(500).json({ error: "Upload failed" });
+    }
+  }
+);
+
 /** GET /admin/image-settings */
 router.get(
   "/admin/image-settings",

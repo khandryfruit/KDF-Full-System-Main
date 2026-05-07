@@ -4,7 +4,7 @@ import {
   Search, MapPin, ChevronDown, User, LogOut, Package, Heart,
   ShoppingBag, Truck, Leaf, RefreshCcw, PhoneCall, Flame, Sparkles,
   Star, X, Menu, Home, LayoutGrid, Mic, TrendingUp, ArrowRight,
-  ChevronRight, Shield, Zap, Gift, Phone, Clock,
+  ChevronRight, Shield, Zap, Gift, Phone, Clock, Navigation,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCart } from "@/context/CartContext";
@@ -201,9 +201,10 @@ function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; on
 }
 
 /* ─── Mobile Drawer ──────────────────────────────────────────── */
-function MobileDrawer({ open, onClose, onNavigate, user, logout, city, cities, setCity }: {
+function MobileDrawer({ open, onClose, onNavigate, user, logout, city, cities, setCity, detectLocation, isDetecting }: {
   open: boolean; onClose: () => void; onNavigate: (p: string) => void;
   user: any; logout: () => void; city: string; cities: string[]; setCity: (c: string) => void;
+  detectLocation: () => Promise<void>; isDetecting: boolean;
 }) {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
 
@@ -308,19 +309,45 @@ function MobileDrawer({ open, onClose, onNavigate, user, logout, city, cities, s
             ))}
           </div>
 
-          {/* City picker */}
+          {/* GPS Location Card */}
           <div className="px-3 mt-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 py-2">Delivery City</p>
-            <div className="flex flex-wrap gap-1.5 px-3">
-              {cities.slice(0, 8).map(c => (
-                <button key={c} type="button" onClick={() => setCity(c)}
-                  className="px-3 py-1 rounded-full text-xs font-semibold border transition-all"
-                  style={c === city
-                    ? { background: GREEN, color: "#fff", borderColor: GREEN }
-                    : { background: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}>
-                  {c}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 py-2">Your Delivery Location</p>
+            <div className="mx-1 rounded-2xl border border-gray-100 overflow-hidden"
+              style={{ background: `linear-gradient(135deg, ${GREEN}08 0%, #fff 100%)` }}>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${GREEN}18` }}>
+                  <MapPin className="w-4 h-4" style={{ color: GREEN }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Delivering to</p>
+                  <p className="font-bold text-gray-900 text-sm truncate">{city}</p>
+                </div>
+              </div>
+              <div className="px-3 pb-3">
+                <button
+                  type="button"
+                  disabled={isDetecting}
+                  onClick={async () => { await detectLocation(); }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg, ${GREEN} 0%, #3d7000 100%)` }}
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  {isDetecting ? "Detecting location…" : "Use My Location"}
                 </button>
-              ))}
+              </div>
+              <div className="px-3 pb-3">
+                <div className="relative">
+                  <select
+                    value={city}
+                    onChange={e => setCity(e.target.value)}
+                    className="w-full h-9 border border-gray-200 rounded-xl px-3 pr-8 text-sm appearance-none focus:outline-none focus:border-green-500 bg-white text-gray-700"
+                  >
+                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -466,7 +493,7 @@ export function Header() {
 
   const { totalItems, setMiniCartOpen } = useCart();
   const { user, logout }               = useAuth();
-  const { city, setCity, cities }      = useUserLocation();
+  const { city, setCity, cities, detectLocation, isDetecting } = useUserLocation();
   const { data: siteSettings }         = useSiteSettings();
   const prevTotalRef = useRef(totalItems);
   const searchRef    = useRef<HTMLDivElement>(null);
@@ -877,6 +904,8 @@ export function Header() {
         city={city}
         cities={cities}
         setCity={setCity}
+        detectLocation={detectLocation}
+        isDetecting={isDetecting}
       />
       <MobileSearchOverlay
         open={searchOverlay}
