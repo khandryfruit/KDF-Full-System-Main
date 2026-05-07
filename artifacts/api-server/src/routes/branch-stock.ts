@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, and, desc, ilike, sql, or } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { branchProductsTable, stockMovementsTable } from "@workspace/db/schema";
+import { branchProductsTable, stockMovementsTable, shopifyProductsTable } from "@workspace/db/schema";
 import { adminMiddleware, branchMiddleware } from "../lib/auth";
 import type { BranchAuthRequest } from "../lib/auth";
 
@@ -13,7 +13,7 @@ const router = Router();
 
 /* GET /api/admin/stock/products */
 router.get("/products", adminMiddleware, async (req, res) => {
-  const { q, category, branchId, lowStock, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { q, category, branchId, lowStock, page = "1", limit = "50", source } = req.query as Record<string, string>;
   const pageNum  = Math.max(1, parseInt(page));
   const limitNum = Math.min(200, parseInt(limit));
   const offset   = (pageNum - 1) * limitNum;
@@ -29,9 +29,110 @@ router.get("/products", adminMiddleware, async (req, res) => {
   if (lowStock === "1") conditions.push(sql`${branchProductsTable.stockQty} <= ${branchProductsTable.lowStockThreshold}`);
 
   const where = conditions.length ? and(...conditions) : undefined;
-  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(branchProductsTable).where(where);
-  const products = await db.select().from(branchProductsTable).where(where).orderBy(branchProductsTable.name).limit(limitNum).offset(offset);
+  const [{ total: branchTotal }] = await db.select({ total: sql<number>`count(*)::int` }).from(branchProductsTable).where(where);
+  const branchProducts = await db.select().from(branchProductsTable).where(where).orderBy(branchProductsTable.name).limit(limitNum).offset(offset);
+  const branchMapped = branchProducts.map(p => ({ ...p, source: "branch" as const }));
+
+  /* Also include Shopify products (merged view, not paginated — capped at 500) */
+  let shopifyMapped: any[] = [];
+  if (!branchId && !lowStock) {
+    const shopifyConds: any[] = [eq(shopifyProductsTable.status, "active")];
+    if (q) shopifyConds.push(or(ilike(shopifyProductsTable.title, `%${q}%`), ilike(shopifyProductsTable.sku, `%${q}%`))!);
+    if (category) shopifyConds.push(ilike(shopifyProductsTable.productType, `%${category}%`));
+
+    /* Exclude items already in branch_products by name (case-insensitive) */
+    const existingNames = branchMapped.map(p => p.name.toLowerCase());
+    const shopifyRaw = await db.select({
+      id: shopifyProductsTable.id,
+      shopifyProductId: shopifyProductsTable.shopifyProductId,
+      title: shopifyProductsTable.title,
+      price: shopifyProductsTable.price,
+      sku: shopifyProductsTable.sku,
+      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+      productType: shopifyProductsTable.productType,
+      imageUrl: shopifyProductsTable.imageUrl,
+      status: shopifyProductsTable.status,
+    }).from(shopifyProductsTable).where(and(...shopifyConds)).orderBy(shopifyProductsTable.title).limit(500);
+
+    shopifyMapped = shopifyRaw
+      .filter(sp => !existingNames.includes(sp.title.toLowerCase()))
+      .map(sp => ({
+        id: -(sp.id),
+        itemCode: sp.sku ?? `SHOPIFY-${sp.id}`,
+        name: sp.title,
+        unit: "Pcs",
+        category: sp.productType ?? null,
+        purchasePrice: null,
+        salePrice: sp.price,
+        stockQty: String(sp.inventoryQuantity ?? 0),
+        lowStockThreshold: "1",
+        isActive: true,
+        barcode: sp.sku ?? null,
+        description: null,
+        branchId: null,
+        imageUrl: sp.imageUrl ?? null,
+        createdAt: new Date().toISOString(),
+        source: "shopify" as const,
+        shopifyProductId: sp.shopifyProductId,
+      }));
+  }
+
+  const products  = [...branchMapped, ...shopifyMapped];
+  const total     = (branchTotal as number) + shopifyMapped.length;
   res.json({ products, total, page: pageNum, limit: limitNum });
+});
+
+/* POST /api/admin/stock/import-shopify — import Shopify products into branch_products */
+router.post("/import-shopify", adminMiddleware, async (req, res) => {
+  const { branchId } = req.body as { branchId?: number };
+
+  /* Fetch all active Shopify products */
+  const shopifyProducts = await db.select({
+    id: shopifyProductsTable.id,
+    title: shopifyProductsTable.title,
+    price: shopifyProductsTable.price,
+    sku: shopifyProductsTable.sku,
+    inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+    productType: shopifyProductsTable.productType,
+    imageUrl: shopifyProductsTable.imageUrl,
+  }).from(shopifyProductsTable).where(eq(shopifyProductsTable.status, "active"));
+
+  /* Get existing branch product names to avoid duplicates */
+  const existing = await db.select({ name: branchProductsTable.name }).from(branchProductsTable).where(eq(branchProductsTable.isActive, true));
+  const existingLower = new Set(existing.map(e => e.name.toLowerCase()));
+
+  const toInsert = shopifyProducts
+    .filter(sp => !existingLower.has(sp.title.toLowerCase()))
+    .map(sp => ({
+      branchId: branchId ?? null,
+      itemCode: sp.sku ?? `SHOPIFY-${sp.id}`,
+      name: sp.title,
+      unit: "Pcs" as string,
+      category: sp.productType ?? null,
+      purchasePrice: null,
+      salePrice: sp.price ?? null,
+      stockQty: String(sp.inventoryQuantity ?? 0),
+      lowStockThreshold: "1",
+      isActive: true,
+      barcode: sp.sku ?? null,
+      description: null,
+      imageUrl: sp.imageUrl ?? null,
+    }));
+
+  if (toInsert.length === 0) {
+    res.json({ imported: 0, skipped: shopifyProducts.length, message: "All Shopify products already exist in stock" });
+    return;
+  }
+
+  /* Insert in batches of 50 */
+  let imported = 0;
+  for (let i = 0; i < toInsert.length; i += 50) {
+    const batch = toInsert.slice(i, i + 50);
+    await db.insert(branchProductsTable).values(batch);
+    imported += batch.length;
+  }
+
+  res.json({ imported, skipped: shopifyProducts.length - imported, message: `Successfully imported ${imported} products from Shopify` });
 });
 
 /* GET /api/admin/stock/products/:id */
@@ -161,18 +262,20 @@ router.get("/branch/products", branchMiddleware, async (req: BranchAuthRequest, 
 router.get("/search", branchMiddleware, async (req: BranchAuthRequest, res) => {
   const { q = "", limit = "20" } = req.query as Record<string, string>;
   const branchId = req.branchUser!.branchId;
+  const limitNum = Math.min(50, parseInt(limit));
 
-  const conditions: any[] = [
+  /* 1 — search branch_products */
+  const branchConds: any[] = [
     eq(branchProductsTable.isActive, true),
     or(eq(branchProductsTable.branchId, branchId!), sql`${branchProductsTable.branchId} is null`)!,
   ];
-  if (q.trim()) conditions.push(or(
+  if (q.trim()) branchConds.push(or(
     ilike(branchProductsTable.name,     `%${q}%`),
     ilike(branchProductsTable.itemCode, `%${q}%`),
     ilike(branchProductsTable.barcode,  `%${q}%`),
   )!);
 
-  const products = await db.select({
+  const branchResults = await db.select({
     id:            branchProductsTable.id,
     itemCode:      branchProductsTable.itemCode,
     name:          branchProductsTable.name,
@@ -183,10 +286,47 @@ router.get("/search", branchMiddleware, async (req: BranchAuthRequest, res) => {
     category:      branchProductsTable.category,
     barcode:       branchProductsTable.barcode,
   }).from(branchProductsTable)
-    .where(and(...conditions))
+    .where(and(...branchConds))
     .orderBy(branchProductsTable.name)
-    .limit(parseInt(limit));
-  res.json(products);
+    .limit(limitNum);
+
+  /* 2 — also search shopify_products for any not already found */
+  const branchNames = new Set(branchResults.map(p => p.name.toLowerCase()));
+  const shopifyConds: any[] = [eq(shopifyProductsTable.status, "active")];
+  if (q.trim()) shopifyConds.push(or(
+    ilike(shopifyProductsTable.title, `%${q}%`),
+    ilike(shopifyProductsTable.sku,   `%${q}%`),
+  )!);
+
+  const shopifyResults = await db.select({
+    id:                shopifyProductsTable.id,
+    title:             shopifyProductsTable.title,
+    price:             shopifyProductsTable.price,
+    sku:               shopifyProductsTable.sku,
+    inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+    productType:       shopifyProductsTable.productType,
+  }).from(shopifyProductsTable)
+    .where(and(...shopifyConds))
+    .orderBy(shopifyProductsTable.title)
+    .limit(limitNum);
+
+  const shopifyMapped = shopifyResults
+    .filter(sp => !branchNames.has(sp.title.toLowerCase()))
+    .map(sp => ({
+      id:            -(sp.id),
+      itemCode:      sp.sku ?? `SHOPIFY-${sp.id}`,
+      name:          sp.title,
+      unit:          "Pcs",
+      salePrice:     sp.price,
+      purchasePrice: null,
+      stockQty:      String(sp.inventoryQuantity ?? 0),
+      category:      sp.productType ?? null,
+      barcode:       sp.sku ?? null,
+      source:        "shopify",
+    }));
+
+  const combined = [...branchResults, ...shopifyMapped].slice(0, limitNum);
+  res.json(combined);
 });
 
 export default router;
