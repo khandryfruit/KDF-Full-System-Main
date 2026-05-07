@@ -116,13 +116,28 @@ async function upsertOrder(store: any, o: any) {
   }).onConflictDoUpdate({
     target: shopifyOrdersTable.shopifyOrderId,
     set: {
-      status: o.fulfillment_status ?? "pending",
+      /* status & fulfilment */
+      status:            o.fulfillment_status ?? "pending",
       fulfillmentStatus: o.fulfillment_status ?? null,
-      financialStatus: o.financial_status ?? null,
-      totalPrice: o.total_price ?? null,
+      financialStatus:   o.financial_status  ?? null,
+      /* prices */
+      totalPrice:        o.total_price    ?? null,
+      subtotalPrice:     o.subtotal_price ?? null,
+      /* customer — update in case phone/name changed */
+      customerName:  o.customer ? `${o.customer.first_name ?? ""} ${o.customer.last_name ?? ""}`.trim() : null,
+      customerEmail: o.customer?.email ?? null,
+      customerPhone: o.customer?.phone ?? addr.phone ?? null,
+      /* address & items — always keep fresh */
+      shippingAddress: {
+        name: addr.name, address1: addr.address1, city: addr.city,
+        country: addr.country, phone: addr.phone, zip: addr.zip,
+      },
       lineItems: items,
+      /* meta */
+      tags: o.tags ?? null,
+      note: o.note ?? null,
       shopifyUpdatedAt: o.updated_at ? new Date(o.updated_at) : null,
-      syncedAt: new Date(),
+      syncedAt:  new Date(),
       updatedAt: new Date(),
     },
   });

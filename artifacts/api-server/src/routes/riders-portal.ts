@@ -245,6 +245,25 @@ router.get("/rider/auth/me", riderMiddleware, async (req: any, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════
+   PUSH TOKEN REGISTRATION
+═══════════════════════════════════════════════════════ */
+
+router.put("/rider/push-token", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId = req.rider.id;
+    const { expo_push_token } = req.body;
+    if (!expo_push_token) { res.status(400).json({ error: "expo_push_token required" }); return; }
+    await db.execute(sql`
+      UPDATE riders SET expo_push_token = ${expo_push_token}, updated_at = NOW() WHERE id = ${riderId}
+    `);
+    res.json({ ok: true });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
    RIDER STATS
 ═══════════════════════════════════════════════════════ */
 

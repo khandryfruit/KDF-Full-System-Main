@@ -1,0 +1,140 @@
+URGENT: SHOPIFY ORDER DATA NOT COMING — FULL SYNC SYSTEM IMPROVEMENT REQUIRED
+
+Current Problem:
+Shopify order data is still NOT syncing properly into:
+- Rider App
+- Admin Dashboard
+- Invoice System
+- Delivery System
+
+Sometimes:
+- Orders do not appear
+- Orders appear late
+- Products missing
+- Customer info missing
+- Rider app empty
+- Real-time updates broken
+
+Please fully debug and rebuild the Shopify sync architecture properly.
+
+====================================
+MAIN FIX REQUIRED
+====================================
+
+Fix the COMPLETE Shopify integration from backend/admin side.
+
+Check and debug:
+- Shopify Webhooks
+- API authentication
+- Access tokens
+- Webhook signatures
+- Database saving
+- Queue workers
+- Background sync jobs
+- Production environment variables
+- API endpoints
+- Realtime sockets
+- Cron jobs
+
+====================================
+REAL-TIME ORDER SYNC
+====================================
+
+When Shopify order is created:
+1. Order should instantly save in database
+2. Admin dashboard should update instantly
+3. Rider app should receive instantly
+4. Notification should appear instantly
+5. Invoice should auto-generate
+6. Tracking should activate automatically
+
+====================================
+BACKGROUND SYNC ENGINE
+====================================
+
+Build proper background sync system.
+
+Requirements:
+- Continuous syncing
+- Retry failed syncs
+- Auto reconnect
+- Queue-based processing
+- Offline-safe architecture
+- Production-safe workers
+
+====================================
+DATA THAT MUST SYNC
+====================================
+
+Sync ALL Shopify order data:
+- Order ID
+- Customer Name
+- Phone Number
+- Address
+- Products
+- Product Images
+- Quantity
+- COD Amount
+- Payment Status
+- Delivery Notes
+- Order Tags
+- Shipping Method
+- Tracking Status
+
+====================================
+RIDER APP IMPROVEMENTS
+====================================
+
+If new order arrives:
+- Rider receives live update
+- Notification appears
+- Order auto-refreshes
+- Delivery card updates instantly
+
+Add:
+- Pull-to-refresh
+- Auto-refresh
+- Live counters
+- Loading states
+- Retry sync button
+
+====================================
+ADMIN DASHBOARD IMPROVEMENTS
+====================================
+
+Add:
+- Live Sync Status
+- Shopify Connection Status
+- Failed Sync Logs
+- Manual Sync Button
+- Queue Monitor
+- Last Synced Time
+
+====================================
+PRODUCTION FIXES
+====================================
+
+Current production sync is unstable.
+
+Fix:
+- Environment configs
+- Production webhooks
+- HTTPS issues
+- Background workers
+- API timeout handling
+- Database optimization
+
+====================================
+IMPORTANT
+====================================
+
+Please fix the ROOT cause permanently instead of temporary fixes.
+
+Final Expected Result:
+- Shopify orders sync instantly
+- Rider app updates instantly
+- Notifications work instantly
+- Admin dashboard stays live
+- Production works perfectly
+- No missing orders
+- No delayed syncing

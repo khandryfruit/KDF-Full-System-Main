@@ -1,22 +1,23 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
-/**
- * Production API base URL.
- *
- * Priority order:
- *   1. EXPO_PUBLIC_API_URL  — set this in eas.json env or .env.local for production
- *   2. EXPO_PUBLIC_DOMAIN   — auto-set in Replit dev environment
- *   3. Empty string (will cause fetch errors — always set one of the above)
- *
- * Example eas.json env:
- *   "env": { "EXPO_PUBLIC_API_URL": "https://api.yourdomain.com" }
- */
 export const BASE_URL: string =
   process.env.EXPO_PUBLIC_API_URL ??
   (process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
     : "");
+
+/* ── Set foreground notification behaviour ── */
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 export interface Rider {
   id: number;
@@ -46,10 +47,61 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
 });
 
+async function registerForPushNotifications(token: string): Promise<void> {
+  if (Platform.OS === "web") return;
+  try {
+    if (!Device.isDevice) return;
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== "granted") return;
+
+    /* Create Android notification channel */
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("new_order", {
+        name: "New Orders",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#00B85A",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+      });
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: "f5433930-a95c-4ac1-857f-dfdafc2fe4d1",
+    });
+
+    const expoPushToken = tokenData.data;
+
+    /* Save locally */
+    await AsyncStorage.setItem("kdf_expo_push_token", expoPushToken);
+
+    /* Send to server */
+    await fetch(`${BASE_URL}/api/rider/push-token`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ expo_push_token: expoPushToken }),
+    }).catch(() => {});
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rider, setRider] = useState<Rider | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,10 +111,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (saved && savedRider) {
           setToken(saved);
           setRider(JSON.parse(savedRider));
+          /* Re-register push token on app restart (token can change) */
+          registerForPushNotifications(saved).catch(() => {});
         }
       } catch {}
       setLoading(false);
     })();
+
+    /* Foreground notification listener */
+    notificationListener.current = Notifications.addNotificationReceivedListener(() => {
+      /* App is in foreground — notification shown via handler above */
+    });
+
+    return () => {
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
   }, []);
 
   const login = useCallback(async (phone: string, password: string) => {
@@ -78,6 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem("kdf_rider_data", JSON.stringify(data.rider));
       setToken(data.token);
       setRider(data.rider);
+      /* Register push token after successful login */
+      registerForPushNotifications(data.token).catch(() => {});
       return { ok: true };
     } catch {
       return { ok: false, error: "Network error. Check your connection." };
@@ -87,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await AsyncStorage.removeItem("kdf_rider_token");
     await AsyncStorage.removeItem("kdf_rider_data");
+    await AsyncStorage.removeItem("kdf_expo_push_token");
     setToken(null);
     setRider(null);
   }, []);

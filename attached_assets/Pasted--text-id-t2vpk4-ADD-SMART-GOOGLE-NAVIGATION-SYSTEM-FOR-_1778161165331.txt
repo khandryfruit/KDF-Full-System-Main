@@ -1,0 +1,101 @@
+```text id="t2vpk4"
+ADD SMART GOOGLE NAVIGATION SYSTEM FOR RIDER APP
+
+Required Feature:
+When rider clicks customer location/address, it should automatically open Google Maps Navigation directly and start route guidance instantly.
+
+====================================
+FEATURE REQUIREMENTS
+====================================
+
+1. ONE-CLICK NAVIGATION
+When rider taps:
+- Address
+OR
+- Navigation button
+OR
+- Location icon
+
+It should instantly:
+- Open Google Maps
+- Start navigation automatically
+- Show fastest route
+- Use rider current location
+- Navigate to customer address
+
+====================================
+2. GOOGLE MAPS DEEP LINKING
+====================================
+
+Use proper Google Maps deep linking.
+
+Example:
+google.navigation:q=LATITUDE,LONGITUDE
+
+OR
+
+https://www.google.com/maps/dir/?api=1
+
+====================================
+3. AUTO LOCATION DETECTION
+====================================
+
+Requirements:
+- Detect rider current GPS automatically
+- Use live coordinates
+- Start turn-by-turn navigation
+- Real-time route updates
+
+====================================
+4. FALLBACK SUPPORT
+====================================
+
+If Google Maps app is not installed:
+- Open browser maps automatically
+- OR open Mapbox/Apple Maps fallback
+
+====================================
+5. DELIVERY CARD IMPROVEMENTS
+====================================
+
+Add professional action buttons:
+- Navigate
+- Call
+- WhatsApp
+- Mark Delivered
+
+Navigation button should:
+- Be large and visible
+- Use modern map icon
+- Open instantly
+- Show loading state
+
+====================================
+6. ADMIN LIVE TRACKING
+====================================
+
+While rider navigates:
+- Admin should see live movement
+- Rider route updates in real-time
+- ETA updates automatically
+
+====================================
+7. CUSTOMER TRACKING
+====================================
+
+Customer should also see:
+- Rider moving live
+- Estimated arrival time
+- Rider nearby alerts
+
+====================================
+8. PRODUCTION READY
+====================================
+
+Requirements:
+- Smooth GPS performance
+- Battery optimized tracking
+- Accurate coordinates
+- Background location updates
+- Production-safe navigation system
+```

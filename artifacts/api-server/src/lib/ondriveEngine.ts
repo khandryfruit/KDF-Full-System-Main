@@ -18,6 +18,51 @@ import { logger } from "./logger";
 const WA_API_VERSION = "v18.0";
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
 
+/* ══════════════════════════════════════════════════════
+   EXPO PUSH NOTIFICATION HELPER
+   Sends push to rider device via Expo push API.
+   No FCM key needed — Expo handles it internally.
+══════════════════════════════════════════════════════ */
+export async function sendExpoPush(params: {
+  expoPushToken: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  sound?: "default" | null;
+  badge?: number;
+}): Promise<void> {
+  const { expoPushToken, title, body, data, sound = "default", badge } = params;
+  if (!expoPushToken || !expoPushToken.startsWith("ExponentPushToken")) return;
+  try {
+    const res = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Accept-encoding": "gzip, deflate",
+      },
+      body: JSON.stringify({
+        to: expoPushToken,
+        title,
+        body,
+        data: data ?? {},
+        sound,
+        ...(badge !== undefined ? { badge } : {}),
+        priority: "high",
+        channelId: "new_order",
+      }),
+    });
+    const result = await res.json() as any;
+    if (result?.data?.status === "error") {
+      logger.warn({ token: expoPushToken.slice(-8), error: result.data.message }, "Expo push: delivery error");
+    } else {
+      logger.info({ token: expoPushToken.slice(-8) }, "Expo push: sent");
+    }
+  } catch (err) {
+    logger.warn(err, "Expo push: network error");
+  }
+}
+
 /* ── Confirmation keywords (Urdu + English) ── */
 const CONFIRM_KEYWORDS = [
   "confirm", "confirmed", "yes", "yeah", "yep", "ok", "okay", "done",
@@ -716,6 +761,24 @@ export async function triggerNewOrderAutomation(params: {
         const delId = (delRows.rows?.[0] as any)?.id;
         if (delId) {
           await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW() WHERE id = ${delId}`).catch(() => {});
+        }
+
+        /* ── Send Expo Push Notification to rider app ── */
+        try {
+          const tokenRow = await db.execute(sql`SELECT expo_push_token FROM riders WHERE id = ${rider.id} LIMIT 1`);
+          const expoPushToken = (tokenRow.rows?.[0] as any)?.expo_push_token;
+          if (expoPushToken) {
+            const codText = isPaid ? "PAID" : `COD: Rs. ${codAmount.toLocaleString()}`;
+            await sendExpoPush({
+              expoPushToken,
+              title: `🚚 New Order ${orderNumber}`,
+              body: `${customerName ?? "Customer"} · ${deliveryAddr} · ${codText}`,
+              data: { deliveryId: delId, orderId: shopifyOrderDbId, orderNumber },
+              sound: "default",
+            });
+          }
+        } catch (pushErr) {
+          logger.warn(pushErr, "Expo push failed for rider (non-critical)");
         }
 
         logger.info({ orderNumber, rider: rider.name, delivery: delId }, "Lahore order: rider assigned + WA sent");

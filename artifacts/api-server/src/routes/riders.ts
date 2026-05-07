@@ -1165,6 +1165,72 @@ For queries: Reply to this message or visit kdfnuts.com`;
   }
 });
 
+/* POST /api/admin/riders/backfill-shopify-data
+   Links rider_deliveries that have no shopify_order_db_id by matching order number,
+   and fills missing order_items / customer phone from shopify_orders. */
+router.post("/admin/riders/backfill-shopify-data", adminMiddleware, async (req, res) => {
+  try {
+    /* 1. Link deliveries that have a shopify_order_number but no shopify_order_db_id */
+    const linked = await db.execute(sql`
+      UPDATE rider_deliveries rd
+      SET
+        shopify_order_db_id = so.id,
+        customer_phone  = COALESCE(NULLIF(rd.customer_phone,''), so.customer_phone),
+        customer_name   = COALESCE(NULLIF(rd.customer_name,''),  so.customer_name),
+        order_items     = CASE
+                            WHEN rd.order_items IS NULL OR rd.order_items::text = '[]' OR rd.order_items::text = 'null'
+                            THEN COALESCE(so.line_items, '[]'::jsonb)
+                            ELSE rd.order_items
+                          END,
+        updated_at      = NOW()
+      FROM shopify_orders so
+      WHERE rd.shopify_order_db_id IS NULL
+        AND rd.shopify_order_number IS NOT NULL
+        AND (so.order_number = rd.shopify_order_number OR so.shopify_order_id = rd.shopify_order_id)
+      RETURNING rd.id
+    `);
+
+    /* 2. Fill missing order_items for linked deliveries */
+    const filledItems = await db.execute(sql`
+      UPDATE rider_deliveries rd
+      SET
+        order_items = COALESCE(so.line_items, '[]'::jsonb),
+        updated_at  = NOW()
+      FROM shopify_orders so
+      WHERE rd.shopify_order_db_id = so.id
+        AND (rd.order_items IS NULL OR rd.order_items::text = '[]' OR rd.order_items::text = 'null')
+        AND so.line_items IS NOT NULL
+        AND so.line_items::text <> '[]'
+      RETURNING rd.id
+    `);
+
+    /* 3. Fill missing customer phone from shopify_orders */
+    const filledPhone = await db.execute(sql`
+      UPDATE rider_deliveries rd
+      SET
+        customer_phone = so.customer_phone,
+        updated_at     = NOW()
+      FROM shopify_orders so
+      WHERE rd.shopify_order_db_id = so.id
+        AND (rd.customer_phone IS NULL OR rd.customer_phone = '')
+        AND so.customer_phone IS NOT NULL
+        AND so.customer_phone <> ''
+      RETURNING rd.id
+    `);
+
+    res.json({
+      ok: true,
+      linked:      linked.rows.length,
+      filledItems: filledItems.rows.length,
+      filledPhone: filledPhone.rows.length,
+      message:     `Linked ${linked.rows.length}, filled items for ${filledItems.rows.length}, filled phone for ${filledPhone.rows.length} deliveries`,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* GET /api/admin/riders/:riderId/deliveries */
 router.get("/admin/riders/:riderId/deliveries", adminMiddleware, async (req, res) => {
   try {

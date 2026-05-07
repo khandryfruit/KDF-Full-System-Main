@@ -24,7 +24,9 @@ import colors, { getStatusColor, getStatusBg, getStatusLabel } from "@/constants
 import { PriorityBanner } from "@/components/PriorityTimer";
 
 const C = colors.light;
-const BASE = BASE_URL;
+
+/* Production domain for clean invoice URLs */
+const PROD_DOMAIN = "https://khandryfruits.com";
 
 const WORKFLOW: Array<{ status: string; label: string; icon: string; color: string }> = [
   { status: "picked",           label: "Picked Up",  icon: "archive",      color: C.statusPicked    },
@@ -40,6 +42,68 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </View>
   );
+}
+
+/* ── Smart Google Maps Navigation ── */
+async function smartNavigate(address: string) {
+  if (!address) return;
+  const q = encodeURIComponent(address);
+
+  const urls = {
+    // Google Maps app turn-by-turn navigation
+    androidNav:  `google.navigation:q=${q}`,
+    iosGmaps:    `comgooglemaps://?daddr=${q}&directionsmode=driving`,
+    // Universal fallback
+    browser:     `https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=driving`,
+  };
+
+  if (Platform.OS === "android") {
+    // Try Google Maps navigation deep link first
+    const canUseGmaps = await Linking.canOpenURL(urls.androidNav).catch(() => false);
+    if (canUseGmaps) {
+      await Linking.openURL(urls.androidNav);
+      return;
+    }
+    // Fallback to browser Google Maps
+    await Linking.openURL(urls.browser);
+  } else if (Platform.OS === "ios") {
+    // Try Google Maps iOS app
+    const canUseGmaps = await Linking.canOpenURL(urls.iosGmaps).catch(() => false);
+    if (canUseGmaps) {
+      await Linking.openURL(urls.iosGmaps);
+      return;
+    }
+    // Try Apple Maps
+    const appleMapsUrl = `maps:?daddr=${q}&dirflg=d`;
+    const canUseApple = await Linking.canOpenURL(appleMapsUrl).catch(() => false);
+    if (canUseApple) {
+      await Linking.openURL(appleMapsUrl);
+      return;
+    }
+    // Browser fallback
+    await Linking.openURL(urls.browser);
+  } else {
+    await Linking.openURL(urls.browser);
+  }
+}
+
+/* ── Open in Google Maps (view only, no navigation) ── */
+async function openInMaps(address: string) {
+  if (!address) return;
+  const q = encodeURIComponent(address);
+  const urls = {
+    android: `geo:0,0?q=${q}`,
+    ios:     `maps:?q=${q}`,
+    browser: `https://maps.google.com/?q=${q}`,
+  };
+  if (Platform.OS === "android") {
+    const canOpen = await Linking.canOpenURL(urls.android).catch(() => false);
+    if (canOpen) { await Linking.openURL(urls.android); return; }
+  } else if (Platform.OS === "ios") {
+    const canOpen = await Linking.canOpenURL(urls.ios).catch(() => false);
+    if (canOpen) { await Linking.openURL(urls.ios); return; }
+  }
+  await Linking.openURL(urls.browser);
 }
 
 export default function OrderDetailScreen() {
@@ -103,23 +167,16 @@ export default function OrderDetailScreen() {
     } catch { return []; }
   })();
 
-  const openMaps = () => {
-    const q = encodeURIComponent(addr);
-    Linking.openURL(Platform.OS === "ios" ? `maps:?q=${q}` : `geo:0,0?q=${q}`)
-      .catch(() => Linking.openURL(`https://maps.google.com/?q=${q}`));
-  };
+  /* ── Invoice URL (clean, no token) ── */
+  const orderNum = delivery?.shopify_order_number ?? delivery?.id ?? "";
+  const invoiceUrl = orderNum
+    ? `${PROD_DOMAIN}/invoice/${String(orderNum).replace(/^#/, "")}`
+    : `${BASE_URL}/api/rider/deliveries/${id}/invoice?token=${token}`;
 
-  const openGoogleMaps = () => {
-    const q = encodeURIComponent(addr);
-    Linking.openURL(`https://maps.google.com/?q=${q}`);
-  };
-
-  const navigate = () => {
-    const q = encodeURIComponent(addr);
-    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=driving`);
-  };
-
-  const callCustomer = () => Linking.openURL(`tel:${delivery?.customer_phone}`);
+  /* ── Actions ── */
+  const navigate      = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); smartNavigate(addr); };
+  const openMapsView  = () => openInMaps(addr);
+  const callCustomer  = () => Linking.openURL(`tel:${delivery?.customer_phone}`);
 
   const waCustomer = () => {
     const ph = String(delivery?.customer_phone ?? "").replace(/\D/g, "");
@@ -131,15 +188,17 @@ export default function OrderDetailScreen() {
   };
 
   const openInvoice = async () => {
-    const url = `${BASE}/api/rider/deliveries/${id}/invoice?token=${token}`;
-    await WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+    await WebBrowser.openBrowserAsync(invoiceUrl, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+      toolbarColor: "#0D1F3C",
+    });
   };
 
   const shareInvoice = async () => {
     const itemsStr = items.slice(0, 5).map((i: any) =>
       `  • ${i.quantity ?? 1}× ${i.title ?? i.name ?? "Item"}${i.variant_title ? ` (${i.variant_title})` : ""}`
     ).join("\n");
-    const msg = `*KDF NUTS — Order Invoice*\n\nOrder: #${delivery?.shopify_order_number}\nCustomer: ${delivery?.customer_name}\nPhone: ${delivery?.customer_phone}\nAddress: ${addr}\n\n*Items:*\n${itemsStr}\n\n*Payment:* ${delivery?.is_paid ? "PAID" : `COD Rs. ${Number(delivery?.cod_amount ?? 0).toLocaleString()}`}`;
+    const msg = `*KDF NUTS — Order Invoice*\n\nOrder: #${delivery?.shopify_order_number}\nCustomer: ${delivery?.customer_name}\nPhone: ${delivery?.customer_phone}\nAddress: ${addr}\n\n*Items:*\n${itemsStr}\n\n*Payment:* ${delivery?.is_paid ? "PAID" : `COD Rs. ${Number(delivery?.cod_amount ?? 0).toLocaleString()}`}\n\n*Invoice Link:* ${invoiceUrl}`;
     Share.share({ message: msg, title: `KDF Invoice #${delivery?.shopify_order_number}` });
   };
 
@@ -147,7 +206,7 @@ export default function OrderDetailScreen() {
     const ph = String(delivery?.customer_phone ?? "").replace(/\D/g, "");
     const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
     const msg = encodeURIComponent(
-      `*KDF NUTS — Order #${delivery?.shopify_order_number}*\n\nDear ${delivery?.customer_name},\nYour invoice: ${BASE}/api/rider/deliveries/${id}/invoice?token=${token}`
+      `السلام علیکم ${delivery?.customer_name}!\n\n*آپ کا KDF NUTS Invoice:*\n${invoiceUrl}\n\nکوئی سوال ہو تو بتائیں۔ شکریہ! 🌟`
     );
     Linking.openURL(`https://wa.me/${intl}?text=${msg}`);
   };
@@ -159,13 +218,7 @@ export default function OrderDetailScreen() {
       `Mark as "${action?.label}"?`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            statusMut.mutate(status);
-          },
-        },
+        { text: "Confirm", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); statusMut.mutate(status); } },
       ]
     );
   };
@@ -205,8 +258,11 @@ export default function OrderDetailScreen() {
 
   return (
     <View style={[styles.root, { paddingBottom: Platform.OS === "web" ? 34 : 0 }]}>
-      {/* Premium Header */}
-      <LinearGradient colors={["#0D2137", "#0F2A47"]} style={[styles.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 10 }]}>
+      {/* ── Premium Header ── */}
+      <LinearGradient
+        colors={["#080F1E", "#0D1F3C"]}
+        style={[styles.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 10 }]}
+      >
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Feather name="arrow-left" size={20} color="#fff" />
@@ -220,31 +276,35 @@ export default function OrderDetailScreen() {
           </View>
         </View>
 
-        {/* Quick action strip */}
+        {/* ── 4 Quick Action Buttons ── */}
         <View style={styles.quickStrip}>
           <TouchableOpacity style={styles.quickStripBtn} onPress={callCustomer}>
-            <View style={[styles.quickStripIcon, { backgroundColor: "#1565C0" }]}>
-              <Feather name="phone-call" size={16} color="#fff" />
+            <View style={[styles.quickIcon, { backgroundColor: "#1565C0" }]}>
+              <Feather name="phone-call" size={17} color="#fff" />
             </View>
-            <Text style={styles.quickStripTxt}>Call</Text>
+            <Text style={styles.quickTxt}>Call</Text>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.quickStripBtn} onPress={waCustomer}>
-            <View style={[styles.quickStripIcon, { backgroundColor: "#075E54" }]}>
-              <Feather name="message-circle" size={16} color="#fff" />
+            <View style={[styles.quickIcon, { backgroundColor: "#075E54" }]}>
+              <Feather name="message-circle" size={17} color="#fff" />
             </View>
-            <Text style={styles.quickStripTxt}>WhatsApp</Text>
+            <Text style={styles.quickTxt}>WhatsApp</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickStripBtn} onPress={navigate}>
-            <View style={[styles.quickStripIcon, { backgroundColor: "#00B85A" }]}>
-              <Feather name="navigation" size={16} color="#fff" />
+
+          {/* Big Navigate Button */}
+          <TouchableOpacity style={[styles.quickStripBtn, { flex: 2 }]} onPress={navigate}>
+            <View style={[styles.quickIcon, { backgroundColor: "#00B85A", width: 56, height: 56, borderRadius: 16, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)" }]}>
+              <Feather name="navigation" size={22} color="#fff" />
             </View>
-            <Text style={styles.quickStripTxt}>Navigate</Text>
+            <Text style={[styles.quickTxt, { color: "#4ADE80", fontFamily: "Inter_700Bold" }]}>Navigate</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickStripBtn} onPress={openGoogleMaps}>
-            <View style={[styles.quickStripIcon, { backgroundColor: "#1A73E8" }]}>
-              <Feather name="map" size={16} color="#fff" />
+
+          <TouchableOpacity style={styles.quickStripBtn} onPress={openMapsView}>
+            <View style={[styles.quickIcon, { backgroundColor: "#1A73E8" }]}>
+              <Feather name="map" size={17} color="#fff" />
             </View>
-            <Text style={styles.quickStripTxt}>Maps</Text>
+            <Text style={styles.quickTxt}>Maps</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -256,7 +316,7 @@ export default function OrderDetailScreen() {
         {/* Priority Banner */}
         {isActive && <PriorityBanner assignedAt={delivery.assigned_at} />}
 
-        {/* Payment Hero Card */}
+        {/* ── Payment Hero Card ── */}
         <View style={[styles.payCard, {
           borderColor: delivery.is_paid ? C.statusDelivered : C.cod,
           backgroundColor: delivery.is_paid ? "#F0FDF4" : "#FFFBEB",
@@ -271,30 +331,39 @@ export default function OrderDetailScreen() {
             <Text style={[styles.payAmount, { color: delivery.is_paid ? C.statusDelivered : C.cod }]}>
               Rs. {cod.toLocaleString()}
             </Text>
-            {dc > 0 && (
-              <Text style={styles.payDelivery}>+ Delivery: Rs. {dc.toLocaleString()}</Text>
-            )}
+            {dc > 0 && <Text style={styles.payDelivery}>+ Delivery: Rs. {dc.toLocaleString()}</Text>}
           </View>
         </View>
 
-        {/* Address */}
+        {/* ── Address + Navigation ── */}
         <Section title="Delivery Address">
           <Text style={styles.addrTxt}>{addr || "—"}</Text>
           {!!addr && (
-            <View style={styles.mapBtnRow}>
-              <TouchableOpacity style={[styles.mapBtn, { flex: 1 }]} onPress={navigate}>
-                <Feather name="navigation" size={14} color="#fff" />
-                <Text style={styles.mapBtnTxt}>Navigate</Text>
+            <>
+              {/* Big navigate button */}
+              <TouchableOpacity style={styles.navigateHero} onPress={navigate} activeOpacity={0.85}>
+                <LinearGradient colors={["#00B85A", "#007A3C"]} style={styles.navigateHeroGrad}>
+                  <View style={styles.navigateHeroIcon}>
+                    <Feather name="navigation" size={22} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.navigateHeroTitle}>Start Navigation</Text>
+                    <Text style={styles.navigateHeroSub}>Google Maps میں کھولیں · Turn-by-turn</Text>
+                  </View>
+                  <Feather name="arrow-right" size={18} color="rgba(255,255,255,0.7)" />
+                </LinearGradient>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mapBtnOutline, { flex: 1 }]} onPress={openGoogleMaps}>
+
+              {/* Secondary: View on map */}
+              <TouchableOpacity style={styles.mapViewBtn} onPress={openMapsView}>
                 <Feather name="map" size={14} color={C.primary} />
-                <Text style={[styles.mapBtnTxt, { color: C.primary }]}>Google Maps</Text>
+                <Text style={styles.mapViewTxt}>View on Map</Text>
               </TouchableOpacity>
-            </View>
+            </>
           )}
         </Section>
 
-        {/* Products Checklist */}
+        {/* ── Products Checklist ── */}
         {items.length > 0 && (
           <Section title={`Products (${items.length} item${items.length !== 1 ? "s" : ""})`}>
             <View style={styles.packHint}>
@@ -339,7 +408,7 @@ export default function OrderDetailScreen() {
           </Section>
         )}
 
-        {/* Notes */}
+        {/* ── Notes ── */}
         {(!!delivery.notes || !!delivery.order_notes) && (
           <Section title="Order Notes">
             <View style={styles.notesBox}>
@@ -349,25 +418,33 @@ export default function OrderDetailScreen() {
           </Section>
         )}
 
-        {/* Invoice Actions */}
+        {/* ── Invoice ── */}
         <Section title="Invoice & Sharing">
+          {/* Invoice URL display */}
+          <View style={styles.invoiceUrlBox}>
+            <Feather name="link" size={13} color="#6B7A99" />
+            <Text style={styles.invoiceUrlTxt} numberOfLines={1}>
+              {invoiceUrl.replace("https://", "")}
+            </Text>
+          </View>
+
           <View style={styles.invoiceGrid}>
-            <TouchableOpacity style={styles.invBtn} onPress={openInvoice}>
-              <Feather name="file-text" size={18} color={C.primaryDark} />
-              <Text style={[styles.invBtnTxt, { color: C.primaryDark }]}>View Invoice</Text>
+            <TouchableOpacity style={[styles.invBtn, { backgroundColor: "#E3F2FD" }]} onPress={openInvoice}>
+              <Feather name="file-text" size={18} color="#1565C0" />
+              <Text style={[styles.invBtnTxt, { color: "#1565C0" }]}>View Invoice</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.invBtn, { backgroundColor: "#E8F5E9" }]} onPress={waInvoice}>
-              <Feather name="message-circle" size={18} color={C.whatsappDark} />
-              <Text style={[styles.invBtnTxt, { color: C.whatsappDark }]}>WA Invoice</Text>
+              <Feather name="message-circle" size={18} color="#075E54" />
+              <Text style={[styles.invBtnTxt, { color: "#075E54" }]}>WA Invoice</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.invBtn, { backgroundColor: "#E3F2FD" }]} onPress={shareInvoice}>
-              <Feather name="share-2" size={18} color="#1565C0" />
-              <Text style={[styles.invBtnTxt, { color: "#1565C0" }]}>Share</Text>
+            <TouchableOpacity style={[styles.invBtn, { backgroundColor: C.primaryLight }]} onPress={shareInvoice}>
+              <Feather name="share-2" size={18} color={C.primaryDark} />
+              <Text style={[styles.invBtnTxt, { color: C.primaryDark }]}>Share</Text>
             </TouchableOpacity>
           </View>
         </Section>
 
-        {/* Status Workflow */}
+        {/* ── Status Workflow ── */}
         {!isTerminal ? (
           <Section title="Update Delivery Status">
             <View style={styles.workflowGrid}>
@@ -379,8 +456,7 @@ export default function OrderDetailScreen() {
                   <TouchableOpacity
                     key={w.status}
                     style={[
-                      styles.wfBtn,
-                      { borderColor: w.color },
+                      styles.wfBtn, { borderColor: w.color },
                       isCurrent && { backgroundColor: w.color },
                       isPast && styles.wfBtnDone,
                     ]}
@@ -390,7 +466,7 @@ export default function OrderDetailScreen() {
                   >
                     {statusMut.isPending && isCurrent
                       ? <ActivityIndicator size="small" color={isCurrent ? "#fff" : w.color} />
-                      : <Feather name={w.icon as any} size={20} color={isCurrent ? "#fff" : isPast ? w.color : w.color} />
+                      : <Feather name={w.icon as any} size={20} color={isCurrent ? "#fff" : w.color} />
                     }
                     <Text style={[styles.wfTxt, { color: isCurrent ? "#fff" : w.color }]}>{w.label}</Text>
                     {isPast && <Feather name="check" size={12} color={w.color} style={styles.wfCheck} />}
@@ -413,7 +489,7 @@ export default function OrderDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:       { flex: 1, backgroundColor: C.background },
+  root:       { flex: 1, backgroundColor: "#F1F4F9" },
   fullCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   backFallback: { backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 12 },
 
@@ -422,16 +498,16 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingBottom: 14, gap: 12,
   },
-  backBtn:       { width: 38, height: 38, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
+  backBtn:        { width: 38, height: 38, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
   headerOrderNum: { color: "rgba(255,255,255,0.55)", fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
-  headerCust:    { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold", marginTop: 2 },
-  statusBadge:   { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 10 },
+  headerCust:     { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold", marginTop: 2 },
+  statusBadge:    { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 10 },
   statusBadgeTxt: { color: "#fff", fontSize: 11, fontFamily: "Inter_700Bold" },
 
-  quickStrip: { flexDirection: "row", paddingHorizontal: 14, paddingBottom: 16, paddingTop: 2 },
+  quickStrip: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 12, paddingBottom: 18, paddingTop: 4, gap: 8 },
   quickStripBtn: { flex: 1, alignItems: "center", gap: 5 },
-  quickStripIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  quickStripTxt: { color: "rgba(255,255,255,0.7)", fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  quickIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  quickTxt:  { color: "rgba(255,255,255,0.65)", fontSize: 10, fontFamily: "Inter_600SemiBold" },
 
   scroll: { padding: 14, gap: 12 },
 
@@ -440,22 +516,30 @@ const styles = StyleSheet.create({
     padding: 18, borderRadius: 18, borderWidth: 2,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
-  payIcon:    { width: 58, height: 58, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  payLabel:   { fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.8, textTransform: "uppercase" },
-  payAmount:  { fontSize: 30, fontFamily: "Inter_700Bold", marginTop: 3 },
+  payIcon:     { width: 58, height: 58, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  payLabel:    { fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 0.8, textTransform: "uppercase" },
+  payAmount:   { fontSize: 30, fontFamily: "Inter_700Bold", marginTop: 3 },
   payDelivery: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.mutedForeground, marginTop: 3 },
 
   section: {
-    backgroundColor: C.card, borderRadius: 18, padding: 16, gap: 0,
+    backgroundColor: "#fff", borderRadius: 18, padding: 16,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
   sectionTitle: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.mutedForeground, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
 
-  addrTxt: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.text, lineHeight: 22, marginBottom: 12 },
-  mapBtnRow: { flexDirection: "row", gap: 10 },
-  mapBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: C.primary, paddingVertical: 10, borderRadius: 12 },
-  mapBtnOutline: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: C.primaryLight, paddingVertical: 10, borderRadius: 12 },
-  mapBtnTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  addrTxt: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.text, lineHeight: 22, marginBottom: 14 },
+
+  /* Navigate hero button */
+  navigateHero: { borderRadius: 16, overflow: "hidden", marginBottom: 10 },
+  navigateHeroGrad: {
+    flexDirection: "row", alignItems: "center", gap: 14, padding: 16,
+  },
+  navigateHeroIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  navigateHeroTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  navigateHeroSub:   { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+
+  mapViewBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 12, backgroundColor: C.primaryLight },
+  mapViewTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.primary },
 
   packHint:      { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
   packHintTxt:   { fontSize: 11, fontFamily: "Inter_400Regular", color: C.mutedForeground, fontStyle: "italic" },
@@ -474,8 +558,15 @@ const styles = StyleSheet.create({
   notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   notesTxt: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: C.text, lineHeight: 21 },
 
+  invoiceUrlBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#F8FAFC", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 12,
+  },
+  invoiceUrlTxt: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7A99" },
+
   invoiceGrid: { flexDirection: "row", gap: 8 },
-  invBtn:      { flex: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primaryLight },
+  invBtn:      { flex: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 14, borderRadius: 12 },
   invBtnTxt:   { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
   workflowGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

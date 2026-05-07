@@ -7,7 +7,7 @@ import {
   MapPin, Package, MessageCircle, Printer, RefreshCw,
   Users, CheckCircle, Clock, Truck, AlertCircle, Search,
   ChevronLeft, ChevronRight, Zap, UserPlus,
-  LayoutGrid, List, Send, X,
+  LayoutGrid, List, Send, X, Database, WifiOff, Wifi,
 } from "lucide-react";
 
 const API = "/api";
@@ -464,6 +464,43 @@ export default function LahoreDeliveriesPage() {
   const pagination = d?.pagination ?? { total: 0, pages: 1 };
   const s = (stats as any)?.stats ?? {};
 
+  const [syncingShopify, setSyncingShopify] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+
+  const { data: syncStatus } = useQuery({
+    queryKey: ["shopify-sync-status"],
+    queryFn: () => apiFetch("/admin/shopify/auto-sync/status"),
+    refetchInterval: 60000,
+  });
+  const ss = (syncStatus as any) ?? {};
+  const lastOrderSync: string | null = ss.store?.lastOrderSync ?? null;
+  const isAutoSyncRunning: boolean = ss.autoSync?.isRunning ?? false;
+
+  const triggerShopifySync = async () => {
+    setSyncingShopify(true);
+    try {
+      const r = await apiFetch("/admin/shopify/auto-sync/trigger", { method: "POST" });
+      toast({ title: "Shopify Sync Triggered", description: r.message ?? "Incremental sync running in background" });
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["shopify-sync-status"] });
+        refresh();
+      }, 3000);
+    } catch (e: any) {
+      toast({ title: "Sync Error", description: e.message, variant: "destructive" });
+    } finally { setSyncingShopify(false); }
+  };
+
+  const runBackfill = async () => {
+    setBackfilling(true);
+    try {
+      const r = await apiFetch("/admin/riders/backfill-shopify-data", { method: "POST" });
+      toast({ title: "Backfill Complete", description: r.message ?? "Data refreshed" });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Backfill Error", description: e.message, variant: "destructive" });
+    } finally { setBackfilling(false); }
+  };
+
   const autoAssign = async () => {
     setAutoAssigning(true);
     try {
@@ -525,6 +562,51 @@ export default function LahoreDeliveriesPage() {
           </div>
           <Button size="sm" onClick={autoAssign} disabled={autoAssigning} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
             <Zap size={14} />{autoAssigning ? "Assigning..." : "Auto-Assign"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Shopify Sync Status Bar */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-border bg-white shadow-sm">
+        <div className="flex items-center gap-2">
+          {isAutoSyncRunning ? (
+            <Wifi size={16} className="text-amber-500 animate-pulse" />
+          ) : (
+            <Database size={16} className="text-blue-600" />
+          )}
+          <span className="text-sm font-semibold text-foreground">Shopify Sync</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className={`w-2 h-2 rounded-full ${isAutoSyncRunning ? "bg-amber-400 animate-pulse" : "bg-green-500"}`} />
+          {isAutoSyncRunning ? "Sync running..." : "Auto-sync every 15 min"}
+        </div>
+        {lastOrderSync && (
+          <div className="text-xs text-muted-foreground">
+            Last orders sync: <span className="font-semibold text-foreground">
+              {new Date(lastOrderSync).toLocaleString("en-PK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        )}
+        <div className="flex gap-2 ml-auto">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={triggerShopifySync}
+            disabled={syncingShopify || isAutoSyncRunning}
+          >
+            <RefreshCw size={12} className={syncingShopify ? "animate-spin" : ""} />
+            {syncingShopify ? "Triggering..." : "Force Sync"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+            onClick={runBackfill}
+            disabled={backfilling}
+          >
+            <Database size={12} className={backfilling ? "animate-pulse" : ""} />
+            {backfilling ? "Backfilling..." : "Fix Missing Data"}
           </Button>
         </div>
       </div>

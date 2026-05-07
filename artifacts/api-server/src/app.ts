@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import { existsSync, statSync } from "fs";
 import router from "./routes";
+import publicInvoiceRouter from "./routes/public-invoice";
 import { logger } from "./lib/logger";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { db } from "@workspace/db";
@@ -48,6 +49,9 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+/** Public invoice — clean SEO-friendly URL, no token required */
+app.use("/invoice", publicInvoiceRouter);
 
 /** Serve /sitemap.xml directly at root level */
 app.get("/sitemap.xml", async (req: Request, res: Response) => {
