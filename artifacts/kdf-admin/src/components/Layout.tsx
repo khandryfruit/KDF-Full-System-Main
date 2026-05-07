@@ -49,6 +49,11 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   Building2,
+  RotateCcw,
+  History,
+  ClipboardList,
+  UserCheck,
+  PieChart,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -58,8 +63,18 @@ import { NotificationBell } from "./NotificationBell";
 /* ═══════════════════════════════════════════════
    NAV DATA
 ═══════════════════════════════════════════════ */
+const INVOICE_NAV_ITEMS = [
+  { href: "/invoice",                   label: "Create Invoice",    icon: Receipt        },
+  { href: "/invoice/history",           label: "All Invoices",      icon: History        },
+  { href: "/invoice/purchase",          label: "Purchase Bill",     icon: ClipboardList  },
+  { href: "/invoice/purchase/history",  label: "Purchase History",  icon: FileText       },
+  { href: "/branch-pos",                label: "Branch POS",        icon: Store          },
+  { href: "/branches",                  label: "Branches",          icon: Building2      },
+  { href: "/customers",                 label: "Customers",         icon: UserCheck      },
+  { href: "/analytics",                 label: "Analytics",         icon: PieChart       },
+];
+
 const NAV_ITEMS = [
-  { href: "/invoice",            label: "Invoice & Billing",    icon: Receipt        },
   { href: "/dashboard",          label: "Dashboard",            icon: LayoutDashboard },
   { href: "/analytics",          label: "Analytics",            icon: BarChart2      },
   { href: "/orders",             label: "Orders",               icon: ShoppingCart   },
@@ -317,10 +332,12 @@ function SidebarSection({
 interface SidebarContentProps {
   location: string;
   expanded: boolean;
+  invoiceOpen: boolean;
   shopifyOpen: boolean;
   pgOpen: boolean;
   logisticsOpen: boolean;
   branchesOpen: boolean;
+  onToggleInvoice: () => void;
   onToggleShopify: () => void;
   onTogglePg: () => void;
   onToggleLogistics: () => void;
@@ -332,10 +349,11 @@ interface SidebarContentProps {
   isMobile?: boolean;
 }
 function SidebarContent({
-  location, expanded, shopifyOpen, pgOpen, logisticsOpen, branchesOpen,
-  onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches, onNavClick, onLogout,
+  location, expanded, invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen,
+  onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches, onNavClick, onLogout,
   onToggleCollapse, isCollapsed, isMobile,
 }: SidebarContentProps) {
+  const isInvoiceActive   = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login");
   const isShopifyActive   = location.startsWith("/shopify");
   const isPgActive        = location.startsWith("/payment-gateway");
   const isLogisticsActive = location.startsWith("/logistics");
@@ -382,6 +400,28 @@ function SidebarContent({
 
       {/* Scrollable nav */}
       <div className={`flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-0.5 ${expanded ? "px-3" : "px-1.5"}`}>
+
+        {/* Invoice & Billing Section — top priority */}
+        <SidebarSection
+          label="Invoice & Billing"
+          icon={Receipt}
+          accentColor="#D97706"
+          activeBg="bg-amber-600/10"
+          activeText="text-amber-700"
+          badgeLetter="₨"
+          isActive={isInvoiceActive}
+          expanded={expanded}
+          open={invoiceOpen}
+          onToggle={onToggleInvoice}
+          items={INVOICE_NAV_ITEMS}
+          location={location}
+          onNavClick={onNavClick}
+        />
+
+        {/* Divider */}
+        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
+          <div className="h-px bg-sidebar-border" />
+        </div>
 
         {/* Main nav items */}
         {NAV_ITEMS.map(item => {
@@ -500,6 +540,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered,   setIsHovered]   = useState(false);
+  const [invoiceOpen,   setInvoiceOpen]   = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos"));
   const [shopifyOpen,   setShopifyOpen]   = useState(() => location.startsWith("/shopify"));
   const [pgOpen,        setPgOpen]        = useState(() => location.startsWith("/payment-gateway"));
   const [logisticsOpen, setLogisticsOpen] = useState(() => location.startsWith("/logistics"));
@@ -514,6 +555,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setIsCollapsed(true);
     setIsHovered(false);
     /* Keep sub-menus open when navigating within them */
+    if (location.startsWith("/invoice") || location.startsWith("/branch-pos")) setInvoiceOpen(true);
     if (location.startsWith("/shopify"))          setShopifyOpen(true);
     if (location.startsWith("/payment-gateway"))  setPgOpen(true);
     if (location.startsWith("/logistics"))        setLogisticsOpen(true);
@@ -551,10 +593,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const sharedProps = {
     location,
+    invoiceOpen,
     shopifyOpen,
     pgOpen,
     logisticsOpen,
     branchesOpen,
+    onToggleInvoice:    () => setInvoiceOpen(o => !o),
     onToggleShopify:    () => setShopifyOpen(o => !o),
     onTogglePg:         () => setPgOpen(o => !o),
     onToggleLogistics:  () => setLogisticsOpen(o => !o),

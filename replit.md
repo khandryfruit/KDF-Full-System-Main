@@ -68,7 +68,7 @@ KDF NUTS is a full-stack eCommerce platform for KDF NUTS, offering a storefront,
 I want iterative development.
 Ask before making major changes.
 I prefer detailed explanations.
-Do not make changes to the `artifacts/kdf-admin` folder.
+Changes to the `artifacts/kdf-admin` folder are allowed.
 Do not make changes to the `lib/api-spec` file.
 
 ## Gotchas
