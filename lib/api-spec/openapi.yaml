@@ -1,0 +1,2399 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: KDF NUTS eCommerce API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: auth
+  - name: products
+  - name: categories
+  - name: banners
+  - name: orders
+  - name: users
+  - name: coupons
+  - name: wallet
+  - name: loyalty
+  - name: admin
+  - name: notifications
+  - name: import-export
+  - name: integrations
+  - name: sync-jobs
+  - name: marketing
+  - name: abandoned-checkouts
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List products
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: featured
+          in: query
+          schema:
+            type: boolean
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [price_asc, price_desc, newest, rating]
+      responses:
+        "200":
+          description: Products list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductsListResponse"
+    post:
+      operationId: createProduct
+      tags: [admin]
+      summary: Create product (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProduct
+      tags: [admin]
+      summary: Update product (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [admin]
+      summary: Delete product (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [admin]
+      summary: Create category (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{id}:
+    put:
+      operationId: updateCategory
+      tags: [admin]
+      summary: Update category (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [admin]
+      summary: Delete category (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /banners:
+    get:
+      operationId: listBanners
+      tags: [banners]
+      summary: List active banners
+      parameters:
+        - in: query
+          name: platform
+          schema:
+            type: string
+            enum: [mobile, website, both]
+          required: false
+          description: Filter banners by platform
+      responses:
+        "200":
+          description: Banners
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+    post:
+      operationId: createBanner
+      tags: [admin]
+      summary: Create banner (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBannerRequest"
+      responses:
+        "201":
+          description: Banner created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+
+  /banners/{id}:
+    put:
+      operationId: updateBanner
+      tags: [admin]
+      summary: Update banner (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBannerRequest"
+      responses:
+        "200":
+          description: Banner updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+    delete:
+      operationId: deleteBanner
+      tags: [admin]
+      summary: Delete banner (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders (own orders for user, all for admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: userId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Orders list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdersListResponse"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Place order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get order by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{id}/items:
+    put:
+      operationId: updateOrderItems
+      tags: [admin]
+      summary: Update order items and recalculate totals (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderItemsRequest"
+      responses:
+        "200":
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{id}/status:
+    patch:
+      operationId: updateOrderStatus
+      tags: [admin]
+      summary: Update order status (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderStatusRequest"
+      responses:
+        "200":
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [admin]
+      summary: List users (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersListResponse"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [admin]
+      summary: Get user by ID (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+    put:
+      operationId: updateUser
+      tags: [admin]
+      summary: Update user (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /coupons:
+    get:
+      operationId: listCoupons
+      tags: [admin]
+      summary: List coupons (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Coupons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Coupon"
+    post:
+      operationId: createCoupon
+      tags: [admin]
+      summary: Create coupon (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCouponRequest"
+      responses:
+        "201":
+          description: Coupon created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+
+  /coupons/{id}:
+    put:
+      operationId: updateCoupon
+      tags: [admin]
+      summary: Update coupon (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCouponRequest"
+      responses:
+        "200":
+          description: Coupon updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coupon"
+    delete:
+      operationId: deleteCoupon
+      tags: [admin]
+      summary: Delete coupon (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /coupons/validate:
+    post:
+      operationId: validateCoupon
+      tags: [coupons]
+      summary: Validate a coupon code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateCouponRequest"
+      responses:
+        "200":
+          description: Coupon validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CouponValidationResponse"
+
+  /wallet/balance:
+    get:
+      operationId: getWalletBalance
+      tags: [wallet]
+      summary: Get wallet balance for user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Wallet balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBalance"
+
+  /wallet/transactions:
+    get:
+      operationId: getWalletTransactions
+      tags: [wallet]
+      summary: Get wallet transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Wallet transactions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletTransactionsResponse"
+
+  /wallet/adjust:
+    post:
+      operationId: adjustWallet
+      tags: [admin]
+      summary: Adjust wallet balance (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustWalletRequest"
+      responses:
+        "200":
+          description: Wallet adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBalance"
+
+  /loyalty/balance:
+    get:
+      operationId: getLoyaltyBalance
+      tags: [loyalty]
+      summary: Get loyalty points balance
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Loyalty balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyBalance"
+
+  /loyalty/transactions:
+    get:
+      operationId: getLoyaltyTransactions
+      tags: [loyalty]
+      summary: Get loyalty transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: Loyalty transactions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyTransactionsResponse"
+
+  /admin/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [admin]
+      summary: Get dashboard statistics
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request presigned upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StorageUploadRequest"
+      responses:
+        "200":
+          description: Presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageUploadResponse"
+
+  /storage/objects/{objectPath}:
+    get:
+      operationId: getStorageObject
+      tags: [storage]
+      summary: Serve storage object
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File content
+
+  /devices/register:
+    post:
+      operationId: registerDevice
+      tags: [notifications]
+      summary: Register FCM device token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterDeviceRequest"
+      responses:
+        "200":
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /notifications/me:
+    get:
+      operationId: getMyNotifications
+      tags: [notifications]
+      summary: Get current user's notification history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: User notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsListResponse"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [admin]
+      summary: List all notifications (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [order_update, promotion, general]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, sent, failed]
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsListResponse"
+
+  /notifications/send:
+    post:
+      operationId: sendNotification
+      tags: [admin]
+      summary: Send push notification (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendNotificationRequest"
+      responses:
+        "200":
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushNotification"
+
+  /seo-settings:
+    get:
+      operationId: getSeoSettings
+      tags: [seo]
+      summary: Get SEO settings
+      responses:
+        "200":
+          description: SEO settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeoSettings"
+    put:
+      operationId: updateSeoSettings
+      tags: [admin]
+      summary: Update SEO settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSeoSettingsRequest"
+      responses:
+        "200":
+          description: Updated SEO settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeoSettings"
+
+  /blog-posts:
+    get:
+      operationId: listBlogPosts
+      tags: [blog]
+      summary: List blog posts
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, published]
+          required: false
+        - in: query
+          name: tag
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: page
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+      responses:
+        "200":
+          description: Blog posts list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BlogPost"
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  totalPages:
+                    type: integer
+                required: [posts, total, page, totalPages]
+    post:
+      operationId: createBlogPost
+      tags: [admin]
+      summary: Create blog post
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBlogPostRequest"
+      responses:
+        "201":
+          description: Created post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+
+  /blog-posts/slug/{slug}:
+    get:
+      operationId: getBlogPostBySlug
+      tags: [blog]
+      summary: Get blog post by slug
+      parameters:
+        - in: path
+          name: slug
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+
+  /blog-posts/{id}:
+    get:
+      operationId: getBlogPost
+      tags: [admin]
+      summary: Get blog post by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: Blog post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+    put:
+      operationId: updateBlogPost
+      tags: [admin]
+      summary: Update blog post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBlogPostRequest"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+    delete:
+      operationId: deleteBlogPost
+      tags: [admin]
+      summary: Delete blog post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /abandoned-checkouts/track:
+    post:
+      operationId: trackAbandonedCheckout
+      tags: [abandoned-checkouts]
+      summary: Track or update abandoned checkout (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackCheckoutRequest"
+      responses:
+        "200":
+          description: Tracked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbandonedCheckout"
+
+  /abandoned-checkouts/recover/{sessionId}:
+    post:
+      operationId: recoverAbandonedCheckoutBySession
+      tags: [abandoned-checkouts]
+      summary: Mark as recovered by sessionId (public, called after order success)
+      parameters:
+        - in: path
+          name: sessionId
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Recovered
+
+  /abandoned-checkouts:
+    get:
+      operationId: listAbandonedCheckouts
+      tags: [abandoned-checkouts]
+      summary: List abandoned checkouts (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, recovered, expired]
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbandonedCheckoutList"
+
+  /abandoned-checkouts/{id}:
+    get:
+      operationId: getAbandonedCheckout
+      tags: [abandoned-checkouts]
+      summary: Get single abandoned checkout (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbandonedCheckout"
+    delete:
+      operationId: deleteAbandonedCheckout
+      tags: [abandoned-checkouts]
+      summary: Delete abandoned checkout (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /abandoned-checkouts/{id}/recover:
+    put:
+      operationId: recoverAbandonedCheckout
+      tags: [abandoned-checkouts]
+      summary: Mark abandoned checkout as recovered (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        "200":
+          description: Recovered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbandonedCheckout"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error]
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success]
+
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        address:
+          type: string
+      required: [name, phone, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+        password:
+          type: string
+      required: [phone, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required: [token, user]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, user, guest]
+        city:
+          type: string
+        country:
+          type: string
+        address:
+          type: string
+        postalCode:
+          type: string
+        profileImage:
+          type: string
+        gender:
+          type: string
+        dateOfBirth:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, phone, role]
+
+    UserAddress:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        label:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        area:
+          type: string
+        city:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, label, name, phone, address, city, country, isDefault]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        address:
+          type: string
+        postalCode:
+          type: string
+        role:
+          type: string
+          enum: [admin, user, guest]
+
+    UsersListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserProfile"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [items, total, page, limit]
+
+    ProductVariant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        value:
+          type: string
+        hex:
+          type: string
+        price:
+          type: string
+        stock:
+          type: integer
+        sku:
+          type: string
+      required: [id, name, value, stock]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        categoryId:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        originalPrice:
+          type: string
+        stock:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+        gradient:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVariant"
+        weight:
+          type: string
+        unit:
+          type: string
+        active:
+          type: boolean
+        featured:
+          type: boolean
+        rating:
+          type: string
+        reviewCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, slug, price, stock, active, featured, reviewCount]
+
+    CreateProductRequest:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        originalPrice:
+          type: string
+        stock:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+        gradient:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVariant"
+        weight:
+          type: string
+        unit:
+          type: string
+        active:
+          type: boolean
+        featured:
+          type: boolean
+      required: [name, price, stock]
+
+    ProductsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [items, total, page, limit]
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+        imageUrl:
+          type: string
+        altText:
+          type: string
+        color:
+          type: string
+        parentId:
+          type: integer
+        sortOrder:
+          type: integer
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, slug, active, sortOrder]
+
+    CreateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+        imageUrl:
+          type: string
+        altText:
+          type: string
+        color:
+          type: string
+        parentId:
+          type: integer
+        sortOrder:
+          type: integer
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        active:
+          type: boolean
+      required: [name, slug]
+
+    Banner:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        subtitle:
+          type: string
+        imageUrl:
+          type: string
+        mobileImageUrl:
+          type: string
+        linkUrl:
+          type: string
+        targetType:
+          type: string
+          enum: [product, category, page]
+        targetId:
+          type: integer
+        bgColor:
+          type: string
+        textColor:
+          type: string
+        label:
+          type: string
+        cta:
+          type: string
+        platform:
+          type: string
+          enum: [mobile, website, both]
+        sortOrder:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, active, sortOrder]
+
+    CreateBannerRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        subtitle:
+          type: string
+        imageUrl:
+          type: string
+        mobileImageUrl:
+          type: string
+        linkUrl:
+          type: string
+        targetType:
+          type: string
+          enum: [product, category, page]
+        targetId:
+          type: integer
+        bgColor:
+          type: string
+        textColor:
+          type: string
+        label:
+          type: string
+        cta:
+          type: string
+        platform:
+          type: string
+          enum: [mobile, website, both]
+        sortOrder:
+          type: integer
+        active:
+          type: boolean
+      required: [title]
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        orderNumber:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, shipped, out_for_delivery, delivered, cancelled]
+        paymentStatus:
+          type: string
+          enum: [unpaid, pending, paid]
+        subtotal:
+          type: string
+        discount:
+          type: string
+        deliveryFee:
+          type: string
+        loyaltyDiscount:
+          type: string
+        walletDiscount:
+          type: string
+        total:
+          type: string
+        deliveryType:
+          type: string
+        courier:
+          type: string
+        paymentMethod:
+          type: string
+        shippingAddress:
+          $ref: "#/components/schemas/ShippingAddress"
+        couponCode:
+          type: string
+        notes:
+          type: string
+        trackingId:
+          type: string
+        packedAt:
+          type: string
+          format: date-time
+        shippedAt:
+          type: string
+          format: date-time
+        outForDeliveryAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, orderNumber, status, subtotal, total, createdAt]
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        orderId:
+          type: integer
+        productId:
+          type: integer
+        name:
+          type: string
+        variant:
+          type: string
+        price:
+          type: string
+        qty:
+          type: integer
+        gradient:
+          type: string
+      required: [id, orderId, name, price, qty]
+
+    ShippingAddress:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        postalCode:
+          type: string
+      required: [name, phone, address, city, country]
+
+    CreateOrderRequest:
+      type: object
+      properties:
+        userId:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemInput"
+        deliveryType:
+          type: string
+        courier:
+          type: string
+        paymentMethod:
+          type: string
+        shippingAddress:
+          $ref: "#/components/schemas/ShippingAddress"
+        couponCode:
+          type: string
+        useLoyaltyPoints:
+          type: boolean
+        useWalletBalance:
+          type: boolean
+        notes:
+          type: string
+      required: [items, shippingAddress, paymentMethod]
+
+    OrderItemInput:
+      type: object
+      properties:
+        productId:
+          type: integer
+        name:
+          type: string
+        variant:
+          type: string
+        price:
+          type: string
+        qty:
+          type: integer
+        gradient:
+          type: string
+      required: [name, price, qty]
+
+    OrdersListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [items, total, page, limit]
+
+    UpdateOrderItemsRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemInput"
+        discount:
+          type: number
+        notes:
+          type: string
+      required: [items]
+
+    UpdateOrderStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, processing, shipped, out_for_delivery, delivered, cancelled]
+        trackingId:
+          type: string
+        courier:
+          type: string
+        courierService:
+          type: string
+        deliveryType:
+          type: string
+      required: [status]
+
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: string
+        minOrder:
+          type: string
+        maxUses:
+          type: integer
+        usedCount:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, code, type, value, usedCount, active]
+
+    CreateCouponRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: string
+        minOrder:
+          type: string
+        maxUses:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+      required: [code, type, value]
+
+    ValidateCouponRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        orderTotal:
+          type: string
+      required: [code, orderTotal]
+
+    CouponValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        discount:
+          type: string
+        message:
+          type: string
+        coupon:
+          $ref: "#/components/schemas/Coupon"
+      required: [valid]
+
+    WalletBalance:
+      type: object
+      properties:
+        userId:
+          type: integer
+        balance:
+          type: string
+      required: [userId, balance]
+
+    WalletTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        amount:
+          type: string
+        type:
+          type: string
+          enum: [credit, debit]
+        description:
+          type: string
+        referenceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, amount, type, description, createdAt]
+
+    WalletTransactionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WalletTransaction"
+        balance:
+          type: string
+        total:
+          type: integer
+        page:
+          type: integer
+      required: [items, balance, total, page]
+
+    AdjustWalletRequest:
+      type: object
+      properties:
+        userId:
+          type: integer
+        amount:
+          type: string
+        type:
+          type: string
+          enum: [credit, debit]
+        description:
+          type: string
+      required: [userId, amount, type, description]
+
+    LoyaltyBalance:
+      type: object
+      properties:
+        userId:
+          type: integer
+        points:
+          type: integer
+        value:
+          type: string
+        tier:
+          type: string
+      required: [userId, points, value, tier]
+
+    LoyaltyTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        points:
+          type: integer
+        type:
+          type: string
+          enum: [credit, debit]
+        description:
+          type: string
+        referenceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, points, type, description, createdAt]
+
+    LoyaltyTransactionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoyaltyTransaction"
+        points:
+          type: integer
+        total:
+          type: integer
+        page:
+          type: integer
+      required: [items, points, total, page]
+
+    DashboardStats:
+      type: object
+      properties:
+        totalOrders:
+          type: integer
+        totalRevenue:
+          type: string
+        totalUsers:
+          type: integer
+        totalProducts:
+          type: integer
+        pendingOrders:
+          type: integer
+        processingOrders:
+          type: integer
+        shippedOrders:
+          type: integer
+        deliveredOrders:
+          type: integer
+        cancelledOrders:
+          type: integer
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+      required: [totalOrders, totalRevenue, totalUsers, totalProducts, pendingOrders, processingOrders, shippedOrders, deliveredOrders, cancelledOrders, recentOrders]
+
+    StorageUploadRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: number
+        contentType:
+          type: string
+      required: [name, size, contentType]
+
+    StorageUploadResponse:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+            size:
+              type: number
+            contentType:
+              type: string
+          required: [name, size, contentType]
+      required: [uploadURL, objectPath, metadata]
+
+    PushNotification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [order_update, promotion, general]
+        status:
+          type: string
+          enum: [pending, sent, failed]
+        isBroadcast:
+          type: boolean
+        recipientCount:
+          type: integer
+        successCount:
+          type: integer
+        failureCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+      required: [id, title, message, type, status, isBroadcast, createdAt]
+
+    NotificationsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PushNotification"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [items, total, page, limit]
+
+    SendNotificationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [order_update, promotion, general]
+        isBroadcast:
+          type: boolean
+        userIds:
+          type: array
+          items:
+            type: integer
+        data:
+          type: object
+          additionalProperties:
+            type: string
+      required: [title, message]
+
+    RegisterDeviceRequest:
+      type: object
+      properties:
+        deviceToken:
+          type: string
+        deviceType:
+          type: string
+          enum: [android, ios, web]
+      required: [deviceToken]
+
+    SeoSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+        googleVerificationCode:
+          type: string
+        robotsTxtContent:
+          type: string
+        siteNoindex:
+          type: boolean
+        sitemapEnabled:
+          type: boolean
+        canonicalDomain:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, siteNoindex, sitemapEnabled]
+
+    UpdateSeoSettingsRequest:
+      type: object
+      properties:
+        googleVerificationCode:
+          type: string
+        robotsTxtContent:
+          type: string
+        siteNoindex:
+          type: boolean
+        sitemapEnabled:
+          type: boolean
+        canonicalDomain:
+          type: string
+
+    BlogPost:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        excerpt:
+          type: string
+        featuredImagePath:
+          type: string
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        keywords:
+          type: string
+        tags:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        views:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, slug, content, status, views]
+
+    AbandonedCheckoutCartItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+        name:
+          type: string
+        price:
+          type: string
+        qty:
+          type: integer
+        variant:
+          type: string
+        variantLabel:
+          type: string
+        image:
+          type: string
+      required: [productId, name, price, qty]
+
+    AbandonedCheckout:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: string
+        userId:
+          type: integer
+        customerName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        cartItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbandonedCheckoutCartItem"
+        subtotal:
+          type: string
+        checkoutStep:
+          type: string
+          enum: [cart, checkout, address, payment]
+        status:
+          type: string
+          enum: [active, recovered, expired]
+        lastActivity:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        recoveredAt:
+          type: string
+          format: date-time
+      required: [id, sessionId, cartItems, subtotal, checkoutStep, status, lastActivity, createdAt]
+
+    AbandonedCheckoutList:
+      type: object
+      properties:
+        checkouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbandonedCheckout"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required: [checkouts, total, page, totalPages]
+
+    TrackCheckoutRequest:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        userId:
+          type: integer
+        customerName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        cartItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/AbandonedCheckoutCartItem"
+        subtotal:
+          type: number
+        checkoutStep:
+          type: string
+          enum: [cart, checkout, address, payment]
+      required: [sessionId, cartItems, subtotal, checkoutStep]
+
+    CreateBlogPostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        content:
+          type: string
+        excerpt:
+          type: string
+        featuredImagePath:
+          type: string
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        keywords:
+          type: string
+        tags:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+      required: [title, slug]

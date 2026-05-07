@@ -1,0 +1,26 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "ugA-P5-tVAfMh_A0mvryK"
+uri = "file://artifacts/mockup-sandbox/public/images/kdf-banner-1.png"
+type = "image"
+title = "Fresh arrivals ecommerce banner"
+
+[[generated]]
+id = "tl4Y4l5gaidtHJsd8xSdJ"
+uri = "file://artifacts/mockup-sandbox/public/images/kdf-banner-2.png"
+type = "image"
+title = "Flash sale ecommerce banner"
+
+[[generated]]
+id = "vptumjlK4AfgzVdQtqXNj"
+uri = "file://artifacts/mockup-sandbox/public/images/kdf-banner-3.png"
+type = "image"
+title = "Exclusive deals ecommerce banner"
+
+[[generated]]
+id = "c9JHHorGxSaO3g0uHf_hs"
+uri = "file://artifacts/kdf-mobile/assets/images/icon.png"
+type = "image"
+title = "generated_image"

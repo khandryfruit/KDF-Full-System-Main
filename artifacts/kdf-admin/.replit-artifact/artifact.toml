@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/admin/"
+title = "KDF Admin"
+version = "1.0.0"
+id = "artifacts/kdf-admin"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/admin/" ]
+localPort = 19323
+
+[services.development]
+run = "pnpm --filter @workspace/kdf-admin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kdf-admin", "run", "build" ]
+publicDir = "artifacts/kdf-admin/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19323"
+BASE_PATH = "/admin/"

@@ -1,0 +1,43 @@
+import { pgTable, serial, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
+
+export const headerSettingsTable = pgTable("header_settings", {
+  id: serial("id").primaryKey(),
+  logoPosition: text("logo_position").notNull().default("left"),
+  showSearch: boolean("show_search").notNull().default(true),
+  searchWidth: integer("search_width").notNull().default(50),
+  menuPosition: text("menu_position").notNull().default("below"),
+  stickyHeader: boolean("sticky_header").notNull().default(true),
+  headerHeight: integer("header_height").notNull().default(64),
+  primaryColor: text("primary_color").notNull().default("#16a34a"),
+  backgroundColor: text("background_color").notNull().default("#ffffff"),
+  textColor: text("text_color").notNull().default("#111827"),
+  navBgColor: text("nav_bg_color").notNull().default("#16a34a"),
+  navTextColor: text("nav_text_color").notNull().default("#ffffff"),
+  showTopBar: boolean("show_top_bar").notNull().default(true),
+  topBarText: text("top_bar_text").notNull().default("🚚 Free delivery on orders above Rs. 1,500 — Order now!"),
+  topBarBgColor: text("top_bar_bg_color").notNull().default("#c53030"),
+  topBarTextColor: text("top_bar_text_color").notNull().default("#ffffff"),
+  topBarAnimation: text("top_bar_animation").notNull().default("marquee"),
+  topBarSpeed: integer("top_bar_speed").notNull().default(30),
+  topBarSlides: text("top_bar_slides").notNull().default("[]"),
+  navItems: text("nav_items").notNull().default("[]"),
+  showCart: boolean("show_cart").notNull().default(true),
+  showAccount: boolean("show_account").notNull().default(true),
+  showTrackOrder: boolean("show_track_order").notNull().default(true),
+  showLocationSelector: boolean("show_location_selector").notNull().default(true),
+  showWhatsapp: boolean("show_whatsapp").notNull().default(false),
+  whatsappNumber: text("whatsapp_number").default("+92-300-0000000"),
+  showTrustStrip: boolean("show_trust_strip").notNull().default(true),
+  trustStripItems: text("trust_strip_items").notNull().default("[]"),
+  showMobileSearch: boolean("show_mobile_search").notNull().default(true),
+  showStickyBottomBar: boolean("show_sticky_bottom_bar").notNull().default(true),
+  mobileMenuType: text("mobile_menu_type").notNull().default("slide"),
+  showMobileCategories: boolean("show_mobile_categories").notNull().default(true),
+  borderRadius: integer("border_radius").notNull().default(6),
+  showShadow: boolean("show_shadow").notNull().default(true),
+  showBorder: boolean("show_border").notNull().default(false),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type HeaderSettings = typeof headerSettingsTable.$inferSelect;
+export type HeaderSettingsInsert = typeof headerSettingsTable.$inferInsert;

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/kdf-nuts/"
+title = "KDF NUTS"
+version = "1.0.0"
+id = "artifacts/kdf-nuts"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/kdf-nuts/" ]
+localPort = 20269
+
+[services.development]
+run = "pnpm --filter @workspace/kdf-nuts run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kdf-nuts", "run", "build:prod" ]
+publicDir = "artifacts/kdf-nuts/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20269"
+BASE_PATH = "/kdf-nuts/"

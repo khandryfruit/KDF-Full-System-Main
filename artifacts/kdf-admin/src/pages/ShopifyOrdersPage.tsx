@@ -1,0 +1,1579 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  RefreshCw, Search, MessageCircle, Package, ChevronLeft, ChevronRight,
+  X, Truck, CheckCircle, Clock, XCircle, AlertCircle, MapPin, Phone,
+  User, DollarSign, Send, RotateCcw, Printer, Eye, Filter,
+  ChevronDown, ArrowRight, Ban, Bell, Copy, ExternalLink, Boxes,
+  Zap, Weight, Star, Info, ShieldCheck, UserCheck, Bike, FileText,
+  Navigation, CalendarCheck, TriangleAlert, CircleCheck, Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+
+/* ─── API helper ───────────────────────────────────────── */
+function api(path: string, opts?: RequestInit) {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+  return fetch(`/api${path}`, {
+    ...opts,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
+  });
+}
+
+/* ─── Constants ────────────────────────────────────────── */
+const STATUS_COLORS: Record<string, string> = {
+  pending:          "bg-yellow-100 text-yellow-800 border-yellow-200",
+  confirmed:        "bg-blue-100 text-blue-800 border-blue-200",
+  processing:       "bg-indigo-100 text-indigo-800 border-indigo-200",
+  shipped:          "bg-purple-100 text-purple-800 border-purple-200",
+  in_transit:       "bg-sky-100 text-sky-800 border-sky-200",
+  out_for_delivery: "bg-orange-100 text-orange-800 border-orange-200",
+  delivered:        "bg-green-100 text-green-800 border-green-200",
+  failed:           "bg-red-100 text-red-800 border-red-200",
+  returned:         "bg-rose-100 text-rose-800 border-rose-200",
+  fulfilled:        "bg-green-100 text-green-800 border-green-200",
+  cancelled:        "bg-gray-100 text-gray-600 border-gray-200",
+  unfulfilled:      "bg-yellow-100 text-yellow-800 border-yellow-200",
+  partial:          "bg-orange-100 text-orange-800 border-orange-200",
+  paid:             "bg-green-100 text-green-800 border-green-200",
+  unpaid:           "bg-red-100 text-red-800 border-red-200",
+  refunded:         "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+const SHIPMENT_STATUS_ICONS: Record<string, React.ReactNode> = {
+  pending:          <Clock className="w-3.5 h-3.5" />,
+  processing:       <Package className="w-3.5 h-3.5" />,
+  shipped:          <Truck className="w-3.5 h-3.5" />,
+  in_transit:       <ArrowRight className="w-3.5 h-3.5" />,
+  out_for_delivery: <MapPin className="w-3.5 h-3.5" />,
+  delivered:        <CheckCircle className="w-3.5 h-3.5" />,
+  failed:           <XCircle className="w-3.5 h-3.5" />,
+  returned:         <RotateCcw className="w-3.5 h-3.5" />,
+};
+
+const COURIER_LOGOS: Record<string, string> = {
+  tcs:      "TCS",
+  postex:   "PX",
+  leopards: "LP",
+  trax:     "TX",
+};
+
+const STATUS_OPTIONS = ["all", "unfulfilled", "pending", "partial", "fulfilled", "cancelled"];
+
+/* ─── Sub-components ───────────────────────────────────── */
+function StatusBadge({ status }: { status: string }) {
+  const cls = STATUS_COLORS[status] ?? "bg-gray-100 text-gray-700 border-gray-200";
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium capitalize border ${cls}`}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function CourierBadge({ slug, name }: { slug: string; name?: string }) {
+  const abbr = COURIER_LOGOS[slug] ?? slug?.slice(0, 2).toUpperCase() ?? "??";
+  const colors: Record<string, string> = {
+    tcs: "bg-red-100 text-red-700",
+    postex: "bg-blue-100 text-blue-700",
+    leopards: "bg-green-100 text-green-700",
+    trax: "bg-purple-100 text-purple-700",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-semibold ${colors[slug] ?? "bg-gray-100 text-gray-700"}`}>
+      <Truck className="w-3 h-3" /> {name ?? abbr}
+    </span>
+  );
+}
+
+function ShipmentTimeline({ history }: { history: Array<{ status: string; timestamp: string; note?: string }> }) {
+  if (!history?.length) return <p className="text-xs text-muted-foreground">No history yet</p>;
+  return (
+    <div className="space-y-2">
+      {[...history].reverse().map((h, i) => (
+        <div key={i} className="flex gap-3 text-xs">
+          <div className="flex flex-col items-center">
+            <div className={`w-2 h-2 rounded-full mt-1 ${i === 0 ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            {i < history.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
+          </div>
+          <div className="pb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-medium capitalize">{h.status.replace(/_/g, " ")}</span>
+              {h.note && <span className="text-muted-foreground">· {h.note}</span>}
+            </div>
+            <span className="text-muted-foreground">{new Date(h.timestamp).toLocaleString()}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Courier Booking Modal (Smart Version) ─────────────── */
+function BookCourierModal({
+  order,
+  couriers,
+  onClose,
+  onBooked,
+}: {
+  order: any;
+  couriers: any[];
+  onClose: () => void;
+  onBooked: () => void;
+}) {
+  const { toast } = useToast();
+  const addr = order.shippingAddress ?? {};
+  const isPaidOrder = ["paid", "partially_paid"].includes(order.financialStatus ?? "");
+
+  const [form, setForm] = useState({
+    courierSlug:         couriers.find(c => c.isActive)?.slug ?? "",
+    customerName:        addr.name ?? order.customerName ?? "",
+    customerPhone:       addr.phone ?? order.customerPhone ?? "",
+    customerAddress:     addr.address1 ?? addr.address ?? "",
+    customerCity:        addr.city ?? "",
+    codAmount:           isPaidOrder ? "0" : String(parseFloat(order.totalPrice ?? "0")),
+    weight:              "0.5",
+    pieces:              String(Math.max(1, (order.lineItems ?? []).length)),
+    contentDesc:         (order.lineItems ?? []).slice(0, 3).map((li: any) => li.title ?? "Product").join(", ") || "KDF Nuts Products",
+    serviceCode:         "O",
+    specialInstructions: "",
+    notifyWhatsapp:      true,
+    postexOrderType:     "Normal",
+  });
+  const [weightLoading, setWeightLoading] = useState(false);
+  const [weightAutoSet, setWeightAutoSet] = useState(false);
+
+  /* ── Auto-fetch weight + recommendations on mount ── */
+  const { data: recData, isLoading: recLoading } = useQuery({
+    queryKey: ["courier-rec", order.id],
+    queryFn: () => api(`/admin/logistics/recommend/${order.id}`).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  /* Apply auto-weight when recData arrives */
+  useEffect(() => {
+    if (recData?.weight && !weightAutoSet) {
+      setForm(f => ({ ...f, weight: String(recData.weight) }));
+      setWeightAutoSet(true);
+    }
+  }, [recData, weightAutoSet]);
+
+  /* Apply top recommendation if no manual selection */
+  useEffect(() => {
+    if (recData?.recommendations?.length && !form.courierSlug) {
+      setForm(f => ({ ...f, courierSlug: recData.recommendations[0].slug }));
+    }
+  }, [recData]);
+
+  const bookMutation = useMutation({
+    mutationFn: () => api(`/admin/shopify/orders/${order.id}/book-courier`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...form,
+        weight: parseFloat(form.weight),
+        pieces: parseInt(form.pieces),
+        codAmount: parseFloat(form.codAmount),
+      }),
+    }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Booking failed");
+      return d;
+    }),
+    onSuccess: (d) => {
+      if (d.apiBooking) {
+        toast({ title: `✅ Real Booking Created!`, description: `${d.courierName} tracking: ${d.trackingId}` });
+      } else {
+        toast({ title: `📋 Tracking Assigned (Local)`, description: d.bookingNote ?? `Courier API not configured — tracking ID generated locally: ${d.trackingId}`, variant: "default" });
+      }
+      onBooked();
+      onClose();
+    },
+    onError: (e: any) => toast({ title: e.message ?? "Booking failed", variant: "destructive" }),
+  });
+
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+  const activeCouriers = couriers.filter(c => c.isActive);
+  const recommendations: any[] = recData?.recommendations ?? [];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="bg-card border border-border rounded-xl w-full max-w-lg shadow-xl my-8">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Truck className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-bold">Book Courier</h2>
+              <p className="text-xs text-muted-foreground">Order {order.orderNumber}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+
+          {/* ── Smart Auto-detected info bar ── */}
+          <div className={`flex items-start gap-3 rounded-xl p-3.5 border ${isPaidOrder ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+            <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${isPaidOrder ? "text-green-600" : "text-amber-600"}`} />
+            <div className="text-xs">
+              {isPaidOrder ? (
+                <><span className="font-semibold text-green-800">Prepaid Order Detected</span>
+                <span className="text-green-700"> — COD automatically set to PKR 0</span></>
+              ) : (
+                <><span className="font-semibold text-amber-800">Cash on Delivery</span>
+                <span className="text-amber-700"> — COD: PKR {parseFloat(form.codAmount).toLocaleString()}</span></>
+              )}
+            </div>
+          </div>
+
+          {/* ── Smart Courier Recommendations ── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-primary" /> AI Courier Recommendations
+              </Label>
+              {recLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+            </div>
+
+            {recLoading ? (
+              <div className="grid grid-cols-2 gap-2">
+                {[1,2].map(i => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}
+              </div>
+            ) : activeCouriers.length === 0 ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                No active couriers. Please configure couriers first.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {activeCouriers.map(c => {
+                  const rec = recommendations.find(r => r.slug === c.slug);
+                  const isTop = rec && recommendations[0]?.slug === c.slug;
+                  return (
+                    <button
+                      key={c.slug}
+                      onClick={() => set("courierSlug", c.slug)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all relative ${form.courierSlug === c.slug ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                    >
+                      {isTop && (
+                        <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                          <Star className="w-2.5 h-2.5" /> BEST
+                        </div>
+                      )}
+                      <CourierBadge slug={c.slug} name={c.name} />
+                      {rec && (
+                        <div className="mt-1.5 space-y-0.5">
+                          <div className={`text-[10px] font-semibold ${isTop ? "text-primary" : "text-muted-foreground"}`}>
+                            {rec.badge} · Score: {rec.score}
+                          </div>
+                          {rec.reasons.slice(0, 1).map((r: string, i: number) => (
+                            <div key={i} className="text-[10px] text-muted-foreground">{r}</div>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Weight & COD auto-detection summary */}
+            {recData && (
+              <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                <span className="flex items-center gap-1"><Weight className="w-3 h-3" /> Auto-weight: <strong className="text-foreground">{recData.weight} kg</strong></span>
+                <span>·</span>
+                <span>City: <strong className="text-foreground">{recData.city || "N/A"}</strong></span>
+                <span>·</span>
+                <span>COD: <strong className="text-foreground">{isPaidOrder ? "PKR 0" : `PKR ${parseInt(recData.codAmount ?? 0).toLocaleString()}`}</strong></span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Customer Info ── */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Customer Info</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs mb-1 block">Name</Label>
+                <Input value={form.customerName} onChange={e => set("customerName", e.target.value)} className="h-9 text-sm" placeholder="Customer name" />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Phone</Label>
+                <Input value={form.customerPhone} onChange={e => set("customerPhone", e.target.value)} className="h-9 text-sm" placeholder="03xx-xxxxxxx" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Address</Label>
+              <Input value={form.customerAddress} onChange={e => set("customerAddress", e.target.value)} className="h-9 text-sm" placeholder="Full shipping address" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">City</Label>
+              <Input value={form.customerCity} onChange={e => set("customerCity", e.target.value)} className="h-9 text-sm" placeholder="Lahore / Karachi / etc." />
+            </div>
+          </div>
+
+          {/* ── Shipment Details ── */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Shipment Details</Label>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  COD Amount (PKR)
+                  {isPaidOrder && <span className="text-green-600 text-[9px] font-bold">AUTO</span>}
+                </Label>
+                <Input type="number" value={form.codAmount} onChange={e => set("codAmount", e.target.value)}
+                  className={`h-9 text-sm ${isPaidOrder ? "bg-green-50 border-green-200" : ""}`} />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  Weight (kg)
+                  {weightAutoSet && <span className="text-blue-600 text-[9px] font-bold">AUTO</span>}
+                </Label>
+                <Input type="number" step="0.1" value={form.weight} onChange={e => set("weight", e.target.value)}
+                  className={`h-9 text-sm ${weightAutoSet ? "bg-blue-50 border-blue-200" : ""}`} />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Pieces</Label>
+                <Input type="number" value={form.pieces} onChange={e => set("pieces", e.target.value)} className="h-9 text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs mb-1 block">Service</Label>
+                <select value={form.serviceCode} onChange={e => set("serviceCode", e.target.value)}
+                  className="w-full h-9 border border-border rounded-md px-2 text-sm bg-background">
+                  <option value="O">O - Overnight</option>
+                  <option value="E">E - Economy</option>
+                  <option value="S">S - Same Day</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Overnight">Overnight</option>
+                </select>
+              </div>
+              {form.courierSlug === "postex" && (
+                <div>
+                  <Label className="text-xs mb-1 block">Order Type</Label>
+                  <select value={form.postexOrderType} onChange={e => set("postexOrderType", e.target.value)}
+                    className="w-full h-9 border border-border rounded-md px-2 text-sm bg-background">
+                    <option value="Normal">Normal</option>
+                    <option value="Reverse">Reverse</option>
+                    <option value="Exchange">Exchange</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Content Description</Label>
+              <Input value={form.contentDesc} onChange={e => set("contentDesc", e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Special Instructions</Label>
+              <Input value={form.specialInstructions} onChange={e => set("specialInstructions", e.target.value)} className="h-9 text-sm" placeholder="e.g. Call before delivery" />
+            </div>
+          </div>
+
+          {/* ── OnDrive WhatsApp Notification ── */}
+          <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+            <input type="checkbox" id="notifyWa" checked={form.notifyWhatsapp} onChange={e => set("notifyWhatsapp", e.target.checked)} className="w-4 h-4 accent-green-600" />
+            <label htmlFor="notifyWa" className="text-sm text-green-800 cursor-pointer flex items-center gap-1.5">
+              <MessageCircle className="w-3.5 h-3.5" /> Send <strong>OnDrive</strong> WhatsApp notification to customer
+            </label>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-5 border-t border-border flex gap-3">
+          <Button className="flex-1" onClick={() => bookMutation.mutate()} disabled={bookMutation.isPending || !form.courierSlug || !form.customerPhone}>
+            {bookMutation.isPending ? (
+              <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Booking...</>
+            ) : (
+              <><Truck className="w-4 h-4 mr-2" /> Book Shipment</>
+            )}
+          </Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Bulk Book Modal ───────────────────────────────────── */
+function BulkBookModal({ orderIds, couriers, onClose, onDone }: { orderIds: number[]; couriers: any[]; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [courierSlug, setCourierSlug] = useState(couriers[0]?.slug ?? "");
+  const [weight, setWeight] = useState("0.5");
+  const [pieces, setPieces] = useState("1");
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(true);
+
+  const mutation = useMutation({
+    mutationFn: () => api("/admin/shopify/orders/bulk-book", {
+      method: "POST",
+      body: JSON.stringify({ orderIds, courierSlug, weight: parseFloat(weight), pieces: parseInt(pieces), notifyWhatsapp }),
+    }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      return d;
+    }),
+    onSuccess: (d) => {
+      toast({ title: `Bulk booking done: ${d.booked} booked, ${d.failed} failed` });
+      onDone();
+      onClose();
+    },
+    onError: (e: any) => toast({ title: e.message ?? "Bulk booking failed", variant: "destructive" }),
+  });
+
+  const activeCouriers = couriers.filter(c => c.isActive);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-xl">
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <div>
+            <h2 className="font-bold">Bulk Book Courier</h2>
+            <p className="text-sm text-muted-foreground">{orderIds.length} orders selected</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <Label className="text-xs font-semibold uppercase tracking-wide mb-2 block">Courier</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {activeCouriers.map(c => (
+                <button key={c.slug} onClick={() => setCourierSlug(c.slug)}
+                  className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${courierSlug === c.slug ? "border-primary bg-primary/5" : "border-border"}`}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs mb-1 block">Default Weight (kg)</Label>
+              <Input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Default Pieces</Label>
+              <Input type="number" value={pieces} onChange={e => setPieces(e.target.value)} className="h-9 text-sm" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+            <input type="checkbox" id="bulkWa" checked={notifyWhatsapp} onChange={e => setNotifyWhatsapp(e.target.checked)} className="w-4 h-4 accent-green-600" />
+            <label htmlFor="bulkWa" className="text-sm text-green-800 cursor-pointer">
+              <MessageCircle className="w-3.5 h-3.5 inline mr-1" /> WhatsApp notification per order
+            </label>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+            Note: Bulk booking generates local tracking IDs. For API bookings, use individual order booking.
+          </div>
+        </div>
+        <div className="p-5 border-t border-border flex gap-3">
+          <Button className="flex-1" onClick={() => mutation.mutate()} disabled={mutation.isPending || !courierSlug}>
+            {mutation.isPending ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Booking...</> : <><Boxes className="w-4 h-4 mr-2" />Book {orderIds.length} Orders</>}
+          </Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Shipment Card ─────────────────────────────────────── */
+function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId: number; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [showTimeline, setShowTimeline] = useState(false);
+
+  const cancelMutation = useMutation({
+    mutationFn: () => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/cancel`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => { toast({ title: "Shipment cancelled" }); onRefresh(); },
+    onError: () => toast({ title: "Cancel failed", variant: "destructive" }),
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: () => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/refresh`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => { toast({ title: "Status refreshed" }); onRefresh(); },
+    onError: () => toast({ title: "Refresh failed", variant: "destructive" }),
+  });
+
+  const notifyMutation = useMutation({
+    mutationFn: () => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/notify`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => toast({ title: "WhatsApp notification sent" }),
+    onError: () => toast({ title: "Notification failed", variant: "destructive" }),
+  });
+
+  const codMutation = useMutation({
+    mutationFn: (codStatus: string) => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/cod`, {
+      method: "PATCH",
+      body: JSON.stringify({ codStatus }),
+    }).then(r => r.json()),
+    onSuccess: () => { toast({ title: "COD status updated" }); onRefresh(); },
+  });
+
+  const isCancelled = shipment.isCancelled;
+
+  return (
+    <div className={`border rounded-xl p-4 space-y-3 transition-all ${isCancelled ? "border-red-200 bg-red-50/30 opacity-70" : "border-border bg-card hover:border-primary/30"}`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <CourierBadge slug={shipment.courierSlug} name={shipment.courierName} />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-semibold text-sm">{shipment.trackingId}</span>
+              <button onClick={() => { navigator.clipboard.writeText(shipment.trackingId); toast({ title: "Copied!" }); }}
+                className="text-muted-foreground hover:text-foreground">
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Booked {new Date(shipment.createdAt).toLocaleDateString()}
+              {shipment.bookingSource === "shopify_bulk" && " · Bulk"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={shipment.status} />
+          {isCancelled && <StatusBadge status="cancelled" />}
+        </div>
+      </div>
+
+      {/* COD Info */}
+      {shipment.isCod && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+          <DollarSign className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <span className="text-xs font-medium text-amber-800">COD: PKR {parseFloat(shipment.codAmount ?? "0").toLocaleString()}</span>
+          </div>
+          {!isCancelled && (
+            <select
+              value={shipment.codStatus ?? "pending"}
+              onChange={e => codMutation.mutate(e.target.value)}
+              className="text-xs border border-amber-300 rounded px-2 py-1 bg-white text-amber-800"
+            >
+              <option value="pending">Pending</option>
+              <option value="received">Received</option>
+              <option value="remitted">Remitted</option>
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Timeline toggle */}
+      <button onClick={() => setShowTimeline(v => !v)}
+        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTimeline ? "rotate-180" : ""}`} />
+        {showTimeline ? "Hide" : "Show"} Timeline ({(shipment.statusHistory ?? []).length} events)
+      </button>
+      {showTimeline && (
+        <div className="bg-muted/30 rounded-lg p-3">
+          <ShipmentTimeline history={shipment.statusHistory ?? []} />
+        </div>
+      )}
+
+      {/* Actions */}
+      {!isCancelled && (
+        <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
+            <RefreshCw className={`w-3 h-3 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 hover:text-green-800 hover:bg-green-50" onClick={() => notifyMutation.mutate()} disabled={notifyMutation.isPending}>
+            <Bell className="w-3 h-3" /> Notify
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => {
+            if (confirm("Cancel this shipment?")) cancelMutation.mutate();
+          }} disabled={cancelMutation.isPending}>
+            <Ban className="w-3 h-3" /> Cancel
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── WA Confirmation Tab ───────────────────────────────── */
+function WaConfirmTab({ order }: { order: any }) {
+  const { toast } = useToast();
+  const addr = order.shippingAddress ?? {};
+  const city = (addr.city ?? "").toLowerCase();
+  const isLahore = city.includes("lahore");
+
+  const { data: conf, isLoading, refetch } = useQuery({
+    queryKey: ["order-confirmation", order.id],
+    queryFn: () => api(`/admin/shopify/orders/${order.id}/confirmation`).then(r => r.json()).then((d: any) => d?.confirmation ?? null),
+    retry: false,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: () => api(`/admin/shopify/orders/${order.id}/send-confirmation`, { method: "POST" }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Send failed");
+      return d;
+    }),
+    onSuccess: (d) => {
+      toast({ title: d.success ? "✅ WA confirmation sent to customer!" : (d.message ?? "Send failed"), variant: d.success ? "default" : "destructive" });
+      refetch();
+    },
+    onError: (e: any) => toast({ title: e.message ?? "Send failed", variant: "destructive" }),
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: () => api(`/admin/logistics/confirmations/${conf?.id}/resend`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => { toast({ title: "✅ WA confirmation resent!" }); refetch(); },
+    onError: () => toast({ title: "Resend failed", variant: "destructive" }),
+  });
+
+  const forceBookMutation = useMutation({
+    mutationFn: () => api(`/admin/logistics/confirmations/${conf?.id}/force-book`, { method: "POST" }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Force book failed");
+      return d;
+    }),
+    onSuccess: (d) => toast({ title: d.success ? `✅ Booked! Tracking: ${d.trackingId}` : (d.error ?? "Booking failed"), variant: d.success ? "default" : "destructive" }),
+    onError: (e: any) => toast({ title: e.message ?? "Force book failed", variant: "destructive" }),
+  });
+
+  const statusColors: Record<string, string> = {
+    pending:   "bg-yellow-50 border-yellow-200 text-yellow-800",
+    confirmed: "bg-green-50 border-green-200 text-green-800",
+    cancelled: "bg-red-50 border-red-200 text-red-800",
+    booked:    "bg-blue-50 border-blue-200 text-blue-800",
+  };
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* City badge */}
+      {isLahore && (
+        <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl p-3 text-sm text-orange-800">
+          <Navigation className="w-4 h-4 shrink-0" />
+          <span><strong>Lahore order</strong> — WA confirmation sent, but delivery handled by local rider (see Rider tab)</span>
+        </div>
+      )}
+
+      {/* Confirmation Status */}
+      {conf?.id ? (
+        <div className="space-y-3">
+          <div className={`border rounded-xl p-4 space-y-3 ${statusColors[conf.status] ?? "bg-muted/30 border-border"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {conf.status === "confirmed" ? <CircleCheck className="w-5 h-5" /> :
+                 conf.status === "cancelled" ? <XCircle className="w-5 h-5" /> :
+                 <Clock className="w-5 h-5" />}
+                <span className="font-semibold capitalize">{conf.status}</span>
+              </div>
+              <span className="text-xs">{conf.retry_count > 0 ? `Sent ${conf.retry_count + 1}×` : "Sent once"}</span>
+            </div>
+            <div className="text-xs space-y-1 opacity-80">
+              <div>Customer: <strong>{conf.customer_phone}</strong></div>
+              {conf.last_sent_at && <div>Sent: {new Date(conf.last_sent_at).toLocaleString()}</div>}
+              {conf.confirmation_received_at && <div>Confirmed: {new Date(conf.confirmation_received_at).toLocaleString()}</div>}
+              {conf.confirmation_reply && <div>Reply method: {conf.confirmation_reply}</div>}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {conf.status === "pending" && (
+              <>
+                <Button size="sm" variant="outline" className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
+                  onClick={() => resendMutation.mutate()} disabled={resendMutation.isPending}>
+                  <Send className="w-3.5 h-3.5" /> {resendMutation.isPending ? "Resending..." : "Resend WA"}
+                </Button>
+                {!isLahore && (
+                  <Button size="sm" variant="outline" className="gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+                    onClick={() => forceBookMutation.mutate()} disabled={forceBookMutation.isPending}>
+                    <Truck className="w-3.5 h-3.5" /> {forceBookMutation.isPending ? "Booking..." : "Force Book Courier"}
+                  </Button>
+                )}
+              </>
+            )}
+            {conf.status === "confirmed" && !conf.auto_book_enabled && (
+              <Button size="sm" variant="outline" className="gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+                onClick={() => forceBookMutation.mutate()} disabled={forceBookMutation.isPending}>
+                <Truck className="w-3.5 h-3.5" /> {forceBookMutation.isPending ? "Booking..." : "Book Courier Now"}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-8 space-y-3">
+          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto" />
+          <div>
+            <p className="font-medium">No confirmation sent yet</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send a WhatsApp confirmation to the customer to trigger the delivery workflow.
+            </p>
+          </div>
+          <Button onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
+            <MessageCircle className="w-4 h-4" />
+            {sendMutation.isPending ? "Sending..." : "Send WA Confirmation"}
+          </Button>
+        </div>
+      )}
+
+      {/* Automation Flow */}
+      <div className="bg-muted/30 rounded-xl p-4 text-xs text-muted-foreground">
+        <p className="font-semibold text-foreground mb-2 text-sm">Automation Flow</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { label: "Order Created", done: true },
+            { label: "WA Confirmation Sent", done: !!conf?.last_sent_at },
+            { label: "Customer Confirmed", done: conf?.status === "confirmed" || conf?.status === "booked" },
+            { label: isLahore ? "Rider Assigned" : "Courier Booked", done: conf?.status === "booked" || !!order.trackingNumber },
+          ].map((step, i, arr) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${step.done ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                {step.done ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                {step.label}
+              </span>
+              {i < arr.length - 1 && <ArrowRight className="w-3 h-3" />}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Rider Tab ─────────────────────────────────────────── */
+function RiderTab({ order }: { order: any }) {
+  const { toast } = useToast();
+  const addr = order.shippingAddress ?? {};
+  const rawCity = (addr.city ?? order.customerCity ?? "").toLowerCase();
+  const autoLahore = rawCity.includes("lahore");
+  const [manualLahore, setManualLahore] = useState(false);
+  const isLahore = autoLahore || manualLahore;
+
+  const { data: deliveryData, isLoading, refetch } = useQuery({
+    queryKey: ["order-rider-delivery", order.id],
+    queryFn: () => api(`/admin/riders/lahore-orders?limit=200`).then(r => r.json()).then((d: any) => {
+      const list: any[] = d.orders ?? [];
+      return list.find((x: any) => x.id === order.id) ?? null;
+    }),
+    enabled: isLahore,
+  });
+
+  const { data: ridersRaw } = useQuery({
+    queryKey: ["riders-active"],
+    queryFn: () => api("/admin/riders").then(r => r.json()).then((d: any) => Array.isArray(d) ? d : (d.riders ?? [])),
+  });
+  const riders: any[] = (ridersRaw ?? []).filter((r: any) => r.status === "active");
+
+  const [selectedRider, setSelectedRider] = useState("");
+
+  const assignMutation = useMutation({
+    mutationFn: () => api("/admin/riders/assign", {
+      method: "POST",
+      body: JSON.stringify({ shopify_order_db_id: order.id, rider_id: parseInt(selectedRider) }),
+    }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Assignment failed");
+      return d;
+    }),
+    onSuccess: () => { toast({ title: "✅ Rider assigned!" }); refetch(); },
+    onError: (e: any) => toast({ title: e.message ?? "Assignment failed", variant: "destructive" }),
+  });
+
+  const waMutation = useMutation({
+    mutationFn: (deliveryId: number) => api(`/admin/riders/deliveries/${deliveryId}/send-wa`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => toast({ title: "✅ WA sent to rider!" }),
+    onError: () => toast({ title: "WA send failed", variant: "destructive" }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ deliveryId, status }: { deliveryId: number; status: string }) =>
+      api(`/admin/riders/deliveries/${deliveryId}/status`, { method: "PUT", body: JSON.stringify({ status }) }).then(async r => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error ?? "Update failed");
+        return d;
+      }),
+    onSuccess: () => { toast({ title: "✅ Status updated!" }); refetch(); },
+    onError: (e: any) => toast({ title: e.message ?? "Update failed", variant: "destructive" }),
+  });
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    assigned: "bg-blue-100 text-blue-800",
+    picked_up: "bg-purple-100 text-purple-800",
+    in_transit: "bg-orange-100 text-orange-800",
+    delivered: "bg-green-100 text-green-800",
+    failed: "bg-red-100 text-red-800",
+    returned: "bg-rose-100 text-rose-800",
+  };
+
+  /* ── Not Lahore & not manually enabled ── */
+  if (!isLahore) return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+        <Navigation className="w-4 h-4 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold">City: {addr.city || "Unknown"}</p>
+          <p className="text-xs mt-0.5">Auto-detected as non-Lahore. Use Courier tab for this order.<br/>If this is actually a Lahore order, enable manually below.</p>
+        </div>
+      </div>
+      <button
+        onClick={() => setManualLahore(true)}
+        className="w-full border-2 border-dashed border-orange-300 rounded-xl p-4 text-orange-700 hover:bg-orange-50 transition-colors text-sm font-medium flex items-center justify-center gap-2">
+        <Bike className="w-4 h-4" /> Force Enable Lahore Rider Mode
+      </button>
+    </div>
+  );
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {deliveryData ? (
+        <>
+          {/* Delivery Card */}
+          <div className="border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bike className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{deliveryData.rider_name ?? "Unassigned"}</p>
+                  <p className="text-xs text-muted-foreground">{deliveryData.rider_phone ?? "—"}</p>
+                </div>
+              </div>
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${statusColors[deliveryData.delivery_status] ?? "bg-muted text-muted-foreground"}`}>
+                {(deliveryData.delivery_status ?? "unassigned").replace(/_/g, " ")}
+              </span>
+            </div>
+
+            <div className="text-xs text-muted-foreground space-y-1 bg-muted/30 rounded-lg p-3">
+              <div className="flex gap-2"><MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span>{(deliveryData.shipping_address as any)?.address1 ?? "—"}, {(deliveryData.shipping_address as any)?.city ?? ""}</span></div>
+              <div className="flex gap-2"><Phone className="w-3.5 h-3.5 shrink-0" /><span>{deliveryData.customer_phone ?? "—"}</span></div>
+              {deliveryData.cod_amount > 0 && (
+                <div className="flex gap-2"><DollarSign className="w-3.5 h-3.5 shrink-0" /><span>COD: <strong className="text-foreground">PKR {parseInt(deliveryData.cod_amount).toLocaleString()}</strong></span></div>
+              )}
+              {deliveryData.wa_sent_at && (
+                <div className="flex gap-2"><MessageCircle className="w-3.5 h-3.5 shrink-0" /><span>WA sent: {new Date(deliveryData.wa_sent_at).toLocaleString()}</span></div>
+              )}
+            </div>
+
+            {/* Status update */}
+            {deliveryData.delivery_id && (
+              <div>
+                <p className="text-xs font-semibold mb-2">Update Delivery Status</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {["assigned","picked_up","in_transit","delivered","failed","returned"].map(s => (
+                    <button key={s} onClick={() => statusMutation.mutate({ deliveryId: deliveryData.delivery_id, status: s })}
+                      disabled={statusMutation.isPending || deliveryData.delivery_status === s}
+                      className={`text-xs px-2.5 py-1 rounded-full capitalize border transition-all ${deliveryData.delivery_status === s ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary hover:text-primary"}`}>
+                      {s.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1 border-t border-border">
+              {deliveryData.delivery_id && (
+                <Button size="sm" variant="outline" className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
+                  onClick={() => waMutation.mutate(deliveryData.delivery_id)} disabled={waMutation.isPending}>
+                  <MessageCircle className="w-3.5 h-3.5" /> {waMutation.isPending ? "Sending..." : "WA to Rider"}
+                </Button>
+              )}
+              <Button size="sm" variant="outline" className="gap-1.5"
+                onClick={() => window.open(`/api/admin/riders/orders/${order.id}/invoice`, "_blank")}>
+                <FileText className="w-3.5 h-3.5" /> Print Invoice
+              </Button>
+            </div>
+          </div>
+
+          {/* Reassign */}
+          <div className="border border-border rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold">Reassign Rider</p>
+            <div className="flex gap-2">
+              <select value={selectedRider} onChange={e => setSelectedRider(e.target.value)}
+                className="flex-1 border border-border rounded-md px-3 py-2 text-sm bg-background">
+                <option value="">Select rider...</option>
+                {riders.map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.phone})</option>)}
+              </select>
+              <Button size="sm" onClick={() => assignMutation.mutate()} disabled={!selectedRider || assignMutation.isPending}>
+                {assignMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-4">
+          <div className="text-center py-6 space-y-2">
+            <Bike className="w-10 h-10 text-muted-foreground mx-auto" />
+            <p className="font-medium">No rider assigned yet</p>
+            <p className="text-sm text-muted-foreground">This is a Lahore order. Assign a rider to handle local delivery.</p>
+          </div>
+          <div className="border border-border rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold">Assign Rider</p>
+            <div className="flex gap-2">
+              <select value={selectedRider} onChange={e => setSelectedRider(e.target.value)}
+                className="flex-1 border border-border rounded-md px-3 py-2 text-sm bg-background">
+                <option value="">Select rider...</option>
+                {riders.map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.phone})</option>)}
+              </select>
+              <Button size="sm" onClick={() => assignMutation.mutate()} disabled={!selectedRider || assignMutation.isPending}>
+                {assignMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+              </Button>
+            </div>
+            <Button variant="outline" size="sm" className="w-full gap-1.5"
+              onClick={() => {
+                api("/admin/riders/auto-assign", { method: "POST" }).then(r => r.json()).then(() => { toast({ title: "Auto-assigned!" }); refetch(); }).catch(() => toast({ title: "Auto-assign failed", variant: "destructive" }));
+              }}>
+              <Zap className="w-3.5 h-3.5" /> Auto-Assign (round-robin)
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Order Detail Panel ─────────────────────────────────── */
+function OrderDetailPanel({
+  order,
+  couriers,
+  onClose,
+}: {
+  order: any;
+  couriers: any[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState<"details" | "workflow" | "courier" | "rider" | "items">("details");
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [newStatus, setNewStatus] = useState(order.status ?? "");
+  const [waMessage, setWaMessage] = useState(
+    `Hi ${order.customerName ?? "there"}! Your KDF NUTS order *${order.orderNumber}* is *${order.status ?? "processing"}*. Thank you for shopping with us! 🌿`
+  );
+
+  const addr = order.shippingAddress ?? {};
+  const isLahore = (addr.city ?? "").toLowerCase().includes("lahore");
+
+  const { data: shipments = [], refetch: refetchShipments } = useQuery({
+    queryKey: ["shopify-order-shipments", order.id],
+    queryFn: () => api(`/admin/shopify/orders/${order.id}/shipments`).then(r => r.json()),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: any) => api(`/admin/shopify/orders/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["shopify-orders"] }); toast({ title: "Status updated" }); },
+    onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
+  });
+
+  const waMutation = useMutation({
+    mutationFn: ({ id, message }: any) => api(`/admin/shopify/orders/${id}/whatsapp`, { method: "POST", body: JSON.stringify({ message }) }).then(r => r.json()),
+    onSuccess: () => { toast({ title: "WhatsApp message sent" }); },
+    onError: () => toast({ title: "Failed to send", variant: "destructive" }),
+  });
+
+  const tabs: Array<{ id: string; label: string; icon: React.ReactNode }> = [
+    { id: "details",  label: "Details",       icon: <User className="w-3.5 h-3.5" /> },
+    { id: "workflow", label: "WA & Confirm",   icon: <MessageCircle className="w-3.5 h-3.5" /> },
+    { id: "courier",  label: `Courier (${shipments.length})`, icon: <Truck className="w-3.5 h-3.5" /> },
+    { id: "rider",    label: isLahore ? "🛵 Rider" : "Rider", icon: <Bike className="w-3.5 h-3.5" /> },
+    { id: "items",    label: `Items (${order.lineItems?.length ?? 0})`, icon: <Package className="w-3.5 h-3.5" /> },
+  ];
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40 flex items-start justify-center p-4 overflow-y-auto" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="bg-card border border-border rounded-xl w-full max-w-2xl shadow-xl my-8">
+          {/* Header */}
+          <div className="flex items-center justify-between p-5 border-b border-border">
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="font-bold text-lg">{order.orderNumber}</h2>
+                <StatusBadge status={order.status} />
+                {order.financialStatus && <StatusBadge status={order.financialStatus} />}
+                {isLahore && (
+                  <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                    <Navigation className="w-3 h-3" /> Lahore Local
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {order.customerName} · {order.customerPhone || order.customerEmail || "—"} · {addr.city || "—"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="gap-1.5" onClick={() => { setActiveTab("courier"); setShowBookModal(true); }}>
+                <Truck className="w-3.5 h-3.5" /> Book Courier
+              </Button>
+              <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-border px-5 overflow-x-auto">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id as any)}
+                className={`py-3 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeTab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                {t.icon}{t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-5 max-h-[60vh] overflow-y-auto">
+            {/* Details Tab */}
+            {activeTab === "details" && (
+              <div className="space-y-5">
+                {/* Summary cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-muted/30 rounded-xl p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Total</p>
+                    <p className="font-bold text-base">PKR {parseFloat(order.totalPrice ?? "0").toLocaleString()}</p>
+                  </div>
+                  <div className="bg-muted/30 rounded-xl p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Shipments</p>
+                    <p className="font-bold text-base">{shipments.length}</p>
+                  </div>
+                  <div className="bg-muted/30 rounded-xl p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Items</p>
+                    <p className="font-bold text-base">{order.lineItems?.length ?? 0}</p>
+                  </div>
+                </div>
+
+                {/* Shipping Address */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Shipping Address</p>
+                  <div className="bg-muted/30 rounded-xl p-4 text-sm space-y-1">
+                    <div className="flex items-center gap-2"><User className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium">{addr.name ?? order.customerName ?? "—"}</span></div>
+                    <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-muted-foreground" /><span>{addr.address1 ?? addr.address ?? "—"}{addr.address2 ? `, ${addr.address2}` : ""}</span></div>
+                    <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-transparent" /><span className="text-muted-foreground">{[addr.city, addr.province, addr.country].filter(Boolean).join(", ")}</span></div>
+                    {(addr.phone || order.customerPhone) && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-muted-foreground" /><span>{addr.phone ?? order.customerPhone}</span></div>}
+                  </div>
+                </div>
+
+                {/* Tracking */}
+                {order.trackingNumber && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Active Tracking</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <Truck className="w-5 h-5 text-blue-600 shrink-0" />
+                      <div>
+                        <p className="font-mono font-semibold text-sm text-blue-900">{order.trackingNumber}</p>
+                        <p className="text-xs text-blue-600">Latest tracking number</p>
+                      </div>
+                      <button onClick={() => { navigator.clipboard.writeText(order.trackingNumber); toast({ title: "Copied!" }); }}
+                        className="ml-auto text-blue-500 hover:text-blue-700">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Totals */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Order Summary</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>PKR {parseFloat(order.subtotalPrice ?? "0").toLocaleString()}</span></div>
+                    {parseFloat(order.totalDiscounts ?? "0") > 0 && (
+                      <div className="flex justify-between text-red-600"><span>Discounts</span><span>-PKR {parseFloat(order.totalDiscounts).toLocaleString()}</span></div>
+                    )}
+                    <div className="flex justify-between font-bold text-base border-t border-border pt-2 mt-2">
+                      <span>Total</span><span>PKR {parseFloat(order.totalPrice ?? "0").toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Invoice + Update Status */}
+                <div className="border-t border-border pt-4 flex gap-3 flex-wrap">
+                  <Button size="sm" variant="outline" className="gap-1.5"
+                    onClick={() => {
+                      const tok = localStorage.getItem("kdf_admin_token") ?? "";
+                      window.open(`/api/admin/riders/orders/${order.id}/invoice?token=${encodeURIComponent(tok)}`, "_blank");
+                    }}>
+                    <FileText className="w-3.5 h-3.5" /> Print Invoice
+                  </Button>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    {["pending", "fulfilled", "cancelled"].map(s => (
+                      <Button key={s} size="sm" variant={newStatus === s ? "default" : "outline"} className="capitalize h-8 text-xs" onClick={() => setNewStatus(s)}>{s}</Button>
+                    ))}
+                    <Button size="sm" onClick={() => statusMutation.mutate({ id: order.id, status: newStatus })} disabled={statusMutation.isPending || newStatus === order.status}>
+                      {statusMutation.isPending ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* WhatsApp */}
+                <div className="border-t border-border pt-4">
+                  <p className="text-sm font-semibold mb-2 flex items-center gap-1.5"><MessageCircle className="w-4 h-4 text-green-600" />Quick WhatsApp</p>
+                  <textarea className="w-full border border-border rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    rows={3} value={waMessage} onChange={e => setWaMessage(e.target.value)} />
+                  <Button size="sm" className="mt-2 gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => waMutation.mutate({ id: order.id, message: waMessage })} disabled={waMutation.isPending || !waMessage.trim()}>
+                    <Send className="w-3.5 h-3.5" /> {waMutation.isPending ? "Sending..." : "Send WhatsApp"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* WA Confirmation Tab */}
+            {activeTab === "workflow" && <WaConfirmTab order={order} />}
+
+            {/* Courier/Shipments Tab */}
+            {activeTab === "courier" && (
+              <div className="space-y-3">
+                {shipments.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Truck className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="font-medium">No shipments yet</p>
+                    <p className="text-sm text-muted-foreground mb-4">Book a courier to create a shipment</p>
+                    <Button size="sm" onClick={() => setShowBookModal(true)}>
+                      <Truck className="w-3.5 h-3.5 mr-1.5" /> Book Courier
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" className="gap-1.5 mb-2" onClick={() => setShowBookModal(true)}>
+                      <Truck className="w-3.5 h-3.5" /> Book Another Courier
+                    </Button>
+                    {shipments.map((s: any) => (
+                      <ShipmentCard key={s.id} shipment={s} orderId={order.id} onRefresh={refetchShipments} />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Rider Tab (Lahore only) */}
+            {activeTab === "rider" && <RiderTab order={order} />}
+
+            {/* Items Tab */}
+            {activeTab === "items" && (
+              <div className="space-y-2">
+                {(order.lineItems ?? []).length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No items</p>
+                ) : (
+                  (order.lineItems ?? []).map((li: any, i: number) => (
+                    <div key={i} className="flex items-center gap-3 bg-muted/20 rounded-xl p-3">
+                      {li.image && <img src={li.image} alt={li.title} className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{li.title}</p>
+                        {li.variantTitle && <p className="text-xs text-muted-foreground">{li.variantTitle}</p>}
+                        <p className="text-xs text-muted-foreground">Qty: {li.quantity}</p>
+                      </div>
+                      <p className="font-semibold text-sm shrink-0">PKR {parseFloat(li.price ?? "0").toLocaleString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showBookModal && (
+        <BookCourierModal
+          order={order}
+          couriers={couriers}
+          onClose={() => setShowBookModal(false)}
+          onBooked={() => { refetchShipments(); qc.invalidateQueries({ queryKey: ["shopify-orders"] }); }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─── Main Page ─────────────────────────────────────────── */
+export default function ShopifyOrdersPage() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [deliveryFilter, setDeliveryFilter] = useState("all");
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [financialFilter, setFinancialFilter] = useState("all");
+
+  const setDeliveryFilterAndReset = (f: string) => { setDeliveryFilter(f); setPage(1); setSelectedIds([]); };
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["shopify-orders", page, search, status, dateFrom, dateTo, financialFilter, deliveryFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), limit: "25", search, status });
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo)   params.set("to", dateTo);
+      if (financialFilter !== "all") params.set("financial_status", financialFilter);
+      if (deliveryFilter !== "all")  params.set("delivery_type", deliveryFilter);
+      return api(`/admin/shopify/orders?${params}`).then(r => r.json());
+    },
+  });
+
+  const { data: tabCounts = {} } = useQuery<Record<string, number>>({
+    queryKey: ["shopify-orders-counts"],
+    queryFn: () => api("/admin/shopify/orders/counts").then(r => r.json()),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: couriersData } = useQuery({
+    queryKey: ["couriers-list"],
+    queryFn: () => api("/admin/couriers").then(r => r.json()),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => api("/admin/shopify/sync/orders", { method: "POST" }).then(r => r.json()),
+    onSuccess: (d) => { qc.invalidateQueries({ queryKey: ["shopify-orders"] }); toast({ title: `${d.synced ?? 0} orders synced from Shopify` }); },
+    onError: () => toast({ title: "Sync failed", variant: "destructive" }),
+  });
+
+  const orders: any[] = data?.orders ?? [];
+  const total: number = data?.total ?? 0;
+  const totalPages = Math.ceil(total / 25);
+  const couriers: any[] = couriersData ?? [];
+
+  const allSelected = orders.length > 0 && orders.every(o => selectedIds.includes(o.id));
+  const toggleAll = () => setSelectedIds(allSelected ? [] : orders.map((o: any) => o.id));
+  const toggleOne = (id: number) => setSelectedIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+
+  const unbookedSelected = orders.filter(o => selectedIds.includes(o.id) && !o.trackingNumber);
+
+  /* Stats bar */
+  const totalRevenue = orders.reduce((s: number, o: any) => s + parseFloat(o.totalPrice ?? "0"), 0);
+  const fulfilledCount = orders.filter((o: any) => o.status === "fulfilled").length;
+  const unfulfilledCount = orders.filter((o: any) => ["unfulfilled", "pending"].includes(o.status)).length;
+
+  return (
+    <div className="space-y-5">
+      {/* Page Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Shopify Orders</h1>
+          <p className="text-sm text-muted-foreground">{total.toLocaleString()} orders · PKR {totalRevenue.toLocaleString()} revenue on this page</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="outline" className="gap-1.5 border-primary text-primary" onClick={() => setShowBulkModal(true)}>
+              <Boxes className="w-4 h-4" /> Book {selectedIds.length} Orders
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setShowFilters(v => !v)} className="gap-1.5">
+            <Filter className="w-4 h-4" /> Filters
+            {(dateFrom || dateTo || financialFilter !== "all") && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+          </Button>
+          <Button variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="gap-1.5">
+            <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync Shopify"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Bar */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Fulfilled</p>
+            <p className="text-xl font-bold">{fulfilledCount}</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5 text-yellow-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Unfulfilled</p>
+            <p className="text-xl font-bold">{unfulfilledCount}</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Page Revenue</p>
+            <p className="text-xl font-bold">PKR {Math.round(totalRevenue / 1000)}K</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Smart Delivery Filter Tabs */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <div className="flex divide-x divide-border min-w-max">
+            {[
+              { id: "all",             label: "All Orders",      icon: <Package className="w-3.5 h-3.5" />,     color: "text-foreground",    countKey: "all" },
+              { id: "lahore",          label: "Lahore",          icon: <Navigation className="w-3.5 h-3.5" />,  color: "text-orange-600",    countKey: "lahore" },
+              { id: "courier_booked",  label: "Courier Booked",  icon: <Truck className="w-3.5 h-3.5" />,      color: "text-blue-600",      countKey: "courier_booked" },
+              { id: "rider_assigned",  label: "Rider Assigned",  icon: <Bike className="w-3.5 h-3.5" />,       color: "text-purple-600",    countKey: "rider_assigned" },
+              { id: "out_for_delivery",label: "Out for Delivery",icon: <MapPin className="w-3.5 h-3.5" />,     color: "text-amber-600",     countKey: "out_for_delivery" },
+              { id: "delivered",       label: "Delivered",       icon: <CheckCircle className="w-3.5 h-3.5" />,color: "text-green-600",     countKey: "delivered" },
+              { id: "cod_pending",     label: "COD Pending",     icon: <DollarSign className="w-3.5 h-3.5" />, color: "text-red-600",       countKey: "cod_pending" },
+              { id: "paid",            label: "Paid",            icon: <CircleCheck className="w-3.5 h-3.5" />,color: "text-emerald-600",   countKey: "paid" },
+            ].map(tab => {
+              const cnt = (tabCounts as any)[tab.countKey];
+              const isActive = deliveryFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setDeliveryFilterAndReset(tab.id)}
+                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : `text-muted-foreground hover:bg-muted/50 ${tab.color}`
+                  }`}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  {cnt !== undefined && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-0.5 ${
+                      isActive
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      {Number(cnt).toLocaleString()}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Search + Status */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Search order #, customer name or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          </div>
+          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}
+            className="border border-border rounded-md px-3 py-2 text-sm bg-background min-w-[160px]">
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s === "all" ? "All Status" : s.replace(/_/g, " ")}</option>)}
+          </select>
+        </div>
+
+        {showFilters && (
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-border">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Date From</Label>
+              <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 text-xs w-36" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Date To</Label>
+              <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 text-xs w-36" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Payment</Label>
+              <select value={financialFilter} onChange={e => setFinancialFilter(e.target.value)}
+                className="h-8 text-xs border border-border rounded-md px-2 bg-background">
+                <option value="all">All</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </div>
+            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setDateFrom(""); setDateTo(""); setFinancialFilter("all"); }}>
+              <X className="w-3 h-3 mr-1" /> Clear
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Bulk selection hint */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 text-sm">
+          <span className="font-medium text-primary">{selectedIds.length} orders selected</span>
+          {unbookedSelected.length > 0 && <span className="text-muted-foreground">· {unbookedSelected.length} without tracking</span>}
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowBulkModal(true)}>
+              <Truck className="w-3 h-3" /> Book Courier
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds([])}>
+              <X className="w-3 h-3" /> Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <RefreshCw className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+            <p className="text-muted-foreground">Loading orders...</p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="p-12 text-center">
+            <Package className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+            <p className="font-medium">No orders found</p>
+            <p className="text-sm text-muted-foreground mt-1">Sync orders from Shopify or adjust your filters</p>
+            <Button variant="outline" className="mt-4" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+              <RefreshCw className="w-4 h-4 mr-2" /> Sync from Shopify
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 accent-primary rounded" />
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Order</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">City</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payment</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracking</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {orders.map((o: any) => {
+                  const addr = o.shippingAddress ?? {};
+                  const rowLahore = (addr.city ?? "").toLowerCase().includes("lahore");
+                  const isSelected = selectedIds.includes(o.id);
+                  return (
+                    <tr key={o.id} className={`hover:bg-muted/20 transition-colors ${isSelected ? "bg-primary/5" : ""}`}>
+                      <td className="px-4 py-3">
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleOne(o.id)} className="w-4 h-4 accent-primary rounded" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <button className="font-semibold text-primary hover:underline" onClick={() => setSelectedOrder(o)}>
+                          {o.orderNumber}
+                        </button>
+                        <div className="text-xs text-muted-foreground">
+                          {o.shopifyCreatedAt ? new Date(o.shopifyCreatedAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short" }) : "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{o.customerName || <span className="text-muted-foreground">Guest</span>}</div>
+                        <div className="text-xs text-muted-foreground">{o.customerPhone || o.customerEmail || "—"}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {rowLahore
+                            ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full"><Navigation className="w-3 h-3" />{addr.city}</span>
+                            : <span className="text-sm text-muted-foreground">{addr.city || "—"}</span>
+                          }
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
+                      <td className="px-4 py-3"><StatusBadge status={o.financialStatus ?? "—"} /></td>
+                      <td className="px-4 py-3 font-semibold">
+                        PKR {parseFloat(o.totalPrice ?? "0").toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        {o.riderName ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                              <Bike className="w-3 h-3" /> {o.riderName}
+                            </span>
+                            {o.riderStatus && <div><StatusBadge status={o.riderStatus} /></div>}
+                          </div>
+                        ) : o.shipmentCourierSlug ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <CourierBadge slug={o.shipmentCourierSlug} />
+                              {(o.shipmentTrackingId ?? o.trackingNumber) && (
+                                <button onClick={() => { navigator.clipboard.writeText(o.shipmentTrackingId ?? o.trackingNumber); toast({ title: "Copied!" }); }}
+                                  className="font-mono text-xs text-primary hover:underline flex items-center gap-0.5">
+                                  {(o.shipmentTrackingId ?? o.trackingNumber).slice(0, 12)}{((o.shipmentTrackingId ?? o.trackingNumber).length > 12 ? "…" : "")}
+                                  <Copy className="w-2.5 h-2.5 ml-0.5" />
+                                </button>
+                              )}
+                            </div>
+                            {o.shipmentStatus && <div><StatusBadge status={o.shipmentStatus} /></div>}
+                          </div>
+                        ) : o.trackingNumber ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{o.trackingNumber.slice(0, 12)}{o.trackingNumber.length > 12 ? "…" : ""}</span>
+                            <button onClick={() => { navigator.clipboard.writeText(o.trackingNumber); toast({ title: "Copied!" }); }}
+                              className="text-muted-foreground hover:text-foreground">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => setSelectedOrder(o)}>
+                            <Truck className="w-3 h-3" /> Book
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-primary" onClick={() => setSelectedOrder(o)} title="View Details">
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" title="Book Courier"
+                            onClick={() => { setSelectedOrder(o); }}>
+                            <Truck className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Page {page} of {totalPages} · {total.toLocaleString()} total orders</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage(1)} disabled={page === 1}>«</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="px-3 py-1 bg-primary text-primary-foreground rounded-md text-xs font-semibold">{page}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(totalPages)} disabled={page === totalPages}>»</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Panel */}
+      {selectedOrder && (
+        <OrderDetailPanel
+          order={selectedOrder}
+          couriers={couriers}
+          onClose={() => setSelectedOrder(null)}
+        />
+      )}
+
+      {/* Bulk Book Modal */}
+      {showBulkModal && (
+        <BulkBookModal
+          orderIds={selectedIds}
+          couriers={couriers}
+          onClose={() => setShowBulkModal(false)}
+          onDone={() => { setSelectedIds([]); qc.invalidateQueries({ queryKey: ["shopify-orders"] }); }}
+        />
+      )}
+    </div>
+  );
+}
