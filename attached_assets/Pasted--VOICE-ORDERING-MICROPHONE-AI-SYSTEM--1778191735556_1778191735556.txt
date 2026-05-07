@@ -1,0 +1,177 @@
+یہ بھی ان کو لازمی ایڈ کروائیں:
+
+========================
+VOICE ORDERING + MICROPHONE AI SYSTEM
+=====================================
+
+Add advanced voice ordering system inside live chat for customers who cannot type easily.
+
+This is a very important conversion feature for Pakistan market.
+
+Many customers:
+✅ Prefer speaking instead of typing
+✅ Cannot type properly
+✅ Want fast ordering experience
+✅ Use mobile devices
+
+========================
+VOICE ORDER FLOW
+================
+
+Inside live chat:
+
+Add:
+✅ Microphone button
+✅ Voice recording option
+✅ Speech-to-text AI
+✅ Urdu voice support
+✅ English voice support
+✅ Roman Urdu support
+
+Example:
+
+Customer taps microphone and says:
+
+“Bhai mujhe 1 kilo badam aur 500 gram pista chahiye”
+
+AI should automatically:
+✅ Convert voice to text
+✅ Detect products
+✅ Detect variants
+✅ Detect quantities
+✅ Build conversational order flow
+
+========================
+SMART AI UNDERSTANDING
+======================
+
+AI should intelligently understand:
+
+✅ Urdu product names
+✅ Roman Urdu
+✅ English product names
+✅ Mixed language voice
+
+Examples:
+
+“Badam”
+→ Almonds
+
+“Pista”
+→ Pistachios
+
+“Akhrot”
+→ Walnuts
+
+“500 gram”
+→ Variant selection
+
+========================
+VOICE-ASSISTED ORDERING
+=======================
+
+After voice message:
+
+AI should:
+✅ Show matching products
+✅ Show product cards
+✅ Show variant options
+✅ Ask missing details
+✅ Confirm order professionally
+
+Example:
+
+AI:
+“Sir aapko Almonds ka kaunsa weight chahiye?”
+
+✅ 250g
+✅ 500g
+✅ 1kg
+
+========================
+AUTO ADDRESS DETECTION
+======================
+
+Customer should also be able to speak address.
+
+Example:
+
+“Johar Town Lahore”
+
+AI should:
+✅ Detect city
+✅ Detect area
+✅ Auto-fill checkout form
+✅ Sync with Google Maps API
+✅ Validate delivery area
+
+========================
+VOICE + CHAT COMBINATION
+========================
+
+Customers should be able to:
+
+✅ Speak
+✅ Type
+✅ Mix voice and text naturally
+
+Example:
+
+Voice:
+“1 kilo almonds”
+
+Text:
+“Cash on delivery”
+
+System should continue conversation intelligently.
+
+========================
+MICROPHONE UI/UX
+================
+
+Need premium microphone experience.
+
+Features:
+✅ WhatsApp-style microphone
+✅ Voice wave animation
+✅ Listening indicator
+✅ Smooth transitions
+✅ Mobile optimized
+✅ Touch friendly
+
+Also show helper text:
+
+🎤 “Don’t want to type? Tap the mic and speak your order.”
+
+========================
+VOICE ORDER CRM TRACKING
+========================
+
+Save:
+✅ Voice transcript
+✅ Detected products
+✅ Customer intent
+✅ AI processing logs
+✅ Final order flow
+
+inside admin CRM system.
+
+========================
+FINAL GOAL
+==========
+
+Need complete AI voice commerce system where customer can:
+
+✅ Speak order naturally
+✅ AI understands products
+✅ AI detects variants
+✅ AI fills order automatically
+✅ AI detects address
+✅ Customer confirms order
+✅ Order reaches admin dashboard professionally
+
+This should feel like:
+✅ AI shopping assistant
+✅ Human sales agent
+✅ Voice-powered ecommerce system
+✅ Modern conversational commerce experience

@@ -819,6 +819,16 @@ export function ChatWidget() {
     } finally { setIsLoading(false); }
   }, [input, isLoading, sessionId, messages.length]);
 
+  const trackActivity = useCallback((product: Product, variant: ProductVariant | null, price: number, action: "cart_add" | "buy_now" | "order_placed", qty = 1) => {
+    const sid = sessionId;
+    if (!sid) return;
+    fetch("/api/chat/lead/activity", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: sid, productId: product.id, name: product.name, variant: variant?.value, price, qty, action }),
+    }).catch(() => {});
+  }, [sessionId]);
+
   const handleAddToCart = useCallback((product: Product, variant: ProductVariant | null, price: number) => {
     setChatCart(prev => {
       const key = `${product.id}-${variant?.id ?? ""}`;
@@ -826,7 +836,8 @@ export function ChatWidget() {
       if (idx >= 0) return prev.map((it, i) => i === idx ? { ...it, qty: it.qty + 1 } : it);
       return [...prev, { productId: product.id, name: product.name, variant: variant?.value ?? "", variantId: variant?.id, price, qty: 1, image: product.image }];
     });
-  }, []);
+    trackActivity(product, variant, price, "cart_add");
+  }, [trackActivity]);
 
   const handleViewProduct = useCallback((id: number) => {
     setIsOpen(false);
@@ -864,11 +875,21 @@ export function ChatWidget() {
 
   const handleBuyNow = useCallback((product: Product, variant: ProductVariant | null, price: number) => {
     handleAddToCart(product, variant, price);
+    trackActivity(product, variant, price, "buy_now");
     setDefaultOrderProduct(product.name);
     setShowOrderForm(true);
-  }, [handleAddToCart]);
+  }, [handleAddToCart, trackActivity]);
 
   const handleOrderSuccess = (orderNumber: string, orderId: number) => {
+    chatCart.forEach(item => {
+      if (sessionId) {
+        fetch("/api/chat/lead/activity", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, productId: item.productId, name: item.name, variant: item.variant, price: item.price, qty: item.qty, action: "order_placed" }),
+        }).catch(() => {});
+      }
+    });
     setShowOrderForm(false);
     setChatCart([]);
     setMessages(prev => [...prev, { role: "assistant", content: `Your order has been placed!\n\nOrder ID: ${orderNumber}\n\nOur team will confirm shortly. Thank you for choosing KDF Nuts!`, timestamp: new Date(), orderPlaced: { id: orderId, orderNumber } }]);

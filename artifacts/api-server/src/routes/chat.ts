@@ -533,21 +533,98 @@ router.post("/chat/lead", async (req, res) => {
   }
 });
 
+/* ── PATCH /api/chat/lead/activity — public, track product interest/cart/order per session ── */
+router.patch("/chat/lead/activity", async (req, res) => {
+  try {
+    const { sessionId, productId, name, variant, price, qty, action } = req.body ?? {};
+    if (!sessionId || !name || !action) return res.status(400).json({ error: "sessionId, name and action required" });
+    const VALID_ACTIONS = ["view", "cart_add", "buy_now", "order_placed"];
+    if (!VALID_ACTIONS.includes(action)) return res.status(400).json({ error: "Invalid action" });
+
+    const [lead] = await db.select().from(chatLeadsTable).where(eq(chatLeadsTable.sessionId, sessionId)).limit(1);
+    if (!lead) return res.status(204).end();
+
+    const entry = { productId, name, variant: variant || undefined, price, qty: qty || 1, action, timestamp: new Date().toISOString() };
+    const existing: any[] = (lead.interestedProducts as any[]) ?? [];
+
+    const isAbandoned = action === "cart_add" || action === "buy_now";
+    const existingAbandoned: any[] = (lead.cartAbandoned as any[]) ?? [];
+
+    const deduped = existing.some(e => e.productId === productId && e.action === action && e.variant === entry.variant)
+      ? existing : [...existing, entry];
+
+    const abandonedDeduped = isAbandoned && !existingAbandoned.some(e => e.productId === productId && e.variant === entry.variant)
+      ? [...existingAbandoned, entry] : existingAbandoned;
+
+    const newStatus = action === "order_placed" ? "ordered" : lead.status;
+
+    await db.update(chatLeadsTable).set({
+      interestedProducts: deduped,
+      ...(isAbandoned ? { cartAbandoned: abandonedDeduped } : {}),
+      ...(newStatus !== lead.status ? { status: newStatus } : {}),
+      updatedAt: new Date(),
+    }).where(eq(chatLeadsTable.id, lead.id));
+
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── POST /api/admin/chat/leads/bulk-wa — send WA message to multiple leads ── */
+router.post("/admin/chat/leads/bulk-wa", adminMiddleware as any, async (req, res) => {
+  try {
+    const { leadIds, message, sendToAll, statusFilter } = req.body ?? {};
+    if (!message?.trim()) return res.status(400).json({ error: "message required" });
+    let targets: any[] = [];
+    if (sendToAll) {
+      const conditions: any[] = [];
+      if (statusFilter) conditions.push(eq(chatLeadsTable.status, statusFilter));
+      targets = await db.select({ id: chatLeadsTable.id, name: chatLeadsTable.name, phone: chatLeadsTable.phone })
+        .from(chatLeadsTable).where(conditions.length ? and(...conditions) : undefined);
+    } else {
+      if (!Array.isArray(leadIds) || leadIds.length === 0) return res.status(400).json({ error: "leadIds required" });
+      targets = await db.select({ id: chatLeadsTable.id, name: chatLeadsTable.name, phone: chatLeadsTable.phone })
+        .from(chatLeadsTable).where(sql`${chatLeadsTable.id} = ANY(${leadIds})`);
+    }
+    res.json({ success: true, count: targets.length, message: `Bulk WA started for ${targets.length} leads` });
+    const { sendWhatsAppMessage } = await import("../lib/whatsapp");
+    void (async () => {
+      for (const lead of targets) {
+        try {
+          const phone = lead.phone?.replace(/\D/g, "");
+          if (!phone || phone.length < 10) continue;
+          const msg = message.replace(/\{\{name\}\}/g, lead.name ?? "Customer").replace(/\{\{phone\}\}/g, lead.phone ?? "");
+          await sendWhatsAppMessage({ phone, message: msg, templateName: "bulk_lead_campaign" });
+          await new Promise(r => setTimeout(r, 2000));
+        } catch {}
+      }
+    })();
+    return;
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── GET /api/admin/chat/leads/export — CSV export (must be before :id routes) ── */
 router.get("/admin/chat/leads/export", adminMiddleware as any, async (req, res) => {
   try {
     const leads = await db.select().from(chatLeadsTable).orderBy(desc(chatLeadsTable.createdAt));
-    const rows = leads.map(l => [
-      l.id,
-      `"${(l.name ?? "").replace(/"/g, '""')}"`,
-      `"${(l.phone ?? "").replace(/"/g, '""')}"`,
-      `"${(l.email ?? "").replace(/"/g, '""')}"`,
-      `"${(l.city ?? "").replace(/"/g, '""')}"`,
-      `"${(l.source ?? "").replace(/"/g, '""')}"`,
-      `"${(l.status ?? "").replace(/"/g, '""')}"`,
-      `"${new Date(l.createdAt).toLocaleString("en-PK")}"`,
-    ].join(","));
-    const csv = ["ID,Name,Phone,Email,City,Source,Status,Date", ...rows].join("\n");
+    const rows = leads.map(l => {
+      const products = ((l.interestedProducts as any[]) ?? []).map((p: any) => p.name).filter(Boolean).join("; ");
+      return [
+        l.id,
+        `"${(l.name ?? "").replace(/"/g, '""')}"`,
+        `"${(l.phone ?? "").replace(/"/g, '""')}"`,
+        `"${(l.email ?? "").replace(/"/g, '""')}"`,
+        `"${(l.city ?? "").replace(/"/g, '""')}"`,
+        `"${(l.source ?? "").replace(/"/g, '""')}"`,
+        `"${(l.status ?? "").replace(/"/g, '""')}"`,
+        `"${products.replace(/"/g, '""')}"`,
+        `"${new Date(l.createdAt).toLocaleString("en-PK")}"`,
+      ].join(",");
+    });
+    const csv = ["ID,Name,Phone,Email,City,Source,Status,Interested Products,Date", ...rows].join("\n");
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="chat-leads-${Date.now()}.csv"`);
     return res.send(csv);
