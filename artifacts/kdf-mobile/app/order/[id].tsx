@@ -138,6 +138,7 @@ export default function OrderDetailScreen() {
       qc.invalidateQueries({ queryKey: ["delivery", id] });
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
       qc.invalidateQueries({ queryKey: ["rider-deliveries-all"] });
+      qc.invalidateQueries({ queryKey: ["rider-deliveries-tasks"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
     },
     onError: (e: any) => {
@@ -213,12 +214,28 @@ export default function OrderDetailScreen() {
 
   const confirmStatus = (status: string) => {
     const action = WORKFLOW.find(w => w.status === status);
+    /* Picked Up / On Route → direct update, no confirmation needed */
+    if (status === "picked" || status === "out_for_delivery") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      statusMut.mutate(status);
+      return;
+    }
+    /* Delivered / Failed → confirm before acting */
     Alert.alert(
-      "Update Status",
-      `Mark as "${action?.label}"?`,
+      status === "delivered" ? "✅ Mark as Delivered?" : "❌ Mark as Failed?",
+      status === "delivered"
+        ? "کیا آپ نے یہ آرڈر deliver کر دیا ہے؟"
+        : "کیا یہ delivery fail ہو گئی؟",
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Confirm", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); statusMut.mutate(status); } },
+        { text: "واپس جائیں", style: "cancel" },
+        {
+          text: status === "delivered" ? "✅ Delivered" : "❌ Failed",
+          style: status === "delivered" ? "default" : "destructive",
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            statusMut.mutate(status);
+          },
+        },
       ]
     );
   };
@@ -447,37 +464,93 @@ export default function OrderDetailScreen() {
         {/* ── Status Workflow ── */}
         {!isTerminal ? (
           <Section title="Update Delivery Status">
-            <View style={styles.workflowGrid}>
-              {WORKFLOW.map(w => {
+            <View style={styles.workflowStack}>
+              {WORKFLOW.map((w, idx) => {
                 const isCurrent = delivery.status === w.status;
                 const statusOrder = ["assigned", "picked", "out_for_delivery", "delivered", "failed"];
                 const isPast = statusOrder.indexOf(w.status) < statusOrder.indexOf(delivery.status);
+                const isLoading = statusMut.isPending;
+
                 return (
                   <TouchableOpacity
                     key={w.status}
                     style={[
-                      styles.wfBtn, { borderColor: w.color },
-                      isCurrent && { backgroundColor: w.color },
+                      styles.wfBtn,
+                      { borderColor: w.color, backgroundColor: isCurrent ? w.color : "#fff" },
                       isPast && styles.wfBtnDone,
                     ]}
-                    onPress={() => !isPast && confirmStatus(w.status)}
-                    disabled={statusMut.isPending || isPast}
-                    activeOpacity={0.78}
+                    onPress={() => { if (!isPast && !isLoading) confirmStatus(w.status); }}
+                    activeOpacity={isPast ? 1 : 0.75}
                   >
-                    {statusMut.isPending && isCurrent
-                      ? <ActivityIndicator size="small" color={isCurrent ? "#fff" : w.color} />
-                      : <Feather name={w.icon as any} size={20} color={isCurrent ? "#fff" : w.color} />
-                    }
-                    <Text style={[styles.wfTxt, { color: isCurrent ? "#fff" : w.color }]}>{w.label}</Text>
-                    {isPast && <Feather name="check" size={12} color={w.color} style={styles.wfCheck} />}
+                    {/* Left icon */}
+                    <View style={[
+                      styles.wfIconWrap,
+                      { backgroundColor: isCurrent ? "rgba(255,255,255,0.25)" : w.color + "18" },
+                    ]}>
+                      {isLoading && isCurrent
+                        ? <ActivityIndicator size="small" color={isCurrent ? "#fff" : w.color} />
+                        : isPast
+                          ? <Feather name="check" size={18} color={w.color} />
+                          : <Feather name={w.icon as any} size={18} color={isCurrent ? "#fff" : w.color} />
+                      }
+                    </View>
+
+                    {/* Label + hint */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.wfTxt, { color: isCurrent ? "#fff" : w.color }]}>
+                        {w.label}
+                      </Text>
+                      {isCurrent && (
+                        <Text style={styles.wfCurrentHint}>Current Status</Text>
+                      )}
+                      {isPast && (
+                        <Text style={[styles.wfCurrentHint, { color: w.color }]}>Done ✓</Text>
+                      )}
+                      {!isCurrent && !isPast && (
+                        <Text style={[styles.wfCurrentHint, { color: w.color + "99" }]}>
+                          {w.status === "picked" ? "Tap to mark picked up" :
+                           w.status === "out_for_delivery" ? "Tap when on route" :
+                           w.status === "delivered" ? "Tap when delivered" : "Tap if failed"}
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* Right arrow */}
+                    {!isPast && (
+                      <Feather
+                        name="chevron-right"
+                        size={18}
+                        color={isCurrent ? "rgba(255,255,255,0.7)" : w.color + "88"}
+                      />
+                    )}
                   </TouchableOpacity>
                 );
               })}
             </View>
+
+            {/* Returned option */}
+            {!["returned"].includes(delivery.status) && (
+              <TouchableOpacity
+                style={styles.returnedBtn}
+                onPress={() => {
+                  Alert.alert(
+                    "↩️ Return Order?",
+                    "کیا یہ آرڈر واپس آ گیا ہے؟",
+                    [
+                      { text: "نہیں", style: "cancel" },
+                      { text: "↩️ Returned", style: "destructive", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); statusMut.mutate("returned"); } },
+                    ]
+                  );
+                }}
+              >
+                <Feather name="rotate-ccw" size={14} color="#8B5CF6" />
+                <Text style={styles.returnedTxt}>Mark as Returned</Text>
+              </TouchableOpacity>
+            )}
           </Section>
         ) : (
           <View style={[styles.terminalBanner, { backgroundColor: getStatusBg(delivery.status), borderColor: sc + "40" }]}>
-            <Feather name="check-circle" size={18} color={sc} />
+            <Feather name={delivery.status === "delivered" ? "check-circle" : "info"} size={18} color={sc} />
             <Text style={[styles.terminalTxt, { color: sc }]}>
               Order {getStatusLabel(delivery.status).toLowerCase()} — no further action needed.
             </Text>
@@ -569,15 +642,25 @@ const styles = StyleSheet.create({
   invBtn:      { flex: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 14, borderRadius: 12 },
   invBtnTxt:   { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
-  workflowGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  workflowStack: { gap: 10 },
   wfBtn: {
-    flex: 1, minWidth: "45%", flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, paddingVertical: 14, borderRadius: 14, borderWidth: 2, backgroundColor: "#fff",
-    position: "relative",
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 16, paddingHorizontal: 16,
+    borderRadius: 16, borderWidth: 2, backgroundColor: "#fff",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  wfBtnDone: { opacity: 0.5, borderStyle: "dashed" },
-  wfTxt:     { fontSize: 13, fontFamily: "Inter_700Bold" },
-  wfCheck:   { position: "absolute", top: 7, right: 10 },
+  wfBtnDone:    { opacity: 0.55 },
+  wfIconWrap:   { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  wfTxt:        { fontSize: 15, fontFamily: "Inter_700Bold" },
+  wfCurrentHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 },
+
+  returnedBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 7, marginTop: 10, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: "#F5F3FF", borderWidth: 1, borderColor: "#DDD6FE",
+  },
+  returnedTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#7C3AED" },
 
   terminalBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, padding: 16, borderWidth: 1 },
   terminalTxt:    { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
