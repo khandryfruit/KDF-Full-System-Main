@@ -121,6 +121,33 @@ app.get("/robots.txt", async (req: Request, res: Response) => {
  * In development the individual Vite dev servers handle static serving via
  * the proxy's path routing, so this middleware is skipped entirely.
  */
+/**
+ * Server-side 301 redirect for unclean product URLs (production only).
+ * Handles: /products/Cashews%20nuts%20250g  →  /products/cashews-nuts-250g
+ * Must come BEFORE the static file catch-all.
+ */
+if (process.env.NODE_ENV === "production") {
+  app.use((req: Request, res: Response, next: () => void) => {
+    const match = req.path.match(/^\/products\/(.+)$/);
+    if (match) {
+      const rawSegment = decodeURIComponent(match[1]);
+      const cleanSlug = rawSegment
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      if (cleanSlug && cleanSlug !== rawSegment) {
+        const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+        res.redirect(301, `/products/${cleanSlug}${qs}`);
+        return;
+      }
+    }
+    next();
+  });
+}
+
 if (process.env.NODE_ENV === "production") {
   app.use((req: Request, res: Response) => {
     // x-forwarded-host may be a comma-separated list; use the first entry.

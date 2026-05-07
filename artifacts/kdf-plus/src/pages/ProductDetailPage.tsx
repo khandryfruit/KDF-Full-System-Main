@@ -299,7 +299,6 @@ export default function ProductDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
   const param = (params as any).slug ?? "";
-  const isNumeric = /^\d+$/.test(param);
   const { toast } = useToast();
   const { addItem } = useCart();
 
@@ -333,14 +332,16 @@ export default function ProductDetailPage() {
 
   const productId: number = (product as any)?.id ?? 0;
 
-  /* Redirect numeric ID → slug URL */
+  /* ── SEO: redirect numeric ID or unclean slug → canonical slug URL ── */
   useEffect(() => {
     if (!product) return;
-    const slug = (product as any).slug;
-    if (slug && isNumeric) {
+    const slug = (product as any).slug as string | undefined;
+    if (!slug) return;
+    const decodedParam = decodeURIComponent(param);
+    if (decodedParam !== slug) {
       window.history.replaceState(null, "", `/products/${slug}`);
     }
-  }, [product, isNumeric]);
+  }, [product, param]);
 
   const { data: bidData, refetch: refetchBid } = useQuery({
     queryKey: ["bids", productId],

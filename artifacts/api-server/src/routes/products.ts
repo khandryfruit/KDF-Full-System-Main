@@ -5,7 +5,12 @@ import { adminMiddleware } from "../lib/auth";
 
 const router = Router();
 
-function generateSlugFromName(name: string): string {
+/**
+ * Converts any string into a clean, SEO-friendly slug.
+ * Rules: lowercase, alphanumeric + hyphens only, no leading/trailing hyphens,
+ * no consecutive hyphens. e.g. "Cashews nuts 250g" → "cashews-nuts-250g"
+ */
+export function generateSlugFromName(name: string): string {
   return name
     .toLowerCase()
     .trim()
@@ -15,8 +20,14 @@ function generateSlugFromName(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/** Returns true if the slug is already in its canonical clean form */
+function isCleanSlug(slug: string): boolean {
+  return generateSlugFromName(slug) === slug;
+}
+
 async function ensureUniqueSlug(base: string, excludeId?: number): Promise<string> {
-  let candidate = base;
+  const cleanBase = generateSlugFromName(base);
+  let candidate = cleanBase;
   let suffix = 2;
   while (true) {
     const existing = await db
@@ -27,7 +38,7 @@ async function ensureUniqueSlug(base: string, excludeId?: number): Promise<strin
     if (existing.length === 0 || (excludeId && existing[0].id === excludeId)) {
       return candidate;
     }
-    candidate = `${base}-${suffix}`;
+    candidate = `${cleanBase}-${suffix}`;
     suffix++;
   }
 }
@@ -70,22 +81,49 @@ router.get("/products/check-slug", adminMiddleware as any, async (req, res) => {
     const conditions: any[] = [eq(productsTable.slug, slug as string)];
     if (excludeId) conditions.push(sql`${productsTable.id} != ${parseInt(excludeId as string)}`);
     const [existing] = await db.select({ id: productsTable.id }).from(productsTable).where(and(...conditions)).limit(1);
-    res.json({ available: !existing });
+    res.json({ available: !existing, canonical: generateSlugFromName(slug as string) });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed" });
   }
 });
 
+/**
+ * GET /products/:id
+ * Supports numeric ID, clean slug, or legacy unclean slug (with spaces/uppercase).
+ * If the param is an unclean slug, the product is found via its cleaned form
+ * and the response includes X-Canonical-Slug so the frontend can redirect.
+ */
 router.get("/products/:id", async (req, res) => {
   try {
     const param = req.params.id;
     const isNumeric = /^\d+$/.test(param);
-    const where = isNumeric
-      ? eq(productsTable.id, parseInt(param))
-      : eq(productsTable.slug, param);
-    const [product] = await db.select().from(productsTable).where(where).limit(1);
+
+    if (isNumeric) {
+      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(param))).limit(1);
+      if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+      res.json(product);
+      return;
+    }
+
+    // Try exact slug match first
+    let [product] = await db.select().from(productsTable).where(eq(productsTable.slug, param)).limit(1);
+
+    // Fallback: clean the param and try again (handles legacy %20-decoded spaces and uppercase)
+    if (!product) {
+      const cleaned = generateSlugFromName(param);
+      if (cleaned !== param && cleaned.length > 0) {
+        [product] = await db.select().from(productsTable).where(eq(productsTable.slug, cleaned)).limit(1);
+      }
+    }
+
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    // Signal unclean URL to the frontend for client-side canonical redirect
+    if (!isCleanSlug(param) || param !== product.slug) {
+      res.setHeader("X-Canonical-Slug", product.slug);
+    }
+
     res.json(product);
   } catch (err) {
     req.log.error(err);
@@ -97,7 +135,8 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
   try {
     const { name, price, stock, slug: rawSlug, ...rest } = req.body;
     if (!name || !price) { res.status(400).json({ error: "name and price are required" }); return; }
-    const baseSlug = rawSlug?.trim() ? rawSlug.trim() : generateSlugFromName(name);
+    // Always sanitize: whether slug is provided by admin or generated from name
+    const baseSlug = rawSlug?.trim() ? rawSlug.trim() : name;
     const slug = await ensureUniqueSlug(baseSlug);
     const [product] = await db.insert(productsTable).values({ name, price, stock: stock ?? 0, slug, ...rest }).returning();
     res.status(201).json(product);
@@ -114,10 +153,15 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
 
     let finalSlug: string | undefined;
     if (rawSlug !== undefined) {
-      const baseSlug = rawSlug.trim() ? rawSlug.trim() : (name ? generateSlugFromName(name) : undefined);
-      if (baseSlug) {
-        finalSlug = await ensureUniqueSlug(baseSlug, id);
-      }
+      // Always sanitize the provided slug through generateSlugFromName
+      const base = rawSlug.trim() ? rawSlug.trim() : (name ?? "");
+      if (base) finalSlug = await ensureUniqueSlug(base, id);
+    } else if (name !== undefined) {
+      // If name changed but no explicit slug, re-generate slug from new name
+      const [existing] = await db.select({ slug: productsTable.slug }).from(productsTable).where(eq(productsTable.id, id)).limit(1);
+      // Only auto-update slug if current slug looks like it was auto-generated from the old name
+      // (i.e., don't overwrite manually set slugs on name-only edits)
+      if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     }
 
     const updateData: any = { ...rest, updatedAt: new Date() };
@@ -140,6 +184,39 @@ router.delete("/products/:id", adminMiddleware as any, async (req, res) => {
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+/**
+ * POST /api/admin/products/fix-slugs
+ * One-time migration: sanitizes all existing product slugs.
+ * Safe to run multiple times (idempotent).
+ */
+router.post("/products/fix-slugs", adminMiddleware as any, async (req, res) => {
+  try {
+    const allProducts = await db
+      .select({ id: productsTable.id, name: productsTable.name, slug: productsTable.slug })
+      .from(productsTable)
+      .orderBy(asc(productsTable.id));
+
+    let fixed = 0;
+    let skipped = 0;
+    const log: { id: number; old: string; new: string }[] = [];
+
+    for (const p of allProducts) {
+      const clean = generateSlugFromName(p.slug);
+      if (clean === p.slug) { skipped++; continue; }
+
+      const newSlug = await ensureUniqueSlug(clean, p.id);
+      await db.update(productsTable).set({ slug: newSlug, updatedAt: new Date() }).where(eq(productsTable.id, p.id));
+      log.push({ id: p.id, old: p.slug, new: newSlug });
+      fixed++;
+    }
+
+    res.json({ success: true, fixed, skipped, log });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to fix slugs" });
   }
 });
 

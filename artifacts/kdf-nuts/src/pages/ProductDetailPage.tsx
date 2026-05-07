@@ -483,11 +483,14 @@ export function ProductDetailPage() {
     }
   }, [product?.id]);
 
-  /* ── SEO: redirect numeric ID → slug URL (client-side 301 equivalent) ── */
+  /* ── SEO: redirect numeric ID or unclean slug → canonical slug URL ── */
   useEffect(() => {
     if (!product) return;
-    const slug = (product as any).slug;
-    if (slug && param !== slug) {
+    const slug = (product as any).slug as string | undefined;
+    if (!slug) return;
+    // Decode any %20-style encoding from the current URL for comparison
+    const decodedParam = decodeURIComponent(param);
+    if (decodedParam !== slug) {
       window.history.replaceState(null, "", `/products/${slug}`);
     }
   }, [product, param]);
