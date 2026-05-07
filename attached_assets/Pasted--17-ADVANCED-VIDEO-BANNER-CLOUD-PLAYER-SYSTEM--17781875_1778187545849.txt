@@ -1,0 +1,246 @@
+========================
+17. ADVANCED VIDEO BANNER + CLOUD PLAYER SYSTEM
+===============================================
+
+The current implementation approach is incorrect.
+
+Do NOT simply place video banners inside normal banner sections.
+
+We need a fully professional dynamic Cloud Video System with proper backend architecture and Cloud Player integration.
+
+========================
+CLOUDFLARE STREAM / CLOUD PLAYER INTEGRATION
+============================================
+
+Implement a dedicated Cloud Video Banner System.
+
+Requirements:
+
+✅ Cloudflare Stream integration
+✅ Cloud Player integration
+✅ Dynamic video streaming
+✅ CDN optimized delivery
+✅ Adaptive bitrate streaming
+✅ Fast loading & buffering
+✅ Mobile optimized playback
+
+The website should NOT directly upload/play raw videos inside the banner section.
+
+Instead:
+
+Flow should be:
+
+1. Upload video to Cloudflare Stream / Cloud Player
+2. Save video ID / stream URL in admin panel
+3. Website dynamically fetches and plays video from Cloud Player CDN
+4. Streamed video should appear inside homepage banner section
+
+========================
+PROPER ADMIN VIDEO CMS
+======================
+
+Create a dedicated Video Banner Management System in Admin Panel.
+
+Do NOT mix it with normal image banner settings.
+
+Create separate module/folder:
+
+Frontend Website Settings
+├── Header Settings
+├── Footer Settings
+├── Homepage Settings
+├── Banner Management
+├── Video Banner Management
+├── Mobile Reels Management
+├── Popup Management
+├── Announcement Bar
+├── Promotional Sections
+└── Homepage Layout Builder
+
+Everything website-related should be centralized professionally in one structured frontend settings module.
+
+========================
+VIDEO BANNER MANAGEMENT
+=======================
+
+Admin should be able to:
+
+✅ Add Cloudflare Stream Video ID
+✅ Add Cloud Player URL
+✅ Add YouTube video URL
+✅ Enable/Disable video banner
+✅ Schedule videos
+✅ Add CTA buttons
+✅ Add fallback image
+✅ Add desktop/mobile variants
+✅ Set autoplay/mute/loop
+✅ Set priority banners
+
+========================
+YOUTUBE VIDEO SUPPORT
+=====================
+
+Add proper YouTube support.
+
+Admin can:
+✅ Paste YouTube URL
+✅ Auto fetch thumbnail
+✅ Auto embed optimized player
+✅ Use as fallback source
+
+Priority logic:
+
+1. Cloudflare Stream video
+2. YouTube fallback
+3. Static image fallback
+
+========================
+MOBILE REELS SYSTEM
+===================
+
+For mobile view:
+
+Implement dedicated Reels/TikTok/Instagram style video system.
+
+This should NOT behave like normal desktop banners.
+
+Features:
+
+✅ Vertical mobile reels
+✅ Swipe reels interaction
+✅ Smooth reel transitions
+✅ Full-screen mobile experience
+✅ Auto-play on scroll
+✅ Mute/unmute controls
+✅ Lazy loading reels
+✅ Infinite reel loading
+✅ Mobile-first optimization
+
+========================
+INSTAGRAM REELS INTEGRATION
+===========================
+
+Admin should be able to:
+
+✅ Add Instagram reel links
+✅ Add reel video URLs
+✅ Upload short-form vertical videos
+✅ Schedule reels
+✅ Enable/Disable reels section
+
+System should dynamically fetch and display reels professionally.
+
+========================
+MOBILE REELS CMS
+================
+
+Create separate backend module:
+
+Mobile Reels Management
+
+Features:
+✅ Add reel
+✅ Edit reel
+✅ Sort reels
+✅ Activate/deactivate
+✅ Analytics
+✅ Thumbnail management
+✅ CTA button support
+✅ Product linking
+✅ Reel categories
+
+========================
+HOMEPAGE VIDEO ARCHITECTURE
+===========================
+
+Desktop Homepage:
+✅ Cinematic hero banner videos
+✅ Cloud Player streaming
+✅ Optimized loading
+
+Mobile Homepage:
+✅ Instagram/TikTok style reels
+✅ Swipeable video cards
+✅ Dynamic video feed
+
+========================
+PERFORMANCE OPTIMIZATION
+========================
+
+Very Important:
+
+Website speed must remain highly optimized.
+
+Implement:
+✅ Lazy loading
+✅ Video preloading strategy
+✅ Adaptive streaming
+✅ CDN caching
+✅ Skeleton loaders
+✅ GPU accelerated animations
+✅ Intersection Observer loading
+✅ Mobile bandwidth optimization
+
+========================
+UI/UX REQUIREMENTS
+==================
+
+Need premium world-class UI/UX.
+
+Design should feel like:
+
+* Modern ecommerce apps
+* TikTok/Instagram reels experience
+* Premium OTT streaming feel
+* Fast mobile interactions
+
+========================
+CODEBASE STRUCTURE
+==================
+
+Refactor frontend architecture professionally.
+
+Organize all website-related systems into structured modules/folders.
+
+Example:
+
+Frontend/
+├── Header/
+├── Footer/
+├── Sidebar/
+├── Homepage/
+├── HeroBanner/
+├── VideoBanner/
+├── MobileReels/
+├── Notifications/
+├── Tracking/
+├── Checkout/
+├── Maps/
+└── SharedComponents/
+
+Admin/
+├── FrontendSettings/
+├── BannerManagement/
+├── VideoManagement/
+├── ReelsManagement/
+├── HomepageBuilder/
+├── DeliverySettings/
+└── NotificationCenter/
+
+Need clean, scalable, professional architecture.
+
+========================
+FINAL GOAL
+==========
+
+Create a complete premium frontend media ecosystem:
+
+✅ Cloudflare Stream video banners
+✅ Cloud Player streaming
+✅ YouTube integration
+✅ Mobile reels system
+✅ Instagram-style experience
+✅ Dynamic admin CMS
+✅ Professional frontend architecture
+✅ Optimized performance
+✅ Modern premium UI/UX
