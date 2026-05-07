@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 
 const SESSION_KEY = "kdfplus_chat_session";
 const CHAT_CART_KEY = "kdfplus_chat_cart";
+const LEAD_KEY = "kdfplus_lead";
 const CITIES = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Abbottabad", "Bahawalpur", "Sargodha", "Other"];
 
 function getImageUrl(key: string | null | undefined): string | null {
@@ -654,11 +655,57 @@ export function ChatWidget() {
   const msgCountRef = useRef(0);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadName, setLeadName] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadCity, setLeadCity] = useState("");
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+
   const handleDismiss = () => {
     setDismissed(true);
     setIsExpanded(false);
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     dismissTimerRef.current = setTimeout(() => setDismissed(false), 3 * 60 * 1000);
+  };
+
+  const handleChatOpen = () => {
+    const saved = localStorage.getItem(LEAD_KEY);
+    if (saved) {
+      setIsExpanded(false);
+      setIsOpen(true);
+    } else {
+      setIsExpanded(false);
+      setShowLeadForm(true);
+    }
+  };
+
+  const handleLeadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leadName.trim() || !leadPhone.trim()) return;
+    setLeadSubmitting(true);
+    try {
+      const newSessionId = sessionId ?? `kdfplus_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      if (!sessionId) setSessionId(newSessionId);
+      await fetch("/api/chat/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: leadName.trim(),
+          phone: leadPhone.trim(),
+          email: leadEmail.trim() || undefined,
+          city: leadCity || undefined,
+          source: "kdf_plus",
+          sessionId: newSessionId,
+          visitSource: document.referrer || undefined,
+          deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
+        }),
+      });
+      localStorage.setItem(LEAD_KEY, JSON.stringify({ name: leadName.trim(), phone: leadPhone.trim(), submitted: true }));
+    } catch {}
+    setLeadSubmitting(false);
+    setShowLeadForm(false);
+    setIsOpen(true);
   };
 
   useEffect(() => {
@@ -849,6 +896,86 @@ export function ChatWidget() {
         </div>
       )}
 
+      {/* Pre-chat Lead Capture Form */}
+      {showLeadForm && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-end p-4 sm:p-6 pointer-events-none">
+          <div className="pointer-events-auto w-full max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-300">
+            <div className="rounded-2xl shadow-2xl overflow-hidden bg-card border border-border">
+              {/* Header */}
+              <div className="px-5 pt-5 pb-4 flex items-center gap-3 border-b border-border" style={{ background: "linear-gradient(135deg,#5FA800,#3d7000)" }}>
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <MessageCircle className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-white text-sm">Chat with KDF Plus</p>
+                  <p className="text-xs text-white/75">Quick intro so we can help you better</p>
+                </div>
+                <button onClick={() => setShowLeadForm(false)} className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Form */}
+              <form onSubmit={handleLeadSubmit} className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5">Your Name <span className="text-red-500">*</span></label>
+                  <input
+                    required
+                    value={leadName}
+                    onChange={e => setLeadName(e.target.value)}
+                    placeholder="e.g. Ali Hassan"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-background border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5FA800]/30 focus:border-[#5FA800] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5">Phone Number <span className="text-red-500">*</span></label>
+                  <input
+                    required
+                    type="tel"
+                    value={leadPhone}
+                    onChange={e => setLeadPhone(e.target.value)}
+                    placeholder="e.g. 03001234567"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-background border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5FA800]/30 focus:border-[#5FA800] transition-all"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Email <span className="text-muted-foreground font-normal">(optional)</span></label>
+                    <input
+                      type="email"
+                      value={leadEmail}
+                      onChange={e => setLeadEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-background border border-border text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#5FA800]/30 focus:border-[#5FA800] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">City <span className="text-muted-foreground font-normal">(optional)</span></label>
+                    <select
+                      value={leadCity}
+                      onChange={e => setLeadCity(e.target.value)}
+                      className="w-full rounded-xl px-3 py-2.5 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#5FA800]/30 focus:border-[#5FA800] transition-all"
+                    >
+                      <option value="">Select…</option>
+                      {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={leadSubmitting || !leadName.trim() || !leadPhone.trim()}
+                  className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-1 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: "#5FA800" }}
+                >
+                  {leadSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                  {leadSubmitting ? "Starting…" : "Start Chat"}
+                </button>
+                <p className="text-center text-xs text-muted-foreground pb-1">Your info is safe with us. No spam. 🔒</p>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FAB — hidden on mobile when chat is open, hidden when dismissed */}
       {!dismissed && (
         <div className={`fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 ${isOpen ? 'hidden lg:flex' : ''}`}>
@@ -856,7 +983,7 @@ export function ChatWidget() {
             <>
               <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-200">
                 <span className="bg-background text-foreground text-xs font-semibold px-2.5 py-1 rounded-full shadow-lg border border-border whitespace-nowrap">Chat with Us</span>
-                <button onClick={() => { setIsExpanded(false); setIsOpen(true); }} className="w-11 h-11 rounded-full shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform" style={{ backgroundColor: "#5FA800" }}>
+                <button onClick={handleChatOpen} className="w-11 h-11 rounded-full shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform" style={{ backgroundColor: "#5FA800" }}>
                   <MessageCircle className="w-5 h-5 text-white" />
                 </button>
               </div>

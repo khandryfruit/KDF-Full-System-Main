@@ -38,6 +38,7 @@ import FailedOrdersPage from "@/pages/FailedOrdersPage";
 import CitiesPage from "@/pages/CitiesPage";
 import ReviewsPage from "@/pages/ReviewsPage";
 import ChatConversationsPage from "@/pages/ChatConversationsPage";
+import ChatLeadsPage from "@/pages/ChatLeadsPage";
 import EmailSettingsPage from "@/pages/EmailSettingsPage";
 import ImageOptimizationPage from "@/pages/ImageOptimizationPage";
 import SameDayDeliveryPage from "@/pages/SameDayDeliveryPage";
@@ -156,6 +157,7 @@ function Router() {
       <Route path="/cities"><ProtectedRoute component={CitiesPage} /></Route>
       <Route path="/reviews"><ProtectedRoute component={ReviewsPage} /></Route>
       <Route path="/chat-conversations"><ProtectedRoute component={ChatConversationsPage} /></Route>
+      <Route path="/chat-leads"><ProtectedRoute component={ChatLeadsPage} /></Route>
       <Route path="/email-settings"><ProtectedRoute component={EmailSettingsPage} /></Route>
       <Route path="/image-optimization"><ProtectedRoute component={ImageOptimizationPage} /></Route>
       <Route path="/same-day-delivery"><ProtectedRoute component={SameDayDeliveryPage} /></Route>

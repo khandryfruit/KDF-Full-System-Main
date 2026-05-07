@@ -49,7 +49,8 @@ KDF NUTS is a full-stack eCommerce platform for KDF NUTS, offering a storefront,
 
 *   **Dual Storefronts:** KDF NUTS and KDF Plus.
 *   **Admin Panel:** Comprehensive management for products, orders, customers, and system settings.
-*   **AI Chatbot & Website Widget:** Customer support, product search, and order assistance.
+*   **AI Chatbot & Website Widget:** Customer support, product search, and order assistance. `chatbot_settings.is_enabled=true`, `ai_model=gpt-4o-mini`. Key: stored in `ai_settings.openai_api_key`.
+*   **Live Chat Lead Capture + CRM:** Pre-chat form (Name, Phone required; Email, City optional) on both KDF Nuts and KDF Plus widgets. DB table: `chat_leads`. localStorage keys: `kdfnuts_lead` / `kdfplus_lead`. API: `POST /api/chat/lead` (public), `GET /api/admin/chat/leads` (filter: q, city, status, source), `PUT /api/admin/chat/leads/:id/status`, `DELETE /api/admin/chat/leads/:id`, `GET /api/admin/chat/leads/export` (CSV). Admin CRM page at `/chat-leads` with stats cards, WhatsApp quick-contact, status dropdown, and export.
 *   **AI Content Generation:** Product descriptions, categories, blog posts, and SEO content.
 *   **WhatsApp Automation:** Notifications, marketing campaigns, and customer support.
 *   **Bidding/Auction & Restock Notifications:** Customer engagement and inventory management.

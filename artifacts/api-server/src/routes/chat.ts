@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   db,
   chatSessionsTable,
+  chatLeadsTable,
   chatbotSettingsTable,
   productsTable,
   categoriesTable,
@@ -499,6 +500,99 @@ router.get("/admin/chat/products", adminMiddleware as any, async (req, res) => {
 router.delete("/admin/chat/session/:id", adminMiddleware as any, async (req, res) => {
   try {
     await db.delete(chatSessionsTable).where(eq(chatSessionsTable.id, Number(req.params.id)));
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ════════════════════════════════════════════
+   CHAT LEADS / CRM
+════════════════════════════════════════════ */
+
+/* ── POST /api/chat/lead — public, save pre-chat lead ── */
+router.post("/chat/lead", async (req, res) => {
+  try {
+    const { name, phone, email, city, source, sessionId, visitSource, deviceInfo } = req.body ?? {};
+    if (!name?.trim() || !phone?.trim()) {
+      return res.status(400).json({ error: "Name and phone are required" });
+    }
+    const [lead] = await db.insert(chatLeadsTable).values({
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email?.trim() || null,
+      city: city?.trim() || null,
+      source: source || "kdf_nuts",
+      sessionId: sessionId || null,
+      visitSource: visitSource || null,
+      deviceInfo: deviceInfo || null,
+    }).returning();
+    return res.status(201).json(lead);
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── GET /api/admin/chat/leads/export — CSV export (must be before :id routes) ── */
+router.get("/admin/chat/leads/export", adminMiddleware as any, async (req, res) => {
+  try {
+    const leads = await db.select().from(chatLeadsTable).orderBy(desc(chatLeadsTable.createdAt));
+    const rows = leads.map(l => [
+      l.id,
+      `"${(l.name ?? "").replace(/"/g, '""')}"`,
+      `"${(l.phone ?? "").replace(/"/g, '""')}"`,
+      `"${(l.email ?? "").replace(/"/g, '""')}"`,
+      `"${(l.city ?? "").replace(/"/g, '""')}"`,
+      `"${(l.source ?? "").replace(/"/g, '""')}"`,
+      `"${(l.status ?? "").replace(/"/g, '""')}"`,
+      `"${new Date(l.createdAt).toLocaleString("en-PK")}"`,
+    ].join(","));
+    const csv = ["ID,Name,Phone,Email,City,Source,Status,Date", ...rows].join("\n");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="chat-leads-${Date.now()}.csv"`);
+    return res.send(csv);
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── GET /api/admin/chat/leads ── */
+router.get("/admin/chat/leads", adminMiddleware as any, async (req, res) => {
+  try {
+    const { q, city, status, source, limit = "25", offset = "0" } = req.query as Record<string, string>;
+    const conditions: any[] = [];
+    if (q) conditions.push(or(ilike(chatLeadsTable.name, `%${q}%`), ilike(chatLeadsTable.phone, `%${q}%`), ilike(chatLeadsTable.email!, `%${q}%`)));
+    if (city) conditions.push(ilike(chatLeadsTable.city!, `%${city}%`));
+    if (status) conditions.push(eq(chatLeadsTable.status, status));
+    if (source) conditions.push(eq(chatLeadsTable.source, source));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const [leads, countRows] = await Promise.all([
+      db.select().from(chatLeadsTable).where(where).orderBy(desc(chatLeadsTable.createdAt)).limit(Number(limit)).offset(Number(offset)),
+      db.select({ count: sql<number>`count(*)::int` }).from(chatLeadsTable).where(where),
+    ]);
+    return res.json({ leads, total: countRows[0]?.count ?? 0 });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── PUT /api/admin/chat/leads/:id/status ── */
+router.put("/admin/chat/leads/:id/status", adminMiddleware as any, async (req, res) => {
+  try {
+    const { status } = req.body ?? {};
+    const VALID = ["new", "contacted", "interested", "ordered", "follow_up", "converted"];
+    if (!VALID.includes(status)) return res.status(400).json({ error: "Invalid status" });
+    const [lead] = await db.update(chatLeadsTable).set({ status, updatedAt: new Date() }).where(eq(chatLeadsTable.id, Number(req.params.id))).returning();
+    return res.json(lead);
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── DELETE /api/admin/chat/leads/:id ── */
+router.delete("/admin/chat/leads/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    await db.delete(chatLeadsTable).where(eq(chatLeadsTable.id, Number(req.params.id)));
     return res.json({ success: true });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });

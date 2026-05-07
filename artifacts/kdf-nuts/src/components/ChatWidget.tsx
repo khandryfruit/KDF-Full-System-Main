@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 const SESSION_KEY = "kdfnuts_chat_session";
 const CHAT_CART_KEY = "kdfnuts_chat_cart";
+const LEAD_KEY = "kdfnuts_lead";
 const CITIES = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Abbottabad", "Bahawalpur", "Sargodha", "Other"];
 
 function getImageUrl(key: string | null | undefined): string | null {
@@ -554,11 +555,57 @@ export function ChatWidget() {
   const msgCountRef = useRef(0);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadName, setLeadName] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadCity, setLeadCity] = useState("");
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+
   const handleDismiss = () => {
     setDismissed(true);
     setIsExpanded(false);
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     dismissTimerRef.current = setTimeout(() => setDismissed(false), 3 * 60 * 1000);
+  };
+
+  const handleChatOpen = () => {
+    const saved = localStorage.getItem(LEAD_KEY);
+    if (saved) {
+      setIsExpanded(false);
+      setIsChatOpen(true);
+    } else {
+      setIsExpanded(false);
+      setShowLeadForm(true);
+    }
+  };
+
+  const handleLeadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leadName.trim() || !leadPhone.trim()) return;
+    setLeadSubmitting(true);
+    try {
+      const newSessionId = sessionId ?? `kdfnuts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      if (!sessionId) setSessionId(newSessionId);
+      await fetch(`${BASE_URL}api/chat/lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: leadName.trim(),
+          phone: leadPhone.trim(),
+          email: leadEmail.trim() || undefined,
+          city: leadCity || undefined,
+          source: "kdf_nuts",
+          sessionId: newSessionId,
+          visitSource: document.referrer || undefined,
+          deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
+        }),
+      });
+      localStorage.setItem(LEAD_KEY, JSON.stringify({ name: leadName.trim(), phone: leadPhone.trim(), submitted: true }));
+    } catch {}
+    setLeadSubmitting(false);
+    setShowLeadForm(false);
+    setIsChatOpen(true);
   };
 
   useEffect(() => {
@@ -750,13 +797,106 @@ export function ChatWidget() {
         <OrderFormScreen defaultProduct={defaultOrderProduct} initialCart={chatCart} sessionId={sessionId} onClose={() => setShowOrderForm(false)} onSuccess={handleOrderSuccess} />
       )}
       {ChatPanel}
+
+      {/* Pre-chat Lead Capture Form */}
+      {showLeadForm && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-end p-4 sm:p-6 pointer-events-none">
+          <div className="pointer-events-auto w-full max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-300">
+            <div className="rounded-2xl shadow-2xl overflow-hidden" style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #0f2010 100%)", border: "1.5px solid #5FA800" }}>
+              {/* Header */}
+              <div className="px-5 pt-5 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(95,168,0,0.2)" }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#5FA800" }}>
+                  <MessageCircle className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-white text-sm">Start Chat with KDF Nuts</p>
+                  <p className="text-xs" style={{ color: "#7ec832" }}>Quick intro so we can help you better 🙌</p>
+                </div>
+                <button onClick={() => setShowLeadForm(false)} className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Form */}
+              <form onSubmit={handleLeadSubmit} className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>Your Name <span className="text-red-400">*</span></label>
+                  <input
+                    required
+                    value={leadName}
+                    onChange={e => setLeadName(e.target.value)}
+                    placeholder="e.g. Ali Hassan"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-white/8 border text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                    style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(255,255,255,0.06)" }}
+                    onFocus={e => e.target.style.borderColor = "#5FA800"}
+                    onBlur={e => e.target.style.borderColor = "rgba(95,168,0,0.3)"}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>Phone Number <span className="text-red-400">*</span></label>
+                  <input
+                    required
+                    type="tel"
+                    value={leadPhone}
+                    onChange={e => setLeadPhone(e.target.value)}
+                    placeholder="e.g. 03001234567"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-white/8 border text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                    style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(255,255,255,0.06)" }}
+                    onFocus={e => e.target.style.borderColor = "#5FA800"}
+                    onBlur={e => e.target.style.borderColor = "rgba(95,168,0,0.3)"}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>Email <span className="text-gray-500 font-normal">(optional)</span></label>
+                    <input
+                      type="email"
+                      value={leadEmail}
+                      onChange={e => setLeadEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm border text-white placeholder-gray-500 focus:outline-none transition-all"
+                      style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(255,255,255,0.06)" }}
+                      onFocus={e => e.target.style.borderColor = "#5FA800"}
+                      onBlur={e => e.target.style.borderColor = "rgba(95,168,0,0.3)"}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>City <span className="text-gray-500 font-normal">(optional)</span></label>
+                    <select
+                      value={leadCity}
+                      onChange={e => setLeadCity(e.target.value)}
+                      className="w-full rounded-xl px-3 py-2.5 text-sm border text-white focus:outline-none transition-all"
+                      style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(30,30,30,0.95)" }}
+                      onFocus={e => e.target.style.borderColor = "#5FA800"}
+                      onBlur={e => e.target.style.borderColor = "rgba(95,168,0,0.3)"}
+                    >
+                      <option value="">Select…</option>
+                      {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={leadSubmitting || !leadName.trim() || !leadPhone.trim()}
+                  className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-95 disabled:opacity-50 mt-1 flex items-center justify-center gap-2"
+                  style={{ background: leadSubmitting || !leadName.trim() || !leadPhone.trim() ? "rgba(95,168,0,0.4)" : "#5FA800" }}
+                >
+                  {leadSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                  {leadSubmitting ? "Starting Chat…" : "Start Chat"}
+                </button>
+                <p className="text-center text-xs text-gray-500 pb-1">Your info is safe with us. No spam ever. 🔒</p>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isChatOpen && !showOrderForm && !dismissed && (
         <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2.5">
           {isExpanded && (
             <>
               <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-200">
                 <span className="bg-white text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-full shadow-md whitespace-nowrap">Chat with Us</span>
-                <button onClick={() => { setIsExpanded(false); setIsChatOpen(true); }} className="w-12 h-12 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform" style={{ backgroundColor: "#5FA800" }}><MessageCircle className="w-5 h-5 text-white" /></button>
+                <button onClick={handleChatOpen} className="w-12 h-12 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform" style={{ backgroundColor: "#5FA800" }}><MessageCircle className="w-5 h-5 text-white" /></button>
               </div>
               {waConfig && (
                 <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-150">

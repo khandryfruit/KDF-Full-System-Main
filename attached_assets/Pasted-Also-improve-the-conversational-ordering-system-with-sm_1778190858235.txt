@@ -1,0 +1,212 @@
+Also improve the conversational ordering system with smart AI automation, Google Maps integration, voice ordering, and automatic address detection.
+
+The goal is to make ordering extremely easy for non-technical customers, elderly users, or users who do not know how to type properly.
+
+========================
+GOOGLE MAPS ADDRESS AUTO-DETECTION
+==================================
+
+Integrate Google Maps APIs directly into the AI chat order flow.
+
+When customer starts ordering:
+
+System should:
+✅ Detect current location automatically
+✅ Auto-fetch customer address
+✅ Auto-detect city
+✅ Auto-detect area/location
+✅ Suggest nearest delivery area
+✅ Autofill order form fields
+
+Use:
+✅ Google Maps API
+✅ Places API
+✅ Geocoding API
+✅ Browser geolocation
+
+========================
+SMART ADDRESS AUTOFILL
+======================
+
+If customer allows location access:
+
+AI should automatically:
+✅ Fetch address
+✅ Fill city
+✅ Fill area
+✅ Fill coordinates
+✅ Suggest nearest branch/delivery zone
+
+This reduces typing and makes ordering easier.
+
+========================
+VOICE ORDERING SYSTEM
+=====================
+
+Add complete voice ordering functionality.
+
+Need:
+✅ Voice input button
+✅ Speech-to-text
+✅ Urdu voice support
+✅ English voice support
+✅ Mobile microphone integration
+
+Customer should be able to:
+✅ Speak naturally
+✅ AI converts speech to text
+✅ AI understands order automatically
+
+========================
+VOICE ORDER FLOW
+================
+
+Example:
+
+Customer says:
+“1 kilo almonds bhej dein DHA Lahore”
+
+AI should automatically:
+✅ Detect product
+✅ Detect quantity
+✅ Detect location
+✅ Find matching products
+✅ Create order form automatically
+✅ Ask for confirmation
+✅ Place order
+
+========================
+AI AUTO ORDER CREATION
+======================
+
+The chatbot should intelligently generate order forms automatically.
+
+AI should:
+✅ Understand natural language
+✅ Understand Urdu + English
+✅ Detect products
+✅ Detect quantities
+✅ Detect address
+✅ Detect customer intent
+
+Then:
+✅ Build structured order automatically
+
+========================
+CONVERSATIONAL ORDERING
+=======================
+
+Need WhatsApp-style conversational commerce experience.
+
+Customer should NOT need to manually fill long forms.
+
+AI should guide naturally like human sales agent.
+
+========================
+VOICE + CHAT HYBRID SYSTEM
+==========================
+
+Support:
+✅ Typed orders
+✅ Voice orders
+✅ AI-generated forms
+✅ Conversational checkout
+
+========================
+MOBILE-FIRST EXPERIENCE
+=======================
+
+This system must be highly optimized for mobile users.
+
+Features:
+✅ One-click microphone
+✅ Auto location fetch
+✅ Autofill forms
+✅ Smart product suggestions
+✅ Large touch-friendly UI
+✅ Fast checkout
+
+========================
+SMART PRODUCT MATCHING
+======================
+
+If customer says:
+“pista”
+“badam”
+“almonds”
+“cashew”
+“akhrot”
+
+AI should:
+✅ Search Shopify synced products
+✅ Search website products
+✅ Match closest products
+✅ Send product cards with:
+
+* Images
+* Prices
+* Variants
+* Add-to-cart buttons
+
+========================
+AUTO ORDER CONFIRMATION
+=======================
+
+After AI builds order:
+
+Customer confirms:
+✅ Place Order
+
+Then:
+✅ Order created automatically
+✅ Order synced to admin
+✅ CRM updated
+✅ Email notification sent
+✅ WhatsApp/SMS notification sent
+
+========================
+VERY IMPORTANT
+==============
+
+Do NOT remove the existing AI ecommerce system.
+
+Only enhance it with:
+✅ Voice ordering
+✅ Address autofill
+✅ Google Maps integration
+✅ AI order automation
+✅ Conversational checkout
+
+Without breaking:
+✅ Existing AI chat
+✅ Product recommendation engine
+✅ Shopify sync
+✅ Product cards
+✅ Add-to-cart functionality
+✅ Existing conversational ecommerce flow
+
+========================
+FINAL GOAL
+==========
+
+Need a complete AI-powered smart commerce assistant where customer can:
+
+✅ Speak naturally
+✅ Chat naturally
+✅ Auto-detect location
+✅ Autofill address
+✅ Get AI recommendations
+✅ Receive product cards
+✅ Add products to cart
+✅ Place order conversationally
+✅ Complete checkout inside chat
+
+Everything should work professionally together with:
+✅ Google Maps APIs
+✅ Shopify synced products
+✅ Website products
+✅ CRM
+✅ Admin dashboard
+✅ Notifications
+✅ Order management
+✅ AI conversational engine

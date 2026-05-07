@@ -140,6 +140,7 @@ const NAV_ITEMS = [
   { href: "/ai-content",         label: "AI Content",           icon: Sparkles       },
   { href: "/reviews",            label: "Reviews",              icon: Star           },
   { href: "/chat-conversations", label: "Chat",                 icon: MessageCircle  },
+  { href: "/chat-leads",         label: "Chat Leads CRM",       icon: Users          },
   { href: "/email-settings",     label: "Email Settings",       icon: Mail           },
   { href: "/image-optimization", label: "Image Optimization",   icon: Zap            },
   { href: "/failed-orders",      label: "Failed Orders",        icon: AlertTriangle  },
