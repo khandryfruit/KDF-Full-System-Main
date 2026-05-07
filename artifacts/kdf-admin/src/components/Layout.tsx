@@ -74,15 +74,28 @@ import { NotificationBell } from "./NotificationBell";
    NAV DATA
 ═══════════════════════════════════════════════ */
 const INVOICE_NAV_ITEMS = [
-  { href: "/pos",                        label: "🖥 Admin POS",       icon: Zap            },
-  { href: "/invoice",                    label: "Create Invoice",    icon: Receipt        },
-  { href: "/invoice/history",            label: "All Invoices",      icon: History        },
-  { href: "/invoice/purchase",           label: "Purchase Bill",     icon: ClipboardList  },
-  { href: "/invoice/purchase/history",   label: "Purchase History",  icon: FileText       },
-  { href: "/branch-pos",                 label: "Branch POS",        icon: Store          },
-  { href: "/branches",                   label: "Branches",          icon: Building2      },
-  { href: "/customers",                  label: "Customers",         icon: UserCheck      },
-  { href: "/analytics",                  label: "Analytics",         icon: PieChart       },
+  { href: "/pos",                        label: "🖥 Admin POS",        icon: Zap            },
+  { href: "/invoice",                    label: "Create Invoice",     icon: Receipt        },
+  { href: "/invoice/history",            label: "All Invoices",       icon: History        },
+  { href: "/invoice/purchase",           label: "Purchase Bill",      icon: ClipboardList  },
+  { href: "/invoice/purchase/history",   label: "Purchase History",   icon: FileText       },
+  { href: "/branch-pos",                 label: "Branch POS",         icon: Store          },
+  { href: "/branches",                   label: "Branches",           icon: Building2      },
+  { href: "/customers",                  label: "Customers",          icon: UserCheck      },
+  { href: "/analytics",                  label: "Analytics",          icon: PieChart       },
+  // ── Stock Management ──
+  { href: "/stock/overview",             label: "Stock Overview",     icon: Boxes          },
+  { href: "/stock/products",             label: "Products",           icon: Package        },
+  { href: "/stock/movement",             label: "Stock Movement",     icon: ArrowRightLeft },
+  { href: "/stock/adjustment",           label: "Adjustment",         icon: SlidersHorizontal },
+  // ── ERP Settings ──
+  { href: "/erp-settings/company",       label: "⚙ Company",          icon: Building       },
+  { href: "/erp-settings/invoice",       label: "⚙ Invoice",          icon: Receipt        },
+  { href: "/erp-settings/pos",           label: "⚙ POS",              icon: ShoppingCart   },
+  { href: "/erp-settings/stock",         label: "⚙ Stock/Inventory",  icon: Package        },
+  { href: "/erp-settings/staff",         label: "⚙ Staff & Perms",    icon: Users          },
+  { href: "/erp-settings/backup",        label: "⚙ Backup & Sync",    icon: HardDrive      },
+  { href: "/erp-settings/mobile",        label: "⚙ Mobile / App",     icon: Smartphone     },
 ];
 
 const NAV_ITEMS = [
@@ -149,24 +162,6 @@ const SHOPIFY_NAV_ITEMS = [
 const BRANCHES_NAV_ITEMS = [
   { href: "/branches",      label: "Dashboard",       icon: BarChart2   },
   { href: "/branches/list", label: "All Branches",    icon: Building2   },
-];
-
-const STOCK_NAV_ITEMS = [
-  { href: "/stock/overview",    label: "Stock Overview",   icon: Boxes            },
-  { href: "/stock/products",    label: "Products",         icon: Package          },
-  { href: "/stock/movement",    label: "Stock Movement",   icon: ArrowRightLeft   },
-  { href: "/stock/adjustment",  label: "Adjustment",       icon: SlidersHorizontal},
-];
-
-const SETTINGS_NAV_ITEMS = [
-  { href: "/erp-settings/company",  label: "Company",          icon: Building         },
-  { href: "/erp-settings/invoice",  label: "Invoice",          icon: Receipt          },
-  { href: "/erp-settings/branch",   label: "Branch",           icon: GitBranch        },
-  { href: "/erp-settings/pos",      label: "POS",              icon: ShoppingCart     },
-  { href: "/erp-settings/stock",    label: "Stock/Inventory",  icon: Package          },
-  { href: "/erp-settings/staff",    label: "Staff & Permissions", icon: Users         },
-  { href: "/erp-settings/backup",   label: "Backup & Sync",    icon: HardDrive        },
-  { href: "/erp-settings/mobile",   label: "Mobile / App",     icon: Smartphone       },
 ];
 
 const LOGISTICS_NAV_ITEMS = [
@@ -366,15 +361,11 @@ interface SidebarContentProps {
   pgOpen: boolean;
   logisticsOpen: boolean;
   branchesOpen: boolean;
-  stockOpen: boolean;
-  settingsOpen: boolean;
   onToggleInvoice: () => void;
   onToggleShopify: () => void;
   onTogglePg: () => void;
   onToggleLogistics: () => void;
   onToggleBranches: () => void;
-  onToggleStock: () => void;
-  onToggleSettings: () => void;
   onNavClick: () => void;
   onLogout: () => void;
   onToggleCollapse?: () => void;
@@ -383,18 +374,14 @@ interface SidebarContentProps {
 }
 function SidebarContent({
   location, expanded, invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen,
-  stockOpen, settingsOpen,
   onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches,
-  onToggleStock, onToggleSettings,
   onNavClick, onLogout, onToggleCollapse, isCollapsed, isMobile,
 }: SidebarContentProps) {
-  const isInvoiceActive   = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login");
+  const isInvoiceActive   = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
   const isShopifyActive   = location.startsWith("/shopify");
   const isPgActive        = location.startsWith("/payment-gateway");
   const isLogisticsActive = location.startsWith("/logistics");
   const isBranchesActive  = location.startsWith("/branches");
-  const isStockActive     = location.startsWith("/stock");
-  const isSettingsActive  = location.startsWith("/erp-settings");
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden">
@@ -549,44 +536,6 @@ function SidebarContent({
           onNavClick={onNavClick}
         />
 
-        {/* Divider */}
-        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
-          <div className="h-px bg-sidebar-border" />
-        </div>
-
-        {/* Stock Management Section */}
-        <SidebarSection
-          label="Stock Management"
-          icon={Boxes}
-          accentColor="#7C3AED"
-          activeBg="bg-violet-600/10"
-          activeText="text-violet-700"
-          badgeLetter="S"
-          isActive={isStockActive}
-          expanded={expanded}
-          open={stockOpen}
-          onToggle={onToggleStock}
-          items={STOCK_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
-
-        {/* ERP Settings Section */}
-        <SidebarSection
-          label="ERP Settings"
-          icon={Settings}
-          accentColor="#0F766E"
-          activeBg="bg-teal-600/10"
-          activeText="text-teal-700"
-          badgeLetter="⚙"
-          isActive={isSettingsActive}
-          expanded={expanded}
-          open={settingsOpen}
-          onToggle={onToggleSettings}
-          items={SETTINGS_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
       </div>
 
       {/* Bottom: Logout */}
@@ -616,13 +565,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered,   setIsHovered]   = useState(false);
-  const [invoiceOpen,   setInvoiceOpen]   = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos"));
+  const [invoiceOpen,   setInvoiceOpen]   = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings"));
   const [shopifyOpen,   setShopifyOpen]   = useState(() => location.startsWith("/shopify"));
   const [pgOpen,        setPgOpen]        = useState(() => location.startsWith("/payment-gateway"));
   const [logisticsOpen, setLogisticsOpen] = useState(() => location.startsWith("/logistics"));
   const [branchesOpen,  setBranchesOpen]  = useState(() => location.startsWith("/branches"));
-  const [stockOpen,     setStockOpen]     = useState(() => location.startsWith("/stock"));
-  const [settingsOpen,  setSettingsOpen]  = useState(() => location.startsWith("/erp-settings"));
   const [mobileOpen,    setMobileOpen]    = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -633,13 +580,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setIsCollapsed(true);
     setIsHovered(false);
     /* Keep sub-menus open when navigating within them */
-    if (location.startsWith("/invoice") || location.startsWith("/branch-pos")) setInvoiceOpen(true);
+    if (location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings")) setInvoiceOpen(true);
     if (location.startsWith("/shopify"))          setShopifyOpen(true);
     if (location.startsWith("/payment-gateway"))  setPgOpen(true);
     if (location.startsWith("/logistics"))        setLogisticsOpen(true);
     if (location.startsWith("/branches"))         setBranchesOpen(true);
-    if (location.startsWith("/stock"))            setStockOpen(true);
-    if (location.startsWith("/erp-settings"))     setSettingsOpen(true);
   }, [location]);
 
   const handleLogout = () => {
@@ -678,15 +623,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     pgOpen,
     logisticsOpen,
     branchesOpen,
-    stockOpen,
-    settingsOpen,
     onToggleInvoice:    () => setInvoiceOpen(o => !o),
     onToggleShopify:    () => setShopifyOpen(o => !o),
     onTogglePg:         () => setPgOpen(o => !o),
     onToggleLogistics:  () => setLogisticsOpen(o => !o),
     onToggleBranches:   () => setBranchesOpen(o => !o),
-    onToggleStock:      () => setStockOpen(o => !o),
-    onToggleSettings:   () => setSettingsOpen(o => !o),
     onNavClick:         handleNavClick,
     onLogout:           handleLogout,
   };
