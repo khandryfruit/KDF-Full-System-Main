@@ -73,6 +73,8 @@ import StockAdjustmentPage from "@/pages/StockAdjustmentPage";
 import ERPSettingsPage from "@/pages/ERPSettingsPage";
 import AdSensePage from "@/pages/AdSensePage";
 import RiderLiveMapPage from "@/pages/RiderLiveMapPage";
+import VideoBannersPage from "@/pages/VideoBannersPage";
+import MobileReelsPage from "@/pages/MobileReelsPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -196,6 +198,8 @@ function Router() {
       <Route path="/erp-settings/:section"><ProtectedRoute component={ERPSettingsPage} /></Route>
       <Route path="/erp-settings"><ProtectedRoute component={ERPSettingsPage} /></Route>
       <Route path="/adsense"><ProtectedRoute component={AdSensePage} /></Route>
+      <Route path="/video-banners"><ProtectedRoute component={VideoBannersPage} /></Route>
+      <Route path="/mobile-reels"><ProtectedRoute component={MobileReelsPage} /></Route>
       <Route path="/">
         <ProtectedRoute component={DashboardPage} />
       </Route>

@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import {
   ChevronLeft, ChevronRight, ArrowRight, Star, Truck, ShieldCheck,
-  RefreshCw, Headphones, Flame, Sparkles, TrendingUp, Tag
+  RefreshCw, Headphones, Flame, Sparkles, TrendingUp, Tag,
+  Volume2, VolumeX, Play, Pause, Smartphone,
 } from "lucide-react";
 import { useListBanners, useListCategories, useListProducts } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -326,6 +327,367 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   );
 }
 
+/* ─── Cloudflare / YouTube / Direct video player helper ─────── */
+function getYoutubeId(url: string) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+type VideoBanner = {
+  id: number; title: string; subtitle?: string;
+  cfStreamId?: string; cfAccountId?: string;
+  youtubeUrl?: string; directVideoUrl?: string; mobileVideoUrl?: string;
+  fallbackImageUrl?: string; mobileFallbackImageUrl?: string;
+  autoplay: boolean; muted: boolean; loop: boolean; showControls: boolean;
+  ctaButtons?: Array<{ label: string; url: string; style: string }>;
+  platform: string; sortOrder: number; active: boolean; isPriority: boolean;
+  overlayOpacity?: number; textPosition?: string;
+};
+
+type MobileReel = {
+  id: number; title: string; description?: string;
+  cfStreamId?: string; cfAccountId?: string;
+  directVideoUrl?: string; instagramUrl?: string; youtubeUrl?: string;
+  thumbnailUrl?: string; autoplay: boolean; muted: boolean; loop: boolean;
+  ctaLabel?: string; ctaUrl?: string; linkedProductId?: number;
+  viewCount: number; likeCount: number;
+};
+
+/* ─── Video Banner Hero ──────────────────────────────────────── */
+function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
+  const [idx, setIdx]     = useState(0);
+  const [muted, setMuted] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [, setLocation] = useLocation();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const prev = useCallback(() => setIdx(i => (i - 1 + banners.length) % banners.length), [banners.length]);
+  const next = useCallback(() => setIdx(i => (i + 1) % banners.length), [banners.length]);
+
+  useEffect(() => {
+    if (banners.length <= 1 || paused) return;
+    const t = setInterval(next, 8000);
+    return () => clearInterval(t);
+  }, [banners.length, paused, next]);
+
+  if (!banners.length) return null;
+
+  const b = banners[idx];
+  const overlayAlpha = ((b.overlayOpacity ?? 50) / 100).toFixed(2);
+  const textAlign = b.textPosition === "center" ? "text-center items-center" : b.textPosition === "right" ? "text-right items-end" : "text-left items-start";
+
+  const mobileVideo = isMobile ? (b.mobileVideoUrl || b.directVideoUrl) : b.directVideoUrl;
+  const fallback = isMobile
+    ? (b.mobileFallbackImageUrl || b.fallbackImageUrl)
+    : b.fallbackImageUrl;
+
+  return (
+    <div
+      className="relative overflow-hidden bg-black"
+      style={{ height: isMobile ? 480 : 560 }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Slides */}
+      {banners.map((banner, i) => {
+        const vid = isMobile ? (banner.mobileVideoUrl || banner.directVideoUrl) : banner.directVideoUrl;
+        const fb  = isMobile ? (banner.mobileFallbackImageUrl || banner.fallbackImageUrl) : banner.fallbackImageUrl;
+        const cfSrc = banner.cfStreamId && banner.cfAccountId
+          ? `https://customer-${banner.cfAccountId}.cloudflarestream.com/${banner.cfStreamId}/iframe?autoplay=${banner.autoplay}&muted=${muted}&loop=${banner.loop}&preload=true&poster=${fb ?? ""}`
+          : null;
+        const ytId = banner.youtubeUrl ? getYoutubeId(banner.youtubeUrl) : null;
+
+        return (
+          <div key={banner.id}
+            className={`absolute inset-0 transition-opacity duration-700 ${i === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"}`}>
+
+            {/* Video Layer: Cloudflare (iframe) */}
+            {cfSrc ? (
+              <iframe
+                src={cfSrc}
+                className="absolute inset-0 w-full h-full object-cover border-0"
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                style={{ pointerEvents: "none" }}
+              />
+            ) : vid ? (
+              /* Direct video */
+              <video
+                key={`${banner.id}-${vid}`}
+                ref={i === idx ? videoRef : undefined}
+                className="absolute inset-0 w-full h-full object-cover"
+                src={vid.startsWith("http") ? vid : `/api/storage/objects/${vid}`}
+                autoPlay={banner.autoplay}
+                muted={muted}
+                loop={banner.loop}
+                playsInline
+                preload={i === 0 ? "auto" : "none"}
+              />
+            ) : ytId ? (
+              /* YouTube embed */
+              <iframe
+                src={`https://www.youtube.com/embed/${ytId}?autoplay=${banner.autoplay ? 1 : 0}&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1`}
+                className="absolute inset-0 w-full h-full border-0"
+                allow="autoplay; encrypted-media"
+                style={{ pointerEvents: "none", transform: "scale(1.1)", transformOrigin: "center" }}
+              />
+            ) : fb ? (
+              /* Fallback image */
+              <img src={fb.startsWith("http") ? fb : `/api/storage/objects/${fb}`}
+                className="absolute inset-0 w-full h-full object-cover" alt={banner.title} />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0D2B00] to-[#1a5200]" />
+            )}
+
+            {/* Dark overlay */}
+            <div className="absolute inset-0 z-10"
+              style={{ background: `rgba(0,0,0,${overlayAlpha})` }} />
+          </div>
+        );
+      })}
+
+      {/* Content overlay */}
+      <div className={`relative z-20 h-full flex flex-col justify-center px-6 sm:px-16 gap-4 ${textAlign}`}>
+        {(b as any).label && (
+          <span className="inline-block text-[11px] font-bold uppercase tracking-widest bg-white/20 text-white px-3 py-1 rounded-full">
+            {(b as any).label}
+          </span>
+        )}
+        <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-tight drop-shadow-2xl">
+          {b.title}
+        </h2>
+        {b.subtitle && (
+          <p className="text-white/80 text-sm sm:text-xl max-w-lg drop-shadow">
+            {b.subtitle}
+          </p>
+        )}
+        {b.ctaButtons && b.ctaButtons.length > 0 && (
+          <div className="flex gap-3 flex-wrap mt-2">
+            {b.ctaButtons.map((cta, ci) => (
+              <button key={ci}
+                onClick={() => setLocation(cta.url)}
+                className={`px-6 py-2.5 rounded-full font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-xl ${
+                  cta.style === "outline"
+                    ? "border-2 border-white text-white hover:bg-white/20"
+                    : cta.style === "secondary"
+                    ? "bg-white text-gray-900 hover:bg-gray-100"
+                    : "text-white"
+                }`}
+                style={cta.style === "primary" ? { backgroundColor: GREEN } : {}}>
+                {cta.label} <ArrowRight className="inline w-4 h-4 ml-1" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="absolute bottom-4 right-4 z-30 flex gap-2">
+        {/* Mute toggle (only for direct/CF video) */}
+        {(b.directVideoUrl || b.mobileVideoUrl || (b.cfStreamId && b.cfAccountId)) && (
+          <button
+            onClick={() => { setMuted(m => !m); if (videoRef.current) videoRef.current.muted = !muted; }}
+            className="w-9 h-9 rounded-full bg-black/50 backdrop-blur text-white flex items-center justify-center hover:bg-black/70 transition-colors">
+            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
+
+      {/* Nav arrows */}
+      {banners.length > 1 && (
+        <>
+          <button onClick={prev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all">
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+          </button>
+          <button onClick={next}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all">
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+          </button>
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-30">
+            {banners.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)}
+                className={`rounded-full transition-all duration-300 ${i === idx ? "w-6 h-2.5" : "w-2.5 h-2.5"}`}
+                style={{ backgroundColor: i === idx ? GREEN : "rgba(255,255,255,0.6)" }} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Priority badge */}
+      {b.isPriority && (
+        <div className="absolute top-4 left-4 z-30">
+          <span className="text-[11px] font-bold text-yellow-800 bg-yellow-300 px-3 py-1 rounded-full">⭐ Featured</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Mobile Reels Section ───────────────────────────────────── */
+function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [mutedMap, setMutedMap]   = useState<Record<number, boolean>>({});
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [, setLocation] = useLocation();
+
+  const toggleMute = (id: number) => setMutedMap(m => ({ ...m, [id]: !m[id] }));
+
+  // IntersectionObserver: auto-advance active reel on scroll
+  useEffect(() => {
+    const items = containerRef.current?.querySelectorAll("[data-reel]");
+    if (!items) return;
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const idx = parseInt((e.target as HTMLElement).dataset.reel ?? "0");
+          setActiveIdx(idx);
+          // POST view
+          fetch(`/api/mobile-reels/${reels[idx]?.id}/view`, { method: "POST" }).catch(() => {});
+        }
+      });
+    }, { root: containerRef.current, threshold: 0.6 });
+    items.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [reels]);
+
+  if (!reels.length) return null;
+
+  return (
+    <section className="py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${GREEN}15` }}>
+              <Smartphone className="w-4 h-4" style={{ color: GREEN }} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Trending</p>
+              <h2 className="text-lg font-bold text-gray-900 leading-tight">Featured Reels</h2>
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal scroll on desktop, full-screen snap on mobile */}
+        <div className="sm:hidden">
+          {/* Mobile: vertical snap scroll */}
+          <div ref={containerRef}
+            className="flex flex-col gap-0 overflow-y-auto snap-y snap-mandatory"
+            style={{ height: "70vh", scrollbarWidth: "none" }}>
+            {reels.map((reel, i) => {
+              const isMuted = mutedMap[reel.id] !== false;
+              const vid = reel.directVideoUrl;
+              const thumb = reel.thumbnailUrl?.startsWith("http") ? reel.thumbnailUrl : reel.thumbnailUrl ? `/api/storage/objects/${reel.thumbnailUrl}` : null;
+              return (
+                <div key={reel.id} data-reel={i}
+                  className="relative flex-shrink-0 w-full snap-center bg-black"
+                  style={{ height: "70vh" }}>
+                  {vid ? (
+                    <video
+                      src={vid}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      autoPlay={i === activeIdx}
+                      muted={isMuted}
+                      loop
+                      playsInline
+                      preload={i === 0 ? "auto" : "metadata"}
+                    />
+                  ) : thumb ? (
+                    <img src={thumb} className="absolute inset-0 w-full h-full object-cover" alt={reel.title} />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900" />
+                  )}
+                  {/* Gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+
+                  {/* Content */}
+                  <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
+                    <p className="text-white font-bold text-lg leading-tight mb-1">{reel.title}</p>
+                    {reel.description && <p className="text-white/70 text-sm mb-3 line-clamp-2">{reel.description}</p>}
+                    {reel.ctaLabel && reel.ctaUrl && (
+                      <button onClick={() => setLocation(reel.ctaUrl!)}
+                        className="px-5 py-2 rounded-full font-bold text-sm text-white shadow-lg"
+                        style={{ backgroundColor: GREEN }}>
+                        {reel.ctaLabel} <ArrowRight className="inline w-3.5 h-3.5 ml-1" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Mute button */}
+                  {vid && (
+                    <button onClick={() => toggleMute(reel.id)}
+                      className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/50 backdrop-blur text-white flex items-center justify-center">
+                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    </button>
+                  )}
+
+                  {/* Progress dots */}
+                  <div className="absolute top-1/2 -translate-y-1/2 right-3 z-20 flex flex-col gap-1.5">
+                    {reels.map((_, di) => (
+                      <div key={di} className={`rounded-full transition-all ${di === i ? "w-1.5 h-6" : "w-1.5 h-1.5"}`}
+                        style={{ backgroundColor: di === i ? GREEN : "rgba(255,255,255,0.5)" }} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Desktop: horizontal card grid */}
+        <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {reels.slice(0, 5).map(reel => {
+            const isMuted = mutedMap[reel.id] !== false;
+            const vid = reel.directVideoUrl;
+            const thumb = reel.thumbnailUrl?.startsWith("http") ? reel.thumbnailUrl : reel.thumbnailUrl ? `/api/storage/objects/${reel.thumbnailUrl}` : null;
+            return (
+              <div key={reel.id} className="relative group rounded-2xl overflow-hidden bg-black cursor-pointer hover:shadow-xl transition-shadow"
+                style={{ aspectRatio: "9/16" }}
+                onClick={() => reel.ctaUrl && setLocation(reel.ctaUrl)}>
+                {vid ? (
+                  <video src={vid} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    muted={isMuted} loop playsInline preload="metadata" autoPlay />
+                ) : thumb ? (
+                  <img src={thumb} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={reel.title} />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-b from-gray-700 to-gray-900" />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
+                  <p className="text-white font-semibold text-sm line-clamp-2">{reel.title}</p>
+                  {reel.ctaLabel && (
+                    <span className="inline-block mt-1.5 px-3 py-1 rounded-full text-xs font-bold text-white"
+                      style={{ backgroundColor: GREEN }}>
+                      {reel.ctaLabel}
+                    </span>
+                  )}
+                </div>
+                {vid && (
+                  <button onClick={e => { e.stopPropagation(); toggleMute(reel.id); }}
+                    className="absolute top-3 right-3 z-20 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  </button>
+                )}
+                <div className="absolute top-3 left-3 z-20">
+                  <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+                    <Play className="w-3 h-3 text-white fill-white" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Trust Badges ───────────────────────────────────────────── */
 function TrustStrip() {
   return (
@@ -606,6 +968,20 @@ export default function HomePage() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: videoBanners = [] } = useQuery<VideoBanner[]>({
+    queryKey: ["video-banners"],
+    queryFn: () => fetch("/api/video-banners?platform=website").then(r => r.ok ? r.json() : []),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: mobileReels = [] } = useQuery<MobileReel[]>({
+    queryKey: ["mobile-reels"],
+    queryFn: () => fetch("/api/mobile-reels").then(r => r.ok ? r.json() : []),
+    staleTime: 60 * 1000,
+  });
+
+  const [isMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
+
   return (
     <>
       <Helmet>
@@ -618,8 +994,12 @@ export default function HomePage() {
 
       <main className="bg-gray-50 min-h-screen">
 
-        {/* Hero Banner */}
-        <HeroBanner banners={banners} loading={bannersLoading} />
+        {/* Video Banner Hero — shows above image banner if video banners exist */}
+        {videoBanners.length > 0 ? (
+          <VideoBannerHero banners={videoBanners} />
+        ) : (
+          <HeroBanner banners={banners} loading={bannersLoading} />
+        )}
 
         {/* Trust strip */}
         <TrustStrip />
@@ -664,6 +1044,11 @@ export default function HomePage() {
             <ProductCarousel products={featuredProducts} loading={featuredLoading} />
           </div>
         </section>
+
+        {/* Mobile Reels */}
+        {mobileReels.length > 0 && (
+          <MobileReelsSection reels={mobileReels} />
+        )}
 
         {/* Mid promo banner */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
