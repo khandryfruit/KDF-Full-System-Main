@@ -2,7 +2,7 @@
   "expo": {
     "name": "KDF RIDER LAHORE",
     "slug": "kdf-mobile",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kdf-mobile",
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.kdfnuts.rider",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D2137"
