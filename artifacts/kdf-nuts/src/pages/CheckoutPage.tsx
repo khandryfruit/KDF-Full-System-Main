@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Check, Truck, CreditCard, Banknote, ChevronDown, ChevronUp, Loader2, AlertCircle, Building2, Navigation } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, MapPin, Check, Truck, CreditCard, Banknote, ChevronDown, ChevronUp, Loader2, AlertCircle, Building2, Navigation, Sparkles } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '../context/CartContext';
@@ -75,6 +75,23 @@ async function fetchCities(): Promise<string[]> {
   return res.json();
 }
 
+async function fetchCityShippingInfo(city: string) {
+  if (!city.trim()) return null;
+  const res = await fetch(`/api/shipping/city-info?city=${encodeURIComponent(city.trim())}`);
+  if (!res.ok) return null;
+  return res.json() as Promise<{ fee: number; isFree: boolean; methodName: string; deliveryTime: string; hasSpecialRule: boolean }>;
+}
+
+async function reverseGeocode(lat: number, lng: number) {
+  const res = await fetch('/api/geocode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat, lng }),
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<{ city: string; area: string; street: string; province: string; postalCode: string; fullAddress: string }>;
+}
+
 const FALLBACK_CITIES = [
   'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad',
   'Multan', 'Peshawar', 'Quetta', 'Sialkot', 'Hyderabad',
@@ -93,6 +110,8 @@ export function CheckoutPage() {
   const [error, setError] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
   const [referenceNumber, setReferenceNumber] = useState('');
+  const [debouncedCity, setDebouncedCity] = useState('');
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: walletData } = useGetWalletBalance({ query: { enabled: isAuthenticated } as any });
   const walletBalance = walletData ? Number(walletData.balance) : 0;
@@ -126,6 +145,20 @@ export function CheckoutPage() {
     queryFn: fetchSameDaySettings,
   });
 
+  /* ── Debounced city → shipping info ── */
+  useEffect(() => {
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+    cityDebounceRef.current = setTimeout(() => setDebouncedCity(address.city), 450);
+    return () => { if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current); };
+  }, [address.city]);
+
+  const { data: cityShippingInfo } = useQuery({
+    queryKey: ['/api/shipping/city-info', debouncedCity],
+    queryFn: () => fetchCityShippingInfo(debouncedCity),
+    enabled: debouncedCity.trim().length > 1,
+    staleTime: 60_000,
+  });
+
   const shippingCalcItems = items.map((i) => ({
     productId: i.id,
     qty: i.qty,
@@ -154,22 +187,17 @@ export function CheckoutPage() {
     setIsDetecting(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true })
       );
       const { latitude, longitude } = pos.coords;
-      const geoRes = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-      );
-      if (geoRes.ok) {
-        const geoData = await geoRes.json();
-        const detectedCity =
-          geoData.address?.city ||
-          geoData.address?.town ||
-          geoData.address?.county ||
-          '';
-        if (detectedCity) {
-          setAddress(prev => ({ ...prev, city: detectedCity }));
-        }
+      const geo = await reverseGeocode(latitude, longitude);
+      if (geo) {
+        setAddress(prev => ({
+          ...prev,
+          ...(geo.city                            && { city:       geo.city }),
+          ...(geo.street && !prev.address.trim()  && { address:    geo.street }),
+          ...(geo.postalCode && !prev.postalCode.trim() && { postalCode: geo.postalCode }),
+        }));
       }
     } catch {
       /* silently fail — user can pick city manually */
@@ -385,6 +413,34 @@ export function CheckoutPage() {
                   <option key={c} value={c} />
                 ))}
               </datalist>
+
+              {/* ── Live Delivery Info Badge ── */}
+              {cityShippingInfo && address.city.trim().length > 1 && (
+                <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs border transition-all ${
+                  cityShippingInfo.hasSpecialRule
+                    ? 'bg-[#eef7e6] border-[#5FA800]/30'
+                    : 'bg-blue-50 border-blue-200/60'
+                }`}>
+                  <Truck className={`w-3.5 h-3.5 flex-shrink-0 ${cityShippingInfo.hasSpecialRule ? 'text-[#5FA800]' : 'text-blue-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className={`font-bold ${cityShippingInfo.hasSpecialRule ? 'text-[#0D2B00]' : 'text-blue-800'}`}>
+                      {cityShippingInfo.methodName}
+                    </span>
+                    <span className={`${cityShippingInfo.hasSpecialRule ? 'text-[#5FA800]' : 'text-blue-600'}`}>
+                      {' '}· {cityShippingInfo.deliveryTime}
+                    </span>
+                    {cityShippingInfo.isFree
+                      ? <span className="ml-1.5 text-[10px] font-bold bg-[#5FA800] text-white px-1.5 py-0.5 rounded-full">FREE</span>
+                      : <span className={`font-bold ${cityShippingInfo.hasSpecialRule ? 'text-[#5FA800]' : 'text-blue-700'}`}> · ₨{cityShippingInfo.fee}</span>
+                    }
+                  </div>
+                  {cityShippingInfo.hasSpecialRule && (
+                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-[#5FA800] flex-shrink-0">
+                      <Sparkles className="w-3 h-3" />Special
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>

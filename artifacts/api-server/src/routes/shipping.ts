@@ -192,6 +192,58 @@ router.patch("/admin/shipping/rules/:id/toggle", adminMiddleware as any, async (
   }
 });
 
+/* ─── city delivery info (public) ──────────────────────────────────── */
+/**
+ * GET /api/shipping/city-info?city=Lahore
+ * Returns the best delivery option for a given city (no cart needed).
+ */
+router.get("/shipping/city-info", async (req: Request, res: Response) => {
+  const DEFAULT = { fee: 150, isFree: false, methodName: "Standard Delivery", deliveryTime: "3–5 business days", hasSpecialRule: false };
+  try {
+    const city = String(req.query.city ?? "").trim().toLowerCase();
+    if (!city) { res.json(DEFAULT); return; }
+
+    const rules = await db
+      .select()
+      .from(shippingRulesTable)
+      .where(eq(shippingRulesTable.enabled, true))
+      .orderBy(asc(shippingRulesTable.priority), asc(shippingRulesTable.id));
+
+    const build = (rule: typeof rules[0], special: boolean) => ({
+      fee: Number(rule.price),
+      isFree: Number(rule.price) === 0,
+      methodName: rule.methodName,
+      deliveryTime: rule.deliveryTime,
+      hasSpecialRule: special,
+    });
+
+    /* 1. City-specific flat rule */
+    for (const rule of rules) {
+      const cities = (rule.cities as string[] | null) ?? [];
+      if (cities.length && cities.some(c => c.trim().toLowerCase() === city) && rule.type === "flat") {
+        res.json(build(rule, true)); return;
+      }
+    }
+    /* 2. City-specific amount / weight rule with no-city fallback ignored */
+    for (const rule of rules) {
+      const cities = (rule.cities as string[] | null) ?? [];
+      if (cities.length && cities.some(c => c.trim().toLowerCase() === city)) {
+        res.json(build(rule, true)); return;
+      }
+    }
+    /* 3. Global flat rule (no city filter) */
+    for (const rule of rules) {
+      const cities = (rule.cities as string[] | null) ?? [];
+      if (!cities.length && rule.type === "flat") {
+        res.json(build(rule, false)); return;
+      }
+    }
+    res.json(DEFAULT);
+  } catch {
+    res.json(DEFAULT);
+  }
+});
+
 /* ─── calculate shipping (public) ──────────────────────────────────── */
 
 /**

@@ -77,6 +77,59 @@ router.post("/cities/auto-save", async (req, res) => {
   }
 });
 
+/* ─── Public: Reverse Geocode (lat/lng → full address) ─────────── */
+router.post("/geocode", async (req, res) => {
+  try {
+    const { lat, lng } = req.body as { lat?: number; lng?: number };
+    if (lat == null || lng == null) return res.status(400).json({ error: "lat and lng required" });
+
+    /* Try Google Maps Geocoding API using server key */
+    const [settings] = await db.select().from(googleMapSettingsTable).limit(1);
+    if (settings?.isEnabled && (settings.serverApiKey || settings.apiKey)) {
+      const key = settings.serverApiKey ?? settings.apiKey;
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&language=en`;
+      const r = await fetch(url);
+      if (r.ok) {
+        const data = await r.json() as any;
+        if (data.status === "OK" && data.results?.[0]) {
+          const result = data.results[0];
+          const get = (type: string) =>
+            (result.address_components as any[])?.find((c: any) => c.types.includes(type))?.long_name ?? "";
+          return res.json({
+            city:        get("locality") || get("administrative_area_level_2") || get("administrative_area_level_1"),
+            area:        get("sublocality_level_1") || get("sublocality") || get("neighborhood"),
+            street:      [get("street_number"), get("route")].filter(Boolean).join(" "),
+            province:    get("administrative_area_level_1"),
+            postalCode:  get("postal_code"),
+            fullAddress: result.formatted_address ?? "",
+          });
+        }
+      }
+    }
+
+    /* Fallback: OpenStreetMap Nominatim (free, no key) */
+    const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+    const nomRes = await fetch(nomUrl, { headers: { "User-Agent": "KDFNuts-App/1.0" } });
+    if (nomRes.ok) {
+      const d = await nomRes.json() as any;
+      const a = d.address ?? {};
+      return res.json({
+        city:        a.city || a.town || a.county || "",
+        area:        a.suburb || a.neighbourhood || a.village || "",
+        street:      [a.house_number, a.road].filter(Boolean).join(" "),
+        province:    a.state || "",
+        postalCode:  a.postcode || "",
+        fullAddress: d.display_name || "",
+      });
+    }
+
+    return res.json({ city: "", area: "", street: "", province: "", postalCode: "", fullAddress: "" });
+  } catch (err) {
+    req.log.error(err);
+    return res.json({ city: "", area: "", street: "", province: "", postalCode: "", fullAddress: "" });
+  }
+});
+
 /* ─── Admin: Get Maps API key for admin panel (server key — no referrer restriction) ─── */
 router.get("/admin/location-settings/map-key", adminMiddleware, async (req, res) => {
   try {
