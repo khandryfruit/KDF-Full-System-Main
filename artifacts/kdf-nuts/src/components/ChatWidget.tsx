@@ -75,7 +75,7 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
   const isInStock = selectedVariant ? selectedVariant.stock > 0 : product.stock > 0;
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 mb-2">
-      <div className="relative h-28">
+      <div className="relative h-36">
         <ProductImg src={product.image} alt={product.name} />
         {product.discount && product.discount > 0 && <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{product.discount}% OFF</span>}
         {!isInStock && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded">Out of Stock</span></div>}
@@ -640,6 +640,7 @@ export function ChatWidget() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [cartExpanded, setCartExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -918,17 +919,39 @@ export function ChatWidget() {
       )}
 
       {chatCart.length > 0 && (
-        <div className="px-3 py-2 bg-green-50 border-t border-green-100 flex items-center justify-between gap-2 flex-shrink-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <ShoppingCart className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#5FA800" }} />
-            <span className="text-xs font-bold truncate" style={{ color: "#5FA800" }}>
-              {chatCart.reduce((s, i) => s + i.qty, 0)} item{chatCart.reduce((s, i) => s + i.qty, 0) !== 1 ? "s" : ""} — Rs. {chatCart.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString()}
-            </span>
+        <div className="border-t border-green-100 flex-shrink-0 bg-green-50">
+          <div className="px-3 py-2 flex items-center gap-2">
+            <button onClick={() => setCartExpanded(v => !v)} className="flex items-center gap-1.5 flex-1 min-w-0 active:opacity-70">
+              <ShoppingCart className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#5FA800" }} />
+              <span className="text-xs font-bold truncate" style={{ color: "#5FA800" }}>
+                {chatCart.reduce((s, i) => s + i.qty, 0)} item{chatCart.reduce((s, i) => s + i.qty, 0) !== 1 ? "s" : ""} — Rs. {chatCart.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString()}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${cartExpanded ? "rotate-180" : ""}`} style={{ color: "#5FA800" }} />
+            </button>
+            <button onClick={handleOpenForm} className="text-[10px] font-bold text-white px-2.5 py-1.5 rounded-full active:opacity-80 flex-shrink-0" style={{ backgroundColor: "#5FA800" }}>Checkout →</button>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button onClick={() => setChatCart([])} className="text-[10px] text-gray-500 underline">Clear</button>
-            <button onClick={handleOpenForm} className="text-[10px] font-bold text-white px-2.5 py-1.5 rounded-full active:opacity-80" style={{ backgroundColor: "#5FA800" }}>Checkout →</button>
-          </div>
+          {cartExpanded && (
+            <div className="px-3 pb-2.5 border-t border-green-100 space-y-2 pt-2">
+              {chatCart.map(item => {
+                const key = `${item.productId}-${item.variantId ?? ""}`;
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{item.name}{item.variant ? <span className="text-gray-500 font-normal"> · {item.variant}</span> : ""}</p>
+                      <p className="text-[10px] text-gray-500">Rs. {item.price.toLocaleString()} each · Total: Rs. {(item.price * item.qty).toLocaleString()}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => setChatCart(prev => { const idx = prev.findIndex(i => `${i.productId}-${i.variantId ?? ""}` === key); if (idx < 0) return prev; if (prev[idx].qty <= 1) return prev.filter((_, j) => j !== idx); return prev.map((it, j) => j === idx ? { ...it, qty: it.qty - 1 } : it); })} className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm active:bg-gray-100 leading-none">−</button>
+                      <span className="text-xs font-bold text-gray-700 w-5 text-center">{item.qty}</span>
+                      <button onClick={() => setChatCart(prev => { const idx = prev.findIndex(i => `${i.productId}-${i.variantId ?? ""}` === key); if (idx < 0) return prev; return prev.map((it, j) => j === idx ? { ...it, qty: it.qty + 1 } : it); })} className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm active:bg-gray-100 leading-none">+</button>
+                      <button onClick={() => setChatCart(prev => prev.filter(i => `${i.productId}-${i.variantId ?? ""}` !== key))} className="w-6 h-6 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-400 text-xs font-bold active:bg-red-100 ml-0.5">✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={() => { setChatCart([]); setCartExpanded(false); }} className="text-[10px] text-gray-400 underline">Clear all</button>
+            </div>
+          )}
         </div>
       )}
       {messages.length <= 1 && !isLoading && (

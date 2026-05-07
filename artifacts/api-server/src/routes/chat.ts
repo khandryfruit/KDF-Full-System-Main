@@ -78,7 +78,7 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 5. NEVER use markdown: no **bold**, no *italic*, no # headings, no bullet points with - or *.
 6. Keep ALL replies to 2–3 lines max. Write like a WhatsApp support agent, not a chatbot.
 7. Never say you are AI or automated. Use Rs. for prices. If user writes Urdu/Roman Urdu, reply in kind.
-8. When customer clearly mentions a product name AND weight/quantity in the same message (e.g. "1 kilo badam", "500 gram pista", "mujhe 2 kg cashews chahiye", "ek kilo almonds") → call auto_add_to_cart IMMEDIATELY. This is the best experience — no manual clicks needed.
+8. When customer mentions ANY product(s) with weight/quantity in one message → call auto_add_to_cart IMMEDIATELY with ALL products in the items array. CRITICAL: If multiple products are mentioned (e.g. "1kg almonds aur 500g pista", "badam aur kaju chahiye"), include ALL of them: items:[{query:"almonds",variantHint:"1kg",qty:1},{query:"pista",variantHint:"500g",qty:1}]. Never omit any mentioned product. Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews, kishmish=raisins, mungphali=peanuts, anjeer=figs, khajoor=dates, chilgoza=pine nuts, moongphali=peanuts.
 9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.`;
 
   const orderInstructions = chatbot.orderingEnabled
@@ -248,7 +248,7 @@ router.post("/chat/message", async (req, res) => {
       if (/(order karna|place order|mujhe lena|mujhe chahiye|order chahiye|i want to (buy|order|purchase)|buy now|khareedna|order please|order dena)/i.test(msg)) {
         return { type: "function", function: { name: "trigger_order_form" } };
       }
-      if (/(\d+\s*(kilo|kg|gram|g|pound)\s*\w|\w+\s+\d+\s*(kilo|kg|gram|g)|(ek|do|teen|char|1|2|3|4|5)\s*kilo)/i.test(msg)) {
+      if (/(\d+\s*(kilo|kg|gram|g|pound)|(ek|do|teen|char|panch|1|2|3|4|5)\s*(kilo|kg|gram|g)|(badam|pista|kaju|akhrot|kishmish|mungphali|anjeer|khajoor|chilgoza|moongphali).{0,20}\d|(almond|cashew|pistachio|walnut|raisin|peanut|fig|date).{0,20}\d|\d.{0,20}(badam|pista|kaju|akhrot))/i.test(msg)) {
         return { type: "function", function: { name: "auto_add_to_cart" } };
       }
       if (/(almond|cashew|pistachio|walnut|raisin|peanut|hazelnut|nut|dry fruit|price|kitna|kitne|kya hai|show me|available|stock|rate|product)/i.test(msg)) {
@@ -365,31 +365,73 @@ router.post("/chat/message", async (req, res) => {
         } else if (fn === "auto_add_to_cart") {
           const reqItems: Array<{ query: string; variantHint?: string; qty: number }> = args.items ?? [];
           const autoCartResult: any[] = [];
-          for (const item of reqItems) {
-            const terms = expandQuery(item.query);
+
+          // Helper: resolve a product query to a cart item
+          async function resolveProduct(query: string, variantHint: string | undefined, qty: number) {
+            const terms = expandQuery(query);
             const rows = await db
               .select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, variants: productsTable.variants, images: productsTable.images, stock: productsTable.stock })
               .from(productsTable)
               .where(and(eq(productsTable.active, true), or(...terms.map(t => ilike(productsTable.name, `%${t}%`)))))
               .limit(1);
-            if (rows.length > 0) {
-              const product = rows[0];
-              const variants = (product.variants as any[]) ?? [];
-              let selectedVariant: any = null;
-              if (variants.length > 0 && item.variantHint) {
-                const hint = item.variantHint.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g").replace(/gm/g, "g");
-                selectedVariant = variants.find((v: any) => {
-                  const vn = (v.name ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
-                  const vv = (v.value ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
-                  return vn.includes(hint) || hint.includes(vn) || vv.includes(hint) || hint.includes(vv);
-                });
-              }
-              if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
-              const imgs = (product.images as string[]) ?? [];
-              const price = selectedVariant?.price ? Number(selectedVariant.price) : Number(product.price);
-              autoCartResult.push({ productId: product.id, name: product.name, variant: selectedVariant?.value ?? null, variantId: selectedVariant?.id ?? null, price, qty: Number(item.qty) || 1, image: imgs[0] ?? null });
+            if (rows.length === 0) return null;
+            const product = rows[0];
+            const variants = (product.variants as any[]) ?? [];
+            let selectedVariant: any = null;
+            if (variants.length > 0 && variantHint) {
+              const hint = variantHint.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g").replace(/gm/g, "g");
+              selectedVariant = variants.find((v: any) => {
+                const vn = (v.name ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+                const vv = (v.value ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+                return vn.includes(hint) || hint.includes(vn) || vv.includes(hint) || hint.includes(vv);
+              });
+            }
+            if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
+            const imgs = (product.images as string[]) ?? [];
+            const price = selectedVariant?.price ? Number(selectedVariant.price) : Number(product.price);
+            return { productId: product.id, name: product.name, variant: selectedVariant?.value ?? null, variantId: selectedVariant?.id ?? null, price, qty: Number(qty) || 1, image: imgs[0] ?? null };
+          }
+
+          for (const item of reqItems) {
+            const result = await resolveProduct(item.query, item.variantHint, item.qty);
+            if (result) autoCartResult.push(result);
+          }
+
+          // Server-side fallback: scan original message for any products the AI missed
+          const PRODUCT_VOCAB: Array<{ words: string[]; search: string }> = [
+            { words: ["pista", "pistachio", "pistachios"], search: "pistachio" },
+            { words: ["badam", "almond", "almonds"], search: "almond" },
+            { words: ["kaju", "cashew", "cashews"], search: "cashew" },
+            { words: ["akhrot", "walnut", "walnuts"], search: "walnut" },
+            { words: ["kishmish", "raisin", "raisins"], search: "raisin" },
+            { words: ["mungphali", "moongphali", "peanut", "peanuts"], search: "peanut" },
+            { words: ["anjeer", "fig", "figs"], search: "fig" },
+            { words: ["khajoor", "date", "dates"], search: "date" },
+            { words: ["chilgoza", "pine nut", "pine nuts"], search: "pine nut" },
+          ];
+          const msgLow = message.toLowerCase();
+          const aiQueriedWords = new Set(reqItems.flatMap(it => it.query.toLowerCase().split(/\s+/)));
+          const alreadyAddedIds = new Set(autoCartResult.map(r => r.productId));
+
+          for (const { words, search } of PRODUCT_VOCAB) {
+            const inMsg = words.find(w => msgLow.includes(w));
+            if (!inMsg) continue;
+            const alreadyQueried = words.some(w => aiQueriedWords.has(w));
+            if (alreadyQueried) continue;
+
+            // Extract weight closest to this keyword in the message
+            const kIdx = msgLow.indexOf(inMsg);
+            const nearby = msgLow.substring(Math.max(0, kIdx - 12), Math.min(msgLow.length, kIdx + 18));
+            const wm = nearby.match(/(\d+)\s*(kg|kilo|gram|gm|g)\b/i);
+            const variantHint = wm ? wm[1] + (wm[2].toLowerCase() === "kilo" ? "kg" : wm[2].toLowerCase().startsWith("gram") || wm[2].toLowerCase() === "gm" ? "g" : wm[2]) : undefined;
+
+            const result = await resolveProduct(search, variantHint, 1);
+            if (result && !alreadyAddedIds.has(result.productId)) {
+              autoCartResult.push(result);
+              alreadyAddedIds.add(result.productId);
             }
           }
+
           if (autoCartResult.length > 0) {
             foundAutoCart = autoCartResult;
             const summary = autoCartResult.map(i => `${i.name}${i.variant ? ` (${i.variant})` : ""} ×${i.qty} — Rs.${(i.price * i.qty).toLocaleString()}`).join(", ");

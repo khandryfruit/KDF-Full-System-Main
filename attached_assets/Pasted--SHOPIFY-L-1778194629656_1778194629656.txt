@@ -1,0 +1,228 @@
+یہ والا فائنل ماسٹر پرامپٹ ان کو بھیجیں تاکہ وہ صحیح چیز سمجھیں:
+
+========================
+SHOPIFY LIVE PRODUCT CHAT INTEGRATION
+=====================================
+
+You are still not understanding the main requirement correctly.
+
+The AI chat MUST connect directly with ALL Shopify products dynamically.
+
+We already have 300+ Shopify products with:
+✅ Images
+✅ Prices
+✅ Variants
+✅ Stock
+✅ Categories
+✅ Product URLs
+
+The live chat must use THESE Shopify products directly.
+
+NOT static products.
+NOT manual products.
+NOT separate database products.
+
+========================
+MAIN REQUIREMENT
+================
+
+If customer searches:
+
+“almonds”
+“badam”
+“pista”
+“cashew”
+“walnuts”
+
+The AI should instantly:
+
+✅ Search Shopify products
+✅ Fetch matching products
+✅ Show product cards INSIDE chat
+✅ Show product image
+✅ Show product price
+✅ Show available variants
+✅ Show Add to Cart button
+
+========================
+VERY IMPORTANT:
+VARIANT SYSTEM
+==============
+
+Currently variants are NOT working correctly.
+
+Example:
+
+Customer searches:
+“Roasted Almonds”
+
+AI shows Shopify product card.
+
+When customer clicks/selects product:
+
+DO NOT directly add product automatically.
+
+Instead:
+OPEN VARIANT SELECTION UI.
+
+Example:
+Select Weight:
+
+✅ 250g
+✅ 500g
+✅ 1kg
+
+with professional ecommerce UI/UX.
+
+Then customer selects variant manually.
+
+THEN:
+Add selected variant to chat cart.
+
+========================
+MULTI PRODUCT CHAT CART
+=======================
+
+Customer must be able to:
+
+✅ Add first product
+✅ Add second product
+✅ Add third product
+✅ Select different variants
+✅ Increase/decrease quantity
+✅ Remove products
+
+Exactly like a real ecommerce cart —
+but INSIDE live chat.
+
+========================
+LIVE CHAT SHOPPING FLOW
+=======================
+
+Example:
+
+Customer:
+“I need almonds”
+
+AI:
+(show Shopify almond products dynamically)
+
+Customer selects:
+“Roasted Almonds”
+
+AI:
+“Please select weight”
+
+✅ 250g
+✅ 500g
+✅ 1kg
+
+Customer selects:
+500g
+
+AI:
+“Added to cart ✅”
+
+Then asks:
+“Would you like anything else?”
+
+Customer:
+“Show pista”
+
+AI:
+(show Shopify pista products dynamically)
+
+Customer adds more products.
+
+At end:
+AI generates full cart summary.
+
+========================
+FINAL ORDER SYSTEM
+==================
+
+At checkout:
+
+AI should generate:
+✅ Full order summary
+✅ Product images
+✅ Variants
+✅ Quantities
+✅ Total amount
+✅ Delivery charges
+
+Then:
+✅ Customer confirms order
+✅ Order saves in Admin
+✅ Order syncs with Shopify
+✅ Order syncs with CRM
+
+========================
+VERY IMPORTANT:
+USE SHOPIFY PRODUCTS ONLY
+=========================
+
+ALL products inside chat must come dynamically from Shopify.
+
+If we add/update/delete product in Shopify:
+the chat should update automatically.
+
+No duplicate product database.
+
+========================
+SMART PRODUCT RECOMMENDATION
+============================
+
+AI should also recommend:
+
+✅ Best-selling products
+✅ Most ordered products
+✅ Lowest-price best-value products
+✅ Trending products
+
+Example:
+
+⭐ Most customers buy:
+Roasted Almonds 500g
+
+🔥 Best Seller
+
+Then show:
+✅ Product image
+✅ Price
+✅ Variant buttons
+✅ Add to Cart button
+
+========================
+PRODUCT CARD UI
+===============
+
+Need modern ecommerce product cards inside chat.
+
+Each card should contain:
+
+✅ Product image
+✅ Product title
+✅ Price
+✅ Variant selector
+✅ Quantity selector
+✅ Add to Cart
+✅ Buy Now
+✅ View Product
+
+========================
+FINAL GOAL
+==========
+
+We need a fully AI-powered conversational ecommerce system where:
+
+✅ Shopify products sync live
+✅ Variants work professionally
+✅ Multi-product cart works
+✅ Customers shop inside chat
+✅ AI behaves like human sales assistant
+✅ Orders go directly to Admin + Shopify
+✅ Entire experience feels premium and automatic
+
+This is the MAIN requirement.
+Please implement this professionally.
