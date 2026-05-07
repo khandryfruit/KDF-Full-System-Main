@@ -70,7 +70,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <>
-      <Link href={`/product/${product.id}`} data-testid={`card-product-${product.id}`}>
+      <Link href={`/products/${(product as any).slug || product.id}`} data-testid={`card-product-${product.id}`}>
         <div className="group bg-white rounded-2xl border border-gray-100 hover:border-[#5FA800]/30 hover:shadow-lg transition-all duration-200 overflow-hidden relative cursor-pointer h-full flex flex-col">
 
           {/* Wishlist */}

@@ -274,7 +274,7 @@ function RelatedProducts({ currentId }: { currentId: number }) {
           const rDisc = rOld && rOld > rPrice ? Math.round(((rOld - rPrice) / rOld) * 100) : null;
           const img = p.images?.[0];
           return (
-            <div key={p.id} onClick={() => setLocation(`/product/${p.id}`)} className="group cursor-pointer border border-border rounded-2xl overflow-hidden bg-card hover:shadow-md transition-all hover:-translate-y-0.5">
+            <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer border border-border rounded-2xl overflow-hidden bg-card hover:shadow-md transition-all hover:-translate-y-0.5">
               <div className="aspect-square bg-muted/20 overflow-hidden relative">
                 {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
                 {rDisc && <span className="absolute top-2 left-2 bg-[#F58300] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{rDisc}% OFF</span>}
@@ -296,9 +296,10 @@ function RelatedProducts({ currentId }: { currentId: number }) {
 
 /* ── Main Page ── */
 export default function ProductDetailPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const productId = Number(params.id);
+  const param = (params as any).slug ?? "";
+  const isNumeric = /^\d+$/.test(param);
   const { toast } = useToast();
   const { addItem } = useCart();
 
@@ -318,9 +319,28 @@ export default function ProductDetailPage() {
   const [showBidForm, setShowBidForm] = useState(false);
   const [bidForm, setBidForm] = useState({ bidderName: "", bidderPhone: "", amount: "" });
 
-  const { data: product, isLoading } = useGetProduct(productId, {
-    query: { enabled: !!productId, queryKey: getGetProductQueryKey(productId) },
+  const { data: product, isLoading } = useQuery({
+    queryKey: ["kdf-plus-product", param],
+    queryFn: async () => {
+      const r = await fetch(`/api/products/${encodeURIComponent(param)}`);
+      if (!r.ok) throw new Error("Product not found");
+      return r.json();
+    },
+    enabled: !!param,
+    staleTime: 60_000,
+    retry: 1,
   });
+
+  const productId: number = (product as any)?.id ?? 0;
+
+  /* Redirect numeric ID → slug URL */
+  useEffect(() => {
+    if (!product) return;
+    const slug = (product as any).slug;
+    if (slug && isNumeric) {
+      window.history.replaceState(null, "", `/products/${slug}`);
+    }
+  }, [product, isNumeric]);
 
   const { data: bidData, refetch: refetchBid } = useQuery({
     queryKey: ["bids", productId],
@@ -350,17 +370,17 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }, [productId]);
+  }, [param]);
 
   useEffect(() => {
     if (!product) return;
-    if (product.variants && product.variants.length > 0) {
-      const first = product.variants.find(v => v.stock !== 0) ?? product.variants[0];
+    if ((product as any).variants && (product as any).variants.length > 0) {
+      const first = (product as any).variants.find((v: any) => v.stock !== 0) ?? (product as any).variants[0];
       setSelectedVariant(first.id);
     } else {
       setSelectedVariant(undefined);
     }
-  }, [product?.id]);
+  }, [(product as any)?.id]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = imgRef.current?.getBoundingClientRect();
@@ -435,7 +455,14 @@ export default function ProductDetailPage() {
         <meta property="og:image" content={getProductImageSrc(images[0])} />
         <meta property="og:type" content="product" />
         <meta name="twitter:card" content="summary_large_image" />
-        <link rel="canonical" href={`/kdf-plus/product/${product.id}`} />
+        <link rel="canonical" href={`https://kdfplus.pk/products/${(product as any).slug || product.id}`} />
+        <meta property="og:url" content={`https://kdfplus.pk/products/${(product as any).slug || product.id}`} />
+        <meta property="og:site_name" content="KDF Plus" />
+        <meta name="twitter:title" content={product.metaTitle || product.name} />
+        <meta name="twitter:description" content={product.metaDescription || product.description?.replace(/<[^>]+>/g, " ").slice(0, 160) || `Buy ${product.name} online.`} />
+        {getProductImageSrc(images[0]) && <meta name="twitter:image" content={getProductImageSrc(images[0])} />}
+        <meta property="product:price:amount" content={String(price)} />
+        <meta property="product:price:currency" content="PKR" />
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 

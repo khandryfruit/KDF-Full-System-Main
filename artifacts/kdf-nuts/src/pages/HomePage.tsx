@@ -208,7 +208,7 @@ export function HomePage() {
                     key={p.id}
                     type="button"
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 active:bg-gray-100 text-left border-b border-gray-50 last:border-0"
-                    onMouseDown={(e) => { e.preventDefault(); setLocation(`/product/${p.slug || p.id}`); setShowHints(false); setSearchQuery(''); }}
+                    onMouseDown={(e) => { e.preventDefault(); setLocation(`/products/${p.slug || p.id}`); setShowHints(false); setSearchQuery(''); }}
                   >
                     {p.image ? (
                       <img src={`${BASE_URL}api/storage/objects/${p.image}`} alt={p.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />

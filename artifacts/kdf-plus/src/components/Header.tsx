@@ -452,7 +452,7 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
             {hints.products.map((p: any) => (
               <button key={p.id} type="button"
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b border-gray-50 text-left"
-                onClick={() => go(`/product/${p.id}`)}>
+                onClick={() => go(`/products/${p.slug || p.id}`)}>
                 {p.image
                   ? <img src={p.image.startsWith("http") ? p.image : `/api/storage/objects/${p.image}`} alt={p.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                   : <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: GREEN }}>{p.name[0]}</div>
@@ -644,7 +644,7 @@ export function Header() {
                         {searchHints.products.map(p => (
                           <button key={p.id} type="button"
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0 group"
-                            onClick={() => { setShowHints(false); setSearchQuery(""); navigate(`/product/${p.id}`); }}>
+                            onClick={() => { setShowHints(false); setSearchQuery(""); navigate(`/products/${p.slug || p.id}`); }}>
                             {p.image
                               ? <img src={getImgSrc(p.image)!} alt={p.name} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
                               : <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0 text-sm" style={{ background: GREEN }}>{p.name[0]}</div>

@@ -50,7 +50,7 @@ export function ProductCard({ product, mode = 'scroll' }: ProductCardProps) {
     toggleItem({ id: product.id, name: product.name, price, gradient: product.gradient || 'from-green-400 to-emerald-600' });
   }, [toggleItem, product.id, product.name, product.gradient, price]);
 
-  const handleNavigate = useCallback(() => setLocation(`/product/${product.slug || product.id}`), [setLocation, product.slug, product.id]);
+  const handleNavigate = useCallback(() => setLocation(`/products/${product.slug || product.id}`), [setLocation, product.slug, product.id]);
   const inWishlist = isInWishlist(product.id);
 
   const StarRow = () => (

@@ -123,7 +123,15 @@ function Router() {
           <Route path="/products" component={() => <Layout><ProductsPage /></Layout>} />
           <Route path="/categories" component={() => <Layout><CategoriesPage /></Layout>} />
           <Route path="/category/:slug" component={() => <Layout><CategoryPage /></Layout>} />
-          <Route path="/product/:id" component={() => <CleanLayout><ProductDetailPage /></CleanLayout>} />
+          <Route path="/products/:slug" component={() => <CleanLayout><ProductDetailPage /></CleanLayout>} />
+          <Route path="/product/:id">
+            {(params: { id: string }) => {
+              if (typeof window !== "undefined") {
+                window.location.replace(`/products/${params.id}`);
+              }
+              return null;
+            }}
+          </Route>
           <Route path="/cart" component={() => <CleanLayout><CartPage /></CleanLayout>} />
           <Route path="/checkout" component={() => <CleanLayout><CheckoutPage /></CleanLayout>} />
           <Route path="/order/:id" component={() => <CleanLayout><OrderSuccessPage /></CleanLayout>} />

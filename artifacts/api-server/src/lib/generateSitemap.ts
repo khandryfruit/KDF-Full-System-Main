@@ -43,7 +43,7 @@ export async function generateSitemapXml(domain: string): Promise<string> {
       : today;
     const identifier = product.slug || String(product.id);
     urls.push(
-      `  <url><loc>${base}/product/${identifier}</loc><changefreq>weekly</changefreq><priority>0.8</priority><lastmod>${lastmod}</lastmod></url>`
+      `  <url><loc>${base}/products/${identifier}</loc><changefreq>weekly</changefreq><priority>0.8</priority><lastmod>${lastmod}</lastmod></url>`
     );
   }
 

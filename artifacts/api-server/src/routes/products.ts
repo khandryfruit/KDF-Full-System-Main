@@ -5,6 +5,33 @@ import { adminMiddleware } from "../lib/auth";
 
 const router = Router();
 
+function generateSlugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+async function ensureUniqueSlug(base: string, excludeId?: number): Promise<string> {
+  let candidate = base;
+  let suffix = 2;
+  while (true) {
+    const existing = await db
+      .select({ id: productsTable.id })
+      .from(productsTable)
+      .where(eq(productsTable.slug, candidate))
+      .limit(1);
+    if (existing.length === 0 || (excludeId && existing[0].id === excludeId)) {
+      return candidate;
+    }
+    candidate = `${base}-${suffix}`;
+    suffix++;
+  }
+}
+
 router.get("/products", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -36,6 +63,20 @@ router.get("/products", async (req, res) => {
   }
 });
 
+router.get("/products/check-slug", adminMiddleware as any, async (req, res) => {
+  try {
+    const { slug, excludeId } = req.query;
+    if (!slug) { res.status(400).json({ error: "slug required" }); return; }
+    const conditions: any[] = [eq(productsTable.slug, slug as string)];
+    if (excludeId) conditions.push(sql`${productsTable.id} != ${parseInt(excludeId as string)}`);
+    const [existing] = await db.select({ id: productsTable.id }).from(productsTable).where(and(...conditions)).limit(1);
+    res.json({ available: !existing });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 router.get("/products/:id", async (req, res) => {
   try {
     const param = req.params.id;
@@ -54,9 +95,10 @@ router.get("/products/:id", async (req, res) => {
 
 router.post("/products", adminMiddleware as any, async (req, res) => {
   try {
-    const { name, price, stock, ...rest } = req.body;
+    const { name, price, stock, slug: rawSlug, ...rest } = req.body;
     if (!name || !price) { res.status(400).json({ error: "name and price are required" }); return; }
-    const slug = (rest.slug ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now());
+    const baseSlug = rawSlug?.trim() ? rawSlug.trim() : generateSlugFromName(name);
+    const slug = await ensureUniqueSlug(baseSlug);
     const [product] = await db.insert(productsTable).values({ name, price, stock: stock ?? 0, slug, ...rest }).returning();
     res.status(201).json(product);
   } catch (err) {
@@ -68,7 +110,21 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
 router.put("/products/:id", adminMiddleware as any, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const [product] = await db.update(productsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(productsTable.id, id)).returning();
+    const { slug: rawSlug, name, ...rest } = req.body;
+
+    let finalSlug: string | undefined;
+    if (rawSlug !== undefined) {
+      const baseSlug = rawSlug.trim() ? rawSlug.trim() : (name ? generateSlugFromName(name) : undefined);
+      if (baseSlug) {
+        finalSlug = await ensureUniqueSlug(baseSlug, id);
+      }
+    }
+
+    const updateData: any = { ...rest, updatedAt: new Date() };
+    if (name !== undefined) updateData.name = name;
+    if (finalSlug !== undefined) updateData.slug = finalSlug;
+
+    const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, id)).returning();
     if (!product) { res.status(404).json({ error: "Not found" }); return; }
     res.json(product);
   } catch (err) {

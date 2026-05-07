@@ -116,7 +116,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   }, [banners.length, paused, next]);
 
   const handleBannerClick = (banner: Banner) => {
-    if (banner.targetType === "product" && banner.targetId) setLocation(`/product/${banner.targetId}`);
+    if (banner.targetType === "product" && banner.targetId) setLocation(`/products/${banner.targetId}`);
     else if (banner.targetType === "category" && banner.targetId) setLocation(`/products?category=${banner.targetId}`);
     else if (banner.linkUrl) setLocation(banner.linkUrl);
     else setLocation("/products");

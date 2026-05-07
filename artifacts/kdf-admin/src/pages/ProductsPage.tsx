@@ -472,7 +472,7 @@ export default function ProductsPage() {
                   <Button
                     type="button"
                     className="flex-1 gap-2"
-                    onClick={() => window.open(`/kdf-nuts/product/${createdProduct.slug}`, "_blank")}
+                    onClick={() => window.open(`/kdf-nuts/products/${createdProduct.slug}`, "_blank")}
                   >
                     <Eye className="w-4 h-4" /> View on Website
                   </Button>
@@ -999,7 +999,7 @@ export default function ProductsPage() {
                         <Button
                           variant="ghost" size="icon" className="h-8 w-8"
                           title="View on website"
-                          onClick={() => window.open(`/kdf-nuts/product/${(product as any).slug || product.id}`, "_blank")}
+                          onClick={() => window.open(`/kdf-nuts/products/${(product as any).slug || product.id}`, "_blank")}
                         >
                           <ExternalLink className="w-4 h-4 text-muted-foreground" />
                         </Button>

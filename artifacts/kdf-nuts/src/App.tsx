@@ -48,7 +48,7 @@ function ScrollToTop() {
 }
 
 const MODAL_SKIP_PATHS = ["/", "/onboarding", "/login", "/otp", "/order-success", "/checkout", "/cart", "/track"];
-const MODAL_SKIP_PREFIXES = ["/product/"];
+const MODAL_SKIP_PREFIXES = ["/products/", "/product/"];
 
 function LocationGateModal() {
   const { isSet } = useNutsLocation();
@@ -91,7 +91,15 @@ function Router() {
       <Route path="/home" component={HomePage} />
       <Route path="/categories" component={CategoriesPage} />
       <Route path="/products" component={ProductListingPage} />
-      <Route path="/product/:id" component={ProductDetailPage} />
+      <Route path="/products/:slug" component={ProductDetailPage} />
+      <Route path="/product/:id">
+        {(params: { id: string }) => {
+          if (typeof window !== "undefined") {
+            window.location.replace(`/products/${params.id}`);
+          }
+          return null;
+        }}
+      </Route>
       <Route path="/cart" component={CartPage} />
       <Route path="/checkout" component={CheckoutPage} />
       <Route path="/order-success" component={OrderSuccessPage} />

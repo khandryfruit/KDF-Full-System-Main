@@ -487,9 +487,8 @@ export function ProductDetailPage() {
   useEffect(() => {
     if (!product) return;
     const slug = (product as any).slug;
-    const isNumeric = /^\d+$/.test(param);
-    if (slug && isNumeric) {
-      window.history.replaceState(null, "", `/product/${slug}`);
+    if (slug && param !== slug) {
+      window.history.replaceState(null, "", `/products/${slug}`);
     }
   }, [product, param]);
 
@@ -498,7 +497,7 @@ export function ProductDetailPage() {
     if (!product) return;
     const slug = (product as any).slug || product.id;
     const canonicalBase = "https://khanbabadryfruits.com";
-    const pageUrl = `${canonicalBase}/product/${slug}`;
+    const pageUrl = `${canonicalBase}/products/${slug}`;
     const title = (product as any).meta_title || `${product.name} | KDF NUTS`;
     const rawDesc = (product as any).meta_description
       || (product as any).description?.replace(/<[^>]+>/g, "").slice(0, 160)
@@ -969,7 +968,7 @@ export function ProductDetailPage() {
                 const rImage = prod.images?.[0];
                 const rDisc = rOldPrice && rOldPrice > rPrice ? Math.round(((rOldPrice - rPrice) / rOldPrice) * 100) : null;
                 return (
-                  <div key={prod.id} onClick={() => setLocation(`/product/${prod.slug || prod.id}`)}
+                  <div key={prod.id} onClick={() => setLocation(`/products/${prod.slug || prod.id}`)}
                     className="cursor-pointer flex-shrink-0 w-36 border border-gray-100 rounded-2xl overflow-hidden snap-start shadow-sm active:scale-[0.97] transition-transform">
                     <div className={`w-full aspect-square bg-gradient-to-br ${prod.gradient || 'from-green-400 to-emerald-600'} relative overflow-hidden`}>
                       {rImage && <img src={getProductImageSrc(rImage) ?? ''} alt={prod.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />}

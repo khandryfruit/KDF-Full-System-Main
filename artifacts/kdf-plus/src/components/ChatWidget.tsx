@@ -638,7 +638,7 @@ export function ChatWidget() {
 
   const handleViewProduct = useCallback((id: number) => {
     setIsOpen(false);
-    setLocation(`/product/${id}`);
+    setLocation(`/products/${id}`);
   }, [setLocation]);
 
   const handleOpenForm = () => setShowOrderForm(true);

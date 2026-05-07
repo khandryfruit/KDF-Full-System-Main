@@ -46,18 +46,18 @@ export function WishlistPage() {
               <div key={item.id} className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex items-center gap-3">
                 {/* Image / gradient */}
                 <div
-                  onClick={() => setLocation(`/product/${item.id}`)}
+                  onClick={() => setLocation(`/products/${(item as any).slug || item.id}`)}
                   className={`w-16 h-16 rounded-xl flex-shrink-0 bg-gradient-to-br ${item.gradient} cursor-pointer active:scale-95 transition-transform`}
                 />
                 {/* Info */}
-                <div className="flex-1 min-w-0" onClick={() => setLocation(`/product/${item.id}`)}>
+                <div className="flex-1 min-w-0" onClick={() => setLocation(`/products/${(item as any).slug || item.id}`)}>
                   <p className="font-semibold text-gray-900 text-sm truncate cursor-pointer">{item.name}</p>
                   <p className="text-[#5FA800] font-bold text-base mt-0.5">₨{item.price.toLocaleString()}</p>
                 </div>
                 {/* Actions */}
                 <div className="flex flex-col gap-2 flex-shrink-0">
                   <button
-                    onClick={() => setLocation(`/product/${item.id}`)}
+                    onClick={() => setLocation(`/products/${(item as any).slug || item.id}`)}
                     className="w-8 h-8 rounded-xl bg-[#5FA800]/10 text-[#5FA800] flex items-center justify-center active:bg-[#5FA800]/20 transition-colors"
                     title="View product"
                   >
