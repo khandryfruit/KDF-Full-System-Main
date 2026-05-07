@@ -1,0 +1,389 @@
+یہ combined اور upgraded prompt ہے جس میں mobile UI, Google Maps integration, rider tracking, realtime delivery system اور notification system سب شامل کر دیا گیا ہے۔
+
+Google Maps APIs successfully connected ہو چکی ہیں، اب complete premium delivery ecosystem professionally implement کریں۔
+
+========================
+
+1. MOBILE SIDEBAR REDESIGN
+   ========================
+
+Current mobile sidebar کو premium mobile app style میں redesign کریں۔
+
+Remove:
+❌ Static delivery cities section
+❌ Old city chips/buttons
+
+Add:
+✅ Auto Detect Location card
+✅ "Use My Location" button
+✅ Dynamic location fetching
+✅ Current city/area detection
+✅ Realtime location updates
+✅ Smart city selector fallback
+
+Location automatically fetch کرے:
+
+* City
+* Area
+* Street
+* Province
+* Postal code
+
+Google Geocoding API استعمال کریں۔
+
+========================
+2. CHECKOUT AUTO LOCATION FIX
+=============================
+
+Current issue:
+"Use My Location" properly کام نہیں کر رہا۔
+
+Fix کریں:
+
+✅ Browser/mobile location permission
+✅ navigator.geolocation API
+✅ Google Geocoding API
+✅ Auto fill checkout form
+
+Auto fill:
+
+* Street address
+* Area
+* City
+* Province
+* Postal code
+
+Customer manual edit بھی کر سکے۔
+
+========================
+3. SMART DELIVERY CITY SYSTEM
+=============================
+
+Customer location سے:
+
+✅ Auto detect delivery city
+✅ Auto update delivery charges
+✅ Detect nearest delivery zone
+✅ Dynamic city dropdown
+✅ Smart delivery logic
+
+========================
+4. MOBILE HEADER + SIDEBAR PREMIUM UI
+=====================================
+
+Complete mobile-first premium UI بنائیں۔
+
+Add:
+✅ Sticky mobile header
+✅ Animated sidebar
+✅ Glassmorphism UI
+✅ Premium icons
+✅ Search bar
+✅ Voice search
+✅ Wishlist
+✅ Cart shortcut
+✅ Notification icon
+✅ User profile shortcut
+✅ Trending searches
+✅ Recently viewed products
+
+UI:
+
+* Smooth
+* Fast
+* App-like experience
+* One-hand usability
+* Premium spacing/typography
+
+========================
+5. DYNAMIC VIDEO BANNER SYSTEM
+==============================
+
+Homepage banner میں dynamic video system add کریں۔
+
+Features:
+✅ Desktop video banner
+✅ Mobile reels-style vertical video
+✅ Cloudflare Stream / Cloud Player integration
+✅ Dynamic admin upload system
+✅ Adaptive streaming
+✅ CDN optimized loading
+✅ Lazy loading
+✅ Fast buffering
+
+========================
+6. ADMIN VIDEO MANAGEMENT
+=========================
+
+Admin panel میں complete banner video management add کریں۔
+
+Desktop:
+✅ Upload desktop video
+✅ Upload desktop banner image
+
+Mobile:
+✅ Upload reels-style mobile video
+✅ Upload mobile banner image
+
+Controls:
+✅ Enable/Disable
+✅ Autoplay
+✅ Loop
+✅ Mute
+✅ Fallback image
+✅ CTA buttons
+✅ Banner scheduling
+
+========================
+7. GOOGLE MAPS + RIDER APP INTEGRATION
+======================================
+
+Google Maps APIs کو Rider App کے ساتھ fully integrate کریں۔
+
+Rider app میں:
+
+✅ Realtime GPS tracking
+✅ Background location tracking
+✅ Live route tracking
+✅ Google navigation integration
+✅ Auto location updates every few seconds
+
+Rider app open ہوتے ہی:
+
+* Current location detect ہو
+* Backend sync ہو
+* Live map update ہو
+
+========================
+8. ADMIN LIVE RIDER MAP
+=======================
+
+Admin dashboard میں realtime live map add کریں۔
+
+Admin دیکھ سکے:
+
+✅ Rider current location
+✅ Moving rider markers
+✅ Rider online/offline
+✅ Current delivery route
+✅ Estimated arrival time
+✅ Rider distance from customer
+
+Popup details:
+
+* Rider name
+* Phone number
+* Delivery status
+* Assigned orders
+
+========================
+9. AUTO DISPATCH SYSTEM
+=======================
+
+New order آنے پر:
+
+✅ Nearest rider auto detect ہو
+✅ Auto assign rider
+✅ Distance calculation
+✅ Fastest ETA logic
+✅ Zone-based dispatch
+
+Manual override بھی ہو۔
+
+========================
+10. CUSTOMER LIVE ORDER TRACKING
+================================
+
+Customer دیکھ سکے:
+
+✅ Live rider location
+✅ Rider moving on map
+✅ Delivery ETA
+✅ Delivery status timeline
+
+Statuses:
+
+* Confirmed
+* Preparing
+* Picked by rider
+* On the way
+* Near you
+* Delivered
+
+========================
+11. RIDER APP FEATURES
+======================
+
+Rider app میں properly working buttons:
+
+✅ Accept Order
+✅ Reject Order
+✅ Start Delivery
+✅ Open Google Navigation
+✅ Reached Customer
+✅ Delivered
+✅ Cash Collected
+
+========================
+12. COMPLETE NOTIFICATION SYSTEM
+================================
+
+Realtime professional notification system implement کریں۔
+
+========================
+RIDER APP NOTIFICATIONS
+=======================
+
+Rider کو instantly notifications جائیں:
+
+✅ New order assigned
+✅ Order cancelled
+✅ Customer message/call
+✅ Delivery updates
+
+Features:
+✅ Push notifications
+✅ Sound alerts
+✅ Vibration
+✅ Popup alerts
+✅ Background notifications
+✅ Lock screen notifications
+
+========================
+RIDER ORDER POPUP
+=================
+
+New order آنے پر:
+
+✅ Fullscreen popup
+✅ Accept / Reject buttons
+✅ Countdown timer
+
+Show:
+
+* Customer name
+* Address
+* Distance
+* COD amount
+* Earnings
+
+========================
+RIDER NOTIFICATION BELL
+=======================
+
+Rider app header میں:
+
+✅ Notification bell icon
+✅ Unread count badge
+✅ Notification history
+✅ Realtime updates
+
+========================
+ADMIN NOTIFICATION SYSTEM
+=========================
+
+Admin dashboard header میں:
+
+✅ Professional notification bell
+✅ Live notification counter
+✅ Sound alerts
+
+Admin notifications:
+✅ New order
+✅ Rider assigned
+✅ Order delivered
+✅ Rider offline
+✅ Delivery delayed
+✅ Failed delivery
+✅ Customer complaint
+
+========================
+CUSTOMER NOTIFICATIONS
+======================
+
+Customer کو notifications جائیں:
+
+✅ Order confirmed
+✅ Rider assigned
+✅ Rider on the way
+✅ Near your location
+✅ Delivered
+
+Channels:
+✅ Push notifications
+✅ WhatsApp
+✅ SMS (optional)
+✅ Email (optional)
+
+========================
+13. REALTIME SYSTEM
+===================
+
+Use:
+✅ Firebase Cloud Messaging (FCM)
+✅ Firebase Realtime Database
+یا
+✅ WebSockets / Pusher
+
+تاکہ:
+
+* Realtime updates instantly آئیں
+* Admin dashboard live رہے
+* Rider movement sync رہے
+
+========================
+14. PERFORMANCE OPTIMIZATION
+============================
+
+Website/app speed متاثر نہیں ہونی چاہیے۔
+
+Optimize:
+✅ Lazy loading
+✅ CDN
+✅ WebP images
+✅ Deferred scripts
+✅ GPU animations
+✅ Optimized Google API calls
+✅ Smart GPS updates
+✅ Low battery usage
+
+========================
+15. SECURITY
+============
+
+✅ API keys .env میں رکھیں
+✅ Secure authentication
+✅ Secure rider tracking
+✅ Role-based permissions
+✅ Secure notification tokens
+
+========================
+16. IMPORTANT BUG FIXES
+=======================
+
+Fix کریں:
+
+❌ Checkout location not fetching
+❌ Auto city not selecting
+❌ Sidebar old city UI
+❌ Rider location delay
+❌ Notification delay
+❌ Mobile responsiveness issues
+❌ Background tracking stop issue
+
+========================
+FINAL GOAL
+==========
+
+Complete professional ecosystem بنائیں:
+
+✅ Website
+✅ Admin Dashboard
+✅ Rider App
+✅ Customer Tracking
+✅ Realtime Notifications
+✅ Google Maps Integration
+✅ Auto Dispatch System
+✅ Dynamic Video Banner System
+
+سب realtime synchronized ہوں اور premium delivery app experience دیں۔
