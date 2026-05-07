@@ -1,0 +1,275 @@
+========================
+18. LIVE CHAT LEAD CAPTURE + MARKETING SYSTEM
+=============================================
+
+The current live chat feature is incomplete.
+
+We need a professional lead generation + customer retargeting system integrated with the live chat.
+
+This is a very important business and marketing feature.
+
+========================
+LIVE CHAT PRE-LEAD FORM
+=======================
+
+Before customer starts chat:
+
+Show professional popup/modal asking for:
+
+✅ Full Name
+✅ Phone Number
+✅ Email (optional)
+✅ City (optional)
+
+Customer must submit details before starting chat.
+
+Then:
+✅ Open live chat automatically
+✅ Save lead in database
+✅ Sync lead with admin panel
+
+========================
+AUTO LEAD SAVING SYSTEM
+=======================
+
+Every customer interaction should automatically save:
+
+✅ Name
+✅ Phone number
+✅ Email
+✅ Chat history
+✅ Location
+✅ Device info
+✅ Visit source
+✅ Timestamp
+
+This data is very important for:
+
+* Retargeting
+* WhatsApp marketing
+* SMS campaigns
+* Email campaigns
+* Offer campaigns
+* Customer recovery
+
+========================
+ADMIN LIVE CHAT CRM
+===================
+
+Create dedicated admin module:
+
+Customer Leads / Live Chat CRM
+
+Features:
+✅ View all leads
+✅ Search leads
+✅ Filter by city/date/source
+✅ Export leads
+✅ WhatsApp quick contact
+✅ Bulk marketing tools
+✅ Lead status system
+
+Statuses:
+
+* New Lead
+* Contacted
+* Interested
+* Ordered
+* Follow-up
+* Converted
+
+========================
+LIVE CHAT DASHBOARD
+===================
+
+Admin dashboard should show:
+
+✅ Total chat leads
+✅ Active chats
+✅ Conversion rate
+✅ Daily/weekly/monthly leads
+✅ Most active cities
+✅ Returning customers
+
+========================
+WHATSAPP MARKETING INTEGRATION
+==============================
+
+Add WhatsApp marketing integration.
+
+Admin should be able to:
+✅ Send offers
+✅ Send discount codes
+✅ Send abandoned cart reminders
+✅ Send new product alerts
+✅ Send promotional campaigns
+
+========================
+SUBSCRIBE / NEWSLETTER SYSTEM
+=============================
+
+Footer subscribe section needs a complete backend + admin CMS.
+
+Current subscribe system is incomplete.
+
+Implement professional newsletter system.
+
+========================
+SUBSCRIBE FLOW
+==============
+
+When user subscribes:
+
+✅ Save email in database
+✅ Save phone number if provided
+✅ Auto assign subscriber status
+✅ Trigger welcome offer
+✅ Generate coupon code if enabled
+
+========================
+AUTO OFFER SYSTEM
+=================
+
+Admin should be able to:
+
+✅ Create offer campaigns
+✅ Create discount codes
+✅ Auto-send welcome offers
+✅ Create seasonal promotions
+✅ Launch new product campaigns
+
+========================
+EMAIL MARKETING CMS
+===================
+
+Create admin module:
+
+Email & Subscriber Management
+
+Features:
+✅ View all subscribers
+✅ Export subscribers
+✅ Bulk email campaigns
+✅ Segment subscribers
+✅ Offer management
+✅ Coupon management
+✅ Campaign analytics
+
+========================
+CAMPAIGN TYPES
+==============
+
+Support:
+✅ New product campaigns
+✅ Flash sale alerts
+✅ Discount offers
+✅ Festival campaigns
+✅ Back-in-stock alerts
+✅ Personalized recommendations
+
+========================
+NOTIFICATION CHANNELS
+=====================
+
+Support:
+✅ Email marketing
+✅ WhatsApp marketing
+✅ SMS marketing
+✅ Push notifications
+
+========================
+COUPON SYSTEM
+=============
+
+When user subscribes:
+
+System can:
+✅ Auto generate coupon
+✅ Send welcome discount
+✅ Attach expiry date
+✅ Track coupon usage
+
+Example:
+WELCOME10
+10% OFF first order
+
+========================
+FRONTEND UI/UX
+==============
+
+Need premium frontend UI.
+
+Live chat:
+✅ Modern popup
+✅ Smooth animations
+✅ Mobile optimized
+✅ Floating chat bubble
+✅ Smart greetings
+
+Subscribe section:
+✅ Beautiful design
+✅ High conversion layout
+✅ Mobile optimized
+✅ Animated CTA
+✅ Offer highlights
+
+========================
+MARKETING AUTOMATION
+====================
+
+Add automation flows:
+
+✅ Welcome flow
+✅ Abandoned cart flow
+✅ Repeat customer offers
+✅ Birthday campaigns
+✅ Re-engagement campaigns
+
+========================
+DATABASE & BACKEND
+==================
+
+Create proper scalable architecture:
+
+Admin/
+├── LiveChatCRM/
+├── LeadsManagement/
+├── SubscriberManagement/
+├── CampaignManager/
+├── CouponSystem/
+├── WhatsAppMarketing/
+├── EmailMarketing/
+└── Analytics/
+
+========================
+ANALYTICS
+=========
+
+Track:
+✅ Subscriber growth
+✅ Lead conversion
+✅ Campaign performance
+✅ Most clicked offers
+✅ WhatsApp conversions
+✅ Email open rates
+
+========================
+FINAL GOAL
+==========
+
+Build a complete customer acquisition & retargeting ecosystem:
+
+✅ Live Chat CRM
+✅ Lead Generation System
+✅ WhatsApp Marketing
+✅ Subscriber System
+✅ Email Marketing
+✅ Coupon Automation
+✅ Offer Campaigns
+✅ Customer Retargeting
+
+Everything should be professionally connected between:
+✅ Frontend
+✅ Admin Dashboard
+✅ Marketing System
+✅ CRM System

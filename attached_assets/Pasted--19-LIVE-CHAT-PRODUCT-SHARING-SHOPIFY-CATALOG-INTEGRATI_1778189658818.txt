@@ -1,0 +1,202 @@
+========================
+19. LIVE CHAT PRODUCT SHARING + SHOPIFY CATALOG INTEGRATION
+===========================================================
+
+The live chat system also needs a complete product sharing and catalog integration system.
+
+Currently chat only supports text messages.
+
+We need a professional ecommerce chat commerce system.
+
+========================
+SHOPIFY PRODUCT CATALOG INTEGRATION
+===================================
+
+All synced Shopify products/catalogs should be connected with the live chat system.
+
+Requirements:
+
+✅ Shopify synced products should automatically appear inside chat product picker
+✅ Product data should sync dynamically
+✅ Live inventory sync
+✅ Real-time pricing sync
+✅ Variant support
+✅ Product image sync
+
+========================
+CHAT PRODUCT SHARING
+====================
+
+Admin/support agent should be able to send products directly inside chat.
+
+When sending product:
+
+Show:
+✅ Product image
+✅ Product name
+✅ Current price
+✅ Discount price
+✅ Variant/weight
+✅ Stock status
+✅ Quick view button
+✅ Add to cart button
+✅ Buy now button
+
+========================
+WEBSITE PRODUCT INTEGRATION
+===========================
+
+Not only Shopify synced products —
+
+All products already موجود on website should also be available inside live chat.
+
+Sources:
+✅ Shopify synced catalog
+✅ Website local products
+✅ Dynamic product database
+
+Everything should work together in one unified product system.
+
+========================
+SMART PRODUCT SEARCH INSIDE CHAT
+================================
+
+Inside admin live chat:
+
+Add:
+✅ Product search
+✅ Category filter
+✅ Fast product picker
+✅ Recent products
+✅ Recommended products
+✅ Bestseller suggestions
+
+========================
+DYNAMIC PRODUCT CARDS
+=====================
+
+Products sent in chat should appear as premium ecommerce product cards.
+
+Card should include:
+✅ Product image
+✅ Product title
+✅ Price
+✅ Discount badge
+✅ Stock badge
+✅ CTA buttons
+✅ Product URL
+✅ Quick add to cart
+
+========================
+REALTIME PRODUCT DATA
+=====================
+
+Product info inside chat should always stay updated.
+
+Realtime sync:
+✅ Price changes
+✅ Inventory updates
+✅ Product availability
+✅ Discount campaigns
+
+========================
+WHATSAPP-STYLE COMMERCE CHAT
+============================
+
+Need modern conversational commerce experience similar to:
+
+* WhatsApp Business
+* Instagram Shop Chat
+* Shopify Inbox
+* Facebook Commerce Chat
+
+========================
+CUSTOMER EXPERIENCE
+===================
+
+Customer should be able to:
+
+✅ View products directly in chat
+✅ Click product to open product page
+✅ Add to cart from chat
+✅ Buy directly from shared products
+✅ View variants/options
+
+========================
+ADMIN CHAT COMMERCE TOOLS
+=========================
+
+Inside admin chat panel:
+
+Add:
+✅ Send product
+✅ Send coupon
+✅ Send collection/category
+✅ Send payment link
+✅ Send checkout link
+✅ Send tracking link
+
+========================
+UPSELL & CROSS-SELL SYSTEM
+==========================
+
+Live chat should support:
+
+✅ Related products
+✅ Frequently bought together
+✅ Recommended upsells
+✅ Personalized product suggestions
+
+========================
+SHOPIFY + WEBSITE PRODUCT ARCHITECTURE
+======================================
+
+Create unified product sync layer.
+
+Flow:
+
+Shopify Products
+↓
+Central Product Database
+↓
+Website Frontend
+↓
+Live Chat Product System
+↓
+Marketing & CRM
+
+Everything should remain synchronized dynamically.
+
+========================
+PERFORMANCE & OPTIMIZATION
+==========================
+
+Optimize:
+✅ Fast product search
+✅ Lazy product loading
+✅ Cached product queries
+✅ Realtime sync optimization
+✅ Mobile optimized product cards
+
+========================
+FINAL GOAL
+==========
+
+Build a complete conversational commerce ecosystem:
+
+✅ Live ecommerce chat
+✅ Shopify catalog integration
+✅ Website product integration
+✅ Dynamic product sharing
+✅ Realtime inventory sync
+✅ Chat-based selling
+✅ WhatsApp-style commerce experience
+✅ Premium ecommerce product cards
+
+Everything should be fully connected between:
+✅ Shopify
+✅ Website
+✅ Live Chat
+✅ CRM
+✅ Marketing System
+✅ Admin Dashboard

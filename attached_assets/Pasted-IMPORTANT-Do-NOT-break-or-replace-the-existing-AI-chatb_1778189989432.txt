@@ -1,0 +1,185 @@
+IMPORTANT:
+Do NOT break or replace the existing AI chatbot system.
+
+The current chatbot already supports:
+✅ AI conversations
+✅ Product recommendations
+✅ Smart replies
+✅ Ecommerce assistance
+✅ Conversational selling
+
+After recent updates, the original OpenAI-style AI chat functionality became unstable/broken.
+
+This is NOT what was requested.
+
+========================
+CORRECT REQUIREMENT
+===================
+
+We only need to ADD lead capture + CRM features on top of the existing chatbot.
+
+The original AI assistant must continue working exactly as before.
+
+========================
+CORRECT CHAT FLOW
+=================
+
+STEP 1
+Customer clicks live chat bubble
+
+STEP 2
+Show small professional popup/modal asking:
+
+✅ Full Name
+✅ Phone Number
+✅ Email (optional)
+✅ City (optional)
+
+STEP 3
+After submit:
+
+✅ Save lead in database
+✅ Sync lead with admin panel
+✅ Open ORIGINAL AI chatbot automatically
+
+STEP 4
+The existing AI assistant should continue normally with:
+
+✅ AI replies
+✅ Product recommendations
+✅ Shopify synced products
+✅ Website products
+✅ Smart conversational selling
+✅ OpenAI-powered ecommerce support
+
+========================
+DO NOT REMOVE EXISTING FEATURES
+===============================
+
+Do NOT break/remove:
+
+❌ Existing AI recommendation engine
+❌ OpenAI responses
+❌ Product recommendation system
+❌ Existing chat intelligence
+❌ Ecommerce conversation flow
+❌ Product selling inside chat
+
+========================
+LEAD CAPTURE REQUIREMENT
+========================
+
+Lead capture should be lightweight and non-intrusive.
+
+Need:
+✅ Simple popup
+✅ Fast UX
+✅ Mobile optimized
+✅ Smooth animation
+✅ Quick submit
+
+NOT a complete chatbot replacement.
+
+========================
+LIVE CHAT CRM SYSTEM
+====================
+
+Need backend CRM module for captured leads.
+
+Save:
+✅ Name
+✅ Phone number
+✅ Email
+✅ Chat history
+✅ Location
+✅ Device info
+✅ Visit source
+✅ Timestamp
+
+========================
+ADMIN CRM MODULE
+================
+
+Create:
+Customer Leads / Live Chat CRM
+
+Features:
+✅ View all leads
+✅ Search leads
+✅ Filter by city/date/source
+✅ Export leads
+✅ WhatsApp quick contact
+✅ Lead status management
+
+Statuses:
+
+* New Lead
+* Contacted
+* Interested
+* Ordered
+* Follow-up
+* Converted
+
+========================
+MARKETING FEATURES
+==================
+
+Need:
+✅ WhatsApp marketing
+✅ SMS campaigns
+✅ Email campaigns
+✅ Offer campaigns
+✅ Coupon system
+✅ Retargeting tools
+
+========================
+SUBSCRIBE SYSTEM
+================
+
+Footer subscribe system should save:
+
+✅ Emails
+✅ Phone numbers (optional)
+
+Admin should manage:
+✅ Subscribers
+✅ Campaigns
+✅ Offers
+✅ Discount codes
+✅ Welcome coupons
+
+========================
+VERY IMPORTANT
+==============
+
+The AI chatbot experience must remain premium and intelligent.
+
+Only ADD:
+✅ Lead collection
+✅ CRM
+✅ Marketing tools
+✅ Subscriber system
+
+Without damaging:
+✅ AI chat
+✅ Product recommendation flow
+✅ OpenAI integrations
+✅ Conversational ecommerce experience
+
+========================
+FINAL GOAL
+==========
+
+Build a complete ecommerce AI assistant with:
+
+✅ AI chatbot
+✅ Product recommendations
+✅ Lead capture
+✅ CRM system
+✅ WhatsApp marketing
+✅ Email marketing
+✅ Subscriber system
+✅ Coupon automation
+✅ Retargeting system
+
+Everything should work together professionally without breaking the original AI chatbot architecture.

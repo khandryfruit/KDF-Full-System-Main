@@ -4,7 +4,7 @@ import {
   MessageCircle, Send, Loader2, RefreshCw, Trash2, User, Bot, Shield,
   Circle, Package, Tag, Gift, ClipboardList, Search, X, ChevronRight,
   Grid3x3, CreditCard, Truck, CheckSquare, Square, ShoppingBag,
-  ExternalLink, Filter, Store, Globe,
+  ExternalLink, Store, Globe,
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,9 @@ function getImageUrl(key: string | null | undefined): string | null {
 /* ─────────────────────────────────────
    Enhanced Template Panel
 ───────────────────────────────────── */
-function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (session: Session) => void }) {
+function TemplatePanel({ sessionId, onSent, initialMode, onClose }: { sessionId: string; onSent: (session: Session) => void; initialMode?: TemplateType | null; onClose?: () => void }) {
   const { toast } = useToast();
-  const [mode, setMode] = useState<TemplateType | null>(null);
+  const [mode, setMode] = useState<TemplateType | null>(initialMode ?? null);
   const [sending, setSending] = useState(false);
 
   /* ── Unified product search state ── */
@@ -298,7 +298,10 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
     <div className="border-t border-border bg-card max-h-[420px] overflow-y-auto">
       {!mode ? (
         <div className="px-4 py-3">
-          <p className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">Quick Templates</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Quick Templates</p>
+            {onClose && <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-3.5 h-3.5" /></button>}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {TEMPLATE_TYPES.map(t => {
               const Icon = t.icon;
@@ -319,7 +322,7 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
       ) : (
         <div className="px-4 py-3 space-y-3">
           <div className="flex items-center gap-2 mb-1">
-            <button onClick={() => { setMode(null); setSelectedProducts([]); }} className="p-1 rounded-lg hover:bg-muted transition-colors"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>
+            <button onClick={() => { setMode(null); setSelectedProducts([]); if (initialMode) onClose?.(); }} className="p-1 rounded-lg hover:bg-muted transition-colors"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>
             <p className="text-xs font-bold">{TEMPLATE_TYPES.find(t => t.type === mode)?.label}</p>
           </div>
 
@@ -431,7 +434,7 @@ export default function ChatConversationsPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [replyText, setReplyText] = useState("");
   const [filter, setFilter] = useState<"all" | "active">("all");
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState<TemplateType | "panel" | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: sessions = [], isLoading, refetch } = useQuery<Session[]>({
@@ -632,7 +635,7 @@ export default function ChatConversationsPage() {
                   const last = msgs[msgs.length - 1];
                   const active = isActive(s.updatedAt);
                   return (
-                    <button key={s.id} onClick={() => { setSelectedSession(s); setShowTemplates(false); }}
+                    <button key={s.id} onClick={() => { setSelectedSession(s); setActiveTemplate(null); }}
                       className={`w-full text-left px-4 py-3.5 border-b border-border/50 hover:bg-muted/40 transition-colors ${selectedSession?.id === s.id ? "bg-[#5FA800]/5 border-l-2 border-l-[#5FA800]" : ""}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <Circle className={`w-2 h-2 flex-shrink-0 ${active ? "fill-green-500 text-green-500" : "fill-gray-300 text-gray-300"}`} />
@@ -709,23 +712,55 @@ export default function ChatConversationsPage() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {showTemplates && (
-                  <TemplatePanel sessionId={selectedSession.sessionId} onSent={(session) => { setSelectedSession(session); qc.invalidateQueries({ queryKey: ["admin-chat-sessions"] }); setShowTemplates(false); }} />
+                {activeTemplate && (
+                  <TemplatePanel
+                    sessionId={selectedSession.sessionId}
+                    initialMode={activeTemplate === "panel" ? null : activeTemplate as TemplateType}
+                    onClose={() => setActiveTemplate(null)}
+                    onSent={(session) => { setSelectedSession(session); qc.invalidateQueries({ queryKey: ["admin-chat-sessions"] }); setActiveTemplate(null); }}
+                  />
                 )}
 
-                <div className="px-4 py-3 border-t border-border bg-card flex gap-2 items-end flex-shrink-0">
-                  <button onClick={() => setShowTemplates(v => !v)} title="Send template"
-                    className={`h-10 px-3 rounded-xl border transition-colors flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${showTemplates ? "bg-[#5FA800]/10 border-[#5FA800]/30 text-[#5FA800]" : "border-border text-muted-foreground hover:bg-muted"}`}>
-                    <Filter className="w-4 h-4" />Templates
-                  </button>
-                  <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
-                    placeholder="Type reply… (Enter to send)"
-                    rows={2}
-                    className="flex-1 border border-border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-background" />
-                  <Button onClick={handleReply} disabled={replyMut.isPending || !replyText.trim()} className="h-10 px-4 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0">
-                    {replyMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Send
-                  </Button>
+                {/* Quick-action toolbar */}
+                <div className="border-t border-border bg-card flex-shrink-0">
+                  {/* Template icon row */}
+                  <div className="px-3 pt-2.5 pb-1 flex items-center gap-1 overflow-x-auto">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex-shrink-0 mr-1">Send:</span>
+                    {[
+                      { type: "product" as TemplateType, icon: Package, label: "Product", color: "text-green-700 bg-green-50 border-green-200 hover:bg-green-100" },
+                      { type: "coupon" as TemplateType, icon: Tag, label: "Coupon", color: "text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100" },
+                      { type: "category" as TemplateType, icon: Grid3x3, label: "Category", color: "text-teal-700 bg-teal-50 border-teal-200 hover:bg-teal-100" },
+                      { type: "offer" as TemplateType, icon: Gift, label: "Offer", color: "text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100" },
+                      { type: "payment_link" as TemplateType, icon: CreditCard, label: "Pay Link", color: "text-violet-700 bg-violet-50 border-violet-200 hover:bg-violet-100" },
+                      { type: "tracking_link" as TemplateType, icon: Truck, label: "Tracking", color: "text-sky-700 bg-sky-50 border-sky-200 hover:bg-sky-100" },
+                      { type: "order_form" as TemplateType, icon: ClipboardList, label: "Order Form", color: "text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100" },
+                    ].map(({ type, icon: Icon, label, color }) => (
+                      <button
+                        key={type}
+                        onClick={() => setActiveTemplate(prev => prev === type ? null : type)}
+                        title={label}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-bold flex-shrink-0 transition-all ${
+                          activeTemplate === type
+                            ? color.replace("bg-", "bg-").replace("hover:bg-", "") + " ring-1 ring-offset-0 opacity-100 scale-95"
+                            : color + " opacity-80 hover:opacity-100"
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {/* Text input row */}
+                  <div className="px-3 pb-3 flex gap-2 items-end">
+                    <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
+                      placeholder="Type reply… (Enter to send)"
+                      rows={2}
+                      className="flex-1 border border-border rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-background" />
+                    <Button onClick={handleReply} disabled={replyMut.isPending || !replyText.trim()} className="h-10 px-4 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0">
+                      {replyMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Send
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
