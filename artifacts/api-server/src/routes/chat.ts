@@ -271,7 +271,7 @@ router.post("/chat/message", async (req, res) => {
       const choice = completion.choices[0];
       currentMessages.push(choice.message as any);
 
-      if (choice.finish_reason === "stop" || !choice.message.tool_calls?.length) {
+      if (!choice.message.tool_calls?.length) {
         const raw = choice.message.content ?? chatbot.fallbackMessage ?? "Let me check that for you. One moment.";
         const replyText = stripMarkdown(raw);
         const historyEntry: any = { role: "assistant", content: replyText, timestamp: new Date().toISOString() };

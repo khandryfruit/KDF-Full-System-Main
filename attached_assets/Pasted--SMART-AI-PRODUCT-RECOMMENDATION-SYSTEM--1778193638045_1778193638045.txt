@@ -1,0 +1,193 @@
+========================
+SMART AI PRODUCT RECOMMENDATION SYSTEM
+======================================
+
+Add an advanced AI recommendation engine inside the live chat ordering system.
+
+The AI should not only search products —
+it should intelligently recommend the BEST products automatically.
+
+========================
+RECOMMENDED PRODUCT ENGINE
+==========================
+
+When customer searches any product:
+
+Example:
+“almonds”
+“pista”
+“kaju”
+“walnuts”
+
+AI should automatically detect:
+
+✅ Best-selling products
+✅ Most popular products
+✅ Highest-rated products
+✅ Most ordered variants
+✅ Trending products
+✅ Best-value products
+✅ Budget-friendly options
+✅ Premium options
+
+Then recommend them professionally inside chat.
+
+========================
+SMART RECOMMENDATION LOGIC
+==========================
+
+The AI should prioritize products based on:
+
+✅ Highest sales
+✅ Highest conversion
+✅ Best reviews
+✅ Lowest price with high demand
+✅ Most purchased variant
+✅ Trending products
+✅ Available stock
+✅ Fast-moving products
+
+========================
+AI SALES ASSISTANT BEHAVIOR
+===========================
+
+Example flow:
+
+Customer:
+“I need almonds”
+
+AI should respond like:
+
+“Sure 😊
+Our most recommended almond product right now is:
+
+🔥 Roasted Almonds — 500g
+⭐ Best Seller
+💰 Great value price
+✅ Most ordered by customers
+
+(show beautiful Shopify product card)
+
+Would you like:
+✅ 250g
+✅ 500g
+✅ 1kg”
+
+========================
+RECOMMENDED PRODUCT BADGES
+==========================
+
+Add premium badges inside product cards:
+
+✅ Best Seller
+✅ Most Popular
+✅ Recommended
+✅ Trending
+✅ Budget Choice
+✅ Premium Choice
+✅ Fast Selling
+✅ Limited Stock
+
+========================
+DYNAMIC RECOMMENDATION CAROUSEL
+===============================
+
+Inside chat show dynamic product carousels:
+
+✅ Recommended for you
+✅ Customers also bought
+✅ Most ordered today
+✅ Best value products
+✅ Trending dry fruits
+✅ Staff picks
+
+========================
+UPSELL & CROSS-SELL SYSTEM
+==========================
+
+After customer adds product:
+
+AI should intelligently recommend related products.
+
+Example:
+
+Customer adds:
+“Roasted Almonds”
+
+AI should recommend:
+✅ Cashews
+✅ Pistachios
+✅ Mixed nuts
+✅ Honey
+✅ Gift boxes
+
+with:
+✅ Add to Cart buttons
+✅ Quick Buy buttons
+
+========================
+VARIANT RECOMMENDATION SYSTEM
+=============================
+
+AI should also recommend:
+
+✅ Most popular variant
+✅ Best-value variant
+✅ Family pack
+✅ Budget pack
+
+Example:
+
+⭐ Most customers choose:
+500g Roasted Almonds
+
+💰 Better value than 250g
+
+========================
+ADMIN CONTROL PANEL
+===================
+
+Inside admin dashboard create controls for:
+
+✅ Mark product as recommended
+✅ Mark product as trending
+✅ Mark product as best seller
+✅ Manual recommendation priority
+✅ Featured products
+✅ Smart campaign products
+
+========================
+ANALYTICS
+=========
+
+Track:
+✅ Most clicked recommendations
+✅ Most converted recommendations
+✅ AI recommendation conversion rate
+✅ Most recommended products
+✅ Most added products from chat
+
+========================
+FINAL GOAL
+==========
+
+The AI chat should behave like a smart ecommerce sales expert.
+
+Instead of basic replies,
+it should intelligently:
+
+✅ Recommend products
+✅ Increase conversions
+✅ Increase average order value
+✅ Help customers choose variants
+✅ Push best-selling products
+✅ Push budget-friendly options
+✅ Push premium products
+✅ Drive more sales automatically
+
+Everything should feel:
+✅ Smart
+✅ AI-powered
+✅ Human-like
+✅ Professional
+✅ Ecommerce optimized

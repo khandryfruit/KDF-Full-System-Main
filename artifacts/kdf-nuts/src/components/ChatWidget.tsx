@@ -887,7 +887,7 @@ export function ChatWidget() {
   const closeChat = () => setIsChatOpen(false);
 
   const ChatPanel = isChatOpen && !showOrderForm ? (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300">
       <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)", paddingTop: "env(safe-area-inset-top, 12px)", paddingBottom: "12px" }}>
         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center font-black text-[#5FA800] text-sm flex-shrink-0">K</div>
         <div className="flex-1 min-w-0">

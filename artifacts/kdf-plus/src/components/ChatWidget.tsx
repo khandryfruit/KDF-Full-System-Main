@@ -988,7 +988,7 @@ export function ChatWidget() {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-muted animate-in slide-in-from-bottom duration-300 lg:inset-auto lg:bottom-24 lg:right-6 lg:w-[380px] lg:h-[540px] lg:rounded-2xl lg:shadow-2xl lg:border lg:border-border lg:slide-in-from-bottom-0">
+        <div className="fixed inset-0 z-[9999] flex flex-col overflow-hidden bg-muted animate-in slide-in-from-bottom duration-300 lg:inset-auto lg:bottom-24 lg:right-6 lg:w-[380px] lg:h-[540px] lg:rounded-2xl lg:shadow-2xl lg:border lg:border-border lg:slide-in-from-bottom-0">
           {/* Header */}
           <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)", paddingTop: "max(14px, env(safe-area-inset-top, 14px))", paddingBottom: "14px" }}>
             <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center font-black text-[#5FA800] text-sm flex-shrink-0">K</div>

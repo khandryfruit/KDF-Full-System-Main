@@ -1,0 +1,285 @@
+========================
+ADVANCED AI CHAT + SHOPIFY PRODUCT ORDER SYSTEM
+===============================================
+
+The current order popup/chat flow is still incomplete.
+
+Right now:
+❌ Only one simple product gets selected
+❌ No proper Shopify product sync
+❌ No product variants selection
+❌ No multi-product cart flow
+❌ No intelligent AI recommendations
+❌ No catalog-style product responses
+❌ No dynamic order building system
+
+This is NOT the experience we need.
+
+We need a fully intelligent AI commerce assistant connected directly with Shopify products.
+
+========================
+MAIN GOAL
+=========
+
+The AI chat should work like a real ecommerce sales assistant.
+
+Customer should be able to:
+
+✅ Ask for products naturally
+✅ See Shopify products dynamically
+✅ Select variants
+✅ Add multiple products
+✅ Build full cart inside chat
+✅ Review order
+✅ Place final order directly from chat
+
+Everything should happen INSIDE the live chat flow professionally.
+
+========================
+SHOPIFY PRODUCT SYNC
+====================
+
+Very important:
+
+ALL Shopify products must sync dynamically with AI chat system.
+
+Including:
+✅ Product title
+✅ Images
+✅ Price
+✅ Variants
+✅ Stock status
+✅ Product URL
+✅ Weight options
+✅ Categories
+✅ Offers
+✅ Discounts
+
+The AI chat should always use LIVE Shopify data.
+
+========================
+SMART PRODUCT SEARCH
+====================
+
+When customer types:
+
+“almonds”
+“badam”
+“pista”
+“kajuu”
+“walnuts”
+“akhrot”
+
+AI should:
+
+✅ Search Shopify products
+✅ Find matching products
+✅ Show beautiful product cards
+✅ Display images
+✅ Display prices
+✅ Display available variants
+✅ Display stock status
+
+NOT generic text replies.
+
+========================
+PRODUCT CARD UI
+===============
+
+Need premium ecommerce product cards inside chat.
+
+Each card should contain:
+
+✅ Product image
+✅ Product name
+✅ Price
+✅ Variant selector
+✅ Quantity selector
+✅ Add to Cart button
+✅ Quick Buy button
+✅ View Details button
+
+Must feel like:
+✅ Shopify
+✅ Amazon
+✅ Daraz
+✅ Modern ecommerce AI assistant
+
+========================
+VARIANT SELECTION SYSTEM
+========================
+
+This is extremely important.
+
+Right now variants are NOT handled correctly.
+
+Example:
+
+If customer selects:
+“Roasted Almonds”
+
+AI must ask:
+
+Which variant would you like?
+
+✅ 250g
+✅ 500g
+✅ 1kg
+
+with beautiful selectable UI cards/buttons.
+
+NOT auto-select single variant.
+
+========================
+MULTI-PRODUCT CART FLOW
+=======================
+
+Need full cart-building system inside chat.
+
+Customer should be able to:
+
+✅ Add almonds
+✅ Add pista
+✅ Add kaju
+✅ Add walnuts
+✅ Edit quantities
+✅ Remove products
+✅ Change variants
+
+before placing final order.
+
+========================
+CHAT-BASED CART SYSTEM
+======================
+
+Need floating smart cart inside chat.
+
+Show:
+✅ Added products
+✅ Variants
+✅ Quantity
+✅ Total price
+✅ Delivery charges
+✅ Discount
+✅ Coupon support
+
+========================
+AI ORDER ASSISTANT
+==================
+
+AI should behave like human sales agent.
+
+Example flow:
+
+Customer:
+“I need almonds”
+
+AI:
+“Sure 😊 Which almonds would you like?”
+
+(show Shopify almond products)
+
+Customer selects:
+“Roasted Almonds”
+
+AI:
+“Which size would you like?”
+
+✅ 250g
+✅ 500g
+✅ 1kg
+
+Customer selects:
+“500g”
+
+AI:
+“Great choice. Added to your cart ✅
+Would you like anything else?”
+
+Then customer continues shopping.
+
+========================
+SHOPIFY CATALOG MESSAGING
+=========================
+
+If customer asks:
+“Show pista”
+“Show almonds”
+“Show kaju”
+
+AI must send:
+✅ Shopify product catalog
+✅ Product cards
+✅ Product images
+✅ Prices
+✅ Variant buttons
+
+inside chat automatically.
+
+========================
+FINAL ORDER FLOW
+================
+
+At checkout stage:
+
+AI should automatically generate smart order summary.
+
+Show:
+✅ Product list
+✅ Variants
+✅ Quantities
+✅ Total
+✅ Delivery info
+✅ Customer address
+✅ Payment method
+
+Then:
+✅ Place order
+✅ Save inside admin dashboard
+✅ Sync with CRM
+✅ Sync with Shopify orders
+
+========================
+VOICE + AI ORDERING
+===================
+
+Need voice-assisted ordering too.
+
+Customer should be able to:
+
+✅ Speak product names
+✅ Speak quantities
+✅ Speak variants
+
+Example:
+“I need 1kg almonds and 500g pista”
+
+AI should:
+✅ Understand voice
+✅ Detect products
+✅ Detect variants
+✅ Auto-build cart
+✅ Confirm order professionally
+
+========================
+FINAL GOAL
+==========
+
+Need a world-class AI ecommerce ordering system where:
+
+✅ Shopify products sync live
+✅ AI behaves like real sales agent
+✅ Variants work professionally
+✅ Multi-product ordering works
+✅ Cart works inside chat
+✅ Product recommendations work
+✅ Voice ordering works
+✅ Orders sync with admin
+✅ Orders sync with Shopify
+✅ Entire experience feels premium and intelligent
+
+The system should feel like:
+✅ AI-powered ecommerce assistant
+✅ Smart shopping chatbot
+✅ Automated sales agent
+✅ Modern conversational commerce platform
