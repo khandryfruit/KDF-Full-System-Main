@@ -1,0 +1,339 @@
+# Master Prompt — Product Naming Cleanup + Dynamic Weight-Based Inventory System
+
+You now need to improve the inventory/product structure of the ERP/POS system.
+
+Current issue:
+
+Products are being created like:
+
+* Cashew Nuts 250g
+* Cashew Nuts 500g
+* Cashew Nuts 1KG
+
+This is WRONG for a professional grocery/dry fruit ERP system.
+
+It creates:
+
+* Duplicate products
+* Inventory confusion
+* Difficult stock management
+* Incorrect analytics
+* Complicated reporting
+
+This must now be converted into a proper dynamic weight-based inventory system.
+
+---
+
+# 1. REMOVE WEIGHT FROM PRODUCT NAMES (IMPORTANT)
+
+Products should ONLY have clean names.
+
+---
+
+# WRONG PRODUCT NAMES
+
+❌ Cashew Nuts 250g
+❌ Cashew Nuts 500g
+❌ Cashew Nuts 1KG
+
+---
+
+# CORRECT PRODUCT NAME
+
+✅ Cashew Nuts
+
+ONLY ONE product should exist.
+
+---
+
+# 2. DYNAMIC WEIGHT SELECTION SYSTEM
+
+Weight should NOT be part of product name.
+
+Weight should be selected dynamically inside invoice/POS.
+
+---
+
+# REQUIRED FLOW
+
+## Product:
+
+Cashew Nuts
+
+When added to invoice:
+
+Cashier selects:
+
+* 250g
+* 500g
+* 750g
+* 1KG
+* Custom weight
+
+---
+
+# 3. CUSTOM WEIGHT INPUT
+
+Allow cashier to type:
+
+* 250g
+* 300g
+* 1.5kg
+* 2kg
+
+System auto calculates:
+
+* Price
+* Stock deduction
+* Profit
+
+IN REAL-TIME.
+
+---
+
+# 4. PRICE PER KG SYSTEM (IMPORTANT)
+
+Each product should have:
+
+## Cost Price Per KG
+
+## Selling Price Per KG
+
+---
+
+# Example
+
+Cashew Nuts:
+
+Cost:
+Rs. 3200/KG
+
+Sell:
+Rs. 3800/KG
+
+---
+
+# Auto Calculation
+
+If customer buys:
+
+## 250g
+
+System calculates:
+
+```text id="r5jpkh"
+3800 ÷ 1000 × 250
+```
+
+Final Price:
+Rs. 950
+
+---
+
+# 5. INVENTORY DEDUCTION SYSTEM
+
+Master stock stored in:
+
+# KG
+
+Example:
+
+Stock:
+50KG
+
+Customer buys:
+250g
+
+Deduct:
+0.25KG
+
+Remaining:
+49.75KG
+
+---
+
+# 6. PRODUCT DATABASE CLEANUP
+
+Remove duplicate weight products.
+
+---
+
+# REQUIRED MIGRATION
+
+Merge:
+
+* Cashew Nuts 250g
+* Cashew Nuts 500g
+* Cashew Nuts 1KG
+
+Into:
+
+# Cashew Nuts
+
+---
+
+# Preserve:
+
+* Stock
+* Sales history
+* Analytics
+* Invoice history
+
+---
+
+# 7. NEW PRODUCT STRUCTURE
+
+Products table should contain:
+
+| Field                | Example     |
+| -------------------- | ----------- |
+| product_name         | Cashew Nuts |
+| base_unit            | KG          |
+| cost_price_per_kg    | 3200        |
+| selling_price_per_kg | 3800        |
+| stock_kg             | 50          |
+
+---
+
+# 8. POS UI IMPROVEMENT
+
+Inside invoice row:
+
+| Product | Weight | Rate/KG | Total |
+
+---
+
+# Weight Selector
+
+Add:
+
+* Quick buttons
+* Custom input
+
+---
+
+# Quick Weight Buttons
+
+Examples:
+
+* 250g
+* 500g
+* 1KG
+
+But NOT inside product name.
+
+---
+
+# 9. LIVE CALCULATIONS
+
+As soon as weight changes:
+
+Update instantly:
+
+* Price
+* Tax
+* Profit
+* Remaining stock
+
+WITHOUT reload.
+
+---
+
+# 10. SEARCH IMPROVEMENT
+
+Searching should ONLY show:
+
+✅ Cashew Nuts
+✅ Almonds
+✅ Pistachio
+
+NOT multiple weight duplicates.
+
+---
+
+# 11. ANALYTICS FIX
+
+Analytics should combine all weight sales into ONE product.
+
+Example:
+
+# Cashew Nuts
+
+Total Sold:
+
+* 250g
+* 500g
+* 1KG
+
+Combined into one analytics report.
+
+---
+
+# 12. PRINT INVOICE IMPROVEMENT
+
+Invoice should show:
+
+```text id="t1x8g5"
+Cashew Nuts — 250g
+```
+
+BUT product database name remains:
+
+```text id="10qf4j"
+Cashew Nuts
+```
+
+---
+
+# 13. STOCK VALIDATION
+
+Prevent:
+
+* Selling more than available stock
+* Negative stock
+* Invalid gram conversion
+
+---
+
+# 14. BARCODE SUPPORT
+
+Barcode should identify:
+
+* Base product
+* Weight
+* Price
+
+---
+
+# 15. PERFORMANCE REQUIREMENTS
+
+System must remain:
+
+* Fast
+* Lightweight
+* Low hosting usage
+
+Avoid duplicate inventory calculations.
+
+---
+
+# 16. FINAL REQUIREMENT
+
+DO NOT:
+
+❌ Create separate products for each weight
+❌ Duplicate inventory
+❌ Duplicate analytics
+❌ Duplicate stock entries
+
+Instead:
+
+✅ Single product
+✅ Dynamic weight selection
+✅ Auto gram/kg calculations
+✅ Unified inventory
+✅ Unified analytics
+✅ Real-time pricing
+✅ Real-time stock deduction
+
+This must behave like a real professional grocery/dry fruit ERP + POS system.

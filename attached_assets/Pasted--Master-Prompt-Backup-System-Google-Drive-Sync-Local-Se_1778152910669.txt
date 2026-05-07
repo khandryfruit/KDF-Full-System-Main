@@ -1,0 +1,507 @@
+# Master Prompt — Backup System + Google Drive Sync + Local Server Storage + Import/Export ERP Module
+
+You now need to upgrade the ERP/POS system into a complete enterprise-grade backup, recovery, and data synchronization platform.
+
+Current system has NO professional backup/recovery architecture.
+
+This is dangerous because:
+
+* Server may crash
+* Windows may corrupt
+* Hosting may fail
+* Database may be deleted
+* Branch PC may stop working
+
+The ERP system MUST now support:
+
+✅ Cloud backup
+✅ Google Drive sync
+✅ Local server backup
+✅ Manual backup
+✅ Import/Export
+✅ Full recovery system
+✅ Offline-safe architecture
+
+This must behave like a real enterprise ERP/POS backup infrastructure.
+
+---
+
+# 1. MASTER BACKUP & RECOVERY MODULE
+
+Create a new section:
+
+# Settings → Backup & Recovery
+
+---
+
+# 2. GOOGLE DRIVE BACKUP SYSTEM (IMPORTANT)
+
+Add professional Google Drive integration.
+
+---
+
+# Required Features
+
+## Google Login
+
+Allow admin to:
+
+* Login with Google
+* Connect Google Drive
+* Select backup folder
+
+---
+
+# Auto Backup
+
+System automatically uploads:
+
+* Database backup
+* Product data
+* Invoice data
+* Inventory data
+* Customer data
+* Settings
+* Branch data
+
+To Google Drive.
+
+---
+
+# Backup Frequency
+
+Admin can select:
+
+* Every hour
+* Daily
+* Weekly
+* Manual only
+
+---
+
+# Smart Backup Strategy
+
+Use:
+
+* Incremental backup
+* Compressed backup
+* Optimized storage
+
+To reduce hosting/storage cost.
+
+---
+
+# 3. LOCAL SERVER STORAGE SYSTEM
+
+Add support for:
+
+# Local Machine Storage
+
+---
+
+# Features
+
+Allow ERP to store backup on:
+
+* Windows PC
+* Local server
+* External drive
+* Network drive
+
+---
+
+# Local Backup Path Settings
+
+Admin can configure:
+
+```text id="eq4aqs"
+D:/ERP_Backups/
+```
+
+OR
+
+```text id="j7wz3d"
+E:/POS_System/Backups/
+```
+
+---
+
+# Auto Local Backup
+
+System automatically saves:
+
+* Database
+* Invoice PDFs
+* Product images
+* Settings
+
+Locally.
+
+---
+
+# 4. IMPORT / EXPORT SYSTEM (VERY IMPORTANT)
+
+Create professional:
+
+# Import / Export Center
+
+---
+
+# Export Features
+
+Allow export:
+
+## Products
+
+## Customers
+
+## Invoices
+
+## Inventory
+
+## Branches
+
+## Staff
+
+## Reports
+
+## Settings
+
+---
+
+# Export Formats
+
+Support:
+
+* Excel (.xlsx)
+* CSV
+* JSON
+* SQL backup
+
+---
+
+# 5. IMPORT FEATURES
+
+Allow import for:
+
+* Product names
+* Product stock
+* Product prices
+* Customers
+* Inventory
+* Branches
+
+---
+
+# REQUIRED IMPORT VALIDATION
+
+Check:
+
+* Duplicate SKU
+* Invalid stock
+* Invalid unit
+* Missing columns
+
+---
+
+# Import Preview
+
+Before importing:
+
+Show preview table.
+
+Admin confirms before final import.
+
+---
+
+# 6. FULL DATABASE RECOVERY SYSTEM
+
+Add:
+
+# Restore Backup
+
+---
+
+# Restore Sources
+
+Restore from:
+
+* Google Drive
+* Local backup
+* Manual upload
+* SQL file
+
+---
+
+# Recovery Features
+
+System can restore:
+
+* Full database
+* Products only
+* Inventory only
+* Settings only
+
+---
+
+# 7. OFFLINE-FIRST ERP SYSTEM
+
+IMPORTANT.
+
+Branches may lose internet.
+
+---
+
+# Required Offline Features
+
+Branch can still:
+
+* Create invoices
+* Print invoices
+* Manage inventory
+
+WITHOUT internet.
+
+---
+
+# Auto Sync
+
+When internet returns:
+
+* Auto sync data
+* Resolve conflicts
+* Update central server
+
+---
+
+# 8. DATA SYNC ENGINE
+
+Create professional sync architecture.
+
+---
+
+# Sync Targets
+
+Sync:
+
+* Products
+* Inventory
+* Invoices
+* Customers
+* Settings
+* Branch data
+
+---
+
+# Conflict Resolution
+
+If same product edited on two systems:
+
+System should:
+
+* Detect conflict
+* Show merge options
+* Prevent data loss
+
+---
+
+# 9. PRODUCT IMPORT/EXPORT (IMPORTANT)
+
+Admin must be able to:
+
+## Export Product List
+
+Including:
+
+* Product Name
+* SKU
+* Barcode
+* Stock
+* Price
+* Unit
+* Category
+
+---
+
+# Bulk Product Import
+
+Support:
+
+* Excel upload
+* CSV upload
+
+---
+
+# Smart Product Matching
+
+Match by:
+
+* SKU
+* Barcode
+* Product ID
+
+Avoid duplicate products.
+
+---
+
+# 10. IMAGE BACKUP SYSTEM
+
+Backup:
+
+* Product images
+* Logos
+* Invoice templates
+
+To:
+
+* Google Drive
+* Local storage
+
+---
+
+# 11. AUTOMATIC HEALTH CHECKS
+
+System monitors:
+
+* Backup status
+* Sync status
+* Storage usage
+* Failed backups
+
+---
+
+# Alerts
+
+Notify admin if:
+
+* Backup failed
+* Sync failed
+* Storage full
+* Database corrupted
+
+---
+
+# 12. SECURITY REQUIREMENTS
+
+Protect:
+
+* Backup files
+* Google tokens
+* Restore APIs
+* Export downloads
+
+---
+
+# Security Features
+
+Use:
+
+* Encryption
+* Secure authentication
+* Role-based access
+
+---
+
+# 13. LOW-COST INFRASTRUCTURE (IMPORTANT)
+
+System MUST be optimized for:
+
+* Low hosting cost
+* Low server load
+* Low storage usage
+
+---
+
+# REQUIRED OPTIMIZATIONS
+
+Use:
+
+* Compressed backups
+* Incremental sync
+* Lazy uploads
+* Efficient database dumps
+
+Avoid:
+
+* Full backup every minute
+* Heavy unnecessary processing
+
+---
+
+# 14. SETTINGS UI REQUIREMENTS
+
+Create professional UI:
+
+# Backup Dashboard
+
+Show:
+
+| Backup Type | Last Backup | Status | Storage |
+| ----------- | ----------- | ------ | ------- |
+
+---
+
+# Add Buttons
+
+* Backup Now
+* Restore
+* Export
+* Import
+* Connect Google Drive
+
+---
+
+# 15. DATABASE REQUIREMENTS
+
+Add support tables:
+
+## backups
+
+* type
+* source
+* file_path
+* status
+* created_at
+
+---
+
+## sync_logs
+
+* module
+* sync_status
+* device
+* timestamp
+
+---
+
+# 16. MOBILE + TABLET SUPPORT
+
+Backup/settings screens must be responsive.
+
+---
+
+# 17. FINAL REQUIREMENT
+
+DO NOT leave:
+
+❌ Fake backup buttons
+❌ Dummy Google login
+❌ Static import/export
+❌ Broken restore logic
+❌ Frontend-only sync
+
+Everything must work with:
+
+✅ Google Drive
+✅ Local storage
+✅ Offline mode
+✅ Auto sync
+✅ Import/export
+✅ Recovery system
+✅ Product backup
+✅ Database restore
+✅ Real backup files
+✅ Secure architecture
+✅ Low hosting usage
+
+This must behave like a real enterprise-grade ERP/POS backup and disaster recovery system.

@@ -1,0 +1,516 @@
+# Master Prompt — Advanced POS Keyboard Navigation + Smart Stock Management + KG/Gram Inventory System
+
+You now need to upgrade the ERP/POS system into a complete professional retail inventory + fast billing system.
+
+Current problems:
+
+* Keyboard navigation incomplete
+* Arrow keys not supported properly
+* Product navigation slow
+* Stock management weak
+* KG/Gram conversion missing
+* Inventory deduction inaccurate
+* Product quantity system not professional
+
+This must now behave like a real supermarket / grocery / dry fruit POS system.
+
+---
+
+# 1. FULL KEYBOARD NAVIGATION SYSTEM (VERY IMPORTANT)
+
+The POS/Create Invoice screen must support complete keyboard-only operation.
+
+Cashier should create invoice WITHOUT mouse.
+
+---
+
+# REQUIRED KEYBOARD SUPPORT
+
+## Arrow Keys Navigation
+
+Use keyboard keys shown in image:
+
+* ↑ Up Arrow
+* ↓ Down Arrow
+* ← Left Arrow
+* → Right Arrow
+
+---
+
+# Product Search Navigation
+
+When searching products:
+
+## UP/DOWN Arrow
+
+Move selection between products.
+
+## ENTER
+
+Select highlighted product.
+
+## LEFT/RIGHT Arrow
+
+Move between:
+
+* Qty field
+* Discount field
+* Price field
+
+---
+
+# Invoice Cart Navigation
+
+Arrow keys should navigate invoice rows.
+
+---
+
+# REQUIRED SHORTCUTS
+
+| Key      | Action               |
+| -------- | -------------------- |
+| F1       | New Invoice          |
+| F2       | Focus Product Search |
+| F3       | Customer Search      |
+| F4       | Add Discount         |
+| F5       | Refresh Products     |
+| F6       | Payment Modal        |
+| F7       | Hold Invoice         |
+| F8       | Resume Invoice       |
+| CTRL + S | Save Invoice         |
+| CTRL + P | Print Invoice        |
+| DELETE   | Remove Product       |
+| ESC      | Close Modal          |
+| ENTER    | Select Product       |
+| ↑ ↓      | Navigate Products    |
+| ← →      | Move Between Fields  |
+
+---
+
+# FAST CASHIER MODE
+
+Cashier workflow should be:
+
+1. Search product
+2. Arrow down
+3. Press Enter
+4. Change qty
+5. Save invoice
+
+WITHOUT mouse usage.
+
+---
+
+# 2. SMART STOCK MANAGEMENT SYSTEM (VERY IMPORTANT)
+
+Current stock system is incomplete.
+
+You now need a professional inventory engine.
+
+---
+
+# REQUIRED INVENTORY FEATURES
+
+## Product Stock Tracking
+
+Track:
+
+* Current Stock
+* Reserved Stock
+* Sold Stock
+* Returned Stock
+* Damaged Stock
+
+---
+
+# Live Stock Updates
+
+When invoice created:
+
+* Stock auto deducts instantly
+
+When return:
+
+* Stock restores automatically
+
+---
+
+# Low Stock Alerts
+
+Show warnings when:
+
+* Stock low
+* Out of stock
+* Negative stock attempt
+
+---
+
+# 3. KG / GRAMS INVENTORY SYSTEM (IMPORTANT)
+
+This is REQUIRED for:
+
+* Dry Fruits
+* Grocery
+* Meat
+* Bakery
+* Wholesale items
+
+---
+
+# MASTER STOCK UNIT
+
+Products should be stored in:
+
+# KG (Kilograms)
+
+Example:
+
+Cashew Stock = 50 KG
+
+---
+
+# SELLING UNITS
+
+Invoice can sell:
+
+* KG
+* Grams
+
+---
+
+# AUTO CONVERSION SYSTEM
+
+Use proper conversion logic:
+
+## Formula
+
+1 KG = 1000 Grams
+
+---
+
+# Example
+
+Stock Added:
+50 KG
+
+Customer buys:
+250 Grams
+
+System should deduct:
+
+0.25 KG
+
+Remaining stock:
+49.75 KG
+
+---
+
+# REQUIRED CALCULATION ENGINE
+
+If user enters:
+
+## 100 Grams
+
+Deduct:
+0.1 KG
+
+## 500 Grams
+
+Deduct:
+0.5 KG
+
+## 1250 Grams
+
+Deduct:
+1.25 KG
+
+---
+
+# IMPORTANT RULE
+
+Database should store stock consistently.
+
+Recommended:
+
+* Store everything internally in grams OR decimal KG
+* Avoid mixed calculations
+
+---
+
+# 4. PRODUCT UNIT SYSTEM
+
+Each product must support:
+
+## Base Unit
+
+Example:
+
+* KG
+* PCS
+* Litre
+* Box
+
+---
+
+# Selling Unit
+
+Can sell in:
+
+* KG
+* Gram
+* Piece
+
+---
+
+# Example
+
+## Almonds
+
+Base stock:
+50 KG
+
+Sell:
+250g
+500g
+1KG
+
+---
+
+# 5. SMART QUANTITY INPUT
+
+Inside invoice:
+
+Allow:
+
+* 250g
+* 500g
+* 1kg
+* 1.5kg
+
+System auto converts.
+
+---
+
+# Auto Parsing Logic
+
+If cashier types:
+
+## “250g”
+
+System converts internally.
+
+---
+
+# 6. STOCK HISTORY SYSTEM
+
+Track ALL inventory movements.
+
+---
+
+# Inventory Logs
+
+Track:
+
+* Stock Added
+* Stock Reduced
+* Invoice Sale
+* Return Added
+* Damage Entry
+* Manual Adjustment
+
+---
+
+# Inventory Table
+
+| Date | Product | Action | Qty | Unit | Remaining Stock |
+| ---- | ------- | ------ | --- | ---- | --------------- |
+
+---
+
+# 7. PRODUCT SEARCH IMPROVEMENTS
+
+Product search should support:
+
+* Barcode
+* SKU
+* Product Name
+* Category
+* Fast keyboard search
+
+---
+
+# SEARCH PERFORMANCE
+
+Use:
+
+* Debounced search
+* Indexed queries
+* Lazy loading
+
+Must stay FAST.
+
+---
+
+# 8. STOCK VALIDATION
+
+Prevent:
+
+* Negative stock
+* Overselling
+* Invalid gram conversion
+
+---
+
+# Example
+
+Available:
+200g
+
+Cashier tries:
+500g
+
+System blocks invoice.
+
+---
+
+# 9. LIVE STOCK DISPLAY
+
+Show live stock inside product card.
+
+Example:
+
+```text id="n4ho6q"
+Stock: 12.5 KG
+```
+
+OR
+
+```text id="efp0sr"
+Stock: 12500g
+```
+
+---
+
+# 10. PRODUCT VARIANT SUPPORT
+
+Support variants:
+
+* Weight
+* Packing
+* Flavor
+* Size
+
+---
+
+# Example
+
+Cashew:
+
+* 250g Pack
+* 500g Pack
+* 1KG Pack
+
+---
+
+# 11. INVENTORY ANALYTICS
+
+Add:
+
+* Fast-moving stock
+* Dead stock
+* Low stock
+* High-profit items
+
+---
+
+# 12. BARCODE SYSTEM
+
+Add support:
+
+* Barcode scan
+* Auto add product
+* Weighted barcode support
+
+---
+
+# Example
+
+Barcode contains:
+
+* Product ID
+* Weight
+* Price
+
+System auto fills invoice.
+
+---
+
+# 13. MOBILE + TABLET OPTIMIZATION
+
+Keyboard shortcuts for desktop.
+
+Touch-friendly UI for:
+
+* Tablets
+* Mobile POS
+
+---
+
+# 14. DATABASE REQUIREMENTS
+
+Add proper support for:
+
+## products
+
+* base_unit
+* stock_qty
+* stock_in_grams
+* min_stock_alert
+
+---
+
+## inventory_logs
+
+* product_id
+* action_type
+* qty
+* unit
+* remaining_stock
+
+---
+
+# 15. PERFORMANCE OPTIMIZATION
+
+Use:
+
+* Cached stock queries
+* Optimized calculations
+* Background inventory sync
+
+System must remain FAST.
+
+---
+
+# 16. FINAL REQUIREMENT
+
+DO NOT leave:
+
+* Fake keyboard support
+* Incorrect gram conversion
+* Dummy stock calculations
+* Frontend-only inventory logic
+
+Everything must work with:
+
+✅ Real inventory
+✅ Real stock deduction
+✅ KG/Gram conversion
+✅ Keyboard navigation
+✅ Arrow key support
+✅ Barcode scanning
+✅ Live stock updates
+✅ Inventory logs
+✅ Fast POS billing
+✅ Multi-unit support
+
+This must behave like a professional supermarket/grocery ERP + POS inventory system.

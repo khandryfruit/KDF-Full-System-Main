@@ -1951,31 +1951,59 @@ function AdminInvoiceEditDialog({ invoice, onClose, onSaved }: {
 }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    customerName: invoice.customerName ?? "",
-    customerPhone: invoice.customerPhone ?? "",
-    paymentMethod: invoice.paymentMethod,
-    paymentStatus: invoice.paymentStatus,
-    paidAmount: invoice.paidAmount ?? "0",
-    notes: invoice.notes ?? "",
-    editReason: "",
-  });
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  /* ── items editable state ── */
+  const [items, setItems] = useState<any[]>(() =>
+    (invoice.items ?? []).map((it: any) => ({ ...it }))
+  );
+
+  /* ── other fields ── */
+  const [customerName, setCustomerName]   = useState(invoice.customerName ?? "");
+  const [customerPhone, setCustomerPhone] = useState(invoice.customerPhone ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(invoice.paymentMethod);
+  const [paymentStatus, setPaymentStatus] = useState(invoice.paymentStatus);
+  const [paidAmount, setPaidAmount]       = useState(invoice.paidAmount ?? "0");
+  const [notes, setNotes]                 = useState(invoice.notes ?? "");
+  const [editReason, setEditReason]       = useState("");
+
+  /* ── item helpers ── */
+  const updateItem = (idx: number, field: string, val: any) => {
+    setItems(prev => {
+      const arr = [...prev];
+      arr[idx] = { ...arr[idx], [field]: val };
+      const it = arr[idx];
+      /* recalculate lineTotal */
+      const qty   = Number(it.inputValue ?? it.qty ?? it.quantity ?? 1);
+      const price = Number(it.customPrice ?? it.pricePerKg ?? it.price ?? 0);
+      const disc  = Number(it.discount ?? 0);
+      const raw   = qty * price;
+      arr[idx].lineTotal = Math.max(0, raw - (raw * disc / 100));
+      return arr;
+    });
+  };
+  const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
+
+  /* ── computed totals ── */
+  const subtotal   = items.reduce((s, it) => s + Number(it.lineTotal ?? it.total ?? 0), 0);
+  const grandTotal = subtotal;
 
   const handleSave = async () => {
-    if (!form.editReason.trim()) { toast({ variant: "destructive", title: "Please enter a reason for editing" }); return; }
+    if (!editReason.trim()) { toast({ variant: "destructive", title: "Please enter a reason for editing" }); return; }
     setSaving(true);
     try {
       await adminApiFetch(`/api/admin/branch-invoices/${invoice.id}`, {
         method: "PUT",
         body: JSON.stringify({
-          customerName: form.customerName || undefined,
-          customerPhone: form.customerPhone || undefined,
-          paymentMethod: form.paymentMethod,
-          paymentStatus: form.paymentStatus,
-          paidAmount: Number(form.paidAmount),
-          notes: form.notes,
-          editReason: form.editReason,
+          items,
+          subtotal,
+          grandTotal,
+          customerName: customerName || undefined,
+          customerPhone: customerPhone || undefined,
+          paymentMethod,
+          paymentStatus,
+          paidAmount: Number(paidAmount),
+          notes,
+          editReason,
         }),
       });
       toast({ title: "Invoice updated", description: invoice.invoiceNo });
@@ -1986,65 +2014,190 @@ function AdminInvoiceEditDialog({ invoice, onClose, onSaved }: {
 
   return (
     <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Pencil className="w-4 h-4 text-blue-500" /> Edit Invoice — {invoice.invoiceNo}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Customer Name</Label>
-              <Input value={form.customerName} onChange={e => set("customerName", e.target.value)} placeholder="Walk-in" className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Phone</Label>
-              <Input value={form.customerPhone} onChange={e => set("customerPhone", e.target.value)} placeholder="03xx…" className="h-9 text-sm" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Payment Method</Label>
-              <Select value={form.paymentMethod} onValueChange={v => set("paymentMethod", v)}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["cash","card","bank_transfer","easypaisa","jazzcash","cheque","credit"].map(m => (
-                    <SelectItem key={m} value={m}>{m.replace(/_/g, " ")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Payment Status</Label>
-              <Select value={form.paymentStatus} onValueChange={v => set("paymentStatus", v)}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="partial">Partial</SelectItem>
-                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                </SelectContent>
-              </Select>
+      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border shrink-0">
+          <h2 className="flex items-center gap-2 text-base font-bold">
+            <Pencil className="w-4 h-4 text-blue-500" />
+            Edit Invoice — <span className="font-mono text-blue-600">{invoice.invoiceNo}</span>
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{invoice.branchName ?? "Branch"} · {new Date(invoice.createdAt).toLocaleString("en-PK")}</p>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+
+          {/* ── Customer ── */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Customer</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Name</Label>
+                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Walk-in" className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Phone</Label>
+                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="03xx…" className="h-9 text-sm" />
+              </div>
             </div>
           </div>
-          {form.paymentStatus === "partial" && (
-            <div className="space-y-1">
-              <Label className="text-xs">Amount Paid (Rs.)</Label>
-              <Input type="number" value={form.paidAmount} onChange={e => set("paidAmount", e.target.value)} className="h-9 text-sm" />
+
+          {/* ── Items ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Items ({items.length})
+              </p>
+              {items.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">No items in this invoice</span>
+              )}
             </div>
-          )}
+
+            {items.length > 0 ? (
+              <div className="space-y-2">
+                {/* Table header */}
+                <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/40 rounded-lg text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                  <div className="col-span-4">Product</div>
+                  <div className="col-span-2 text-center">Mode/Qty</div>
+                  <div className="col-span-2 text-center">Rate</div>
+                  <div className="col-span-2 text-center">Disc%</div>
+                  <div className="col-span-1 text-right">Total</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {items.map((it: any, idx: number) => {
+                  const name       = it.name ?? it.productName ?? it.sku ?? "Item";
+                  const qty        = it.inputValue ?? it.qty ?? it.quantity ?? 1;
+                  const rate       = it.customPrice ?? it.pricePerKg ?? it.price ?? 0;
+                  const disc       = it.discount ?? 0;
+                  const lineTotal  = it.lineTotal ?? it.total ?? 0;
+                  const mode       = it.sellingMode ?? "custom";
+                  const modeLabel  = mode === "kg" ? "KG" : mode === "grams" ? "g" : mode === "box" ? "Box" : mode === "amount" ? "Rs" : "Qty";
+
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center px-3 py-2.5 border border-border rounded-xl bg-card hover:bg-muted/10 transition-colors">
+                      {/* Name */}
+                      <div className="col-span-4">
+                        <p className="font-semibold text-sm truncate" title={name}>{name}</p>
+                        {it.sku && <p className="text-[10px] text-muted-foreground">{it.sku} · {modeLabel}</p>}
+                      </div>
+                      {/* Qty */}
+                      <div className="col-span-2">
+                        <Input
+                          type="number" min="0" step="any"
+                          value={qty}
+                          onChange={e => updateItem(idx, it.inputValue !== undefined ? "inputValue" : it.qty !== undefined ? "qty" : "quantity", Number(e.target.value))}
+                          className="h-8 text-xs text-center"
+                        />
+                      </div>
+                      {/* Rate */}
+                      <div className="col-span-2">
+                        <Input
+                          type="number" min="0" step="any"
+                          value={rate}
+                          onChange={e => updateItem(idx, it.customPrice !== undefined ? "customPrice" : it.pricePerKg !== undefined ? "pricePerKg" : "price", Number(e.target.value))}
+                          className="h-8 text-xs text-center"
+                        />
+                      </div>
+                      {/* Discount */}
+                      <div className="col-span-2">
+                        <Input
+                          type="number" min="0" max="100"
+                          value={disc}
+                          onChange={e => updateItem(idx, "discount", Number(e.target.value))}
+                          className="h-8 text-xs text-center"
+                        />
+                      </div>
+                      {/* Total */}
+                      <div className="col-span-1 text-right">
+                        <span className="text-sm font-bold text-primary tabular-nums">
+                          {fmtRs(Number(lineTotal))}
+                        </span>
+                      </div>
+                      {/* Delete */}
+                      <div className="col-span-1 flex justify-end">
+                        <button onClick={() => removeItem(idx)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Subtotal bar */}
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30 rounded-xl border border-border">
+                  <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-black text-base tabular-nums">{fmtRs(subtotal)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-border rounded-xl py-8 text-center text-muted-foreground text-sm">
+                No items stored in this invoice
+              </div>
+            )}
+          </div>
+
+          {/* ── Payment ── */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Payment</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["cash","card","bank_transfer","easypaisa","jazzcash","cheque","credit"].map(m => (
+                      <SelectItem key={m} value={m}>{m.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Payment Status</Label>
+                <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {paymentStatus === "partial" && (
+              <div className="space-y-1">
+                <Label className="text-xs">Amount Paid (Rs.)</Label>
+                <Input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className="h-9 text-sm" />
+              </div>
+            )}
+          </div>
+
+          {/* ── Notes ── */}
           <div className="space-y-1">
             <Label className="text-xs">Notes</Label>
-            <Textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2} className="text-sm resize-none" placeholder="Internal notes…" />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="text-sm resize-none" placeholder="Internal notes…" />
           </div>
+
+          {/* ── Edit reason (required) ── */}
           <div className="space-y-1">
             <Label className="text-xs text-red-600">Reason for Edit <span className="text-red-500">*</span></Label>
-            <Input value={form.editReason} onChange={e => set("editReason", e.target.value)} placeholder="e.g. Customer payment method changed" className="h-9 text-sm border-red-200 focus:border-red-400" />
+            <Input
+              value={editReason} onChange={e => setEditReason(e.target.value)}
+              placeholder="e.g. Customer payment method changed"
+              className="h-9 text-sm border-red-200 focus:border-red-400"
+            />
           </div>
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
-            </Button>
-          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border shrink-0 flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Changes
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

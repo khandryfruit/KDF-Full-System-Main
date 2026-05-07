@@ -521,12 +521,13 @@ function InvoiceEditModal({
     setItems(prev => {
       const arr = [...prev];
       arr[idx] = { ...arr[idx], [field]: val };
-      // Recalculate lineTotal
       const it = arr[idx];
-      const qty = Number(it.quantity ?? it.inputValue ?? 1);
+      const qty   = Number(it.inputValue ?? it.qty ?? it.quantity ?? 1);
       const price = Number(it.customPrice ?? it.pricePerKg ?? it.price ?? 0);
-      const disc = Number(it.discount ?? 0);
-      arr[idx].lineTotal = Math.max(0, qty * price * (1 - disc / 100));
+      const disc  = Number(it.discount ?? 0);
+      const raw   = qty * price;
+      arr[idx].lineTotal = Math.max(0, raw - (raw * disc / 100));
+      if (it.total !== undefined) arr[idx].total = arr[idx].lineTotal;
       return arr;
     });
   };
@@ -569,39 +570,60 @@ function InvoiceEditModal({
 
           {/* Items */}
           <div>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Items ({items.length})</p>
-            <div className="space-y-2">
-              {items.map((it, idx) => (
-                <div key={idx} className="bg-card border border-border rounded-xl p-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="font-semibold text-sm flex-1">{it.name ?? it.sku}</p>
-                    <button onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600 shrink-0">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">Qty/Value</label>
-                      <Input type="number" value={it.inputValue ?? it.quantity ?? 1} className="h-8 text-xs"
-                        onChange={e => updateItem(idx, "inputValue", Number(e.target.value))} />
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+              Items ({items.length})
+            </p>
+            {items.length === 0 ? (
+              <div className="border-2 border-dashed border-border rounded-xl py-6 text-center text-xs text-muted-foreground">
+                No items stored in this invoice
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {items.map((it: any, idx: number) => {
+                  const qty      = it.inputValue ?? it.qty ?? it.quantity ?? 1;
+                  const rate     = it.customPrice ?? it.pricePerKg ?? it.price ?? 0;
+                  const disc     = it.discount ?? 0;
+                  const total    = it.lineTotal ?? it.total ?? 0;
+                  const qtyField = it.inputValue !== undefined ? "inputValue" : it.qty !== undefined ? "qty" : "quantity";
+                  const priceField = it.customPrice !== undefined ? "customPrice" : it.pricePerKg !== undefined ? "pricePerKg" : "price";
+
+                  return (
+                    <div key={idx} className="bg-card border border-border rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <p className="font-semibold text-sm">{it.name ?? it.sku ?? "Item"}</p>
+                          {it.sellingMode && <p className="text-[10px] text-muted-foreground capitalize">{it.sellingMode}</p>}
+                        </div>
+                        <button onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600 shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Qty/Value</label>
+                          <Input type="number" value={qty} className="h-8 text-xs"
+                            onChange={e => updateItem(idx, qtyField, Number(e.target.value))} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Rate/Price</label>
+                          <Input type="number" value={rate} className="h-8 text-xs"
+                            onChange={e => updateItem(idx, priceField, Number(e.target.value))} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Disc%</label>
+                          <Input type="number" value={disc} className="h-8 text-xs"
+                            onChange={e => updateItem(idx, "discount", Number(e.target.value))} />
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-between items-center">
+                        <span className="text-[10px] text-muted-foreground">{qty} × {fmtRs(rate)}{disc > 0 ? ` − ${disc}%` : ""}</span>
+                        <span className="text-xs font-bold text-primary">{fmtRs(Number(total))}</span>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">Price</label>
-                      <Input type="number" value={it.customPrice ?? it.pricePerKg ?? 0} className="h-8 text-xs"
-                        onChange={e => updateItem(idx, "customPrice", Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">Disc%</label>
-                      <Input type="number" value={it.discount ?? 0} className="h-8 text-xs"
-                        onChange={e => updateItem(idx, "discount", Number(e.target.value))} />
-                    </div>
-                  </div>
-                  <div className="mt-2 text-right">
-                    <span className="text-xs font-bold text-primary">{fmtRs(Number(it.lineTotal ?? 0))}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Payment */}
