@@ -1,0 +1,184 @@
+Use this master prompt for your developer/Replit AI:
+
+---
+
+Create a completely redesigned premium footer section for the KDF NUTS website with modern enterprise-level UI/UX. The current footer looks too basic and empty. Redesign it professionally for a live production eCommerce website.
+
+Requirements:
+
+1. Full Premium Footer Redesign
+
+* Make the footer visually rich, modern, clean, and luxury style.
+* Improve spacing, typography, icons, alignment, hover animations, and responsive layout.
+* Use the website brand colors:
+
+  * Green: #5FA800
+  * Orange: #F58300
+* Add soft gradients, glassmorphism/light shadows, premium hover effects, and smooth transitions.
+* Must look world-class on both desktop and mobile.
+* Footer should feel similar to premium brands like Noon, Amazon, Bagallery, or modern Shopify Plus stores.
+
+2. Newsletter Section Enhancement
+
+* Redesign the newsletter area professionally.
+* Add:
+
+  * Heading
+  * Small description
+  * Email field
+  * Animated subscribe button
+  * Success/error toast message
+* Add subtle background pattern or gradient.
+* Optimize for conversions.
+
+3. Add Complete Blog Section (Important for SEO)
+   Create a footer blog/news section because SEO blog posting is required.
+
+Add:
+
+* “Latest Blog Posts” section
+* Dynamic blog cards
+* Blog image thumbnail
+* Blog title
+* Short excerpt
+* Read More button
+* Blog categories
+* Publish date
+* Author name
+* SEO-friendly structure
+
+Create backend support for:
+
+* Add/Edit/Delete blog posts
+* Blog categories
+* Featured image upload
+* Slug generation
+* Meta title
+* Meta description
+* SEO keywords
+* Schema markup support
+* Rich snippets optimization
+
+Blog pages must:
+
+* Be mobile responsive
+* Fast loading
+* SEO optimized
+* Structured for Google indexing
+
+4. Footer Content Improvements
+   Improve all sections professionally:
+
+A. Company Section
+
+* Logo
+* Short brand story
+* Contact info
+* Working hours
+* Store locations
+
+B. Quick Links
+
+* Shop
+* Categories
+* New Arrivals
+* Best Sellers
+* Deals
+* Grocery
+* Dry Fruits
+* Track Order
+
+C. Account Section
+
+* Login
+* Register
+* Orders
+* Wallet
+* Loyalty Program
+* Wishlist
+
+D. Support Section
+
+* FAQ
+* Privacy Policy
+* Terms
+* Refund Policy
+* Shipping Policy
+* Contact Us
+
+5. Social Media Section
+
+* Modern circular social icons
+* Hover animation
+* Facebook
+* Instagram
+* TikTok
+* WhatsApp
+* YouTube
+
+6. WhatsApp QR Area
+   Redesign QR section professionally:
+
+* Card style layout
+* Floating animation
+* “Scan to Chat on WhatsApp”
+* Add WhatsApp CTA button
+
+7. Trust & Payment Section
+   Add:
+
+* Secure payment badges
+* Visa/Mastercard icons
+* COD available badge
+* Secure checkout badge
+* Delivery icons
+
+8. SEO & Performance Optimization
+   Very Important:
+
+* Keep footer lightweight
+* Lazy load images
+* Optimized CSS/JS
+* Avoid CLS issues
+* Mobile-first responsive
+* Accessibility optimized
+* Semantic HTML structure
+* SEO-friendly schema
+
+9. Production Ready
+   This is not demo UI.
+   Implement directly on LIVE PRODUCTION SERVER.
+
+Requirements:
+
+* Fully functional
+* Production optimized
+* No broken links
+* No dummy data
+* Real backend connectivity
+* Responsive testing
+* Cross-browser compatibility
+
+10. Technical Requirements
+
+* Clean reusable code
+* Shopify/Laravel compatible structure
+* Dynamic content support
+* Admin manageable sections
+* No performance degradation
+* Lighthouse optimized
+
+11. Extra Premium Features
+    Add:
+
+* Scroll-to-top animated button
+* Floating WhatsApp button redesign
+* Footer reveal animation
+* Hover micro interactions
+* Elegant divider lines
+* Modern typography hierarchy
+
+Goal:
+The footer should look premium, modern, SEO optimized, mobile responsive, and visually impressive enough that users immediately feel the website is a high-end professional eCommerce brand.
+
+Deploy directly on live production server after proper testing and optimization.

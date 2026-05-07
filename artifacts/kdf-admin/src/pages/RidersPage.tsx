@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import {
   Users, Phone, MessageCircle, MapPin, Plus, Pencil, Trash2,
   CheckCircle, XCircle, Package, TrendingUp, X, RefreshCw,
   DollarSign, CreditCard, Printer, BarChart2, Clock, AlertCircle,
-  RotateCcw, Bike, KeyRound, Eye, EyeOff,
+  RotateCcw, Bike, KeyRound, Eye, EyeOff, Zap, ShieldCheck, Activity,
 } from "lucide-react";
 
 const API = "/api";
@@ -511,6 +511,195 @@ function AccountingPanel() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   SHOPIFY SYNC MONITOR PANEL
+══════════════════════════════════════════════════════════ */
+const ACTION_LABELS: Record<string, string> = {
+  assigned:         "📦 Assigned",
+  local_delivery:   "🏍️ Local Delivery",
+  picked:           "📦 Picked Up",
+  out_for_delivery: "🚚 Out for Delivery",
+  delivered:        "✅ Delivered",
+  failed:           "❌ Failed",
+  returned:         "↩️ Returned",
+  cancelled:        "🚫 Cancelled",
+  delayed:          "⏳ Delayed",
+  rescheduled:      "📅 Rescheduled",
+  reassigned:       "🔄 Reassigned",
+};
+
+function ShopifySyncMonitor() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ["shopify-sync-stats"],
+    queryFn: () => apiFetch("/admin/riders/shopify-sync/stats"),
+    refetchInterval: 30_000,
+  });
+
+  const { data: logsData, isLoading: logsLoading } = useQuery({
+    queryKey: ["shopify-sync-logs", statusFilter],
+    queryFn: () => apiFetch(`/admin/riders/shopify-sync/logs?limit=100${statusFilter !== "all" ? `&status=${statusFilter}` : ""}`),
+    refetchInterval: 15_000,
+  });
+
+  const retryMut = useMutation({
+    mutationFn: (ids?: number[]) =>
+      fetch("/api/admin/riders/shopify-sync/retry", {
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({ ids }),
+      }).then(r => r.json()),
+    onSuccess: (d) => {
+      toast({ title: `✅ Queued ${d.queued} retries` });
+      qc.invalidateQueries({ queryKey: ["shopify-sync-logs"] });
+      qc.invalidateQueries({ queryKey: ["shopify-sync-stats"] });
+    },
+    onError: () => toast({ title: "Retry failed", variant: "destructive" }),
+  });
+
+  const stats = statsData?.last24h ?? [];
+  const success = stats.find((s: any) => s.status === "success")?.count ?? 0;
+  const failed  = stats.find((s: any) => s.status === "failed")?.count ?? 0;
+  const pending = stats.find((s: any) => s.status === "pending")?.count ?? 0;
+  const logs: any[] = logsData?.logs ?? [];
+  const failedIds = logs.filter(l => l.status === "failed").map(l => l.id);
+
+  return (
+    <div className="space-y-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Successful (24h)",  value: success, icon: CheckCircle,  color: "text-green-600",  bg: "bg-green-50" },
+          { label: "Failed (24h)",      value: failed,  icon: XCircle,       color: "text-red-600",    bg: "bg-red-50" },
+          { label: "Pending Retries",   value: pending, icon: Clock,         color: "text-amber-600",  bg: "bg-amber-50" },
+          { label: "Total All-Time",    value: statsData?.total ?? 0, icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
+          <div key={label} className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+              <Icon size={18} className={color} />
+            </div>
+            <div>
+              <p className="text-xl font-bold">{statsLoading ? "…" : value}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions row */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          {["all","success","failed","pending"].map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all ${
+                statusFilter === s ? "bg-white shadow text-blue-700" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >{s}</button>
+          ))}
+        </div>
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-xs"
+          onClick={() => { qc.invalidateQueries({ queryKey: ["shopify-sync-logs"] }); qc.invalidateQueries({ queryKey: ["shopify-sync-stats"] }); }}
+        ><RefreshCw size={12} />Refresh</Button>
+        {failedIds.length > 0 && (
+          <Button
+            size="sm"
+            className="gap-1.5 text-xs bg-red-600 hover:bg-red-700 text-white"
+            onClick={() => retryMut.mutate(failedIds)}
+            disabled={retryMut.isPending}
+          ><RotateCcw size={12} />Retry All Failed ({failedIds.length})</Button>
+        )}
+      </div>
+
+      {/* Logs table */}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b bg-slate-50/50 flex items-center justify-between">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Zap size={14} className="text-blue-600" />
+            Shopify Sync Log
+          </h3>
+          <span className="text-xs text-muted-foreground">{logs.length} records</span>
+        </div>
+        <div className="overflow-x-auto">
+          {logsLoading ? (
+            <div className="p-8 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : logs.length === 0 ? (
+            <div className="p-10 text-center">
+              <ShieldCheck size={36} className="mx-auto mb-2 text-green-500 opacity-60" />
+              <p className="text-sm font-medium text-muted-foreground">No sync logs yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Logs appear when rider/admin actions trigger Shopify updates</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left">
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Time</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Order</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Action</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Status</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Attempt</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Error</th>
+                  <th className="px-3 py-2 font-semibold text-muted-foreground">Retry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log: any) => (
+                  <tr key={log.id} className="border-b hover:bg-slate-50/50">
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString("en-PK", {
+                        month: "short", day: "2-digit",
+                        hour: "2-digit", minute: "2-digit", hour12: true,
+                      })}
+                    </td>
+                    <td className="px-3 py-2 font-mono font-bold">
+                      {log.shopify_order_number ? `#${log.shopify_order_number}` : log.shopify_order_id}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {ACTION_LABELS[log.action] ?? log.action}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold text-[10px] ${
+                        log.status === "success" ? "bg-green-100 text-green-700" :
+                        log.status === "failed"  ? "bg-red-100 text-red-700" :
+                        "bg-amber-100 text-amber-700"
+                      }`}>
+                        {log.status === "success" ? "✓" : log.status === "failed" ? "✗" : "⟳"} {log.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center text-muted-foreground">{log.attempt}</td>
+                    <td className="px-3 py-2 text-red-600 max-w-[200px] truncate" title={log.error ?? ""}>
+                      {log.error ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {log.status === "failed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2 gap-1"
+                          onClick={() => retryMut.mutate([log.id])}
+                          disabled={retryMut.isPending}
+                        ><RotateCcw size={10} />Retry</Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function RidersPage() {
@@ -519,7 +708,7 @@ export default function RidersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editRider, setEditRider] = useState<any>(null);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"riders" | "accounting">("riders");
+  const [activeTab, setActiveTab] = useState<"riders" | "accounting" | "shopify-sync">("riders");
 
   const { data, isLoading } = useQuery({
     queryKey: ["riders-full"],
@@ -589,8 +778,12 @@ export default function RidersPage() {
       </div>
 
       {/* Tab toggle */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-        {([["riders", "Riders", Users], ["accounting", "Accounting & Earnings", DollarSign]] as const).map(([key, label, Icon]) => (
+      <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+        {([
+          ["riders",       "Riders",          Users],
+          ["accounting",   "Accounting",       DollarSign],
+          ["shopify-sync", "Shopify Sync",     Zap],
+        ] as const).map(([key, label, Icon]) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
@@ -605,6 +798,8 @@ export default function RidersPage() {
 
       {activeTab === "accounting" ? (
         <AccountingPanel />
+      ) : activeTab === "shopify-sync" ? (
+        <ShopifySyncMonitor />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Riders Grid */}

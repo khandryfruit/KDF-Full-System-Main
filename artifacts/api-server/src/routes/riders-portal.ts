@@ -5,112 +5,15 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { adminMiddleware } from "../lib/auth";
 import { logger } from "../lib/logger";
+import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
 
 const router = Router();
 
 const JWT_SECRET = process.env.SESSION_SECRET || "kdf-rider-secret";
 
 /* ══════════════════════════════════════════════════════════
-   SHOPIFY STATUS SYNC BACK
-   When rider marks delivered/failed/picked → update Shopify
+   SHOPIFY STATUS SYNC — delegated to lib/shopifySync.ts
 ══════════════════════════════════════════════════════════ */
-
-async function syncRiderStatusToShopify(delivery: any, newStatus: string, notes?: string) {
-  try {
-    /* Get the Shopify store config */
-    const storeRows = await db.execute(sql`SELECT * FROM shopify_stores WHERE is_connected = true LIMIT 1`);
-    const store = storeRows.rows?.[0] as any;
-    if (!store?.access_token && !store?.accessToken) return;
-
-    const accessToken = store.access_token ?? store.accessToken;
-    const shopDomain = store.shop_domain ?? store.shopDomain;
-    const shopifyOrderId = delivery.shopify_order_id ?? delivery.shopifyOrderId;
-    if (!shopifyOrderId) return;
-
-    const SHOPIFY_API_VERSION = "2024-01";
-    const baseUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}`;
-    const headers = { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" };
-
-    /* ── Map status to Shopify tags + note ── */
-    const statusMap: Record<string, { tag: string; note: string }> = {
-      picked:           { tag: "rider-picked",           note: `📦 Order picked up by rider. ${notes ?? ""}`.trim() },
-      out_for_delivery: { tag: "rider-out-for-delivery", note: `🚚 Out for delivery. ${notes ?? ""}`.trim() },
-      delivered:        { tag: "rider-delivered",        note: `✅ Delivered successfully. ${notes ?? ""}`.trim() },
-      failed:           { tag: "delivery-failed",        note: `❌ Delivery failed. ${notes ?? "Rider could not deliver."}`.trim() },
-      returned:         { tag: "delivery-returned",      note: `↩️ Order returned. ${notes ?? ""}`.trim() },
-    };
-    const mapped = statusMap[newStatus];
-    if (!mapped) return;
-
-    /* Step 1: Get current order tags */
-    const getRes = await fetch(`${baseUrl}/orders/${shopifyOrderId}.json?fields=id,tags,note`, { headers });
-    if (!getRes.ok) return;
-    const { order: currentOrder } = await getRes.json() as any;
-
-    /* Merge tags (remove old rider tags, add new) */
-    const riderTags = ["rider-picked", "rider-out-for-delivery", "rider-delivered", "delivery-failed", "delivery-returned"];
-    const existingTags: string[] = (currentOrder?.tags ?? "").split(",").map((t: string) => t.trim()).filter(Boolean);
-    const cleanedTags = existingTags.filter(t => !riderTags.includes(t));
-    cleanedTags.push(mapped.tag);
-
-    /* Step 2: Update order tags + note */
-    const updateBody = JSON.stringify({
-      order: {
-        id: shopifyOrderId,
-        tags: cleanedTags.join(", "),
-        note: mapped.note,
-      },
-    });
-    const putRes = await fetch(`${baseUrl}/orders/${shopifyOrderId}.json`, {
-      method: "PUT", headers, body: updateBody,
-    });
-    if (!putRes.ok) {
-      const errTxt = await putRes.text();
-      logger.warn({ shopifyOrderId, newStatus, errTxt }, "Shopify order tag update failed");
-      return;
-    }
-
-    /* Step 3: If delivered → create fulfillment (marks as shipped) */
-    if (newStatus === "delivered") {
-      /* Get first location to use for fulfillment */
-      const locRes = await fetch(`${baseUrl}/locations.json?limit=1`, { headers });
-      const locData = locRes.ok ? ((await locRes.json()) as any) : {};
-      const locationId = locData?.locations?.[0]?.id;
-
-      if (locationId) {
-        const fulfillBody = JSON.stringify({
-          fulfillment: {
-            location_id: locationId,
-            status: "success",
-            message: `Delivered by Khan Dry Fruits rider. ${notes ?? ""}`.trim(),
-            notify_customer: false,
-            tracking_number: null,
-          },
-        });
-        await fetch(`${baseUrl}/orders/${shopifyOrderId}/fulfillments.json`, {
-          method: "POST", headers, body: fulfillBody,
-        }).catch(() => {});
-      }
-    }
-
-    /* Step 4: Notify admin SSE */
-    try {
-      const { broadcastSSE } = await import("../lib/sse.js");
-      broadcastSSE("rider_status_update", {
-        deliveryId: delivery.id,
-        shopifyOrderId,
-        orderNumber: delivery.shopify_order_number,
-        customerName: delivery.customer_name,
-        status: newStatus,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch {}
-
-    logger.info({ shopifyOrderId, newStatus, tag: mapped.tag }, "Shopify status synced from rider");
-  } catch (err: any) {
-    logger.warn({ err: err.message }, "syncRiderStatusToShopify: non-fatal error");
-  }
-}
 
 function normalisePhone(raw: string): string {
   if (!raw) return raw;
@@ -429,9 +332,15 @@ router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res
     const updatedDelivery = updated.rows[0] as any;
     res.json({ ok: true, delivery: updatedDelivery });
 
-    /* ── Async: sync rider status back to Shopify (non-blocking) ── */
+    /* ── Async: sync rider status back to Shopify via unified engine ── */
     if (updatedDelivery) {
-      setImmediate(() => syncRiderStatusToShopify(updatedDelivery, status, notes).catch(() => {}));
+      setImmediate(async () => {
+        try {
+          const riderRows = await db.execute(sql`SELECT name, phone FROM riders WHERE id = ${riderId} LIMIT 1`);
+          const rider = riderRows.rows[0] as any;
+          await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, updatedDelivery, rider, notes));
+        } catch {}
+      });
     }
   } catch (err: any) {
     req.log?.error(err);

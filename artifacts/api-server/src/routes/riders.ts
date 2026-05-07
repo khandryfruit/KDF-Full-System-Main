@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage } from "../lib/whatsapp";
+import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
 
 const router = Router();
 
@@ -302,6 +303,20 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
     }
 
     res.json({ ok: true, delivery });
+
+    /* ── Non-blocking Shopify sync ── */
+    if (delivery) {
+      setImmediate(async () => {
+        try {
+          let rider: any = null;
+          if (rider_id) {
+            const rr = await db.execute(sql`SELECT name, phone FROM riders WHERE id = ${parseInt(rider_id)} LIMIT 1`);
+            rider = rr.rows[0];
+          }
+          await syncDeliveryToShopify(buildSyncPayload("assigned", delivery, rider, notes));
+        } catch {}
+      });
+    }
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
@@ -369,6 +384,21 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
         )
         ON CONFLICT DO NOTHING
       `);
+
+      /* ── Non-blocking Shopify sync per assignment ── */
+      setImmediate(async () => {
+        try {
+          const delRow = await db.execute(sql`
+            SELECT * FROM rider_deliveries
+            WHERE shopify_order_db_id = ${order.id} LIMIT 1
+          `);
+          const del = delRow.rows[0] as any;
+          if (del) {
+            await syncDeliveryToShopify(buildSyncPayload("assigned", del, rider));
+          }
+        } catch {}
+      });
+
       assignedCount++;
     }
 
@@ -451,16 +481,16 @@ router.post("/admin/riders/orders/:orderId/send-wa", adminMiddleware, async (req
 router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, res) => {
   try {
     const id = parseInt(req.params["id"] as string);
-    const { status } = req.body;
-    const valid = ["assigned","picked","out_for_delivery","delivered","failed","returned"];
-    if (!valid.includes(status)) res.status(400).json({ error: `status must be one of: ${valid.join(", ")}` });
+    const { status, notes } = req.body;
+    const valid = ["assigned","picked","out_for_delivery","delivered","failed","returned","cancelled","delayed","rescheduled"];
+    if (!valid.includes(status)) { res.status(400).json({ error: `status must be one of: ${valid.join(", ")}` }); return; }
 
     const tsField: Record<string, string> = {
-      picked: "picked_at",
+      picked:           "picked_at",
       out_for_delivery: "out_for_delivery_at",
-      delivered: "delivered_at",
-      failed: "failed_at",
-      returned: "returned_at",
+      delivered:        "delivered_at",
+      failed:           "failed_at",
+      returned:         "returned_at",
     };
 
     let extra = "";
@@ -471,6 +501,22 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
     `));
 
     res.json({ ok: true, status });
+
+    /* ── Non-blocking Shopify sync ── */
+    setImmediate(async () => {
+      try {
+        const delRow = await db.execute(sql`
+          SELECT d.*, r.name AS rider_name, r.phone AS rider_phone
+          FROM rider_deliveries d
+          LEFT JOIN riders r ON r.id = d.rider_id
+          WHERE d.id = ${id} LIMIT 1
+        `);
+        const del = delRow.rows[0] as any;
+        if (!del) return;
+        const rider = del.rider_name ? { name: del.rider_name, phone: del.rider_phone } : undefined;
+        await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, del, rider, notes));
+      } catch {}
+    });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
@@ -1244,6 +1290,92 @@ router.get("/admin/riders/:riderId/deliveries", adminMiddleware, async (req, res
       LIMIT 100
     `);
     res.json({ deliveries: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   SHOPIFY SYNC LOG MONITORING
+═══════════════════════════════════════════════════════ */
+
+/* GET /api/admin/riders/shopify-sync/logs — last 50 sync attempts */
+router.get("/admin/riders/shopify-sync/logs", adminMiddleware, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit ?? "50")), 200);
+    const status = req.query.status as string | undefined;
+    const rows = await db.execute(sql`
+      SELECT id, delivery_id, shopify_order_id, shopify_order_number,
+             action, status, attempt, error, next_retry_at, created_at, updated_at
+      FROM shopify_sync_log
+      ${status ? sql`WHERE status = ${status}` : sql``}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `);
+    res.json({ logs: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/riders/shopify-sync/stats — 24-hour breakdown */
+router.get("/admin/riders/shopify-sync/stats", adminMiddleware, async (req, res) => {
+  try {
+    const stats = await db.execute(sql`
+      SELECT
+        status,
+        COUNT(*)::int AS count,
+        MAX(created_at) AS last_at
+      FROM shopify_sync_log
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+      GROUP BY status
+    `);
+    const total = await db.execute(sql`SELECT COUNT(*)::int AS total FROM shopify_sync_log`);
+    const pending = await db.execute(sql`
+      SELECT COUNT(*)::int AS count FROM shopify_sync_log
+      WHERE status = 'pending' AND next_retry_at <= NOW()
+    `);
+    res.json({
+      last24h: stats.rows ?? [],
+      total: (total.rows[0] as any)?.total ?? 0,
+      pendingRetries: (pending.rows[0] as any)?.count ?? 0,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* POST /api/admin/riders/shopify-sync/retry — manually retry failed entries */
+router.post("/admin/riders/shopify-sync/retry", adminMiddleware, async (req, res) => {
+  try {
+    const { ids } = req.body as { ids?: number[] };
+
+    let toRetry: any[];
+    if (ids?.length) {
+      const rows = await db.execute(sql`
+        SELECT payload FROM shopify_sync_log WHERE id = ANY(${ids}::int[]) AND status = 'failed'
+      `);
+      toRetry = rows.rows as any[];
+    } else {
+      const rows = await db.execute(sql`
+        SELECT payload FROM shopify_sync_log WHERE status = 'failed'
+        ORDER BY created_at DESC LIMIT 20
+      `);
+      toRetry = rows.rows as any[];
+    }
+
+    let queued = 0;
+    for (const row of toRetry) {
+      const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+      if (payload?.shopifyOrderId) {
+        setImmediate(() => syncDeliveryToShopify(payload, 1).catch(() => {}));
+        queued++;
+      }
+    }
+    res.json({ ok: true, queued });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
