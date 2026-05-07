@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Send, Loader2, RefreshCw, Trash2, User, Bot, Shield, Circle, Package, Tag, Gift, ClipboardList, Search, X, ChevronRight, Grid3x3 } from "lucide-react";
+import {
+  MessageCircle, Send, Loader2, RefreshCw, Trash2, User, Bot, Shield,
+  Circle, Package, Tag, Gift, ClipboardList, Search, X, ChevronRight,
+  Grid3x3, CreditCard, Truck, CheckSquare, Square, ShoppingBag,
+  ExternalLink, Filter, Store, Globe,
+} from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +19,10 @@ function authFetch(url: string, opts: RequestInit = {}) {
 
 interface ChatMsg { role: "user" | "assistant" | "admin"; content: string; timestamp: string; type?: string; metadata?: any; }
 interface Session { id: number; sessionId: string; messages: ChatMsg[]; updatedAt: string; }
-interface ProductOption { id: number; name: string; price: number; originalPrice?: number; images?: string[]; }
-interface CategoryOption { id: number; name: string; slug: string; image?: string; }
+interface ProductOption { id: number; name: string; price: number; originalPrice?: number | null; images?: string[]; image?: string | null; source?: "website" | "shopify"; stock?: number; variants?: any[]; }
+interface CategoryOption { id: number; name: string; slug: string; image?: string | null; }
 
-type TemplateType = "product" | "category" | "coupon" | "offer" | "order_form";
+type TemplateType = "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link";
 
 function timeAgo(ts: string) {
   const diff = Date.now() - new Date(ts).getTime();
@@ -26,42 +31,70 @@ function timeAgo(ts: string) {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   return new Date(ts).toLocaleDateString("en-PK", { month: "short", day: "numeric" });
 }
-
 function isActive(ts: string) { return Date.now() - new Date(ts).getTime() < 5 * 60 * 1000; }
-
 function getImageUrl(key: string | null | undefined): string | null {
   if (!key) return null;
   if (key.startsWith("http")) return key;
   return `/api/storage/objects/${key}`;
 }
 
-/* ── Template Panel ── */
+/* ─────────────────────────────────────
+   Enhanced Template Panel
+───────────────────────────────────── */
 function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (session: Session) => void }) {
   const { toast } = useToast();
   const [mode, setMode] = useState<TemplateType | null>(null);
   const [sending, setSending] = useState(false);
 
-  /* Product template state */
+  /* ── Unified product search state ── */
   const [productSearch, setProductSearch] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
-  const { data: products = [] } = useQuery<ProductOption[]>({ queryKey: ["products-for-chat"], queryFn: () => fetch("/api/products").then(r => r.json()).then(d => Array.isArray(d) ? d : (d.products ?? [])), staleTime: 60000 });
-  const filteredProducts = productSearch ? products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 6) : products.slice(0, 6);
+  const [productSource, setProductSource] = useState<"all" | "website" | "shopify">("all");
+  const [productSort, setProductSort] = useState("newest");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState<ProductOption[]>([]);
 
-  /* Category template state */
+  const { data: categories = [] } = useQuery<CategoryOption[]>({
+    queryKey: ["categories-for-chat"],
+    queryFn: () => fetch("/api/categories").then(r => r.json()).then(d => Array.isArray(d) ? d : []),
+    staleTime: 60000,
+  });
+
+  const { data: chatProducts = [], isFetching: loadingProducts } = useQuery<ProductOption[]>({
+    queryKey: ["admin-chat-products", productSearch, productSource, productSort, categoryFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ source: productSource, sort: productSort, limit: "16" });
+      if (productSearch) params.set("q", productSearch);
+      if (categoryFilter) params.set("categoryId", categoryFilter);
+      return authFetch(`/api/admin/chat/products?${params}`).then(r => r.json()).then(d => Array.isArray(d) ? d : []);
+    },
+    staleTime: 30000,
+  });
+
+  /* ── Single product state ── */
   const [selectedCategory, setSelectedCategory] = useState<CategoryOption | null>(null);
-  const { data: categories = [] } = useQuery<CategoryOption[]>({ queryKey: ["categories-for-chat"], queryFn: () => fetch("/api/categories").then(r => r.json()).then(d => Array.isArray(d) ? d : []), staleTime: 60000 });
 
-  /* Coupon template state */
+  /* ── Coupon ── */
   const [couponCode, setCouponCode] = useState("");
   const [couponName, setCouponName] = useState("");
   const [couponDiscount, setCouponDiscount] = useState("");
   const [couponMin, setCouponMin] = useState("");
   const [couponDesc, setCouponDesc] = useState("");
 
-  /* Offer template state */
+  /* ── Offer ── */
   const [offerTitle, setOfferTitle] = useState("");
   const [offerText, setOfferText] = useState("");
   const [offerColor, setOfferColor] = useState("#5FA800");
+
+  /* ── Payment Link ── */
+  const [payTitle, setPayTitle] = useState("");
+  const [payUrl, setPayUrl] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+
+  /* ── Tracking Link ── */
+  const [trackOrderNum, setTrackOrderNum] = useState("");
+  const [trackUrl, setTrackUrl] = useState("");
+  const [trackCourier, setTrackCourier] = useState("");
+  const [trackNumber, setTrackNumber] = useState("");
 
   const COLORS = ["#5FA800", "#F58300", "#e11d48", "#7c3aed", "#0ea5e9", "#0f766e"];
 
@@ -73,21 +106,49 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
       const data = await r.json();
       onSent(data.session);
       setMode(null);
-      toast({ title: "Template sent!" });
+      setSelectedProducts([]);
+      toast({ title: "Sent!" });
     } catch { toast({ title: "Failed to send", variant: "destructive" }); } finally { setSending(false); }
   };
 
-  const sendProduct = () => {
-    if (!selectedProduct) return;
-    const price = Number(selectedProduct.price);
-    const originalPrice = selectedProduct.originalPrice ? Number(selectedProduct.originalPrice) : undefined;
-    const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : undefined;
-    const image = getImageUrl(selectedProduct.images?.[0]) ?? undefined;
-    send({
-      message: `Check out ${selectedProduct.name}! Starting from Rs. ${price.toLocaleString()}.${discount ? ` Save ${discount}% today!` : ""}`,
-      type: "product",
-      metadata: { id: selectedProduct.id, name: selectedProduct.name, price, originalPrice, discount, image },
+  const toggleProduct = (p: ProductOption) => {
+    setSelectedProducts(prev => {
+      const has = prev.some(x => x.id === p.id);
+      if (has) return prev.filter(x => x.id !== p.id);
+      if (prev.length >= 3) { toast({ title: "Max 3 products", description: "Deselect one first" }); return prev; }
+      return [...prev, p];
     });
+  };
+
+  const sendProducts = () => {
+    if (selectedProducts.length === 0) return;
+    if (selectedProducts.length === 1) {
+      const p = selectedProducts[0];
+      const price = Number(p.price);
+      const originalPrice = p.originalPrice ? Number(p.originalPrice) : undefined;
+      const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : undefined;
+      const image = getImageUrl(p.image ?? p.images?.[0]) ?? undefined;
+      send({
+        message: `Check out ${p.name}! Starting from Rs. ${price.toLocaleString()}.${discount ? ` Save ${discount}% today!` : ""}`,
+        type: "product",
+        metadata: { id: p.id, name: p.name, price, originalPrice, discount, image, stock: p.stock ?? 1, variants: p.variants ?? [] },
+      });
+    } else {
+      const names = selectedProducts.map(p => p.name).join(", ");
+      const productsData = selectedProducts.map(p => ({
+        id: p.id, name: p.name, price: Number(p.price),
+        originalPrice: p.originalPrice ? Number(p.originalPrice) : null,
+        discount: p.originalPrice && Number(p.originalPrice) > Number(p.price)
+          ? Math.round(((Number(p.originalPrice) - Number(p.price)) / Number(p.originalPrice)) * 100) : null,
+        stock: p.stock ?? 1, variants: p.variants ?? [],
+        image: p.image ?? p.images?.[0] ?? null,
+      }));
+      send({
+        message: `Here are some great products for you: ${names}`,
+        type: "multi_product",
+        metadata: { products: productsData },
+      });
+    }
   };
 
   const sendCoupon = () => {
@@ -118,19 +179,123 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
     send({ message: "We've made it easy for you to place an order directly from the chat!", type: "order_form" });
   };
 
+  const sendPaymentLink = () => {
+    if (!payUrl.trim()) return;
+    send({
+      message: payTitle || "Here's your payment link. Click to complete your purchase.",
+      type: "payment_link",
+      metadata: { url: payUrl.trim(), title: payTitle || "Complete Payment", amount: payAmount ? Number(payAmount) : undefined },
+    });
+  };
+
+  const sendTrackingLink = () => {
+    if (!trackOrderNum.trim() && !trackNumber.trim()) return;
+    send({
+      message: `Your order ${trackOrderNum || trackNumber} is on the way! Track it here.`,
+      type: "tracking_link",
+      metadata: { orderNumber: trackOrderNum, trackingNumber: trackNumber, courierName: trackCourier, url: trackUrl || undefined },
+    });
+  };
+
   const TEMPLATE_TYPES: { type: TemplateType; label: string; icon: any; color: string; desc: string }[] = [
-    { type: "product", label: "Product Card", icon: Package, color: "text-green-600 bg-green-50 border-green-200", desc: "Share a product with image & price" },
+    { type: "product", label: "Product Card", icon: Package, color: "text-green-600 bg-green-50 border-green-200", desc: "Share 1–3 products with image & price" },
     { type: "category", label: "Category", icon: Grid3x3, color: "text-teal-600 bg-teal-50 border-teal-200", desc: "Show a product category" },
     { type: "coupon", label: "Coupon Code", icon: Tag, color: "text-orange-600 bg-orange-50 border-orange-200", desc: "Send a discount code" },
-    { type: "offer", label: "Offer Banner", icon: Gift, color: "text-purple-600 bg-purple-50 border-purple-200", desc: "Send a promotional message" },
+    { type: "offer", label: "Offer Banner", icon: Gift, color: "text-purple-600 bg-purple-50 border-purple-200", desc: "Send a promotional banner" },
+    { type: "payment_link", label: "Payment Link", icon: CreditCard, color: "text-violet-600 bg-violet-50 border-violet-200", desc: "Send a checkout/payment URL" },
+    { type: "tracking_link", label: "Tracking Info", icon: Truck, color: "text-sky-600 bg-sky-50 border-sky-200", desc: "Share order tracking details" },
     { type: "order_form", label: "Order Form", icon: ClipboardList, color: "text-blue-600 bg-blue-50 border-blue-200", desc: "Prompt customer to place order" },
   ];
 
   const inputCls = "w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5FA800]/20 bg-background";
 
+  /* ── Product picker (shared for "product" + "multi_product") ── */
+  const ProductPicker = () => (
+    <>
+      {/* Search + filters */}
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search products…" className={`${inputCls} pl-8`} />
+        </div>
+        <div className="flex gap-2">
+          {/* Source tabs */}
+          <div className="flex rounded-lg border border-border overflow-hidden flex-shrink-0">
+            {(["all", "website", "shopify"] as const).map(s => (
+              <button key={s} onClick={() => setProductSource(s)}
+                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors flex items-center gap-1 ${productSource === s ? "bg-[#5FA800] text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                {s === "website" ? <Globe className="w-2.5 h-2.5" /> : s === "shopify" ? <Store className="w-2.5 h-2.5" /> : null}
+                {s === "all" ? "All" : s === "website" ? "Web" : "Shopify"}
+              </button>
+            ))}
+          </div>
+          {/* Category filter */}
+          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+            className="flex-1 border border-border rounded-lg px-2 py-1 text-[10px] bg-background focus:outline-none focus:ring-1 focus:ring-[#5FA800]/30">
+            <option value="">All categories</option>
+            {categories.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+          </select>
+          {/* Sort */}
+          <select value={productSort} onChange={e => setProductSort(e.target.value)}
+            className="border border-border rounded-lg px-2 py-1 text-[10px] bg-background focus:outline-none">
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Selected count */}
+      {selectedProducts.length > 0 && (
+        <div className="flex items-center gap-2 px-2.5 py-2 bg-[#5FA800]/5 border border-[#5FA800]/20 rounded-lg">
+          <CheckSquare className="w-3.5 h-3.5 text-[#5FA800]" />
+          <span className="text-xs font-semibold text-[#5FA800]">{selectedProducts.length} product{selectedProducts.length > 1 ? "s" : ""} selected</span>
+          <span className="text-[10px] text-muted-foreground">(max 3)</span>
+          <button onClick={() => setSelectedProducts([])} className="ml-auto text-[10px] text-muted-foreground underline">Clear</button>
+        </div>
+      )}
+
+      {/* Product grid */}
+      <div className="space-y-1 max-h-52 overflow-y-auto">
+        {loadingProducts ? (
+          <div className="flex items-center gap-2 justify-center py-6 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs">Loading…</span></div>
+        ) : chatProducts.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">No products found</p>
+        ) : chatProducts.map(p => {
+          const img = getImageUrl(p.image ?? p.images?.[0]);
+          const isSelected = selectedProducts.some(x => x.id === p.id);
+          return (
+            <button key={`${p.source}-${p.id}`} onClick={() => toggleProduct(p)}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors border ${isSelected ? "bg-[#5FA800]/10 border-[#5FA800]/30" : "border-transparent hover:bg-muted"}`}>
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-100 to-emerald-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-sm">
+                {img ? <img src={img} alt={p.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : "🥜"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold truncate">{p.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] text-[#5FA800] font-bold">Rs. {Number(p.price).toLocaleString()}</p>
+                  {p.source === "shopify" && <span className="text-[9px] bg-orange-100 text-orange-700 px-1 rounded font-bold">Shopify</span>}
+                  {(p.stock ?? 0) === 0 && <span className="text-[9px] text-red-500">Out of stock</span>}
+                </div>
+              </div>
+              {isSelected
+                ? <div className="w-5 h-5 rounded-full bg-[#5FA800] flex items-center justify-center text-white flex-shrink-0"><span className="text-[10px] font-black">✓</span></div>
+                : <Square className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              }
+            </button>
+          );
+        })}
+      </div>
+
+      <Button onClick={sendProducts} disabled={selectedProducts.length === 0 || sending} size="sm" className="w-full bg-[#5FA800] hover:bg-[#4d8a00] text-white">
+        {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <ShoppingBag className="w-3.5 h-3.5 mr-1" />}
+        {selectedProducts.length > 1 ? `Send ${selectedProducts.length} Products` : "Send Product Card"}
+      </Button>
+    </>
+  );
+
   return (
-    <div className="border-t border-border bg-card">
-      {/* Template type picker */}
+    <div className="border-t border-border bg-card max-h-[420px] overflow-y-auto">
       {!mode ? (
         <div className="px-4 py-3">
           <p className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">Quick Templates</p>
@@ -138,7 +303,7 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
             {TEMPLATE_TYPES.map(t => {
               const Icon = t.icon;
               return (
-                <button key={t.type} onClick={() => setMode(t.type)}
+                <button key={t.type} onClick={() => { setMode(t.type); setSelectedProducts([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left hover:opacity-80 transition-opacity ${t.color}`}>
                   <Icon className="w-4 h-4 flex-shrink-0" />
                   <div className="min-w-0">
@@ -154,39 +319,11 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
       ) : (
         <div className="px-4 py-3 space-y-3">
           <div className="flex items-center gap-2 mb-1">
-            <button onClick={() => setMode(null)} className="p-1 rounded-lg hover:bg-muted transition-colors"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>
+            <button onClick={() => { setMode(null); setSelectedProducts([]); }} className="p-1 rounded-lg hover:bg-muted transition-colors"><X className="w-3.5 h-3.5 text-muted-foreground" /></button>
             <p className="text-xs font-bold">{TEMPLATE_TYPES.find(t => t.type === mode)?.label}</p>
           </div>
 
-          {mode === "product" && (
-            <>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search products…" className={`${inputCls} pl-8`} />
-              </div>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {filteredProducts.map(p => {
-                  const img = getImageUrl(p.images?.[0]);
-                  return (
-                    <button key={p.id} onClick={() => setSelectedProduct(p)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${selectedProduct?.id === p.id ? "bg-[#5FA800]/10 border border-[#5FA800]/30" : "hover:bg-muted"}`}>
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-100 to-emerald-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-sm">
-                        {img ? <img src={img} alt={p.name} className="w-full h-full object-cover" /> : "🥜"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold truncate">{p.name}</p>
-                        <p className="text-[10px] text-[#5FA800] font-bold">Rs. {Number(p.price).toLocaleString()}</p>
-                      </div>
-                      {selectedProduct?.id === p.id && <div className="w-4 h-4 rounded-full bg-[#5FA800] flex items-center justify-center text-white text-[10px]">✓</div>}
-                    </button>
-                  );
-                })}
-              </div>
-              <Button onClick={sendProduct} disabled={!selectedProduct || sending} size="sm" className="w-full bg-[#5FA800] hover:bg-[#4d8a00] text-white">
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Package className="w-3.5 h-3.5 mr-1" />}
-                Send Product Card
-              </Button>
-            </>
-          )}
+          {(mode === "product" || mode === "multi_product") && <ProductPicker />}
 
           {mode === "category" && (
             <>
@@ -196,21 +333,19 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
                 ) : categories.map(c => {
                   const img = getImageUrl(c.image);
                   return (
-                    <button key={c.id} onClick={() => setSelectedCategory(c)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${selectedCategory?.id === c.id ? "bg-teal-50 border border-teal-200" : "hover:bg-muted"}`}>
+                    <button key={c.id} onClick={() => setSelectedCategory(c)}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${selectedCategory?.id === c.id ? "bg-teal-50 border border-teal-200" : "hover:bg-muted"}`}>
                       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-100 to-emerald-200 flex-shrink-0 overflow-hidden flex items-center justify-center text-sm">
                         {img ? <img src={img} alt={c.name} className="w-full h-full object-cover" /> : "🗂️"}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold truncate">{c.name}</p>
-                      </div>
+                      <p className="flex-1 text-xs font-semibold truncate">{c.name}</p>
                       {selectedCategory?.id === c.id && <div className="w-4 h-4 rounded-full bg-teal-600 flex items-center justify-center text-white text-[10px]">✓</div>}
                     </button>
                   );
                 })}
               </div>
               <Button onClick={sendCategory} disabled={!selectedCategory || sending} size="sm" className="w-full bg-teal-600 hover:bg-teal-700 text-white">
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Grid3x3 className="w-3.5 h-3.5 mr-1" />}
-                Send Category
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Grid3x3 className="w-3.5 h-3.5 mr-1" />} Send Category
               </Button>
             </>
           )}
@@ -227,8 +362,7 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
                 <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Description</label><input value={couponDesc} onChange={e => setCouponDesc(e.target.value)} placeholder="Optional" className={inputCls} /></div>
               </div>
               <Button onClick={sendCoupon} disabled={!couponCode || !couponDiscount || sending} size="sm" className="w-full bg-orange-500 hover:bg-orange-600 text-white">
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Tag className="w-3.5 h-3.5 mr-1" />}
-                Send Coupon
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Tag className="w-3.5 h-3.5 mr-1" />} Send Coupon
               </Button>
             </>
           )}
@@ -239,15 +373,35 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
               <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Offer Message *</label><textarea value={offerText} onChange={e => setOfferText(e.target.value)} placeholder="e.g. Get 20% off on all nuts this weekend only!" rows={2} className={`${inputCls} resize-none`} /></div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Banner Color</label>
-                <div className="flex gap-2">
-                  {COLORS.map(c => (
-                    <button key={c} onClick={() => setOfferColor(c)} className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${offerColor === c ? "border-foreground scale-110" : "border-transparent"}`} style={{ backgroundColor: c }} />
-                  ))}
-                </div>
+                <div className="flex gap-2">{COLORS.map(c => (<button key={c} onClick={() => setOfferColor(c)} className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${offerColor === c ? "border-foreground scale-110" : "border-transparent"}`} style={{ backgroundColor: c }} />))}</div>
               </div>
               <Button onClick={sendOffer} disabled={!offerText || sending} size="sm" className="w-full text-white" style={{ backgroundColor: offerColor }}>
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Gift className="w-3.5 h-3.5 mr-1" />}
-                Send Offer
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Gift className="w-3.5 h-3.5 mr-1" />} Send Offer
+              </Button>
+            </>
+          )}
+
+          {mode === "payment_link" && (
+            <>
+              <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Title</label><input value={payTitle} onChange={e => setPayTitle(e.target.value)} placeholder="e.g. Order #1234 Payment" className={inputCls} /></div>
+              <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Payment URL *</label><input value={payUrl} onChange={e => setPayUrl(e.target.value)} placeholder="https://..." className={inputCls} /></div>
+              <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Amount (Rs.)</label><input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="e.g. 2500" className={inputCls} /></div>
+              <Button onClick={sendPaymentLink} disabled={!payUrl.trim() || sending} size="sm" className="w-full bg-violet-600 hover:bg-violet-700 text-white">
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />} Send Payment Link
+              </Button>
+            </>
+          )}
+
+          {mode === "tracking_link" && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Order Number</label><input value={trackOrderNum} onChange={e => setTrackOrderNum(e.target.value)} placeholder="e.g. KDF-12345678" className={inputCls} /></div>
+                <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Courier</label><input value={trackCourier} onChange={e => setTrackCourier(e.target.value)} placeholder="e.g. TCS, PostEx" className={inputCls} /></div>
+              </div>
+              <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Tracking Number</label><input value={trackNumber} onChange={e => setTrackNumber(e.target.value)} placeholder="Tracking / CN number" className={inputCls} /></div>
+              <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Tracking URL (optional)</label><input value={trackUrl} onChange={e => setTrackUrl(e.target.value)} placeholder="https://..." className={inputCls} /></div>
+              <Button onClick={sendTrackingLink} disabled={(!trackOrderNum && !trackNumber) || sending} size="sm" className="w-full bg-sky-600 hover:bg-sky-700 text-white">
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Truck className="w-3.5 h-3.5 mr-1" />} Send Tracking Info
               </Button>
             </>
           )}
@@ -256,10 +410,9 @@ function TemplatePanel({ sessionId, onSent }: { sessionId: string; onSent: (sess
             <div className="text-center py-2">
               <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-2"><ClipboardList className="w-6 h-6 text-blue-600" /></div>
               <p className="text-sm font-semibold mb-1">Send Order Form Prompt</p>
-              <p className="text-xs text-muted-foreground mb-3">The customer will see an interactive button to open the order form.</p>
+              <p className="text-xs text-muted-foreground mb-3">Customer will see a button to open the interactive order form.</p>
               <Button onClick={sendOrderForm} disabled={sending} size="sm" className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <ClipboardList className="w-3.5 h-3.5 mr-1" />}
-                Send Order Form
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <ClipboardList className="w-3.5 h-3.5 mr-1" />} Send Order Form
               </Button>
             </div>
           )}
@@ -314,59 +467,74 @@ export default function ChatConversationsPage() {
   const activeCount = sessions.filter(s => isActive(s.updatedAt)).length;
   const handleReply = () => { if (!replyText.trim() || !selectedSession) return; replyMut.mutate({ sessionId: selectedSession.sessionId, message: replyText.trim() }); };
 
-  /* ── Admin-side card previews (read-only mirrors of what customer sees) ── */
+  /* ── Admin-side card previews ── */
   const renderTemplateCard = (msg: ChatMsg) => {
     const m = msg.metadata;
     if (msg.type === "product" && m) {
       const img = getImageUrl(m.image);
       return (
-        <div className="w-56 bg-white rounded-xl overflow-hidden shadow border border-border">
-          <div className="h-28 bg-gradient-to-br from-green-100 to-emerald-200 relative">
-            {img ? <img src={img} alt={m.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🥜</div>}
-            {m.discount && <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{m.discount}% OFF</span>}
+        <div className="w-52 bg-white rounded-xl overflow-hidden shadow border border-border">
+          <div className="h-24 bg-gradient-to-br from-green-100 to-emerald-200 relative">
+            {img ? <img src={img} alt={m.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl">🥜</div>}
+            {m.discount && <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{m.discount}% OFF</span>}
           </div>
-          <div className="p-2.5">
-            <p className="font-bold text-sm truncate">{m.name}</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[#5FA800] font-bold text-sm">Rs. {Number(m.price).toLocaleString()}</span>
-              {m.originalPrice && <span className="text-muted-foreground text-xs line-through">Rs. {Number(m.originalPrice).toLocaleString()}</span>}
-            </div>
-            <div className="flex gap-1 mt-2">
-              <button className="flex-1 py-1 rounded-lg bg-[#5FA800] text-white text-[10px] font-bold">View Details</button>
-              <button className="flex-1 py-1 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold">Order Now</button>
+          <div className="p-2">
+            <p className="font-bold text-xs truncate">{m.name}</p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[#5FA800] font-bold text-xs">Rs. {Number(m.price).toLocaleString()}</span>
+              {m.originalPrice && <span className="text-muted-foreground text-[10px] line-through">Rs. {Number(m.originalPrice).toLocaleString()}</span>}
             </div>
           </div>
+        </div>
+      );
+    }
+    if (msg.type === "multi_product" && m?.products) {
+      return (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 max-w-sm">
+          {(m.products as any[]).map((p: any) => {
+            const img = getImageUrl(p.image);
+            return (
+              <div key={p.id} className="flex-shrink-0 w-36 bg-white rounded-xl overflow-hidden shadow border border-border">
+                <div className="h-20 bg-gradient-to-br from-green-100 to-emerald-200 relative">
+                  {img ? <img src={img} alt={p.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-2xl">🥜</div>}
+                  {p.discount && <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold px-1 py-0.5 rounded-full">{p.discount}% OFF</span>}
+                </div>
+                <div className="p-1.5">
+                  <p className="font-bold text-[10px] truncate">{p.name}</p>
+                  <p className="text-[#5FA800] font-bold text-[10px]">Rs. {Number(p.price).toLocaleString()}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
     if (msg.type === "category" && m) {
       const img = getImageUrl(m.image);
       return (
-        <div className="w-56 bg-white rounded-xl overflow-hidden shadow border border-border">
-          <div className="h-24 bg-gradient-to-br from-teal-50 to-emerald-100 relative">
-            {img ? <img src={img} alt={m.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl">🗂️</div>}
+        <div className="w-52 bg-white rounded-xl overflow-hidden shadow border border-border">
+          <div className="h-20 bg-gradient-to-br from-teal-50 to-emerald-100 relative">
+            {img ? <img src={img} alt={m.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-2xl">🗂️</div>}
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            <p className="absolute bottom-2 left-2.5 text-white font-bold text-sm drop-shadow">{m.name}</p>
+            <p className="absolute bottom-2 left-2.5 text-white font-bold text-xs drop-shadow">{m.name}</p>
           </div>
-          <div className="p-2.5">
-            <button className="w-full py-1.5 rounded-lg bg-teal-600 text-white text-xs font-bold">View Products →</button>
+          <div className="p-2">
+            <button className="w-full py-1 rounded-lg bg-teal-600 text-white text-[10px] font-bold">View Products →</button>
           </div>
         </div>
       );
     }
     if (msg.type === "coupon" && m) {
       return (
-        <div className="w-56 bg-white rounded-xl border-2 border-dashed border-orange-300 overflow-hidden shadow">
-          <div className="bg-orange-500 px-3 py-2 flex items-center gap-2">
-            <Tag className="w-4 h-4 text-white" />
-            <span className="text-white text-xs font-bold uppercase tracking-wider">{m.name ?? "Discount Offer"}</span>
+        <div className="w-52 bg-white rounded-xl border-2 border-dashed border-orange-300 overflow-hidden shadow">
+          <div className="bg-orange-500 px-3 py-1.5 flex items-center gap-1.5">
+            <Tag className="w-3 h-3 text-white" />
+            <span className="text-white text-[10px] font-bold uppercase">{m.name ?? "Discount Offer"}</span>
+            {m.discountPercent && <span className="ml-auto bg-white text-orange-600 text-[10px] font-black px-1.5 py-0.5 rounded-full">{m.discountPercent}% OFF</span>}
           </div>
-          <div className="px-3 py-2.5">
-            <div className="bg-orange-50 rounded-lg px-3 py-2 text-center border border-orange-200 mb-2">
-              <p className="font-mono font-black text-orange-600 text-lg tracking-widest">{m.code}</p>
-            </div>
-            <p className="text-xs text-center font-semibold text-gray-700">{m.discountPercent}% OFF{m.minOrder ? ` on orders above Rs. ${Number(m.minOrder).toLocaleString()}` : ""}</p>
-            <button className="w-full mt-2 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-bold">Apply Coupon</button>
+          <div className="px-3 py-2">
+            <p className="font-mono font-black text-orange-600 text-center text-base tracking-widest mb-1">{m.code}</p>
+            {m.minOrder && <p className="text-[9px] text-center text-gray-500">Min. Rs. {Number(m.minOrder).toLocaleString()}</p>}
           </div>
         </div>
       );
@@ -374,21 +542,55 @@ export default function ChatConversationsPage() {
     if (msg.type === "offer") {
       const bg = m?.color ?? "#5FA800";
       return (
-        <div className="w-56 rounded-xl overflow-hidden shadow" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)` }}>
-          <div className="px-3 py-3 text-white">
-            <div className="flex items-center gap-1.5 mb-1"><Gift className="w-3.5 h-3.5" /><span className="text-[10px] font-bold uppercase tracking-wider">{m?.title ?? "Special Offer"}</span></div>
-            <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
+        <div className="w-52 rounded-xl overflow-hidden shadow" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)` }}>
+          <div className="px-3 py-2.5 text-white">
+            <div className="flex items-center gap-1.5 mb-1"><Gift className="w-3 h-3" /><span className="text-[9px] font-bold uppercase tracking-wider">{m?.title ?? "Special Offer"}</span></div>
+            <p className="text-xs leading-relaxed font-medium">{msg.content}</p>
+          </div>
+        </div>
+      );
+    }
+    if (msg.type === "payment_link" && m) {
+      return (
+        <div className="w-52 bg-white rounded-xl overflow-hidden shadow border border-violet-200">
+          <div className="px-3 py-2 text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+            <div className="flex items-center gap-1.5 mb-0.5"><CreditCard className="w-3 h-3" /><span className="text-[9px] font-bold uppercase">Payment Link</span></div>
+            {m.amount && <p className="text-base font-black">Rs. {Number(m.amount).toLocaleString()}</p>}
+          </div>
+          <div className="p-2">
+            <p className="text-[10px] font-semibold text-gray-700 truncate">{m.title ?? "Complete Payment"}</p>
+            <a href={m.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 w-full py-1 rounded-lg bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center gap-1">
+              <ExternalLink className="w-2.5 h-2.5" /> Pay Now
+            </a>
+          </div>
+        </div>
+      );
+    }
+    if (msg.type === "tracking_link" && m) {
+      return (
+        <div className="w-52 bg-white rounded-xl overflow-hidden shadow border border-sky-200">
+          <div className="px-3 py-2 text-white" style={{ background: "linear-gradient(135deg,#0ea5e9,#0284c7)" }}>
+            <div className="flex items-center gap-1.5 mb-0.5"><Truck className="w-3 h-3" /><span className="text-[9px] font-bold uppercase">Order Tracking</span></div>
+            {m.orderNumber && <p className="text-xs font-bold font-mono">{m.orderNumber}</p>}
+          </div>
+          <div className="p-2 space-y-1">
+            {m.courierName && <p className="text-[10px] text-gray-600">Courier: <span className="font-semibold">{m.courierName}</span></p>}
+            {m.trackingNumber && <p className="text-[10px] text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">CN: {m.trackingNumber}</p>}
+            {m.url && (
+              <a href={m.url} target="_blank" rel="noopener noreferrer" className="w-full py-1 rounded-lg bg-sky-600 text-white text-[10px] font-bold flex items-center justify-center gap-1 mt-1">
+                <ExternalLink className="w-2.5 h-2.5" /> Track Order
+              </a>
+            )}
           </div>
         </div>
       );
     }
     if (msg.type === "order_form") {
       return (
-        <div className="w-56 bg-blue-50 border border-blue-200 rounded-xl p-3">
-          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center mx-auto mb-2"><ClipboardList className="w-5 h-5 text-white" /></div>
+        <div className="w-52 bg-blue-50 border border-blue-200 rounded-xl p-2.5">
+          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center mx-auto mb-1.5"><ClipboardList className="w-4 h-4 text-white" /></div>
           <p className="text-xs font-bold text-center text-blue-800 mb-1">Order Form</p>
-          <p className="text-[10px] text-center text-blue-600 mb-2">{msg.content}</p>
-          <button className="w-full py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold">Fill Order Form</button>
+          <p className="text-[9px] text-center text-blue-600">{msg.content}</p>
         </div>
       );
     }
@@ -401,7 +603,7 @@ export default function ChatConversationsPage() {
         <div className="px-4 md:px-8 py-4 border-b border-border bg-card flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-xl font-bold">Chat Conversations</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Monitor sessions and send templates</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Monitor sessions · Send product cards, coupons, payment & tracking links</p>
           </div>
           <div className="flex items-center gap-2">
             {activeCount > 0 && <Badge className="bg-green-100 text-green-700 border-green-200">{activeCount} Active</Badge>}
@@ -429,7 +631,6 @@ export default function ChatConversationsPage() {
                   const msgs = s.messages ?? [];
                   const last = msgs[msgs.length - 1];
                   const active = isActive(s.updatedAt);
-                  const unread = msgs.filter(m => m.role === "user").length;
                   return (
                     <button key={s.id} onClick={() => { setSelectedSession(s); setShowTemplates(false); }}
                       className={`w-full text-left px-4 py-3.5 border-b border-border/50 hover:bg-muted/40 transition-colors ${selectedSession?.id === s.id ? "bg-[#5FA800]/5 border-l-2 border-l-[#5FA800]" : ""}`}>
@@ -438,7 +639,7 @@ export default function ChatConversationsPage() {
                         <span className="text-xs font-mono text-muted-foreground truncate flex-1">{s.sessionId.slice(0, 18)}…</span>
                         <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{timeAgo(s.updatedAt)}</span>
                       </div>
-                      {last && <p className={`text-xs truncate ${last.role === "user" ? "font-medium text-foreground" : "text-muted-foreground"}`}>{last.role === "admin" ? "You: " : last.role === "user" ? "" : "Bot: "}{last.type ? `[${last.type.replace("_", " ")}]` : last.content.slice(0, 50)}</p>}
+                      {last && <p className={`text-xs truncate ${last.role === "user" ? "font-medium text-foreground" : "text-muted-foreground"}`}>{last.role === "admin" ? "You: " : last.role === "user" ? "" : "Bot: "}{last.type ? `[${last.type.replace(/_/g, " ")}]` : last.content.slice(0, 50)}</p>}
                       <p className="text-[10px] text-muted-foreground mt-1">{msgs.length} messages</p>
                     </button>
                   );
@@ -453,7 +654,7 @@ export default function ChatConversationsPage() {
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3">
                 <MessageCircle className="w-12 h-12 opacity-20" />
                 <p className="text-sm font-medium">Select a conversation</p>
-                <p className="text-xs">Use templates to send product cards, coupons, and offers</p>
+                <p className="text-xs text-center max-w-xs">Send product cards (website + Shopify), coupons, payment links, tracking info, and more</p>
               </div>
             ) : (
               <>
@@ -475,7 +676,6 @@ export default function ChatConversationsPage() {
                     const ts = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" }) : "";
                     const card = renderTemplateCard(msg);
 
-                    /* Template messages → render card, no blue bubble */
                     if (card) return (
                       <div key={i} className="flex gap-2 justify-start">
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isAdmin ? "bg-blue-600" : "bg-[#5FA800]"} text-white`}>
@@ -484,12 +684,12 @@ export default function ChatConversationsPage() {
                         <div>
                           {isAdmin && <p className="text-[9px] font-bold text-blue-600 mb-0.5 uppercase tracking-wider">Support Team</p>}
                           {card}
-                          <p className="text-[10px] text-muted-foreground mt-1">{ts}</p>
+                          <p className="text-[9px] text-muted-foreground mt-1">{msg.content.slice(0, 60)}{msg.content.length > 60 ? "…" : ""}</p>
+                          <p className="text-[10px] text-muted-foreground">{ts}</p>
                         </div>
                       </div>
                     );
 
-                    /* Regular text messages */
                     return (
                       <div key={i} className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                         {!isUser && (
@@ -509,16 +709,14 @@ export default function ChatConversationsPage() {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Templates panel (slide-in above reply) */}
                 {showTemplates && (
                   <TemplatePanel sessionId={selectedSession.sessionId} onSent={(session) => { setSelectedSession(session); qc.invalidateQueries({ queryKey: ["admin-chat-sessions"] }); setShowTemplates(false); }} />
                 )}
 
-                {/* Reply input */}
                 <div className="px-4 py-3 border-t border-border bg-card flex gap-2 items-end flex-shrink-0">
                   <button onClick={() => setShowTemplates(v => !v)} title="Send template"
                     className={`h-10 px-3 rounded-xl border transition-colors flex items-center gap-1.5 text-xs font-semibold flex-shrink-0 ${showTemplates ? "bg-[#5FA800]/10 border-[#5FA800]/30 text-[#5FA800]" : "border-border text-muted-foreground hover:bg-muted"}`}>
-                    <Gift className="w-4 h-4" />Templates
+                    <Filter className="w-4 h-4" />Templates
                   </button>
                   <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(); } }}

@@ -9,8 +9,9 @@ import {
   orderItemsTable,
   aiSettingsTable,
   sameDayDeliverySettingsTable,
+  shopifyProductsTable,
 } from "@workspace/db";
-import { eq, ilike, or, and, desc, sql } from "drizzle-orm";
+import { eq, ilike, or, and, desc, sql, asc } from "drizzle-orm";
 import { expandQuery } from "./search";
 import { adminMiddleware } from "../lib/auth";
 import OpenAI from "openai";
@@ -425,6 +426,70 @@ router.post("/admin/chat/reply", adminMiddleware as any, async (req, res) => {
 
     const [updated] = await db.update(chatSessionsTable).set({ messages: history, updatedAt: new Date() }).where(eq(chatSessionsTable.id, session.id)).returning();
     return res.json({ success: true, session: updated });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── GET /api/admin/chat/products (unified product search for chat templates) ── */
+router.get("/admin/chat/products", adminMiddleware as any, async (req, res) => {
+  try {
+    const { q = "", source = "all", categoryId, sort = "newest", limit = "16" } = req.query as Record<string, string>;
+    const lim = Math.min(Number(limit) || 16, 40);
+
+    let websiteProducts: any[] = [];
+    let shopifyProducts: any[] = [];
+
+    if (source !== "shopify") {
+      const conditions: any[] = [eq(productsTable.active, true)];
+      if (q) conditions.push(or(ilike(productsTable.name, `%${q}%`), sql`coalesce(${productsTable.tags}::text,'') ILIKE ${`%${q}%`}`));
+      if (categoryId) conditions.push(eq(productsTable.categoryId, Number(categoryId)));
+      const orderClause = sort === "price_asc" ? asc(sql`${productsTable.price}::numeric`)
+        : sort === "price_desc" ? desc(sql`${productsTable.price}::numeric`)
+        : desc(productsTable.createdAt);
+      const rows = await db.select({
+        id: productsTable.id, name: productsTable.name, price: productsTable.price,
+        originalPrice: productsTable.originalPrice, stock: productsTable.stock,
+        variants: productsTable.variants, images: productsTable.images, categoryId: productsTable.categoryId,
+      }).from(productsTable).where(and(...conditions)).orderBy(orderClause).limit(lim);
+      websiteProducts = rows.map(p => {
+        const imgs = (p.images as string[]) ?? [];
+        const price = Number(p.price);
+        const originalPrice = p.originalPrice ? Number(p.originalPrice) : null;
+        const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : null;
+        return { id: p.id, name: p.name, price, originalPrice, discount, stock: p.stock, variants: (p.variants as any[]) ?? [], image: imgs[0] ?? null, source: "website" };
+      });
+    }
+
+    if (source !== "website") {
+      const shopifyConds: any[] = [eq(shopifyProductsTable.status, "active")];
+      if (q) shopifyConds.push(ilike(shopifyProductsTable.title, `%${q}%`));
+      const shopifyRows = await db.select({
+        id: shopifyProductsTable.id, title: shopifyProductsTable.title,
+        price: shopifyProductsTable.price, compareAtPrice: shopifyProductsTable.compareAtPrice,
+        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+        imageUrl: shopifyProductsTable.imageUrl, variants: shopifyProductsTable.variants,
+        shopifyProductId: shopifyProductsTable.shopifyProductId,
+      }).from(shopifyProductsTable).where(and(...shopifyConds)).orderBy(desc(shopifyProductsTable.createdAt)).limit(lim);
+      shopifyProducts = shopifyRows.map(p => {
+        const price = Number(p.price) || 0;
+        const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
+        const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : null;
+        const vars = (p.variants as any[]) ?? [];
+        return {
+          id: p.id, name: p.title, price, originalPrice: compareAt, discount,
+          stock: p.inventoryQuantity ?? 0,
+          variants: vars.map((v: any) => ({ id: String(v.id), name: "Size", value: v.title, price: Number(v.price), stock: v.inventoryQuantity ?? 0 })),
+          image: p.imageUrl ?? null, source: "shopify", shopifyProductId: p.shopifyProductId,
+        };
+      });
+    }
+
+    const all = source === "shopify" ? shopifyProducts
+      : source === "website" ? websiteProducts
+      : [...websiteProducts, ...shopifyProducts].slice(0, lim);
+
+    return res.json(all);
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }

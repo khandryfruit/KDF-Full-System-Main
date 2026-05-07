@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList } from "lucide-react";
+import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap } from "lucide-react";
 import { useLocation } from "wouter";
 
 const SESSION_KEY = "kdfplus_chat_session";
@@ -51,6 +51,18 @@ interface TemplateMetadata {
   title?: string;
   description?: string;
   color?: string;
+  /* payment_link */
+  url?: string;
+  amount?: number;
+  /* tracking_link */
+  orderNumber?: string;
+  trackingNumber?: string;
+  courierName?: string;
+  /* multi_product */
+  products?: Product[];
+  /* product card stock */
+  stock?: number;
+  variants?: ProductVariant[];
 }
 
 interface ChatMessage {
@@ -60,7 +72,7 @@ interface ChatMessage {
   products?: Product[];
   categories?: { id: number; name: string; slug: string; image?: string | null }[];
   orderPlaced?: { id: number; orderNumber: string };
-  type?: "product" | "category" | "coupon" | "offer" | "order_form";
+  type?: "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link";
   metadata?: TemplateMetadata;
 }
 
@@ -82,10 +94,11 @@ function ProductImg({ src, alt }: { src: string | null | undefined; alt: string 
 }
 
 /* ── Rich Product Card ── */
-function ProductCard({ product, onAddToCart, onView }: {
+function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
   product: Product;
   onAddToCart: (p: Product, variant: ProductVariant | null, price: number) => void;
   onView: (id: number) => void;
+  onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
 }) {
   const hasVariants = product.variants.length > 0;
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(hasVariants ? product.variants[0] : null);
@@ -122,9 +135,10 @@ function ProductCard({ product, onAddToCart, onView }: {
           {product.originalPrice && product.originalPrice > currentPrice && (
             <span className="text-muted-foreground text-xs line-through">Rs. {product.originalPrice.toLocaleString()}</span>
           )}
+          {!isInStock && <span className="text-[10px] text-red-500 font-semibold ml-auto">Out of stock</span>}
         </div>
         <div className="flex gap-1.5">
-          <button onClick={() => onView(product.id)} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-muted transition-colors">
+          <button onClick={() => onView(product.id)} className="flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-muted transition-colors">
             <Eye className="w-3 h-3" /> View
           </button>
           {isInStock && (
@@ -133,6 +147,90 @@ function ProductCard({ product, onAddToCart, onView }: {
             </button>
           )}
         </div>
+        {isInStock && onBuyNow && (
+          <button onClick={() => onBuyNow(product, selectedVariant, currentPrice)} className="w-full mt-1.5 flex items-center justify-center gap-1 py-1.5 rounded-lg text-white text-xs font-bold transition-colors hover:opacity-90" style={{ backgroundColor: "#F58300" }}>
+            <Zap className="w-3 h-3" /> Buy Now
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Multi-Product Carousel ── */
+function MultiProductCarousel({ products, onAddToCart, onView, onBuyNow }: {
+  products: Product[];
+  onAddToCart: (p: Product, variant: ProductVariant | null, price: number) => void;
+  onView: (id: number) => void;
+  onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
+}) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 max-w-[92%]" style={{ scrollbarWidth: "none" }}>
+      {products.map(p => (
+        <div key={p.id} className="flex-shrink-0 w-44">
+          <ProductCard product={p} onAddToCart={onAddToCart} onView={onView} onBuyNow={onBuyNow} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Payment Link Card ── */
+function PaymentLinkCard({ meta }: { meta: TemplateMetadata }) {
+  return (
+    <div className="bg-white border border-violet-200 rounded-xl overflow-hidden shadow-sm mb-2 max-w-[90%]">
+      <div className="px-3 py-2.5 text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <CreditCard className="w-4 h-4" />
+          <span className="text-xs font-bold uppercase tracking-wider">Payment Link</span>
+        </div>
+        {meta.amount && <p className="text-xl font-black">Rs. {Number(meta.amount).toLocaleString()}</p>}
+      </div>
+      <div className="p-3">
+        {meta.title && <p className="text-sm font-semibold text-gray-800 mb-2">{meta.title}</p>}
+        {meta.url && (
+          <a href={meta.url} target="_blank" rel="noopener noreferrer"
+            className="w-full py-2 rounded-lg text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: "#7c3aed" }}>
+            <ExternalLink className="w-3 h-3" /> Pay Securely Now
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Tracking Link Card ── */
+function TrackingLinkCard({ meta }: { meta: TemplateMetadata }) {
+  return (
+    <div className="bg-white border border-sky-200 rounded-xl overflow-hidden shadow-sm mb-2 max-w-[90%]">
+      <div className="px-3 py-2.5 text-white" style={{ background: "linear-gradient(135deg,#0ea5e9,#0284c7)" }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <Truck className="w-4 h-4" />
+          <span className="text-xs font-bold uppercase tracking-wider">Order Tracking</span>
+        </div>
+        {meta.orderNumber && <p className="text-sm font-bold font-mono">{meta.orderNumber}</p>}
+      </div>
+      <div className="p-3 space-y-2">
+        {meta.courierName && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-muted-foreground">COURIER</span>
+            <span className="text-xs font-semibold">{meta.courierName}</span>
+          </div>
+        )}
+        {meta.trackingNumber && (
+          <div className="bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-1.5">
+            <p className="text-[10px] font-bold text-sky-600 mb-0.5">TRACKING NO.</p>
+            <p className="font-mono font-bold text-sm text-gray-800">{meta.trackingNumber}</p>
+          </div>
+        )}
+        {meta.url && (
+          <a href={meta.url} target="_blank" rel="noopener noreferrer"
+            className="w-full py-2 rounded-lg text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: "#0ea5e9" }}>
+            <ExternalLink className="w-3 h-3" /> Track My Order
+          </a>
+        )}
       </div>
     </div>
   );
@@ -253,12 +351,13 @@ function OrderBanner({ orderNumber }: { orderNumber: string }) {
 }
 
 /* ── Message Bubble ── */
-function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCategory }: {
+function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCategory, onBuyNow }: {
   msg: ChatMessage;
   onAddToCart: (p: Product, variant: ProductVariant | null, price: number) => void;
   onViewProduct: (id: number) => void;
   onOpenForm: () => void;
   onViewCategory: (slug: string) => void;
+  onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -282,13 +381,22 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
       const p: Product = {
         id: msg.metadata.id ?? 0, name: msg.metadata.name ?? "", price: msg.metadata.price ?? 0,
         originalPrice: msg.metadata.originalPrice, discount: msg.metadata.discount,
-        stock: 1, variants: [], image: msg.metadata.image,
+        stock: msg.metadata.stock ?? 1, variants: msg.metadata.variants ?? [], image: msg.metadata.image,
       };
-      return <ProductCard product={p} onAddToCart={onAddToCart} onView={onViewProduct} />;
+      return <ProductCard product={p} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} />;
+    }
+    if (msg.type === "multi_product" && msg.metadata?.products) {
+      const products: Product[] = msg.metadata.products.map((p: any) => ({
+        id: p.id, name: p.name, price: p.price, originalPrice: p.originalPrice,
+        discount: p.discount, stock: p.stock ?? 1, variants: p.variants ?? [], image: p.image,
+      }));
+      return <MultiProductCarousel products={products} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} />;
     }
     if (msg.type === "category" && msg.metadata) return <CategoryCard meta={msg.metadata} onView={onViewCategory} />;
     if (msg.type === "coupon" && msg.metadata) return <CouponCard meta={msg.metadata} />;
     if (msg.type === "offer" && msg.metadata) return <OfferCard meta={msg.metadata} content={msg.content} />;
+    if (msg.type === "payment_link" && msg.metadata) return <PaymentLinkCard meta={msg.metadata} />;
+    if (msg.type === "tracking_link" && msg.metadata) return <TrackingLinkCard meta={msg.metadata} />;
     if (msg.type === "order_form") return <OrderFormPromptCard onOpenForm={onOpenForm} />;
     return null;
   };
@@ -598,7 +706,10 @@ export function ChatWidget() {
           if (serverMsgs.length > msgCountRef.current) {
             const newMsgs = serverMsgs.slice(msgCountRef.current).filter((m: any) => m.role === "admin");
             if (newMsgs.length > 0) {
-              setMessages(prev => [...prev, ...newMsgs.map((m: any) => ({ role: "admin" as const, content: m.content, timestamp: new Date(m.timestamp), type: m.type, metadata: m.metadata }))]);
+              setMessages(prev => [...prev, ...newMsgs.map((m: any) => ({
+                role: "admin" as const, content: m.content, timestamp: new Date(m.timestamp),
+                type: m.type as ChatMessage["type"], metadata: m.metadata,
+              }))]);
               msgCountRef.current = serverMsgs.length;
             }
           }
@@ -643,6 +754,12 @@ export function ChatWidget() {
 
   const handleOpenForm = () => setShowOrderForm(true);
 
+  const handleBuyNow = useCallback((product: Product, variant: ProductVariant | null, price: number) => {
+    handleAddToCart(product, variant, price);
+    setDefaultOrderProduct(product.name);
+    setShowOrderForm(true);
+  }, [handleAddToCart]);
+
   const handleOrderSuccess = (orderNumber: string, orderId: number) => {
     setShowOrderForm(false);
     setChatCart([]);
@@ -682,7 +799,7 @@ export function ChatWidget() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-            {messages.map((msg, i) => <MessageBubble key={i} msg={msg} onAddToCart={handleAddToCart} onViewProduct={handleViewProduct} onOpenForm={handleOpenForm} onViewCategory={(slug) => { setIsOpen(false); setLocation(`/products?category=${slug}`); }} />)}
+            {messages.map((msg, i) => <MessageBubble key={i} msg={msg} onAddToCart={handleAddToCart} onViewProduct={handleViewProduct} onOpenForm={handleOpenForm} onViewCategory={(slug) => { setIsOpen(false); setLocation(`/products?category=${slug}`); }} onBuyNow={handleBuyNow} />)}
             {isLoading && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
