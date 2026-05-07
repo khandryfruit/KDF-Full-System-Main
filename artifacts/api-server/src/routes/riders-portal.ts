@@ -154,14 +154,23 @@ router.get("/rider/auth/me", riderMiddleware, async (req: any, res) => {
 router.put("/rider/location", riderMiddleware, async (req: any, res) => {
   try {
     const riderId = req.rider.id;
-    const { lat, lng } = req.body;
+    const { lat, lng, accuracy, speed, heading } = req.body;
     if (lat == null || lng == null) { res.status(400).json({ error: "lat and lng required" }); return; }
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
     if (isNaN(latNum) || isNaN(lngNum)) { res.status(400).json({ error: "Invalid coordinates" }); return; }
+    const accNum     = accuracy != null  ? parseFloat(accuracy)  : null;
+    const speedNum   = speed    != null  ? parseFloat(speed)     : null;
+    const headingNum = heading  != null  ? parseFloat(heading)   : null;
     await db.execute(sql`
       UPDATE riders
-      SET location_lat = ${latNum}, location_lng = ${lngNum}, location_updated_at = NOW(), updated_at = NOW()
+      SET location_lat        = ${latNum},
+          location_lng        = ${lngNum},
+          location_updated_at = NOW(),
+          location_accuracy   = ${accNum},
+          location_speed      = ${speedNum},
+          location_heading    = ${headingNum},
+          updated_at          = NOW()
       WHERE id = ${riderId}
     `);
     res.json({ ok: true });
@@ -181,6 +190,7 @@ router.get("/admin/riders/live-locations", adminMiddleware, async (req, res) => 
       SELECT
         r.id, r.name, r.phone, r.status, r.vehicle_type, r.delivery_area,
         r.location_lat, r.location_lng, r.location_updated_at,
+        r.location_accuracy, r.location_speed, r.location_heading,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_deliveries,
         (
           SELECT jsonb_agg(jsonb_build_object(

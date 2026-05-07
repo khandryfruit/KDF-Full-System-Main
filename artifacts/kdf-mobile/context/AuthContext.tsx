@@ -99,7 +99,7 @@ async function registerForPushNotifications(token: string): Promise<void> {
   } catch {}
 }
 
-/* ── Background location push (every 15s when logged in) ── */
+/* ── Background location push (every 8s when logged in) ── */
 async function startLocationTracking(authToken: string): Promise<() => void> {
   if (Platform.OS === "web") return () => {};
   try {
@@ -107,20 +107,33 @@ async function startLocationTracking(authToken: string): Promise<() => void> {
     if (status !== "granted") return () => {};
 
     let stopped = false;
+    let failCount = 0;
 
     const loop = async () => {
       while (!stopped) {
         try {
           const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 5,
           });
+          failCount = 0;
           await fetch(`${BASE_URL}/api/rider/location`, {
             method: "PUT",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-            body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+            body: JSON.stringify({
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+              accuracy: loc.coords.accuracy,
+              speed: loc.coords.speed,
+              heading: loc.coords.heading,
+            }),
           }).catch(() => {});
-        } catch {}
-        await new Promise(r => setTimeout(r, 15_000));
+        } catch {
+          failCount++;
+        }
+        /* Back-off: 8s normally, 20s after 3 consecutive failures (save battery) */
+        await new Promise(r => setTimeout(r, failCount >= 3 ? 20_000 : 8_000));
       }
     };
 
