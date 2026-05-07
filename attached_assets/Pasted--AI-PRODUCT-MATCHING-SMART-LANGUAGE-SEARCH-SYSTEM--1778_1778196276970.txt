@@ -1,0 +1,182 @@
+========================
+AI PRODUCT MATCHING + SMART LANGUAGE SEARCH SYSTEM
+==================================================
+
+The live chat system is now working very well overall.
+
+But there is one important issue remaining:
+
+When customer asks for a specific product,
+the AI is still sending unrelated products too.
+
+Example:
+Customer asks for:
+“اخروٹ”
+“walnuts”
+
+But chat also sends:
+❌ Rewari
+❌ Gift boxes
+❌ Other unrelated products
+
+This is wrong.
+
+========================
+MAIN REQUIREMENT
+================
+
+If customer asks for a product:
+
+✅ walnuts
+✅ اخروٹ
+✅ badam
+✅ almonds
+✅ pista
+✅ kaju
+✅ cashews
+
+Then AI should ONLY show matching Shopify products related to that exact category/search intent.
+
+NOT unrelated products.
+
+========================
+SMART PRODUCT FILTERING
+=======================
+
+Need intelligent AI filtering system.
+
+The AI should:
+
+✅ Detect customer intent
+✅ Detect product category
+✅ Detect translated keywords
+✅ Detect synonyms
+✅ Match Shopify products correctly
+
+Example:
+
+Customer says:
+“اخروٹ دکھاؤ”
+
+AI should:
+✅ Translate internally:
+اخروٹ = walnuts
+
+Then:
+✅ Search Shopify walnut products only
+✅ Send ONLY walnut-related products
+✅ Send all walnut variants/products
+✅ Exclude unrelated products
+
+========================
+MULTI LANGUAGE PRODUCT SEARCH
+=============================
+
+The AI must intelligently understand:
+
+✅ English
+✅ Roman Urdu
+✅ Urdu
+✅ Arabic
+
+Examples:
+
+“akhrot”
+“اخروٹ”
+“walnuts”
+“badam”
+“بادام”
+“almonds”
+“pista”
+“پستہ”
+
+All should map correctly to Shopify product categories automatically.
+
+========================
+SMART TRANSLATION LAYER
+=======================
+
+Add AI translation + keyword mapping system.
+
+Example mappings:
+
+اخروٹ → Walnuts
+بادام → Almonds
+کاجو → Cashews
+پستہ → Pistachios
+خشک میوہ → Dry Fruits
+
+The AI should automatically:
+✅ Translate
+✅ Normalize
+✅ Search Shopify products
+✅ Return correct matching products
+
+========================
+STRICT PRODUCT MATCHING
+=======================
+
+If customer asks for walnuts:
+
+ONLY show:
+✅ Walnut products
+✅ Walnut variants
+✅ Walnut categories
+
+DO NOT show:
+❌ Rewari
+❌ Gift boxes
+❌ Mixed unrelated products
+
+unless customer asks for recommendations separately.
+
+========================
+SMART RECOMMENDATION LOGIC
+==========================
+
+Recommendations should ONLY be related.
+
+Example:
+
+If customer asks for walnuts:
+
+You MAY recommend:
+✅ Premium walnuts
+✅ Soft shell walnuts
+✅ Walnut gift packs
+
+But NOT unrelated products.
+
+========================
+SEARCH ACCURACY IMPROVEMENTS
+============================
+
+Improve:
+✅ Search accuracy
+✅ AI keyword matching
+✅ Product intent detection
+✅ Shopify category filtering
+✅ Variant filtering
+✅ Multi-language search
+
+========================
+FINAL GOAL
+==========
+
+Need a highly intelligent multilingual ecommerce AI system where:
+
+✅ Urdu searches work
+✅ Roman Urdu searches work
+✅ English searches work
+✅ AI auto-translates customer intent
+✅ Shopify products match correctly
+✅ Only relevant products appear
+✅ Product search feels smart and accurate
+✅ Customers quickly find what they actually want
+
+Everything should feel:
+✅ Human-like
+✅ Accurate
+✅ Smart
+✅ Fast
+✅ Ecommerce optimized

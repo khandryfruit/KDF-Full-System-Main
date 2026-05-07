@@ -947,4 +947,59 @@ router.delete("/admin/chat/leads/:id", adminMiddleware as any, async (req, res) 
   }
 });
 
+/* ── GET /api/chat/products/search (public — no auth — fast product picker for order form) ── */
+router.get("/chat/products/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const limit = Math.min(Number(req.query.limit) || 12, 24);
+    if (!q) return res.json({ products: [] });
+
+    const rows = await db.select({
+      id: shopifyProductsTable.id,
+      title: shopifyProductsTable.title,
+      price: shopifyProductsTable.price,
+      compareAtPrice: shopifyProductsTable.compareAtPrice,
+      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+      imageUrl: shopifyProductsTable.imageUrl,
+      variants: shopifyProductsTable.variants,
+    })
+    .from(shopifyProductsTable)
+    .where(and(
+      eq(shopifyProductsTable.status, "active"),
+      or(
+        ilike(shopifyProductsTable.title, `%${q}%`),
+        ilike(shopifyProductsTable.title, `%${expandQuery(q)}%`),
+      )
+    ))
+    .orderBy(desc(shopifyProductsTable.updatedAt))
+    .limit(limit);
+
+    const products = rows.map(p => {
+      const price = Number(p.price) || 0;
+      const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
+      const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : null;
+      const vars = (p.variants as any[]) ?? [];
+      return {
+        id: p.id,
+        name: p.title,
+        price,
+        originalPrice: compareAt,
+        discount,
+        stock: p.inventoryQuantity ?? 0,
+        variants: vars.map((v: any) => ({
+          id: String(v.id),
+          value: v.title,
+          price: Number(v.price) || price,
+          stock: v.inventoryQuantity ?? 0,
+        })),
+        image: p.imageUrl ?? null,
+      };
+    });
+
+    return res.json({ products });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;

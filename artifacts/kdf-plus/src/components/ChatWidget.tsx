@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin } from "lucide-react";
+import { X, Send, MessageCircle, RotateCcw, Loader2, ShoppingBag, AlertCircle, ChevronDown, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin, Search, Plus, Package } from "lucide-react";
 import { useLocation } from "wouter";
 
 const SESSION_KEY = "kdfplus_chat_session";
@@ -81,11 +81,6 @@ interface ChatMessage {
   type?: "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link" | "escalate_human";
   metadata?: TemplateMetadata;
   autoCartAdded?: AutoCartItem[];
-}
-
-interface OrderFormData {
-  product: string; qty: number; name: string; phone: string;
-  city: string; cityCustom: string; address: string; notes: string;
 }
 
 /* ── Image with fallback ── */
@@ -498,84 +493,194 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
   );
 }
 
-/* ── Product Search Combobox for Order Form ── */
-function ProductCombobox({ value, onChange, className }: { value: string; onChange: (v: string) => void; className: string }) {
-  const [query, setQuery] = useState(value);
-  const [results, setResults] = useState<any[]>([]);
-  const [show, setShow] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+/* ─── Types for new order form ─── */
+interface ShopifyProductForForm {
+  id: number; name: string; price: number; originalPrice: number | null; discount: number | null;
+  stock: number; variants: Array<{ id: string; value: string; price: number; stock: number }>;
+  image: string | null;
+}
 
-  useEffect(() => { setQuery(value); }, [value]);
+/* ─── Product Search Sheet (kdf-plus) ─── */
+function ProductSearchSheet({ onSelect, onClose }: { onSelect: (p: ShopifyProductForForm) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ShopifyProductForForm[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recRef = useRef<any>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 120); }, []);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!query || query.length < 1) { setResults([]); setShow(false); return; }
+    if (!query.trim()) { setResults([]); return; }
     setLoading(true);
     timerRef.current = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=products&limit=6`);
-        if (r.ok) { const d = await r.json(); setResults(d.products ?? []); if (d.products?.length > 0) setShow(true); }
+        const r = await fetch(`/api/chat/products/search?q=${encodeURIComponent(query)}&limit=12`);
+        if (r.ok) { const d = await r.json(); setResults(d.products ?? []); }
       } catch {} finally { setLoading(false); }
-    }, 280);
+    }, 250);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [query]);
 
+  const startVoice = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    recRef.current = new SR(); recRef.current.lang = "ur-PK"; recRef.current.interimResults = false;
+    recRef.current.onresult = (e: any) => { setQuery(e.results[0][0].transcript); setListening(false); };
+    recRef.current.onerror = () => setListening(false);
+    recRef.current.onend = () => setListening(false);
+    recRef.current.start(); setListening(true);
+  };
+  const stopVoice = () => { recRef.current?.stop(); setListening(false); };
+
   return (
-    <div className="relative">
-      <div className="relative">
-        <input
-          value={query}
-          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setShow(true); }}
-          onBlur={() => setTimeout(() => setShow(false), 180)}
-          placeholder="Search product... (e.g. almonds, kaju)"
-          className={className}
-        />
-        {loading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs animate-pulse" style={{ color: "#5FA800" }}>●</span>}
+    <div className="absolute inset-0 z-20 flex flex-col bg-muted rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2.5 bg-background border-b border-border flex-shrink-0">
+        <button onClick={onClose} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center active:opacity-70 flex-shrink-0">
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        </button>
+        <div className="flex-1 flex items-center gap-2 bg-muted rounded-xl px-2.5 py-2">
+          <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search: badam, pista, kaju…"
+            className="flex-1 bg-transparent text-xs text-foreground placeholder-muted-foreground focus:outline-none" />
+          {loading && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: "#5FA800" }} />}
+        </div>
+        <button onMouseDown={startVoice} onMouseUp={stopVoice} onTouchStart={startVoice} onTouchEnd={stopVoice}
+          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${listening ? "bg-red-500 animate-pulse" : "bg-muted"}`}>
+          {listening ? <MicOff className="w-3.5 h-3.5 text-white" /> : <Mic className="w-3.5 h-3.5 text-muted-foreground" />}
+        </button>
       </div>
-      {show && results.length > 0 && (
-        <div className="absolute z-[300] top-full left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow-xl max-h-48 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
+        {!query.trim() && (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 px-4 text-center">
+            <Search className="w-10 h-10 text-muted-foreground/30" />
+            <p className="text-muted-foreground text-xs font-semibold">Search from 300+ dry fruits</p>
+            <p className="text-muted-foreground/60 text-[11px]">Or tap mic to speak in Urdu/English</p>
+          </div>
+        )}
+        {query.trim() && !loading && results.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 gap-1.5">
+            <Package className="w-8 h-8 text-muted-foreground/30" />
+            <p className="text-muted-foreground text-xs">No products found for "{query}"</p>
+          </div>
+        )}
+        <div className="px-2 py-2 space-y-1.5">
           {results.map(p => (
-            <button key={p.id} type="button"
-              onMouseDown={() => { onChange(p.name); setQuery(p.name); setShow(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-left border-b border-border/50 last:border-0 transition-colors">
+            <button key={p.id} onClick={() => onSelect(p)}
+              className="w-full bg-background rounded-xl border border-border p-2.5 flex gap-2.5 items-center active:opacity-80 transition-opacity text-left">
               {p.image ? (
-                <img src={getImageUrl(p.image) ?? ""} alt={p.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+                <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-muted"
+                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : (
-                <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold bg-[#5FA800]/10" style={{ color: "#5FA800" }}>{p.name[0]}</div>
+                <div className="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-base font-bold bg-[#5FA800]/10" style={{ color: "#5FA800" }}>{p.name[0]}</div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">{p.name}</p>
-                <p className="text-[10px] font-semibold" style={{ color: "#5FA800" }}>Rs. {p.price.toLocaleString()}</p>
+                <p className="font-bold text-foreground text-xs leading-snug line-clamp-2">{p.name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="font-bold text-xs" style={{ color: "#5FA800" }}>Rs. {p.price.toLocaleString()}</span>
+                  {p.discount && p.discount > 0 && <span className="text-[9px] font-bold bg-red-50 text-red-500 px-1 py-0.5 rounded-full">{p.discount}% OFF</span>}
+                </div>
+                {p.variants.length > 1 && <p className="text-[10px] text-muted-foreground mt-0.5">{p.variants.length} sizes</p>}
               </div>
+              <Plus className="w-4 h-4 flex-shrink-0" style={{ color: "#5FA800" }} />
             </button>
           ))}
         </div>
-      )}
-      {show && results.length === 0 && query.length > 1 && !loading && (
-        <div className="absolute z-[300] top-full left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow px-3 py-2 text-xs text-muted-foreground text-center">
-          No match — just type a custom product name above.
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-/* ── Order Form Panel (inline overlay for desktop, full-screen on mobile) ── */
-function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuccess }: {
+/* ─── Variant Picker Sheet (kdf-plus) ─── */
+function VariantPickerSheet({ product, onConfirm, onClose }: {
+  product: ShopifyProductForForm; onConfirm: (item: ChatCartItem) => void; onClose: () => void;
+}) {
+  const hasVariants = product.variants.length > 1;
+  const [selected, setSelected] = useState<ShopifyProductForForm["variants"][0] | null>(hasVariants ? null : product.variants[0] ?? null);
+  const [qty, setQty] = useState(1);
+  const price = selected?.price ?? product.price;
+
+  return (
+    <div className="absolute inset-0 z-30 flex items-end rounded-2xl overflow-hidden" style={{ background: "rgba(0,0,0,0.4)" }} onClick={onClose}>
+      <div className="w-full bg-background rounded-t-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="w-8 h-1 bg-border rounded-full mx-auto mt-2.5 mb-1" />
+        <div className="flex gap-2.5 px-3 py-2.5 border-b border-border">
+          {product.image && <img src={product.image} alt={product.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0 bg-muted" />}
+          <div className="flex-1 min-w-0 py-0.5">
+            <p className="font-bold text-foreground text-xs leading-snug line-clamp-2">{product.name}</p>
+            <p className="font-bold text-sm mt-1" style={{ color: "#5FA800" }}>Rs. {price.toLocaleString()}</p>
+            {product.discount && product.discount > 0 && <span className="text-[9px] font-bold bg-red-50 text-red-500 px-1 py-0.5 rounded-full">{product.discount}% OFF</span>}
+          </div>
+          <button onClick={onClose} className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 self-start mt-0.5"><X className="w-3 h-3 text-muted-foreground" /></button>
+        </div>
+        <div className="px-3 py-3 space-y-3 max-h-64 overflow-y-auto">
+          {hasVariants && (
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground tracking-wider mb-1.5">SELECT SIZE</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {product.variants.map(v => (
+                  <button key={v.id} onClick={() => setSelected(v)} disabled={v.stock === 0}
+                    className={`py-2 px-1.5 rounded-lg border text-center transition-all disabled:opacity-40 ${selected?.id === v.id ? "border-[#5FA800] bg-[#f0f9e8]" : "border-border bg-background"}`}>
+                    <p className="text-[11px] font-bold text-foreground">{v.value}</p>
+                    <p className="text-[10px] font-semibold mt-0.5" style={{ color: "#5FA800" }}>Rs. {v.price.toLocaleString()}</p>
+                    {v.stock === 0 && <p className="text-[8px] text-red-400 font-semibold">Out of stock</p>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-muted-foreground tracking-wider">QUANTITY</p>
+            <div className="flex items-center gap-2.5">
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-base font-bold text-foreground active:bg-muted">−</button>
+              <span className="w-6 text-center font-bold text-foreground">{qty}</span>
+              <button onClick={() => setQty(q => q + 1)} className="w-8 h-8 rounded-full flex items-center justify-center text-base font-bold text-white active:opacity-80" style={{ backgroundColor: "#5FA800" }}>+</button>
+            </div>
+          </div>
+          <div className="bg-green-50/50 border border-green-200/30 rounded-xl p-2.5 flex justify-between items-center">
+            <span className="text-xs font-semibold text-muted-foreground">Subtotal</span>
+            <span className="font-bold text-sm" style={{ color: "#5FA800" }}>Rs. {(price * qty).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="px-3 pt-1 pb-4">
+          <button onClick={() => onConfirm({ name: product.name, variant: selected?.value ?? "", variantId: selected?.id ?? "", price, qty, image: product.image ?? undefined })}
+            disabled={hasVariants && !selected}
+            className="w-full py-3 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-40 active:opacity-80"
+            style={{ backgroundColor: "#5FA800" }}>
+            <ShoppingCart className="w-3.5 h-3.5" />
+            {hasVariants && !selected ? "Select a size to continue" : `Add to Cart — Rs. ${(price * qty).toLocaleString()}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Order Form Panel (kdf-plus) ── */
+function OrderFormPanel({ initialCart, sessionId, onClose, onSuccess }: {
   defaultProduct: string; initialCart?: ChatCartItem[]; sessionId: string | null;
   onClose: () => void; onSuccess: (orderNumber: string, orderId: number) => void;
 }) {
-  const hasCart = (initialCart?.length ?? 0) > 0;
   const [localCart, setLocalCart] = useState<ChatCartItem[]>(initialCart ?? []);
-  const [form, setForm] = useState<OrderFormData>({ product: defaultProduct, qty: 1, name: "", phone: "", city: "", cityCustom: "", address: "", notes: "" });
+  const [form, setForm] = useState({ name: "", phone: "", city: "", cityCustom: "", address: "", notes: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [isDetectingLoc, setIsDetectingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
-  const set = (k: keyof OrderFormData, v: string | number) => { setForm(f => ({ ...f, [k]: v })); setSubmitError(null); };
+  const [showSearch, setShowSearch] = useState(false);
+  const [pickerProduct, setPickerProduct] = useState<ShopifyProductForForm | null>(null);
+  const set = (k: string, v: string) => { setForm(f => ({ ...f, [k]: v })); setSubmitError(null); };
+
+  const updateCartQty = (idx: number, qty: number) => { if (qty < 1) return; setLocalCart(c => c.map((it, i) => i === idx ? { ...it, qty } : it)); };
+  const removeCartItem = (idx: number) => setLocalCart(c => c.filter((_, i) => i !== idx));
+  const cartTotal = localCart.reduce((s, i) => s + i.price * i.qty, 0);
+  const totalItems = localCart.reduce((s, i) => s + i.qty, 0);
 
   const detectLocation = () => {
     if (!navigator.geolocation) { setLocError("Location not supported on this device"); return; }
@@ -596,16 +701,7 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
     }, () => { setIsDetectingLoc(false); setLocError("Location access denied. Please type your address."); }, { timeout: 10000 });
   };
 
-  const updateCartQty = (idx: number, qty: number) => { if (qty < 1) return; setLocalCart(c => c.map((it, i) => i === idx ? { ...it, qty } : it)); };
-  const removeCartItem = (idx: number) => setLocalCart(c => c.filter((_, i) => i !== idx));
-  const cartTotal = localCart.reduce((s, i) => s + i.price * i.qty, 0);
-
-  const v1 = () => {
-    const e: Record<string, string> = {};
-    if (hasCart) { if (localCart.length === 0) e.cart = "Add at least one item"; }
-    else { if (!form.product.trim()) e.product = "Required"; if (form.qty < 1) e.qty = "Min 1"; }
-    setErrors(e); return !Object.keys(e).length;
-  };
+  const v1 = () => { const e: Record<string, string> = {}; if (localCart.length === 0) e.cart = "Please add at least one product"; setErrors(e); return !Object.keys(e).length; };
   const v2 = () => {
     const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = "Required";
@@ -619,13 +715,10 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
 
   const submit = async () => {
     if (!v2()) return;
-    setIsSubmitting(true);
-    setSubmitError(null);
+    setIsSubmitting(true); setSubmitError(null);
     try {
       const city = form.city === "Other" ? form.cityCustom : form.city;
-      const items = hasCart
-        ? localCart.map(i => ({ name: i.name, variant: i.variant, variantId: i.variantId, price: i.price, qty: i.qty }))
-        : [{ name: form.product.trim(), variant: "", price: 0, qty: form.qty }];
+      const items = localCart.map(i => ({ name: i.name, variant: i.variant, variantId: i.variantId, price: i.price, qty: i.qty }));
       const r = await fetch("/api/chat/direct-order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, items, name: form.name.trim(), phone: form.phone.trim(), city, address: form.address.trim(), notes: form.notes.trim() }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Order failed. Please try again.");
@@ -634,69 +727,91 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
   };
 
   const Err = ({ f }: { f: string }) => errors[f] ? <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[f]}</p> : null;
-  const inputCls = "w-full border border-border rounded-lg px-3 py-2 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-[#5FA800]/50";
+  const inputCls = "w-full border border-border rounded-xl px-3 py-2.5 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-[#5FA800]/50";
 
   return (
     <div className="absolute inset-0 z-10 flex flex-col rounded-2xl overflow-hidden bg-muted">
+      {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)" }}>
-        <button onClick={onClose} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center"><X className="w-3.5 h-3.5 text-white" /></button>
-        <p className="font-bold text-white text-xs flex-1">{hasCart ? "Review & Order" : "Place Order"} — Step {step}/2</p>
+        <button onClick={onClose} className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center active:bg-white/30"><X className="w-3.5 h-3.5 text-white" /></button>
+        <div className="flex-1">
+          <p className="font-bold text-white text-xs">{step === 1 ? "Your Order" : "Delivery Details"}</p>
+          <p className="text-green-100 text-[10px]">Step {step}/2{step === 1 && totalItems > 0 ? ` · ${totalItems} item${totalItems > 1 ? "s" : ""}` : ""}</p>
+        </div>
         <div className="flex gap-1">
           <div className={`h-1 w-8 rounded-full ${step >= 1 ? "bg-white" : "bg-white/30"}`} />
           <div className={`h-1 w-8 rounded-full ${step >= 2 ? "bg-white" : "bg-white/30"}`} />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 relative">
         {step === 1 ? (
           <>
-            {hasCart ? (
-              <>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Your items</p>
+            {localCart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
+                <ShoppingCart className="w-10 h-10 text-muted-foreground/30" />
+                <p className="text-muted-foreground text-xs font-semibold">Cart is empty</p>
+                <p className="text-muted-foreground/60 text-[11px] text-center">Search products below to add them</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
                 {localCart.map((item, idx) => (
-                  <div key={idx} className="bg-background rounded-lg border border-border p-2.5 flex gap-2 items-start">
-                    {item.image && <img src={`/api/storage/objects/${item.image}`} alt={item.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                  <div key={idx} className="bg-background rounded-xl border border-border p-2.5 flex gap-2 items-start">
+                    {item.image && <img src={getImageUrl(item.image) ?? ""} alt={item.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-muted" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-foreground text-xs truncate">{item.name}</p>
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="font-bold text-foreground text-xs leading-snug line-clamp-2 flex-1">{item.name}</p>
+                        <button onClick={() => removeCartItem(idx)} className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center text-red-400 text-[9px] flex-shrink-0 ml-1">✕</button>
+                      </div>
                       {item.variant && <span className="text-[9px] font-bold text-white px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#5FA800" }}>{item.variant}</span>}
                       <div className="flex items-center justify-between mt-1.5">
                         <div className="flex items-center border border-border rounded-lg overflow-hidden bg-muted">
-                          <button onClick={() => updateCartQty(idx, item.qty - 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-foreground">−</button>
-                          <span className="w-6 text-center text-xs font-bold">{item.qty}</span>
-                          <button onClick={() => updateCartQty(idx, item.qty + 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-foreground">+</button>
+                          <button onClick={() => updateCartQty(idx, item.qty - 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-foreground active:bg-background">−</button>
+                          <span className="w-6 text-center text-xs font-bold text-foreground">{item.qty}</span>
+                          <button onClick={() => updateCartQty(idx, item.qty + 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold text-foreground active:bg-background">+</button>
                         </div>
                         <span className="text-xs font-bold" style={{ color: "#5FA800" }}>Rs. {(item.price * item.qty).toLocaleString()}</span>
-                        <button onClick={() => removeCartItem(idx)} className="w-5 h-5 rounded-full bg-red-50 flex items-center justify-center text-red-400 text-[10px]">✕</button>
                       </div>
                     </div>
                   </div>
                 ))}
-                {localCart.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Cart is empty</p>}
-                <Err f="cart" />
-                <div className="bg-green-50 border border-green-200/50 rounded-lg p-2.5 flex justify-between items-center">
-                  <span className="text-xs font-semibold text-gray-700">Total</span>
+              </div>
+            )}
+            <Err f="cart" />
+
+            {/* Add more button */}
+            <button onClick={() => setShowSearch(true)}
+              className="w-full py-3 rounded-xl border-2 border-dashed font-bold text-xs flex items-center justify-center gap-1.5 active:opacity-70 transition-opacity"
+              style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "transparent" }}>
+              <Plus className="w-3.5 h-3.5" />
+              {localCart.length === 0 ? "Search & Add Products" : "Add More Items"}
+            </button>
+
+            {/* Cart total */}
+            {localCart.length > 0 && (
+              <div className="bg-background rounded-xl border border-border p-3 space-y-1.5">
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Subtotal ({totalItems} item{totalItems > 1 ? "s" : ""})</span>
+                  <span className="font-semibold text-foreground">Rs. {cartTotal.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Delivery</span><span className="font-semibold text-green-600">Free</span>
+                </div>
+                <div className="border-t border-border pt-1.5 flex justify-between items-center">
+                  <span className="font-bold text-foreground text-xs">Total</span>
                   <span className="font-bold text-sm" style={{ color: "#5FA800" }}>Rs. {cartTotal.toLocaleString()}</span>
                 </div>
-              </>
-            ) : (
-              <>
-                <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Product *</label><ProductCombobox value={form.product} onChange={v => set("product", v)} className={inputCls} /><Err f="product" /></div>
-                <div>
-                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Quantity *</label>
-                  <div className="flex items-center border border-border rounded-lg overflow-hidden w-fit bg-background">
-                    <button onClick={() => set("qty", Math.max(1, form.qty - 1))} className="w-8 h-8 flex items-center justify-center text-sm font-bold hover:bg-muted border-r border-border">−</button>
-                    <span className="w-8 text-center text-xs font-bold">{form.qty}</span>
-                    <button onClick={() => set("qty", form.qty + 1)} className="w-8 h-8 flex items-center justify-center text-sm font-bold hover:bg-muted border-l border-border">+</button>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
+
             <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Notes (optional)</label><textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any special requests..." rows={2} className={`${inputCls} resize-none`} /></div>
           </>
         ) : (
           <>
             <button type="button" onClick={detectLocation} disabled={isDetectingLoc}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed font-semibold text-xs transition-all active:scale-95 disabled:opacity-60"
-              style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "#f0f9e8" }}>
+              style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "transparent" }}>
               {isDetectingLoc ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Detecting location…</> : <><MapPin className="w-3.5 h-3.5" />Auto-detect my address</>}
             </button>
             {locError && <p className="text-[10px] text-amber-600 -mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{locError}</p>}
@@ -704,25 +819,48 @@ function OrderFormPanel({ defaultProduct, initialCart, sessionId, onClose, onSuc
             <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Phone *</label><input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="03XX XXXXXXX" className={inputCls} /><Err f="phone" /></div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground mb-1 block">City *</label>
-              <div className="relative"><select value={form.city} onChange={e => set("city", e.target.value)} className={`${inputCls} appearance-none pr-7`}><option value="">Select city…</option>{CITIES.map(c => <option key={c} value={c}>{c}</option>)}</select><ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" /></div>
+              <div className="relative"><select value={form.city} onChange={e => set("city", e.target.value)} className={`${inputCls} appearance-none pr-6`}><option value="">Select city…</option>{CITIES.map(c => <option key={c} value={c}>{c}</option>)}</select><ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" /></div>
               <Err f="city" />
               {form.city === "Other" && <><input value={form.cityCustom} onChange={e => set("cityCustom", e.target.value)} placeholder="Your city" className={`mt-1.5 ${inputCls}`} /><Err f="cityCustom" /></>}
             </div>
             <div><label className="text-[10px] font-bold text-muted-foreground mb-1 block">Address *</label><textarea value={form.address} onChange={e => set("address", e.target.value)} placeholder="House/flat, street, area..." rows={3} className={`${inputCls} resize-none`} /><Err f="address" /></div>
+            {/* Order recap */}
+            <div className="bg-green-50/50 border border-green-200/40 rounded-xl p-2.5">
+              <p className="text-[9px] font-bold text-muted-foreground tracking-wider mb-1.5">ORDER SUMMARY</p>
+              {localCart.map((item, i) => (
+                <div key={i} className="flex justify-between text-[11px] text-muted-foreground py-0.5">
+                  <span className="truncate flex-1 pr-2">{item.name}{item.variant ? ` (${item.variant})` : ""} ×{item.qty}</span>
+                  <span className="font-bold flex-shrink-0" style={{ color: "#5FA800" }}>Rs. {(item.price * item.qty).toLocaleString()}</span>
+                </div>
+              ))}
+              <div className="border-t border-green-200/50 mt-1.5 pt-1.5 flex justify-between font-bold text-xs">
+                <span className="text-foreground">Total</span><span style={{ color: "#5FA800" }}>Rs. {cartTotal.toLocaleString()}</span>
+              </div>
+            </div>
           </>
         )}
+
+        {/* Overlays */}
+        {showSearch && <ProductSearchSheet onSelect={p => { setPickerProduct(p); setShowSearch(false); }} onClose={() => setShowSearch(false)} />}
+        {pickerProduct && <VariantPickerSheet product={pickerProduct} onConfirm={item => { setLocalCart(c => [...c, item]); setPickerProduct(null); }} onClose={() => setPickerProduct(null)} />}
       </div>
-      <div className="bg-background border-t border-border px-3 pt-2 pb-2.5 flex-shrink-0">
+
+      {/* Footer */}
+      <div className="bg-background border-t border-border px-3 pt-2 pb-3 flex-shrink-0">
         {submitError && (
-          <div className="flex items-start gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 mb-2">
+          <div className="flex items-start gap-1.5 bg-red-50 border border-red-200 rounded-xl px-2.5 py-2 mb-2">
             <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
             <p className="text-[11px] text-red-600 font-medium leading-snug">{submitError}</p>
           </div>
         )}
         <div className="flex gap-2">
-          {step === 2 && <button onClick={() => { setStep(1); setSubmitError(null); }} className="px-3 py-2 rounded-lg border border-border text-xs font-semibold text-muted-foreground">Back</button>}
-          <button onClick={step === 1 ? () => { if (v1()) setStep(2); } : submit} disabled={isSubmitting} className="flex-1 py-2 rounded-lg text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60" style={{ backgroundColor: "#5FA800" }}>
-            {isSubmitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Placing…</> : step === 1 ? "Continue →" : <><ShoppingBag className="w-3.5 h-3.5" />Place Order</>}
+          {step === 2 && <button onClick={() => { setStep(1); setSubmitError(null); }} className="px-3 py-2.5 rounded-xl border border-border text-xs font-semibold text-muted-foreground">Back</button>}
+          <button onClick={step === 1 ? () => { if (v1()) setStep(2); } : submit} disabled={isSubmitting}
+            className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60 active:opacity-80"
+            style={{ backgroundColor: "#5FA800" }}>
+            {isSubmitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Placing…</>
+              : step === 1 ? `Continue${totalItems > 0 ? ` (${totalItems})` : ""} →`
+              : <><ShoppingBag className="w-3.5 h-3.5" />Place Order · Rs. {cartTotal.toLocaleString()}</>}
           </button>
         </div>
       </div>

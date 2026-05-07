@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Send, MessageCircle, RotateCcw, ChevronDown, Loader2, ShoppingBag, AlertCircle, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin } from "lucide-react";
+import { X, Send, MessageCircle, RotateCcw, ChevronDown, Loader2, ShoppingBag, AlertCircle, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin, Search, Plus, Package } from "lucide-react";
 import { useLocation } from "wouter";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -399,84 +399,196 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
   );
 }
 
-/* ── Product Search Combobox for Order Form ── */
-function ProductCombobox({ value, onChange, className }: { value: string; onChange: (v: string) => void; className: string }) {
-  const [query, setQuery] = useState(value);
-  const [results, setResults] = useState<any[]>([]);
-  const [show, setShow] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+/* ─── Types for new order form ─── */
+interface ShopifyProductForForm {
+  id: number; name: string; price: number; originalPrice: number | null; discount: number | null;
+  stock: number; variants: Array<{ id: string; value: string; price: number; stock: number }>;
+  image: string | null;
+}
 
-  useEffect(() => { setQuery(value); }, [value]);
+/* ─── Product Search Sheet (slide-in fullscreen search) ─── */
+function ProductSearchSheet({ onSelect, onClose }: { onSelect: (p: ShopifyProductForForm) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ShopifyProductForForm[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recRef = useRef<any>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 120); }, []);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!query || query.length < 1) { setResults([]); setShow(false); return; }
+    if (!query.trim()) { setResults([]); return; }
     setLoading(true);
     timerRef.current = setTimeout(async () => {
       try {
-        const r = await fetch(`${BASE_URL}api/search?q=${encodeURIComponent(query)}&type=products&limit=6`);
-        if (r.ok) { const d = await r.json(); setResults(d.products ?? []); if (d.products?.length > 0) setShow(true); }
+        const r = await fetch(`${BASE_URL}api/chat/products/search?q=${encodeURIComponent(query)}&limit=12`);
+        if (r.ok) { const d = await r.json(); setResults(d.products ?? []); }
       } catch {} finally { setLoading(false); }
-    }, 280);
+    }, 250);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [query]);
 
+  const startVoice = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    recRef.current = new SR(); recRef.current.lang = "ur-PK"; recRef.current.interimResults = false;
+    recRef.current.onresult = (e: any) => { setQuery(e.results[0][0].transcript); setListening(false); };
+    recRef.current.onerror = () => setListening(false);
+    recRef.current.onend = () => setListening(false);
+    recRef.current.start(); setListening(true);
+  };
+  const stopVoice = () => { recRef.current?.stop(); setListening(false); };
+
   return (
-    <div className="relative">
-      <div className="relative">
-        <input
-          value={query}
-          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setShow(true); }}
-          onBlur={() => setTimeout(() => setShow(false), 180)}
-          placeholder="Search product... (e.g. almonds, kaju)"
-          className={className}
-        />
-        {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs animate-pulse" style={{ color: "#5FA800" }}>●</span>}
+    <div className="absolute inset-0 z-20 flex flex-col bg-[#F0F2F5]">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-3 bg-white border-b border-gray-100 shadow-sm flex-shrink-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center active:bg-gray-200 flex-shrink-0">
+          <ChevronDown className="w-5 h-5 text-gray-600" />
+        </button>
+        <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-2xl px-3 py-2.5">
+          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search: badam, pista, kaju, almonds…"
+            className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 focus:outline-none" />
+          {loading && <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: "#5FA800" }} />}
+        </div>
+        <button onMouseDown={startVoice} onMouseUp={stopVoice} onTouchStart={startVoice} onTouchEnd={stopVoice}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${listening ? "bg-red-500 shadow-lg shadow-red-200 animate-pulse" : "bg-gray-100"}`}>
+          {listening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-500" />}
+        </button>
       </div>
-      {show && results.length > 0 && (
-        <div className="absolute z-[300] top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
+        {!query.trim() && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 px-6 text-center">
+            <Search className="w-12 h-12 text-gray-200" />
+            <p className="text-gray-500 font-semibold">Search from 300+ dry fruits</p>
+            <p className="text-gray-400 text-sm">Type a product name or tap the mic to speak in Urdu/English</p>
+          </div>
+        )}
+        {query.trim() && !loading && results.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-2">
+            <Package className="w-10 h-10 text-gray-200" />
+            <p className="text-gray-400 text-sm">No products found for "{query}"</p>
+          </div>
+        )}
+        <div className="px-3 py-3 space-y-2">
           {results.map(p => (
-            <button key={p.id} type="button"
-              onMouseDown={() => { onChange(p.name); setQuery(p.name); setShow(false); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors">
+            <button key={p.id} onClick={() => onSelect(p)}
+              className="w-full bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex gap-3 items-center active:scale-[0.98] transition-transform text-left">
               {p.image ? (
-                <img src={getImageUrl(p.image) ?? ""} alt={p.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+                <img src={p.image} alt={p.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0 bg-gray-100"
+                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : (
-                <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold bg-[#5FA800]/10" style={{ color: "#5FA800" }}>{p.name[0]}</div>
+                <div className="w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center text-xl font-bold bg-[#5FA800]/10" style={{ color: "#5FA800" }}>{p.name[0]}</div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
-                <p className="text-[10px] font-semibold" style={{ color: "#5FA800" }}>Rs. {p.price.toLocaleString()}</p>
+                <p className="font-bold text-gray-900 text-sm leading-snug line-clamp-2">{p.name}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-bold text-sm" style={{ color: "#5FA800" }}>Rs. {p.price.toLocaleString()}</span>
+                  {p.discount && p.discount > 0 && <span className="text-[10px] font-bold bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full">{p.discount}% OFF</span>}
+                </div>
+                {p.variants.length > 1 && <p className="text-[11px] text-gray-400 mt-0.5">{p.variants.length} sizes available</p>}
               </div>
+              <Plus className="w-5 h-5 flex-shrink-0" style={{ color: "#5FA800" }} />
             </button>
           ))}
         </div>
-      )}
-      {show && results.length === 0 && query.length > 1 && !loading && (
-        <div className="absolute z-[300] top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow px-3 py-2 text-xs text-gray-400 text-center">
-          No match — just type a custom product name above.
+      </div>
+    </div>
+  );
+}
+
+/* ─── Variant Picker Sheet (bottom sheet) ─── */
+function VariantPickerSheet({ product, onConfirm, onClose }: {
+  product: ShopifyProductForForm; onConfirm: (item: ChatCartItem) => void; onClose: () => void;
+}) {
+  const hasVariants = product.variants.length > 1;
+  const [selected, setSelected] = useState<ShopifyProductForForm["variants"][0] | null>(hasVariants ? null : product.variants[0] ?? null);
+  const [qty, setQty] = useState(1);
+  const price = selected?.price ?? product.price;
+
+  return (
+    <div className="absolute inset-0 z-30 flex items-end" style={{ background: "rgba(0,0,0,0.45)" }} onClick={onClose}>
+      <div className="w-full bg-white rounded-t-3xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
+        <div className="flex gap-3 px-4 py-3 border-b border-gray-100">
+          {product.image && <img src={product.image} alt={product.name} className="w-16 h-16 rounded-2xl object-cover flex-shrink-0 bg-gray-100" />}
+          <div className="flex-1 min-w-0 py-1">
+            <p className="font-bold text-gray-900 text-sm leading-snug line-clamp-2">{product.name}</p>
+            <p className="font-bold text-base mt-1" style={{ color: "#5FA800" }}>Rs. {price.toLocaleString()}</p>
+            {product.discount && product.discount > 0 && <span className="text-[10px] font-bold bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full">{product.discount}% OFF</span>}
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 self-start mt-1"><X className="w-3.5 h-3.5 text-gray-500" /></button>
         </div>
-      )}
+        <div className="px-4 py-4 space-y-4 max-h-72 overflow-y-auto">
+          {hasVariants && (
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 tracking-wider mb-2">SELECT SIZE / WEIGHT</p>
+              <div className="grid grid-cols-3 gap-2">
+                {product.variants.map(v => (
+                  <button key={v.id} onClick={() => setSelected(v)}
+                    disabled={v.stock === 0}
+                    className={`py-2.5 px-2 rounded-xl border-2 text-center transition-all disabled:opacity-40 ${selected?.id === v.id ? "border-[#5FA800] bg-[#f0f9e8]" : "border-gray-200 bg-white active:border-gray-300"}`}>
+                    <p className="text-xs font-bold text-gray-800">{v.value}</p>
+                    <p className="text-[11px] font-semibold mt-0.5" style={{ color: "#5FA800" }}>Rs. {v.price.toLocaleString()}</p>
+                    {v.stock === 0 && <p className="text-[9px] text-red-400 font-semibold">Out of stock</p>}
+                    {v.stock > 0 && v.stock < 10 && <p className="text-[9px] text-amber-500 font-semibold">Only {v.stock} left</p>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold text-gray-400 tracking-wider">QUANTITY</p>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 rounded-full border-2 border-gray-200 flex items-center justify-center text-lg font-bold text-gray-600 active:bg-gray-50">−</button>
+              <span className="w-8 text-center font-bold text-gray-900 text-lg">{qty}</span>
+              <button onClick={() => setQty(q => q + 1)} className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold text-white active:opacity-80" style={{ backgroundColor: "#5FA800" }}>+</button>
+            </div>
+          </div>
+          <div className="bg-[#f0f9e8] rounded-2xl p-3 flex justify-between items-center">
+            <span className="text-sm font-semibold text-gray-700">Subtotal ({qty} item{qty > 1 ? "s" : ""})</span>
+            <span className="text-lg font-bold" style={{ color: "#5FA800" }}>Rs. {(price * qty).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="px-4 pt-1 pb-6">
+          <button onClick={() => onConfirm({ name: product.name, variant: selected?.value ?? "", variantId: selected?.id ?? "", price, qty, image: product.image ?? undefined })}
+            disabled={hasVariants && !selected}
+            className="w-full py-4 rounded-2xl text-white font-bold text-[15px] flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-all shadow-[0_4px_14px_rgba(95,168,0,0.3)]"
+            style={{ backgroundColor: "#5FA800" }}>
+            <ShoppingCart className="w-5 h-5" />
+            {hasVariants && !selected ? "Select a size to continue" : `Add to Cart — Rs. ${(price * qty).toLocaleString()}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ── Full-Screen Order Form ── */
-function OrderFormScreen({ defaultProduct, initialCart, sessionId, onClose, onSuccess }: {
+function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
   defaultProduct: string; initialCart?: ChatCartItem[]; sessionId: string | null;
   onClose: () => void; onSuccess: (orderNumber: string, orderId: number) => void;
 }) {
-  const hasCart = (initialCart?.length ?? 0) > 0;
   const [localCart, setLocalCart] = useState<ChatCartItem[]>(initialCart ?? []);
-  const [form, setForm] = useState<OrderForm>({ product: defaultProduct, qty: 1, name: "", phone: "", city: "", cityCustom: "", address: "", notes: "" });
+  const [form, setForm] = useState({ name: "", phone: "", city: "", cityCustom: "", address: "", notes: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [isDetectingLoc, setIsDetectingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
-  const set = (k: keyof OrderForm, v: string | number) => { setForm(f => ({ ...f, [k]: v })); setSubmitError(null); };
+  const [showSearch, setShowSearch] = useState(false);
+  const [pickerProduct, setPickerProduct] = useState<ShopifyProductForForm | null>(null);
+  const set = (k: string, v: string) => { setForm(f => ({ ...f, [k]: v })); setSubmitError(null); };
+
+  const updateCartQty = (idx: number, qty: number) => { if (qty < 1) return; setLocalCart(c => c.map((it, i) => i === idx ? { ...it, qty } : it)); };
+  const removeCartItem = (idx: number) => setLocalCart(c => c.filter((_, i) => i !== idx));
+  const cartTotal = localCart.reduce((s, i) => s + i.price * i.qty, 0);
+  const totalItems = localCart.reduce((s, i) => s + i.qty, 0);
 
   const detectLocation = () => {
     if (!navigator.geolocation) { setLocError("Location not supported on this device"); return; }
@@ -497,16 +609,7 @@ function OrderFormScreen({ defaultProduct, initialCart, sessionId, onClose, onSu
     }, () => { setIsDetectingLoc(false); setLocError("Location access denied. Please type your address."); }, { timeout: 10000 });
   };
 
-  const updateCartQty = (idx: number, qty: number) => { if (qty < 1) return; setLocalCart(c => c.map((it, i) => i === idx ? { ...it, qty } : it)); };
-  const removeCartItem = (idx: number) => setLocalCart(c => c.filter((_, i) => i !== idx));
-  const cartTotal = localCart.reduce((s, i) => s + i.price * i.qty, 0);
-
-  const v1 = () => {
-    const e: Record<string, string> = {};
-    if (hasCart) { if (localCart.length === 0) e.cart = "Add at least one item"; }
-    else { if (!form.product.trim()) e.product = "Required"; if (form.qty < 1) e.qty = "Min 1"; }
-    setErrors(e); return !Object.keys(e).length;
-  };
+  const v1 = () => { const e: Record<string, string> = {}; if (localCart.length === 0) e.cart = "Please add at least one product to your order"; setErrors(e); return !Object.keys(e).length; };
   const v2 = () => {
     const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = "Required";
@@ -520,13 +623,10 @@ function OrderFormScreen({ defaultProduct, initialCart, sessionId, onClose, onSu
 
   const submit = async () => {
     if (!v2()) return;
-    setIsSubmitting(true);
-    setSubmitError(null);
+    setIsSubmitting(true); setSubmitError(null);
     try {
       const city = form.city === "Other" ? form.cityCustom : form.city;
-      const items = hasCart
-        ? localCart.map(i => ({ name: i.name, variant: i.variant, variantId: i.variantId, price: i.price, qty: i.qty }))
-        : [{ name: form.product.trim(), variant: "", price: 0, qty: form.qty }];
+      const items = localCart.map(i => ({ name: i.name, variant: i.variant, variantId: i.variantId, price: i.price, qty: i.qty }));
       const r = await fetch(`${BASE_URL}api/chat/direct-order`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, items, name: form.name.trim(), phone: form.phone.trim(), city, address: form.address.trim(), notes: form.notes.trim() }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Order failed. Please try again.");
@@ -534,71 +634,99 @@ function OrderFormScreen({ defaultProduct, initialCart, sessionId, onClose, onSu
     } catch (e: any) { setSubmitError(e.message); } finally { setIsSubmitting(false); }
   };
 
-  const Err = ({ f }: { f: string }) => errors[f] ? <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[f]}</p> : null;
-  const inputCls = "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#5FA800] bg-white shadow-sm";
+  const Err = ({ f }: { f: string }) => errors[f] ? <p className="text-red-500 text-[11px] mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[f]}</p> : null;
+  const inputCls = "w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[#5FA800] bg-white shadow-sm";
 
   return (
     <div className="fixed inset-0 z-[210] flex flex-col bg-[#F0F2F5]">
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)", paddingTop: "max(16px,env(safe-area-inset-top,16px))", paddingBottom: "14px" }}>
         <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center active:bg-white/30"><ChevronDown className="w-5 h-5 text-white" /></button>
-        <div className="flex-1"><p className="font-bold text-white text-base">Place Your Order</p><p className="text-green-100 text-xs">Step {step} of 2</p></div>
-        <div className="flex gap-1.5"><div className={`h-1.5 w-10 rounded-full ${step >= 1 ? "bg-white" : "bg-white/30"}`} /><div className={`h-1.5 w-10 rounded-full ${step >= 2 ? "bg-white" : "bg-white/30"}`} /></div>
+        <div className="flex-1">
+          <p className="font-bold text-white text-base">{step === 1 ? "Your Order" : "Delivery Details"}</p>
+          <p className="text-green-100 text-xs">Step {step} of 2{step === 1 && totalItems > 0 ? ` · ${totalItems} item${totalItems > 1 ? "s" : ""}` : ""}</p>
+        </div>
+        <div className="flex gap-1.5">
+          <div className={`h-1.5 w-10 rounded-full ${step >= 1 ? "bg-white" : "bg-white/30"}`} />
+          <div className={`h-1.5 w-10 rounded-full ${step >= 2 ? "bg-white" : "bg-white/30"}`} />
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 relative">
         {step === 1 ? (
           <>
-            <h3 className="font-bold text-gray-900">{hasCart ? "Your selected items" : "What would you like to order?"}</h3>
-            {hasCart ? (
-              <>
+            {localCart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 gap-3">
+                <ShoppingCart className="w-14 h-14 text-gray-200" />
+                <p className="text-gray-500 font-bold">Your cart is empty</p>
+                <p className="text-gray-400 text-sm text-center">Search and add products below to place your order</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
                 {localCart.map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex gap-3 items-start">
-                    {item.image && <img src={getImageUrl(item.image) ?? ""} alt={item.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                  <div key={idx} className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex gap-3 items-start">
+                    {item.image && <img src={getImageUrl(item.image) ?? ""} alt={item.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0 bg-gray-100" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 text-sm truncate">{item.name}</p>
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="font-bold text-gray-900 text-sm leading-snug line-clamp-2 flex-1">{item.name}</p>
+                        <button onClick={() => removeCartItem(idx)} className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center text-red-400 text-xs flex-shrink-0 active:bg-red-100 ml-1">✕</button>
+                      </div>
                       {item.variant && <span className="inline-block text-[10px] font-bold text-white px-2 py-0.5 rounded-full mt-0.5" style={{ backgroundColor: "#5FA800" }}>{item.variant}</span>}
                       <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
-                          <button onClick={() => updateCartQty(idx, item.qty - 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg active:bg-gray-100">−</button>
-                          <span className="w-8 text-center text-sm font-bold">{item.qty}</span>
-                          <button onClick={() => updateCartQty(idx, item.qty + 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 font-bold text-lg active:bg-gray-100">+</button>
+                        <div className="flex items-center rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
+                          <button onClick={() => updateCartQty(idx, item.qty - 1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-600 text-lg active:bg-gray-200">−</button>
+                          <span className="w-8 text-center font-bold text-gray-900 text-sm">{item.qty}</span>
+                          <button onClick={() => updateCartQty(idx, item.qty + 1)} className="w-8 h-8 flex items-center justify-center font-bold text-gray-600 text-lg active:bg-gray-200">+</button>
                         </div>
-                        <span className="font-bold text-[#5FA800] text-sm">Rs. {(item.price * item.qty).toLocaleString()}</span>
-                        <button onClick={() => removeCartItem(idx)} className="w-7 h-7 rounded-full bg-red-50 flex items-center justify-center text-red-400 text-sm font-bold active:bg-red-100">✕</button>
+                        <span className="font-bold text-sm" style={{ color: "#5FA800" }}>Rs. {(item.price * item.qty).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
                 ))}
-                {localCart.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Cart is empty</p>}
-                <Err f="cart" />
-                <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex justify-between items-center">
-                  <span className="text-sm font-semibold text-gray-700">Order Total</span>
-                  <span className="font-bold text-[#5FA800] text-xl">Rs. {cartTotal.toLocaleString()}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div><label className="text-xs font-bold text-gray-500 mb-1.5 block">Product Name *</label><ProductCombobox value={form.product} onChange={v => set("product", v)} className={inputCls} /><Err f="product" /></div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 mb-1.5 block">Quantity *</label>
-                  <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden w-fit bg-white shadow-sm">
-                    <button onClick={() => set("qty", Math.max(1, form.qty - 1))} className="w-10 h-10 flex items-center justify-center text-lg font-bold text-gray-600 active:bg-gray-50 border-r border-gray-200">−</button>
-                    <span className="w-12 text-center font-bold text-gray-900">{form.qty}</span>
-                    <button onClick={() => set("qty", form.qty + 1)} className="w-10 h-10 flex items-center justify-center text-lg font-bold text-gray-600 active:bg-gray-50 border-l border-gray-200">+</button>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
-            <div><label className="text-xs font-bold text-gray-500 mb-1.5 block">Notes (optional)</label><textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any special requests..." rows={2} className={`${inputCls} resize-none`} /></div>
+            <Err f="cart" />
+
+            {/* Add more button */}
+            <button onClick={() => setShowSearch(true)}
+              className="w-full py-3.5 rounded-2xl border-2 border-dashed font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "#f0f9e8" }}>
+              <Plus className="w-4 h-4" />
+              {localCart.length === 0 ? "Search & Add Products" : "Add More Items"}
+            </button>
+
+            {/* Cart total */}
+            {localCart.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2">
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>Subtotal ({totalItems} item{totalItems > 1 ? "s" : ""})</span>
+                  <span className="font-semibold text-gray-700">Rs. {cartTotal.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>Delivery charges</span>
+                  <span className="font-semibold text-green-600">Free</span>
+                </div>
+                <div className="border-t border-gray-100 pt-2 flex justify-between items-center">
+                  <span className="font-bold text-gray-900">Order Total</span>
+                  <span className="text-xl font-bold" style={{ color: "#5FA800" }}>Rs. {cartTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-bold text-gray-500 mb-1.5 block">Order Notes (optional)</label>
+              <textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any special requests..." rows={2} className={`${inputCls} resize-none`} />
+            </div>
           </>
         ) : (
           <>
-            <h3 className="font-bold text-gray-900">Your delivery details</h3>
             <button type="button" onClick={detectLocation} disabled={isDetectingLoc}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed font-semibold text-sm transition-all active:scale-95 disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed font-semibold text-sm transition-all active:scale-95 disabled:opacity-60"
               style={{ borderColor: "#5FA800", color: "#5FA800", backgroundColor: "#f0f9e8" }}>
               {isDetectingLoc ? <><Loader2 className="w-4 h-4 animate-spin" />Detecting your location…</> : <><MapPin className="w-4 h-4" />Auto-detect my address</>}
             </button>
-            {locError && <p className="text-xs text-amber-600 -mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{locError}</p>}
+            {locError && <p className="text-xs text-amber-600 -mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{locError}</p>}
             <div><label className="text-xs font-bold text-gray-500 mb-1.5 block">Full Name *</label><input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Your full name" className={inputCls} /><Err f="name" /></div>
             <div><label className="text-xs font-bold text-gray-500 mb-1.5 block">Phone Number *</label><input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="03XX XXXXXXX" className={inputCls} /><Err f="phone" /></div>
             <div>
@@ -608,20 +736,43 @@ function OrderFormScreen({ defaultProduct, initialCart, sessionId, onClose, onSu
               {form.city === "Other" && <><input value={form.cityCustom} onChange={e => set("cityCustom", e.target.value)} placeholder="Enter your city" className={`mt-2 ${inputCls}`} /><Err f="cityCustom" /></>}
             </div>
             <div><label className="text-xs font-bold text-gray-500 mb-1.5 block">Complete Address *</label><textarea value={form.address} onChange={e => set("address", e.target.value)} placeholder="House/flat, street, area..." rows={3} className={`${inputCls} resize-none`} /><Err f="address" /></div>
+            {/* Order summary recap */}
+            <div className="bg-[#f0f9e8] rounded-2xl p-3 border border-green-100">
+              <p className="text-[11px] font-bold text-gray-400 tracking-wider mb-2">ORDER SUMMARY</p>
+              {localCart.map((item, i) => (
+                <div key={i} className="flex justify-between text-xs text-gray-700 py-0.5">
+                  <span className="truncate flex-1 pr-2">{item.name}{item.variant ? ` (${item.variant})` : ""} ×{item.qty}</span>
+                  <span className="font-bold flex-shrink-0" style={{ color: "#5FA800" }}>Rs. {(item.price * item.qty).toLocaleString()}</span>
+                </div>
+              ))}
+              <div className="border-t border-green-200 mt-2 pt-2 flex justify-between font-bold text-sm">
+                <span>Total</span><span style={{ color: "#5FA800" }}>Rs. {cartTotal.toLocaleString()}</span>
+              </div>
+            </div>
           </>
         )}
+
+        {/* Overlays */}
+        {showSearch && <ProductSearchSheet onSelect={p => { setPickerProduct(p); setShowSearch(false); }} onClose={() => setShowSearch(false)} />}
+        {pickerProduct && <VariantPickerSheet product={pickerProduct} onConfirm={item => { setLocalCart(c => [...c, item]); setPickerProduct(null); }} onClose={() => setPickerProduct(null)} />}
       </div>
+
+      {/* Sticky footer */}
       <div className="bg-white border-t border-gray-100 px-4 flex-shrink-0" style={{ paddingBottom: "calc(16px + env(safe-area-inset-bottom,0px))" }}>
         {submitError && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mt-3 mb-2">
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-2xl px-3 py-2.5 mt-3 mb-2">
             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-red-600 font-medium">{submitError}</p>
           </div>
         )}
         <div className="flex gap-3 pt-3 pb-1">
-          {step === 2 && <button onClick={() => { setStep(1); setSubmitError(null); }} className="px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold text-sm">Back</button>}
-          <button onClick={step === 1 ? () => { if (v1()) setStep(2); } : submit} disabled={isSubmitting} className="flex-1 py-3.5 rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-[0_3px_12px_rgba(95,168,0,0.30)] disabled:opacity-60" style={{ backgroundColor: "#5FA800" }}>
-            {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" />Placing…</> : step === 1 ? "Continue →" : <><ShoppingBag className="w-5 h-5" />Place Order</>}
+          {step === 2 && <button onClick={() => { setStep(1); setSubmitError(null); }} className="px-5 py-3.5 rounded-2xl border-2 border-gray-200 text-gray-700 font-semibold text-sm">Back</button>}
+          <button onClick={step === 1 ? () => { if (v1()) setStep(2); } : submit} disabled={isSubmitting}
+            className="flex-1 py-3.5 rounded-2xl text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-[0_3px_12px_rgba(95,168,0,0.30)] disabled:opacity-60 active:scale-[0.98] transition-transform"
+            style={{ backgroundColor: "#5FA800" }}>
+            {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" />Placing…</>
+              : step === 1 ? `Continue${totalItems > 0 ? ` (${totalItems} item${totalItems > 1 ? "s" : ""})` : ""} →`
+              : <><ShoppingBag className="w-5 h-5" />Place Order · Rs. {cartTotal.toLocaleString()}</>}
           </button>
         </div>
       </div>
