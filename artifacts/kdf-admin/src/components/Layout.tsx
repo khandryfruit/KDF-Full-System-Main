@@ -83,20 +83,20 @@ const INVOICE_NAV_ITEMS = [
   { href: "/branches",                   label: "Branches",           icon: Building2      },
   { href: "/customers",                  label: "Customers",          icon: UserCheck      },
   { href: "/analytics",                  label: "Analytics",          icon: PieChart       },
-  // ── Stock Management ──
+  { divider: true,                       label: "Stock"                                    },
   { href: "/stock/overview",             label: "Stock Overview",     icon: Boxes          },
   { href: "/stock/products",             label: "Products",           icon: Package        },
   { href: "/stock/movement",             label: "Stock Movement",     icon: ArrowRightLeft },
   { href: "/stock/adjustment",           label: "Adjustment",         icon: SlidersHorizontal },
-  // ── ERP Settings ──
-  { href: "/erp-settings/company",       label: "⚙ Company",          icon: Building       },
-  { href: "/erp-settings/invoice",       label: "⚙ Invoice",          icon: Receipt        },
-  { href: "/erp-settings/pos",           label: "⚙ POS",              icon: ShoppingCart   },
-  { href: "/erp-settings/stock",         label: "⚙ Stock/Inventory",  icon: Package        },
-  { href: "/erp-settings/staff",         label: "⚙ Staff & Perms",    icon: Users          },
-  { href: "/erp-settings/backup",        label: "⚙ Backup & Sync",    icon: HardDrive      },
-  { href: "/erp-settings/mobile",        label: "⚙ Mobile / App",     icon: Smartphone     },
-];
+  { divider: true,                       label: "ERP Settings"                             },
+  { href: "/erp-settings/company",       label: "Company",            icon: Building       },
+  { href: "/erp-settings/invoice",       label: "Invoice",            icon: Receipt        },
+  { href: "/erp-settings/pos",           label: "POS",                icon: ShoppingCart   },
+  { href: "/erp-settings/stock",         label: "Stock / Inventory",  icon: Package        },
+  { href: "/erp-settings/staff",         label: "Staff & Perms",      icon: Users          },
+  { href: "/erp-settings/backup",        label: "Backup & Sync",      icon: HardDrive      },
+  { href: "/erp-settings/mobile",        label: "Mobile / App",       icon: Smartphone     },
+] as const satisfies ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
 
 const NAV_ITEMS = [
   { href: "/dashboard",          label: "Dashboard",            icon: LayoutDashboard },
@@ -278,7 +278,7 @@ interface SidebarSectionProps {
   expanded: boolean;
   open: boolean;
   onToggle: () => void;
-  items: { href: string; label: string; icon: React.ElementType }[];
+  items: ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
   location: string;
   onNavClick?: () => void;
 }
@@ -323,9 +323,20 @@ function SidebarSection({
       </button>
 
       {/* Sub-items */}
-      <div className={`overflow-hidden transition-all duration-300 ${open && expanded ? "max-h-96 mt-1" : "max-h-0"}`}>
+      <div className={`overflow-hidden transition-all duration-500 ${open && expanded ? "max-h-[1200px] mt-1" : "max-h-0"}`}>
         <div className="ml-4 pl-3 border-l-2 space-y-0.5" style={{ borderColor: `${accentColor}66` }}>
-          {items.map(item => {
+          {items.map((item, idx) => {
+            if (item.divider) {
+              return (
+                <div key={`divider-${idx}`} className="flex items-center gap-2 px-2 pt-3 pb-1">
+                  <div className="h-px flex-1" style={{ backgroundColor: `${accentColor}44` }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: `${accentColor}99` }}>
+                    {item.label}
+                  </span>
+                  <div className="h-px flex-1" style={{ backgroundColor: `${accentColor}44` }} />
+                </div>
+              );
+            }
             const SubIcon = item.icon;
             const subActive = location === item.href;
             return (
