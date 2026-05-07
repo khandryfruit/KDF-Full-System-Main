@@ -50,6 +50,8 @@ import branchInvoiceRouter from "./branch-invoice";
 import erpSettingsRouter from "./erp-settings";
 import branchStockRouter from "./branch-stock";
 import blogAdsRouter from "./blogAds";
+import videoBannersRouter from "./videoBanners";
+import mobileReelsRouter from "./mobileReels";
 
 const router: IRouter = Router();
 
@@ -102,6 +104,8 @@ router.use(ridersPortalRouter);
 router.use(branchesRouter);
 router.use(branchInvoiceRouter);
 router.use(blogAdsRouter);
+router.use(videoBannersRouter);
+router.use(mobileReelsRouter);
 router.use("/admin/erp-settings",  erpSettingsRouter);
 router.use("/admin/stock",          branchStockRouter);
 router.use("/branch/stock",         branchStockRouter);
