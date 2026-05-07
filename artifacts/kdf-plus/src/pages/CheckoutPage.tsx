@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Wallet, Package, Banknote, Building2, Smartphone, MapPin, Navigation, ChevronDown, Truck, Zap, Clock } from "lucide-react";
+import { CreditCard, Wallet, Package, Banknote, Building2, Smartphone, MapPin, Navigation, ChevronDown, Truck, Zap, Clock, Loader2, Sparkles } from "lucide-react";
 
 const checkoutSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -45,6 +45,13 @@ async function fetchShippingCalc(items: { productId: number; qty: number; price:
   } catch {
     return null;
   }
+}
+
+async function fetchCityShippingInfo(city: string) {
+  if (!city.trim()) return null;
+  const res = await fetch(`/api/shipping/city-info?city=${encodeURIComponent(city.trim())}`);
+  if (!res.ok) return null;
+  return res.json() as Promise<{ fee: number; isFree: boolean; methodName: string; deliveryTime: string; hasSpecialRule: boolean }>;
 }
 
 async function fetchSameDaySettings() {
@@ -120,6 +127,16 @@ export default function CheckoutPage() {
       paymentMethod: gateways[0]?.type ?? "cod",
       notes: "",
     },
+  });
+
+  const [debouncedCity, setDebouncedCity] = useState(form.getValues("city") || "");
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: cityShippingInfo } = useQuery({
+    queryKey: ["/api/shipping/city-info", debouncedCity],
+    queryFn: () => fetchCityShippingInfo(debouncedCity),
+    enabled: debouncedCity.length >= 2,
+    staleTime: 60_000,
   });
 
   const shippingCalcItems = items.map((i) => ({
@@ -366,9 +383,9 @@ export default function CheckoutPage() {
                               setLocationError("");
                               try {
                                 const pos = await new Promise<GeolocationPosition>((res, rej) =>
-                                  navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
+                                  navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000, enableHighAccuracy: true })
                                 );
-                                const r = await fetch("/api/geocode/reverse", {
+                                const r = await fetch("/api/geocode", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -379,7 +396,10 @@ export default function CheckoutPage() {
                                 const addr = parts.join(", ") || geo.fullAddress || "";
                                 if (addr) form.setValue("address", addr, { shouldValidate: true });
                                 if (addressTextareaRef.current) addressTextareaRef.current.value = addr;
-                                if (geo.city) form.setValue("city", geo.city, { shouldValidate: true });
+                                if (geo.city) {
+                                  form.setValue("city", geo.city, { shouldValidate: true });
+                                  setDebouncedCity(geo.city);
+                                }
                                 if (geo.postalCode) form.setValue("postalCode", geo.postalCode, { shouldValidate: true });
                               } catch (e: any) {
                                 setLocationError(e?.code === 1 ? "Location permission denied. Please allow access." : "Could not detect location. Try again.");
@@ -388,10 +408,36 @@ export default function CheckoutPage() {
                               }
                             }}
                             disabled={locationFilling}
-                            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-50"
+                            className="group relative flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed overflow-hidden"
+                            style={{
+                              background: locationFilling
+                                ? "linear-gradient(135deg,#e8f5d4,#d4edaa)"
+                                : "linear-gradient(135deg,#f0fae3,#e4f5c4)",
+                              borderColor: "#5FA800",
+                              color: "#3d7200",
+                            }}
                           >
-                            <Navigation className="w-3 h-3" />
-                            {locationFilling ? "Detecting…" : "Use my location"}
+                            <span
+                              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full"
+                              style={{ background: "linear-gradient(135deg,#e0f7b8,#c9ee90)" }}
+                            />
+                            {locationFilling ? (
+                              <>
+                                <Loader2 className="relative z-10 w-3.5 h-3.5 animate-spin" style={{ color: "#5FA800" }} />
+                                <span className="relative z-10">Detecting…</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="relative z-10 flex items-center justify-center">
+                                  <Navigation className="w-3.5 h-3.5" style={{ color: "#5FA800" }} />
+                                  <span
+                                    className="absolute inline-flex w-3.5 h-3.5 rounded-full opacity-40 animate-ping"
+                                    style={{ backgroundColor: "#5FA800" }}
+                                  />
+                                </span>
+                                <span className="relative z-10">Use my location</span>
+                              </>
+                            )}
                           </button>
                         </div>
                         {locationError && (
@@ -438,7 +484,11 @@ export default function CheckoutPage() {
                             <input
                               list="kdf-plus-cities-list"
                               value={field.value}
-                              onChange={(e) => field.onChange(e.target.value)}
+                              onChange={(e) => {
+                                field.onChange(e.target.value);
+                                if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+                                cityDebounceRef.current = setTimeout(() => setDebouncedCity(e.target.value), 450);
+                              }}
                               onBlur={field.onBlur}
                               ref={field.ref}
                               data-testid="input-city"
@@ -451,6 +501,31 @@ export default function CheckoutPage() {
                                 <option key={c} value={c} />
                               ))}
                             </datalist>
+                            {cityShippingInfo && debouncedCity.length >= 2 && (
+                              <div
+                                className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg text-xs font-medium border"
+                                style={
+                                  cityShippingInfo.isFree
+                                    ? { background: "#f0fae3", borderColor: "#5FA800", color: "#3d7200" }
+                                    : cityShippingInfo.hasSpecialRule
+                                    ? { background: "#fff7ed", borderColor: "#F58300", color: "#c26000" }
+                                    : { background: "#eff6ff", borderColor: "#93c5fd", color: "#1d4ed8" }
+                                }
+                              >
+                                {cityShippingInfo.isFree ? (
+                                  <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+                                ) : (
+                                  <Truck className="w-3.5 h-3.5 flex-shrink-0" />
+                                )}
+                                <span>
+                                  {cityShippingInfo.isFree
+                                    ? "Free delivery to " + debouncedCity
+                                    : "Delivery to " + debouncedCity + ": Rs. " + cityShippingInfo.fee}
+                                  {" · "}
+                                  <span className="opacity-80">{cityShippingInfo.deliveryTime}</span>
+                                </span>
+                              </div>
+                            )}
                           </>
                         </FormControl>
                         <FormMessage />
