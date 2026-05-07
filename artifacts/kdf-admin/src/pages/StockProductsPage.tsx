@@ -63,10 +63,18 @@ export default function StockProductsPage() {
       const params = new URLSearchParams({ page: String(page), limit: String(LIMIT), q });
       if (lowStockOnly) params.set("lowStock", "1");
       const res = await fetch(`/api/admin/stock/products?${params}`, { headers: authHeader() });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: "Failed to load products", description: err.error ?? `HTTP ${res.status}`, variant: "destructive" });
+        setProducts([]); setTotal(0);
+        return;
+      }
       const data = await res.json();
       setProducts(data.products ?? []);
       setTotal(data.total ?? 0);
-    } catch {}
+    } catch (e: any) {
+      toast({ title: "Network error", description: e.message, variant: "destructive" });
+    }
     setLoading(false);
   }, [page, q, lowStockOnly]);
 

@@ -219,6 +219,38 @@ function PosTab({ token }: { token: string }) {
   const valueRef = useRef<HTMLInputElement>(null);
   const rateRef  = useRef<HTMLInputElement>(null);
 
+  // Stock product autocomplete
+  interface StockProduct { id: number; itemCode: string; name: string; unit: string; salePrice: string | null; purchasePrice: string | null; stockQty: string; category: string | null; }
+  const [suggestions, setSuggestions] = useState<StockProduct[]>([]);
+  const [showSug, setShowSug]         = useState(false);
+  const [searchingStock, setSearching] = useState(false);
+  const sugRef = useRef<HTMLDivElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchStock = useCallback((q: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!q.trim()) { setSuggestions([]); setShowSug(false); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const d = await branchFetch(`/api/branch/stock/search?q=${encodeURIComponent(q)}&limit=10`, token);
+        setSuggestions(Array.isArray(d) ? d : []);
+        setShowSug(true);
+      } catch { /* ignore */ }
+      setSearching(false);
+    }, 200);
+  }, [token]);
+
+  const pickProduct = useCallback((p: StockProduct) => {
+    setProdName(p.name);
+    const unitMode: SellingMode = p.unit === "KG" ? "kg" : p.unit === "Gram" ? "grams" : p.unit === "Pcs" ? "custom" : p.unit === "Box" ? "box" : "kg";
+    setMode(unitMode);
+    const price = p.salePrice ? parseFloat(p.salePrice) : 0;
+    setRate(price > 0 ? String(price) : "");
+    setSuggestions([]); setShowSug(false);
+    setTimeout(() => valueRef.current?.focus(), 50);
+  }, []);
+
   const subtotal    = items.reduce((s, i) => s + i.lineTotal, 0);
   const discountAmt = (subtotal * invoiceDiscount) / 100;
   const taxAmt      = ((subtotal - discountAmt) * taxRate) / 100;
@@ -342,20 +374,57 @@ function PosTab({ token }: { token: string }) {
             <span className="text-[11px] font-bold text-[#1a3a5c] whitespace-nowrap bg-[#b8d0e8] px-2 py-1 rounded border border-[#8aaecc]">
               ITEM NAME
             </span>
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <div className="relative flex-1" ref={sugRef}>
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 z-10" />
+              {searchingStock && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-gray-400 z-10" />}
               <input
                 ref={nameRef}
                 value={prodName}
-                onChange={e => setProdName(e.target.value)}
+                onChange={e => { setProdName(e.target.value); searchStock(e.target.value); }}
                 onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                  if (e.key === "Enter") { e.preventDefault(); valueRef.current?.focus(); }
-                  if (e.key === "Tab")   { e.preventDefault(); valueRef.current?.focus(); }
+                  if (e.key === "Escape") { setShowSug(false); return; }
+                  if (e.key === "ArrowDown" && showSug && suggestions.length) {
+                    e.preventDefault();
+                    (sugRef.current?.querySelector("[data-sug='0']") as HTMLElement)?.focus();
+                    return;
+                  }
+                  if (e.key === "Enter") { e.preventDefault(); setShowSug(false); valueRef.current?.focus(); }
+                  if (e.key === "Tab")   { e.preventDefault(); setShowSug(false); valueRef.current?.focus(); }
                 }}
+                onFocus={() => { if (prodName.trim()) searchStock(prodName); }}
+                onBlur={() => setTimeout(() => setShowSug(false), 150)}
                 placeholder="Type item name or code… (F2)"
-                className="w-full pl-7 pr-2 py-1 text-sm border border-[#8aaecc] rounded bg-white focus:outline-none focus:border-[#1a3a5c] focus:ring-1 focus:ring-[#1a3a5c]"
+                className="w-full pl-7 pr-6 py-1 text-sm border border-[#8aaecc] rounded bg-white focus:outline-none focus:border-[#1a3a5c] focus:ring-1 focus:ring-[#1a3a5c]"
                 autoFocus
               />
+              {/* Desktop Suggestions Dropdown */}
+              {showSug && suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-0.5 bg-white border border-[#8aaecc] rounded shadow-xl z-50 overflow-hidden max-h-56 overflow-y-auto">
+                  {suggestions.map((p, i) => (
+                    <button
+                      key={p.id}
+                      data-sug={i}
+                      onMouseDown={() => pickProduct(p)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { e.preventDefault(); pickProduct(p); }
+                        if (e.key === "ArrowDown") { e.preventDefault(); (sugRef.current?.querySelector(`[data-sug='${i+1}']`) as HTMLElement)?.focus(); }
+                        if (e.key === "ArrowUp")   { e.preventDefault(); i === 0 ? nameRef.current?.focus() : (sugRef.current?.querySelector(`[data-sug='${i-1}']`) as HTMLElement)?.focus(); }
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[#eef5ff] focus:bg-[#eef5ff] focus:outline-none border-b border-gray-100 last:border-0 transition-colors"
+                    >
+                      <Package className="w-3.5 h-3.5 text-[#1a3a5c] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-[#1a3a5c]">{p.name}</span>
+                        {p.category && <span className="text-xs text-gray-400 ml-1.5">{p.category}</span>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-bold text-[#1a7a3a]">Rs {Number(p.salePrice || 0).toLocaleString()}/{p.unit}</span>
+                        <span className="block text-[10px] text-gray-400">Stock: {p.stockQty} {p.unit}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Mode selector */}
@@ -704,9 +773,32 @@ function PosTab({ token }: { token: string }) {
       {/* Add Item */}
       <div className="bg-muted/30 border border-border rounded-2xl p-3 space-y-2">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Add Item</p>
-        <Input ref={nameRef} value={prodName} onChange={e => setProdName(e.target.value)}
-          onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") addItem(); }}
-          placeholder="Product name… (Enter to add)" className="h-11 text-sm font-medium" />
+        <div className="relative">
+          <Input ref={nameRef} value={prodName}
+            onChange={e => { setProdName(e.target.value); searchStock(e.target.value); }}
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === "Escape") { setShowSug(false); return; }
+              if (e.key === "Enter") { setShowSug(false); addItem(); }
+            }}
+            onBlur={() => setTimeout(() => setShowSug(false), 150)}
+            placeholder="Search product or type name…" className="h-11 text-sm font-medium pr-8" />
+          {searchingStock && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />}
+          {showSug && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden max-h-52 overflow-y-auto">
+              {suggestions.map(p => (
+                <button key={p.id} onMouseDown={() => pickProduct(p)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-accent transition-colors border-b border-border last:border-0">
+                  <Package className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">Stock: {p.stockQty} {p.unit}</p>
+                  </div>
+                  <span className="text-xs font-bold text-primary shrink-0">Rs {Number(p.salePrice || 0).toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex gap-2 flex-wrap">
           <Select value={mode} onValueChange={v => setMode(v as SellingMode)}>
             <SelectTrigger className="h-10 w-[90px] text-xs shrink-0"><SelectValue /></SelectTrigger>

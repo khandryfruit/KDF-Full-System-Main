@@ -135,7 +135,7 @@ router.get("/overview", adminMiddleware, async (_req, res) => {
    BRANCH ROUTES — read product catalogue + search
 ═══════════════════════════════════════════════════════════ */
 
-/* GET /api/branch/stock/products — branch staff search */
+/* GET /api/branch/stock/products — branch staff search (clean URL) */
 router.get("/branch/products", branchMiddleware, async (req: BranchAuthRequest, res) => {
   const { q, category, page = "1", limit = "100" } = req.query as Record<string, string>;
   const branchId = req.branchUser!.branchId;
@@ -154,6 +154,38 @@ router.get("/branch/products", branchMiddleware, async (req: BranchAuthRequest, 
   const products = await db.select().from(branchProductsTable)
     .where(and(...conditions)).orderBy(branchProductsTable.name)
     .limit(parseInt(limit)).offset((parseInt(page) - 1) * parseInt(limit));
+  res.json(products);
+});
+
+/* GET /api/branch/stock/search?q= — used by Branch POS item autocomplete */
+router.get("/search", branchMiddleware, async (req: BranchAuthRequest, res) => {
+  const { q = "", limit = "20" } = req.query as Record<string, string>;
+  const branchId = req.branchUser!.branchId;
+
+  const conditions: any[] = [
+    eq(branchProductsTable.isActive, true),
+    or(eq(branchProductsTable.branchId, branchId!), sql`${branchProductsTable.branchId} is null`)!,
+  ];
+  if (q.trim()) conditions.push(or(
+    ilike(branchProductsTable.name,     `%${q}%`),
+    ilike(branchProductsTable.itemCode, `%${q}%`),
+    ilike(branchProductsTable.barcode,  `%${q}%`),
+  )!);
+
+  const products = await db.select({
+    id:            branchProductsTable.id,
+    itemCode:      branchProductsTable.itemCode,
+    name:          branchProductsTable.name,
+    unit:          branchProductsTable.unit,
+    salePrice:     branchProductsTable.salePrice,
+    purchasePrice: branchProductsTable.purchasePrice,
+    stockQty:      branchProductsTable.stockQty,
+    category:      branchProductsTable.category,
+    barcode:       branchProductsTable.barcode,
+  }).from(branchProductsTable)
+    .where(and(...conditions))
+    .orderBy(branchProductsTable.name)
+    .limit(parseInt(limit));
   res.json(products);
 });
 
