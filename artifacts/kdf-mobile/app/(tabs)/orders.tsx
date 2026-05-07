@@ -1,11 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -27,118 +29,139 @@ const FILTERS = [
   { key: "assigned",         label: "Assigned",  icon: "package"      },
   { key: "picked",           label: "Picked",    icon: "archive"      },
   { key: "out_for_delivery", label: "On Route",  icon: "truck"        },
-  { key: "delivered",        label: "Delivered", icon: "check-circle" },
+  { key: "delivered",        label: "Done",      icon: "check-circle" },
   { key: "failed",           label: "Failed",    icon: "x-circle"     },
 ] as const;
 
 const TERMINAL = new Set(["delivered", "failed", "returned"]);
 
 function OrderCard({ d, onPress }: { d: any; onPress: () => void }) {
-  const sc  = getStatusColor(d.status);
-  const sb  = getStatusBg(d.status);
+  const sc = getStatusColor(d.status);
+  const sb = getStatusBg(d.status);
   const cod = Number(d.cod_amount ?? 0);
   const isActive = !TERMINAL.has(d.status);
 
   const addr = (() => {
     try {
-      const a = typeof d.shipping_address === "string"
-        ? JSON.parse(d.shipping_address)
-        : d.shipping_address;
+      const a = typeof d.shipping_address === "string" ? JSON.parse(d.shipping_address) : d.shipping_address;
       return [a?.address1, a?.city].filter(Boolean).join(", ") || d.delivery_address || "—";
     } catch { return d.delivery_address ?? "—"; }
   })();
 
-  const items = (() => {
+  const items: any[] = (() => {
     try {
       const li = typeof d.line_items === "string" ? JSON.parse(d.line_items) : d.line_items;
       return Array.isArray(li) ? li : [];
     } catch { return []; }
   })();
 
-  const timeStr = d.assigned_at
-    ? new Date(d.assigned_at).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" })
-    : "";
+  const openMaps = () => {
+    const q = encodeURIComponent(addr);
+    Linking.openURL(`https://maps.google.com/?q=${q}`);
+  };
+
+  const callCustomer = () => Linking.openURL(`tel:${d.customer_phone}`);
+
+  const waCustomer = () => {
+    const ph = String(d.customer_phone ?? "").replace(/\D/g, "");
+    const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
+    const msg = encodeURIComponent(`السلام علیکم! میں آپ کا KDF NUTS آرڈر #${d.shopify_order_number} ڈیلیور کرنے آ رہا ہوں۔`);
+    Linking.openURL(`https://wa.me/${intl}?text=${msg}`);
+  };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.78}>
+      {/* Left accent */}
       <View style={[styles.cardAccent, { backgroundColor: sc }]} />
-      <View style={styles.cardBody}>
 
-        {/* Row 1: order# + status pill + priority badge */}
-        <View style={styles.row}>
+      <View style={styles.cardBody}>
+        {/* Header row */}
+        <View style={styles.cardHeaderRow}>
           <Text style={styles.orderNum}>#{d.shopify_order_number ?? d.id}</Text>
           <View style={[styles.statusPill, { backgroundColor: sb }]}>
             <View style={[styles.statusDot, { backgroundColor: sc }]} />
             <Text style={[styles.statusTxt, { color: sc }]}>{getStatusLabel(d.status)}</Text>
           </View>
-          <View style={{ flex: 1 }} />
           {isActive && <PriorityBadge assignedAt={d.assigned_at} />}
         </View>
 
-        {/* Row 2: customer name */}
+        {/* Customer */}
         <Text style={styles.custName} numberOfLines={1}>{d.customer_name}</Text>
 
-        {/* Row 3: phone */}
-        <View style={styles.iconRow}>
+        {/* Phone & address */}
+        <View style={styles.infoRow}>
           <Feather name="phone" size={11} color={C.mutedForeground} />
-          <Text style={styles.iconTxt}>{d.customer_phone}</Text>
+          <Text style={styles.infoTxt}>{d.customer_phone}</Text>
         </View>
-
-        {/* Row 4: address */}
-        <View style={styles.iconRow}>
+        <View style={styles.infoRow}>
           <Feather name="map-pin" size={11} color={C.mutedForeground} />
-          <Text style={styles.iconTxt} numberOfLines={1}>{addr}</Text>
+          <Text style={styles.infoTxt} numberOfLines={1}>{addr}</Text>
         </View>
 
-        {/* Row 5: items */}
+        {/* Items preview */}
         {items.length > 0 && (
-          <View style={styles.itemsPreview}>
+          <View style={styles.infoRow}>
             <Feather name="box" size={11} color={C.mutedForeground} />
-            <Text style={styles.itemsPreviewTxt} numberOfLines={1}>
-              {items.slice(0, 2).map((i: any) => `${i.quantity ?? 1}× ${i.title ?? i.name ?? "Item"}`).join(" • ")}
-              {items.length > 2 ? ` +${items.length - 2} more` : ""}
+            <Text style={styles.itemsTxt} numberOfLines={1}>
+              {items.slice(0, 2).map((i: any) => `${i.quantity ?? 1}× ${i.title ?? i.name ?? "Item"}`).join(" · ")}
+              {items.length > 2 ? ` +${items.length - 2}` : ""}
             </Text>
           </View>
         )}
 
-        {/* Row 6: countdown (active orders only) */}
+        {/* Countdown */}
         {isActive && d.assigned_at && (
           <View style={{ marginTop: 2 }}>
             <CountdownLine assignedAt={d.assigned_at} />
           </View>
         )}
 
-        {/* Row 7: COD footer + assigned time */}
-        <View style={[styles.cardFooter, { backgroundColor: d.is_paid ? C.statusDeliveredBg : C.codBg }]}>
-          <View style={styles.row}>
-            <Feather
-              name={d.is_paid ? "check-circle" : "dollar-sign"}
-              size={13}
-              color={d.is_paid ? C.statusDelivered : C.cod}
-            />
+        {/* Footer: COD + quick actions */}
+        <View style={styles.cardFooter}>
+          <View style={[styles.codChip, { backgroundColor: d.is_paid ? C.statusDeliveredBg : C.codBg }]}>
+            <Feather name={d.is_paid ? "check-circle" : "dollar-sign"} size={11} color={d.is_paid ? C.statusDelivered : C.cod} />
             <Text style={[styles.codTxt, { color: d.is_paid ? C.statusDelivered : C.cod }]}>
-              {d.is_paid ? "PAID" : `COD: Rs. ${cod.toLocaleString()}`}
+              {d.is_paid ? "PAID" : `Rs. ${cod.toLocaleString()}`}
             </Text>
           </View>
-          {!!timeStr && <Text style={styles.timeTxt}>Assigned {timeStr}</Text>}
+
+          {/* Quick action buttons */}
+          <View style={styles.quickBtns}>
+            {!!d.customer_phone && (
+              <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "#E3F2FD" }]} onPress={callCustomer}>
+                <Feather name="phone-call" size={13} color="#1565C0" />
+              </TouchableOpacity>
+            )}
+            {!!d.customer_phone && (
+              <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "#E8F5E9" }]} onPress={waCustomer}>
+                <Feather name="message-circle" size={13} color={C.whatsappDark} />
+              </TouchableOpacity>
+            )}
+            {!!addr && addr !== "—" && (
+              <TouchableOpacity style={[styles.quickBtn, { backgroundColor: C.primaryLight }]} onPress={openMaps}>
+                <Feather name="map" size={13} color={C.primaryDark} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
-      <Feather name="chevron-right" size={16} color={C.border} style={{ alignSelf: "center", marginRight: 14 }} />
+
+      <Feather name="chevron-right" size={15} color={C.border} style={{ alignSelf: "center", marginRight: 12 }} />
     </TouchableOpacity>
   );
 }
 
 export default function OrdersScreen() {
   const { token } = useAuth();
-  const router    = useRouter();
-  const insets    = useSafeAreaInsets();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<string>("all");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["rider-deliveries", filter],
     queryFn: async () => {
       const qs = filter !== "all" ? `?status=${filter}` : "";
-      const r  = await riderFetch(`/rider/deliveries${qs}`, token);
+      const r = await riderFetch(`/rider/deliveries${qs}`, token);
       return r.json();
     },
     refetchInterval: 10_000,
@@ -146,66 +169,64 @@ export default function OrdersScreen() {
   });
 
   const rawDeliveries: any[] = data?.deliveries ?? [];
-  // Sort by urgency: critical → high → medium → low, terminal last
   const deliveries = sortByPriority(rawDeliveries);
-
-  // Count critical/high for header alert
   const urgentCount = deliveries.filter(d =>
     !TERMINAL.has(d.status) &&
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
   ).length;
 
   return (
-    <View style={[
-      styles.root,
-      { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0), paddingBottom: Platform.OS === "web" ? 34 : 0 },
-    ]}>
-      {/* Dark header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>My Deliveries</Text>
-          <Text style={styles.headerSub}>
-            {isLoading ? "Loading..." : `${deliveries.length} orders`}
-            {urgentCount > 0 ? ` · ${urgentCount} urgent` : ""}
-          </Text>
+    <View style={[styles.root, { paddingBottom: Platform.OS === "web" ? 34 : 0 }]}>
+      {/* Header */}
+      <LinearGradient
+        colors={["#0D2137", "#0F2A47"]}
+        style={[styles.header, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) + 14 }]}
+      >
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>My Deliveries</Text>
+            <Text style={styles.headerSub}>
+              {isLoading ? "Loading..." : `${deliveries.length} orders`}
+              {urgentCount > 0 ? ` · ${urgentCount} urgent` : ""}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => { Haptics.selectionAsync(); refetch(); }} style={styles.refreshBtn}>
+            <Feather name="refresh-cw" size={16} color="#fff" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
-          <Feather name="refresh-cw" size={16} color="#fff" />
-        </TouchableOpacity>
-      </View>
 
-      {/* Urgent alert banner */}
+        {/* Filter pills */}
+        <FlatList
+          data={FILTERS}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.key}
+          contentContainerStyle={styles.filterBar}
+          renderItem={({ item }) => {
+            const active = filter === item.key;
+            const fColor = item.key === "all" ? C.primary : getStatusColor(item.key);
+            return (
+              <TouchableOpacity
+                style={[styles.filterPill, active && { backgroundColor: fColor, borderColor: fColor }]}
+                onPress={() => { setFilter(item.key); Haptics.selectionAsync(); }}
+              >
+                <Feather name={item.icon as any} size={11} color={active ? "#fff" : "rgba(255,255,255,0.6)"} />
+                <Text style={[styles.filterTxt, { color: active ? "#fff" : "rgba(255,255,255,0.6)" }]}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </LinearGradient>
+
+      {/* Urgent banner */}
       {urgentCount > 0 && (
         <View style={styles.urgentBanner}>
-          <Feather name="alert-octagon" size={14} color="#ef4444" />
-          <Text style={styles.urgentBannerTxt}>
-            {urgentCount} {urgentCount === 1 ? "order requires" : "orders require"} immediate attention
+          <Feather name="alert-octagon" size={14} color="#EF4444" />
+          <Text style={styles.urgentTxt}>
+            {urgentCount} {urgentCount === 1 ? "order requires" : "orders require"} immediate action
           </Text>
         </View>
       )}
-
-      {/* Filter pills */}
-      <FlatList
-        data={FILTERS}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={i => i.key}
-        contentContainerStyle={styles.filterBar}
-        renderItem={({ item }) => {
-          const active = filter === item.key;
-          const fColor = item.key === "all" ? C.primary : getStatusColor(item.key);
-          const fBg    = item.key === "all" ? C.primaryLight : getStatusBg(item.key);
-          return (
-            <TouchableOpacity
-              style={[styles.filterPill, active && { backgroundColor: fColor }]}
-              onPress={() => { setFilter(item.key); Haptics.selectionAsync(); }}
-            >
-              <Feather name={item.icon as any} size={12} color={active ? "#fff" : fColor} />
-              <Text style={[styles.filterTxt, { color: active ? "#fff" : fColor }]}>{item.label}</Text>
-            </TouchableOpacity>
-          );
-        }}
-      />
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -229,7 +250,9 @@ export default function OrdersScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Feather name="inbox" size={52} color={C.border} />
+              <View style={styles.emptyIcon}>
+                <Feather name="inbox" size={36} color={C.border} />
+              </View>
               <Text style={styles.emptyTitle}>No orders found</Text>
               <Text style={styles.emptyTxt}>
                 {filter === "all"
@@ -247,60 +270,61 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.background },
 
-  header: {
-    backgroundColor: C.headerBg, paddingHorizontal: 20, paddingBottom: 16,
+  header: { paddingBottom: 0 },
+  headerRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, marginBottom: 14,
   },
-  headerTitle: { color: "#fff", fontSize: 20, fontFamily: "Inter_700Bold" },
-  headerSub:   { color: "rgba(255,255,255,0.55)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  refreshBtn:  { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
+  headerTitle: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold" },
+  headerSub:   { color: "rgba(255,255,255,0.5)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  refreshBtn:  { width: 38, height: 38, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
+
+  filterBar: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2, gap: 8 },
+  filterPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
+  },
+  filterTxt: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
   urgentBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#fff5f5", paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: "#fecaca",
+    backgroundColor: "#FEF2F2", paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#FECACA",
   },
-  urgentBannerTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#b91c1c", flex: 1 },
+  urgentTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#B91C1C", flex: 1 },
 
-  filterBar: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  filterPill: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
-  },
-  filterTxt: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-
-  centered:   { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingTxt: { color: C.mutedForeground, fontFamily: "Inter_400Regular" },
 
-  list: { paddingHorizontal: 12, paddingTop: 4, gap: 10 },
+  list: { padding: 12, gap: 10 },
 
   card: {
-    backgroundColor: C.card, borderRadius: 16, flexDirection: "row",
+    flexDirection: "row", backgroundColor: C.card, borderRadius: 18,
     overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
   },
   cardAccent: { width: 5 },
-  cardBody:   { flex: 1, paddingTop: 13, paddingLeft: 12, paddingBottom: 0, gap: 4 },
-  row:        { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardBody:   { flex: 1, padding: 13, gap: 5 },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   orderNum:   { fontSize: 11, fontFamily: "Inter_700Bold", color: C.primary, letterSpacing: 0.5 },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   statusDot:  { width: 5, height: 5, borderRadius: 3 },
   statusTxt:  { fontSize: 10, fontFamily: "Inter_700Bold" },
   custName:   { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
-  iconRow:    { flexDirection: "row", alignItems: "center", gap: 5 },
-  iconTxt:    { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.mutedForeground },
-  itemsPreview:    { flexDirection: "row", alignItems: "center", gap: 5 },
-  itemsPreviewTxt: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: C.mutedForeground, fontStyle: "italic" },
-  cardFooter: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 12, paddingVertical: 9, marginTop: 8,
-  },
-  codTxt:  { fontSize: 13, fontFamily: "Inter_700Bold", marginLeft: 4 },
-  timeTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.mutedForeground },
+  infoRow:    { flexDirection: "row", alignItems: "center", gap: 6 },
+  infoTxt:    { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.mutedForeground },
+  itemsTxt:   { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: C.mutedForeground, fontStyle: "italic" },
+
+  cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  codChip:    { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  codTxt:     { fontSize: 12, fontFamily: "Inter_700Bold" },
+  quickBtns:  { flexDirection: "row", gap: 6 },
+  quickBtn:   { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center" },
 
   emptyWrap:  { alignItems: "center", paddingVertical: 60, gap: 10 },
+  emptyIcon:  { width: 72, height: 72, borderRadius: 36, backgroundColor: C.muted, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: C.text },
   emptyTxt:   { fontSize: 13, fontFamily: "Inter_400Regular", color: C.mutedForeground, textAlign: "center", paddingHorizontal: 32 },
 });

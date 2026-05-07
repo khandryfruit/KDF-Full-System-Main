@@ -2,7 +2,7 @@
   "expo": {
     "name": "KDF RIDER LAHORE",
     "slug": "kdf-mobile",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kdf-mobile",
@@ -15,20 +15,28 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.kdfnuts.rider"
+      "bundleIdentifier": "com.kdfnuts.rider",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "KDF Rider needs your location for delivery navigation.",
+        "NSLocationAlwaysUsageDescription": "KDF Rider uses your location to track deliveries."
+      }
     },
     "android": {
       "package": "com.kdfnuts.rider",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D2137"
       },
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -42,7 +50,15 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00B85A",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
