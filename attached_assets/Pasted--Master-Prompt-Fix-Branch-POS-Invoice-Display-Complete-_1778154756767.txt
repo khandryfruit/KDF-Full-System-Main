@@ -1,0 +1,409 @@
+# Master Prompt — Fix Branch POS Invoice Display + Complete Mobile/Desktop POS Layout
+
+The current Branch POS/Invoice screen is NOT properly displaying.
+
+Right now the screen looks broken and incomplete:
+
+❌ Too much empty space
+❌ Invoice/cart not visible
+❌ Product list missing
+❌ Totals not showing properly
+❌ Mobile layout stretched
+❌ POS workflow incomplete
+❌ Desktop view not optimized
+❌ Branch invoice UI looks unfinished
+
+This must now become a FULL professional POS billing interface like:
+
+* Supermarket POS
+* Grocery ERP
+* Retail billing software
+* Vyapar POS
+* Oracle POS
+* Shopify POS
+
+---
+
+# 1. FIX CURRENT BRANCH POS SCREEN (IMPORTANT)
+
+Current UI only shows:
+
+* Customer card
+* Add item section
+
+Everything else is missing.
+
+This is WRONG.
+
+---
+
+# REQUIRED PROFESSIONAL POS LAYOUT
+
+# DESKTOP POS LAYOUT
+
+---
+
+## LEFT SIDE (70%)
+
+# Product + Invoice Area
+
+Show:
+
+### Product Search
+
+* Barcode search
+* Product search
+* SKU search
+
+---
+
+# Product Grid/List
+
+Show products with:
+
+* Image
+* Name
+* Stock
+* Price
+* Category
+
+---
+
+# Invoice Cart Table
+
+| Product | Qty | Weight | Rate | Discount | Total |
+
+---
+
+# RIGHT SIDE (30%)
+
+# Billing Summary Panel
+
+Show:
+
+## Customer
+
+## Invoice Number
+
+## Payment Method
+
+## Tax
+
+## Discount
+
+## Total
+
+## Paid Amount
+
+## Balance
+
+---
+
+# Sticky Checkout Button
+
+```text id="10wv3t"
+Save & Print Bill
+```
+
+Always visible.
+
+---
+
+# 2. MOBILE POS FIX (VERY IMPORTANT)
+
+Current mobile UI is broken and incomplete.
+
+Mobile POS must become:
+
+✅ Compact
+✅ Fast
+✅ Touch-friendly
+✅ Full-featured
+
+---
+
+# REQUIRED MOBILE POS DESIGN
+
+## Top Header
+
+Show:
+
+* Branch name
+* Cashier name
+* Search button
+* Barcode button
+
+---
+
+# Product Search
+
+Sticky search bar.
+
+---
+
+# Product List
+
+Scrollable product cards.
+
+---
+
+# Bottom Sticky Cart
+
+Always visible:
+
+| Items | Total | Checkout |
+
+---
+
+# Mobile Cart Drawer
+
+Tap cart button opens:
+
+* Products
+* Qty controls
+* Discounts
+* Tax
+* Payment
+
+---
+
+# 3. FIX EMPTY SPACE ISSUE
+
+Current screen has huge empty blank area.
+
+This is bad UX.
+
+---
+
+# REQUIRED FIX
+
+Desktop:
+
+* Use responsive grid layout
+* Proper spacing
+* Full-width POS design
+
+---
+
+# Mobile:
+
+* Compact stacked layout
+* No unused white space
+
+---
+
+# 4. SHOW REAL PRODUCT LIST
+
+Current POS only shows input fields.
+
+This is incomplete.
+
+---
+
+# REQUIRED PRODUCT DISPLAY
+
+When typing/searching:
+
+Show dropdown:
+
+| Product | Stock | Price |
+
+---
+
+# Product Selection
+
+On click/enter:
+
+* Add to cart instantly
+
+---
+
+# 5. SHOW LIVE CART ITEMS
+
+Currently cart/invoice not visible.
+
+---
+
+# REQUIRED CART SYSTEM
+
+After adding product:
+
+Show live invoice rows:
+
+| Product | Qty | Unit | Price | Total |
+
+---
+
+# Qty Controls
+
+Add:
+
+* Plus/minus buttons
+* Manual qty input
+
+---
+
+# 6. LIVE TOTALS SYSTEM
+
+Show instantly:
+
+* Subtotal
+* Tax
+* Discount
+* Grand Total
+* Change Return
+
+WITHOUT reload.
+
+---
+
+# 7. BRANCH SETTINGS SYNC
+
+Branch POS should inherit:
+
+* Invoice settings
+* Tax settings
+* Discount permissions
+* POS permissions
+
+From admin panel.
+
+---
+
+# 8. RESPONSIVE BREAKPOINT FIXES
+
+Fix:
+
+## Desktop
+
+* Full POS layout
+
+## Tablet
+
+* Split layout
+
+## Mobile
+
+* Drawer/cart layout
+
+---
+
+# 9. PROFESSIONAL POS ACTIONS
+
+Add bottom quick actions:
+
+| Action      | Shortcut |
+| ----------- | -------- |
+| Change Qty  | F2       |
+| Discount    | F3       |
+| Remove Item | DELETE   |
+| Hold Bill   | F7       |
+| Resume Bill | F8       |
+| Payment     | F6       |
+
+---
+
+# 10. FIX MOBILE NAVIGATION
+
+Current mobile navigation incomplete.
+
+Add:
+
+## Bottom Navigation
+
+* Home
+* POS
+* Invoices
+* Products
+* Analytics
+
+---
+
+# 11. SAME FEATURES AS ADMIN POS
+
+Branch POS should support:
+
+✅ Discounts
+✅ Returns
+✅ Tax
+✅ Barcode
+✅ Split payment
+✅ Thermal printing
+✅ Inventory deduction
+✅ Hold bills
+✅ Draft invoices
+
+Based on permissions.
+
+---
+
+# 12. INVENTORY DISPLAY
+
+Show live stock:
+
+Example:
+
+```text id="1qsncl"
+Stock: 12.5 KG
+```
+
+Update instantly after sale.
+
+---
+
+# 13. PERFORMANCE OPTIMIZATION
+
+POS must remain VERY FAST.
+
+Use:
+
+* Lazy loading
+* Debounced search
+* Optimized rendering
+* Cached products
+
+---
+
+# 14. UI/UX REQUIREMENTS
+
+The POS must look:
+
+✅ Professional
+✅ ERP-style
+✅ Supermarket POS
+✅ Mobile responsive
+✅ Fast cashier friendly
+✅ Modern UI
+
+Use:
+
+* TailwindCSS
+* ShadCN UI
+* Smooth animations
+* Responsive grid
+
+---
+
+# 15. FINAL REQUIREMENT
+
+DO NOT leave:
+
+❌ Empty white screen
+❌ Broken mobile layout
+❌ Missing invoice cart
+❌ Static product fields
+❌ Incomplete POS UI
+
+Everything must work with:
+
+✅ Live products
+✅ Live invoice cart
+✅ Responsive desktop/mobile UI
+✅ Real totals
+✅ Branch permissions
+✅ Inventory sync
+✅ Fast billing
+✅ Barcode support
+✅ Professional POS workflow
+
+This must behave like a real enterprise-grade supermarket/grocery POS billing screen.

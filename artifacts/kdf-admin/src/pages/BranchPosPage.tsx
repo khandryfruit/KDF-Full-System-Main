@@ -281,11 +281,272 @@ function PosTab({ token }: { token: string }) {
     window.open(`https://wa.me/${customer.phone.replace(/^0/, "92")}?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
+  /* ── Billing panel (shared between mobile floating + desktop sidebar) ── */
+  const BillingPanel = () => (
+    <div className="flex flex-col h-full">
+      {/* Customer quick-pick */}
+      <div className="p-4 border-b border-border">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Customer</p>
+        {customer === undefined ? (
+          <button onClick={() => setShowPicker(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left">
+            <User className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="text-sm text-muted-foreground">Select customer…</span>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-primary/5">
+            <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+              {customer ? customer.name[0]?.toUpperCase() : <User className="w-4 h-4" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{customer?.name ?? "Walk-in"}</p>
+              {customer?.phone && <p className="text-[10px] text-muted-foreground">{customer.phone}</p>}
+            </div>
+            <button onClick={() => setCustomer(undefined)} className="text-muted-foreground hover:text-foreground p-0.5 shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Adjustments */}
+      <div className="p-4 border-b border-border space-y-3">
+        {perm("apply_discount") && (
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Invoice Discount %</label>
+            <Input type="number" value={invoiceDiscount || ""} onChange={e => setInvoiceDiscount(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tax %</label>
+            <Input type="number" value={taxRate || ""} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Shipping</label>
+            <Input type="number" value={shipping || ""} onChange={e => setShipping(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Notes</label>
+          <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note…" className="h-9 text-sm" />
+        </div>
+      </div>
+
+      {/* Payment */}
+      <div className="p-4 border-b border-border grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Payment</label>
+          <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cash">Cash</SelectItem>
+              <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+              <SelectItem value="card">Card</SelectItem>
+              <SelectItem value="jazzcash">JazzCash</SelectItem>
+              <SelectItem value="easypaisa">Easypaisa</SelectItem>
+              <SelectItem value="credit">Credit</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
+          <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="unpaid">Unpaid</SelectItem>
+              <SelectItem value="partial">Partial</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Totals summary */}
+      <div className="p-4 space-y-1.5 flex-1">
+        <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal</span><span className="tabular-nums">{fmtRs(subtotal)}</span></div>
+        {invoiceDiscount > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Discount ({invoiceDiscount}%)</span><span className="text-red-600 tabular-nums">−{fmtRs(discountAmt)}</span></div>}
+        {taxRate > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Tax ({taxRate}%)</span><span className="tabular-nums">+{fmtRs(taxAmt)}</span></div>}
+        {shipping > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Shipping</span><span className="tabular-nums">+{fmtRs(shipping)}</span></div>}
+        <div className="border-t border-border mt-2 pt-3 flex justify-between items-center">
+          <span className="font-black text-base">Grand Total</span>
+          <span className="text-2xl font-black text-primary tabular-nums">{fmtRs(grandTotal)}</span>
+        </div>
+        {items.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center pt-4">Add items to see total</p>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="p-4 border-t border-border space-y-2">
+        {customer?.phone && (
+          <button onClick={handleWhatsApp}
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 text-sm font-semibold transition-colors">
+            <MessageCircle className="w-4 h-4" /> Send WhatsApp
+          </button>
+        )}
+        {perm("print_invoice") && (
+          <button onClick={handlePrint} disabled={items.length === 0}
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-40 transition-colors">
+            <Printer className="w-4 h-4" /> Print Invoice
+          </button>
+        )}
+        <Button onClick={handleSave} disabled={saving || items.length === 0} className="w-full h-12 text-base font-black gap-2 rounded-xl">
+          {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> Saving…</> : <><Save className="w-5 h-5" /> Save & Bill</>}
+        </Button>
+        {items.length > 0 && (
+          <button onClick={() => { setItems([]); setCustomer(undefined); setNotes(""); setInvoiceDiscount(0); setShipping(0); setTaxRate(0); setPaymentMethod("cash"); setPaymentStatus("paid"); }}
+            className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors py-1">
+            Clear Invoice
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  /* ── Cart items section (shared) ── */
+  const CartSection = () => (
+    <>
+      {/* Add Item form */}
+      <div className="bg-muted/30 border border-border rounded-2xl p-3 space-y-2">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Add Item</p>
+        <Input
+          ref={nameRef}
+          value={prodName}
+          onChange={e => setProdName(e.target.value)}
+          onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+          placeholder="Product name… (press Enter to add)"
+          className="h-11 text-sm font-medium"
+        />
+        <div className="flex gap-2 flex-wrap">
+          <Select value={mode} onValueChange={v => setMode(v as SellingMode)}>
+            <SelectTrigger className="h-10 w-[90px] text-xs shrink-0"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="grams">Grams</SelectItem>
+              <SelectItem value="kg">KG</SelectItem>
+              <SelectItem value="amount">Rs Amt</SelectItem>
+              <SelectItem value="box">Boxes</SelectItem>
+              <SelectItem value="custom">Qty/pcs</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input type="number" value={value} onChange={e => setValue(e.target.value)}
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+            placeholder={mode === "grams" ? "Grams" : mode === "kg" ? "KG" : mode === "box" ? "Boxes" : mode === "custom" ? "Qty" : "Amount (Rs)"}
+            className="h-10 text-sm flex-1 min-w-[80px]" />
+          {mode !== "amount" && (
+            <Input type="number" value={rate} onChange={e => setRate(e.target.value)}
+              placeholder="Rate/kg" className="h-10 text-sm w-[90px] shrink-0" />
+          )}
+          {perm("apply_discount") && (
+            <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+              placeholder="Disc%" className="h-10 text-sm w-[65px] shrink-0" />
+          )}
+        </div>
+        <Button onClick={addItem} className="w-full h-10 gap-2 font-bold">
+          <Plus className="w-4 h-4" /> Add Item
+        </Button>
+      </div>
+
+      {/* Items table */}
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+            <Receipt className="w-7 h-7 text-muted-foreground/40" />
+          </div>
+          <div>
+            <p className="font-semibold text-muted-foreground">No items added yet</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Type a product name and press Enter or click Add Item</p>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{items.length} Item{items.length !== 1 ? "s" : ""}</p>
+            <span className="text-xs font-bold text-primary tabular-nums">{fmtRs(subtotal)}</span>
+          </div>
+          {/* Desktop: table view */}
+          <div className="hidden md:block border border-border rounded-2xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/50 text-[10px] text-muted-foreground uppercase tracking-wide">
+                  <th className="text-left px-4 py-2 font-semibold">Product</th>
+                  <th className="text-center px-3 py-2 font-semibold">Weight/Qty</th>
+                  <th className="text-right px-3 py-2 font-semibold">Rate</th>
+                  {perm("apply_discount") && <th className="text-right px-3 py-2 font-semibold">Disc%</th>}
+                  <th className="text-right px-4 py-2 font-semibold">Total</th>
+                  <th className="w-10 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {items.map(item => (
+                  <tr key={item.id} className="bg-card hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                          <Package className="w-3.5 h-3.5 text-orange-500" />
+                        </div>
+                        <span className="font-medium truncate max-w-[180px]">{item.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-center text-muted-foreground">{weightStr(item)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                      {item.sellingMode !== "amount" && item.sellingMode !== "custom" ? fmtRs(item.pricePerKg) + "/kg" : "—"}
+                    </td>
+                    {perm("apply_discount") && <td className="px-3 py-3 text-right tabular-nums">{item.discount > 0 ? <span className="text-green-600">{item.discount}%</span> : <span className="text-muted-foreground">—</span>}</td>}
+                    <td className="px-4 py-3 text-right font-bold tabular-nums text-primary">{fmtRs(item.lineTotal)}</td>
+                    <td className="py-3 pr-3">
+                      <button onClick={() => removeItem(item.id)} className="p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: card view */}
+          <div className="md:hidden space-y-2">
+            {items.map(item => (
+              <div key={item.id} className="flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-2xl">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                  <Package className="w-4 h-4 text-orange-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">{weightStr(item)}{item.discount > 0 ? ` · ${item.discount}% off` : ""}</p>
+                </div>
+                <p className="font-bold text-sm text-primary tabular-nums shrink-0">{fmtRs(item.lineTotal)}</p>
+                <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 transition-colors p-1 shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className="flex flex-col gap-3 pb-32">
-      {/* Customer selector */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Customer</p>
+    <>
+      {/* ── DESKTOP: two-column layout ── */}
+      <div className="hidden md:flex h-[calc(100vh-57px)]">
+        {/* Left: cart area */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-background">
+          <CartSection />
+        </div>
+
+        {/* Right: billing panel (sticky) */}
+        <div className="w-[320px] shrink-0 border-l border-border bg-card overflow-y-auto">
+          <BillingPanel />
+        </div>
+      </div>
+
+      {/* ── MOBILE: stacked layout ── */}
+      <div className="md:hidden flex flex-col gap-3 pb-32 px-4 pt-4">
+        {/* Customer selector (mobile) */}
         {customer === undefined ? (
           <button onClick={() => setShowPicker(true)}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left">
@@ -302,170 +563,91 @@ function PosTab({ token }: { token: string }) {
               <p className="font-semibold text-sm">{customer?.name ?? "Walk-in Customer"}</p>
               {customer?.phone && <p className="text-xs text-muted-foreground">{customer.phone}</p>}
             </div>
-            <button onClick={() => setCustomer(undefined)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+            <button onClick={() => setCustomer(undefined)} className="text-muted-foreground hover:text-foreground p-1">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
-      </div>
 
-      {/* POS Entry Bar */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add Item</p>
-        <div className="bg-muted/30 border border-border rounded-2xl p-3 space-y-2">
-          {/* Row 1: Product name */}
-          <Input
-            ref={nameRef}
-            value={prodName}
-            onChange={e => setProdName(e.target.value)}
-            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
-            placeholder="Product name…"
-            className="h-11 text-sm font-medium"
-          />
-          {/* Row 2: Mode + Value + Rate */}
-          <div className="flex gap-2">
-            <Select value={mode} onValueChange={v => setMode(v as SellingMode)}>
-              <SelectTrigger className="h-10 w-[90px] text-xs shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grams">Grams</SelectItem>
-                <SelectItem value="kg">KG</SelectItem>
-                <SelectItem value="amount">Rs Amt</SelectItem>
-                <SelectItem value="box">Boxes</SelectItem>
-                <SelectItem value="custom">Qty/pcs</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input type="number" value={value} onChange={e => setValue(e.target.value)}
-              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
-              placeholder={mode === "grams" ? "Grams" : mode === "kg" ? "KG" : mode === "box" ? "Boxes" : mode === "custom" ? "Qty" : "Amount"}
-              className="h-10 text-sm flex-1" />
-            {mode !== "amount" && (
-              <Input type="number" value={rate} onChange={e => setRate(e.target.value)}
-                placeholder="Rate/kg"
-                className="h-10 text-sm w-[100px] shrink-0" />
-            )}
-            {perm("apply_discount") && (
-              <Input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
-                placeholder="Disc%"
-                className="h-10 text-sm w-[70px] shrink-0" />
-            )}
-          </div>
-          <Button onClick={addItem} className="w-full h-10 gap-2 font-bold">
-            <Plus className="w-4 h-4" /> Add Item
-          </Button>
-        </div>
-      </div>
+        <CartSection />
 
-      {/* Items list */}
-      {items.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Items ({items.length})
-          </p>
-          <div className="space-y-2">
-            {items.map(item => (
-              <div key={item.id} className="flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-2xl">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-                  <Package className="w-4 h-4 text-orange-500" />
+        {/* Mobile totals summary (inline) */}
+        {items.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className={`grid gap-2 p-4 border-b border-border ${perm("apply_discount") ? "grid-cols-3" : "grid-cols-2"}`}>
+              {perm("apply_discount") && (
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Disc%</label>
+                  <Input type="number" value={invoiceDiscount || ""} onChange={e => setInvoiceDiscount(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">{weightStr(item)} {item.discount > 0 ? `· ${item.discount}% off` : ""}</p>
-                </div>
-                <p className="font-bold text-sm text-primary tabular-nums shrink-0">{fmtRs(item.lineTotal)}</p>
-                <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 transition-colors p-1 shrink-0">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Totals + settings */}
-      {items.length > 0 && (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          {/* Discount / Tax / Shipping */}
-          <div className={`grid gap-2 p-4 border-b border-border ${perm("apply_discount") ? "grid-cols-3" : "grid-cols-2"}`}>
-            {perm("apply_discount") && (
+              )}
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Discount %</p>
-                <Input type="number" value={invoiceDiscount || ""} onChange={e => setInvoiceDiscount(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Tax%</label>
+                <Input type="number" value={taxRate || ""} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
               </div>
-            )}
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Tax %</p>
-              <Input type="number" value={taxRate || ""} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Shipping</label>
+                <Input type="number" value={shipping || ""} onChange={e => setShipping(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Shipping</p>
-              <Input type="number" value={shipping || ""} onChange={e => setShipping(parseFloat(e.target.value) || 0)} placeholder="0" className="h-9 text-sm" />
+            <div className="p-4 space-y-1.5">
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span className="tabular-nums">{fmtRs(subtotal)}</span></div>
+              {invoiceDiscount > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Discount</span><span className="text-red-600 tabular-nums">−{fmtRs(discountAmt)}</span></div>}
+              {taxRate > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Tax</span><span className="tabular-nums">+{fmtRs(taxAmt)}</span></div>}
+              <div className="border-t border-border pt-2 flex justify-between items-center">
+                <span className="font-bold">Grand Total</span>
+                <span className="text-xl font-black text-primary tabular-nums">{fmtRs(grandTotal)}</span>
+              </div>
             </div>
-          </div>
-
-          {/* Summary */}
-          <div className="p-4 space-y-1.5">
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-medium tabular-nums">{fmtRs(subtotal)}</span></div>
-            {invoiceDiscount > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Discount ({invoiceDiscount}%)</span><span className="text-red-600 font-medium tabular-nums">-{fmtRs(discountAmt)}</span></div>}
-            {taxRate > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Tax ({taxRate}%)</span><span className="font-medium tabular-nums">+{fmtRs(taxAmt)}</span></div>}
-            {shipping > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Shipping</span><span className="font-medium tabular-nums">+{fmtRs(shipping)}</span></div>}
-            <div className="border-t border-border pt-2 flex justify-between items-center">
-              <span className="font-bold">Total</span>
-              <span className="text-xl font-black text-primary tabular-nums">{fmtRs(grandTotal)}</span>
+            <div className="px-4 pb-4 grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Payment</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="jazzcash">JazzCash</SelectItem>
+                    <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                    <SelectItem value="credit">Credit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Status</label>
+                <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-
-          {/* Payment */}
-          <div className="px-4 pb-4 grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Payment Method</p>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="jazzcash">JazzCash</SelectItem>
-                  <SelectItem value="easypaisa">Easypaisa</SelectItem>
-                  <SelectItem value="credit">Credit</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Status</p>
-              <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                  <SelectItem value="partial">Partial</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="px-4 pb-4">
+              <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)…" className="h-9 text-sm" />
             </div>
           </div>
+        )}
+      </div>
 
-          <div className="px-4 pb-4">
-            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)…" className="h-9 text-sm" />
-          </div>
-        </div>
-      )}
-
-      {/* Floating save bar */}
+      {/* Mobile floating save bar */}
       {items.length > 0 && (
-        <div className="fixed bottom-[72px] left-0 right-0 px-4 pb-2 z-40 pointer-events-none">
+        <div className="md:hidden fixed bottom-[64px] left-0 right-0 px-4 pb-2 z-40 pointer-events-none">
           <div className="bg-card border border-border rounded-2xl shadow-2xl p-3 flex items-center gap-2 pointer-events-auto">
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-muted-foreground">Grand Total</p>
+              <p className="text-[10px] text-muted-foreground">{items.length} items · Grand Total</p>
               <p className="font-black text-lg text-primary tabular-nums">{fmtRs(grandTotal)}</p>
             </div>
             {customer?.phone && (
-              <button onClick={handleWhatsApp} className="p-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors" title="Send WhatsApp">
+              <button onClick={handleWhatsApp} className="p-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
                 <MessageCircle className="w-5 h-5" />
               </button>
             )}
             {perm("print_invoice") && (
-              <button onClick={handlePrint} className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors" title="Print Invoice">
+              <button onClick={handlePrint} className="p-2.5 rounded-xl bg-muted hover:bg-muted/80 transition-colors">
                 <Printer className="w-5 h-5 text-muted-foreground" />
               </button>
             )}
@@ -478,7 +660,7 @@ function PosTab({ token }: { token: string }) {
       )}
 
       <CustomerPickerSheet open={showPicker} onClose={() => setShowPicker(false)} token={token} onPick={setCustomer} />
-    </div>
+    </>
   );
 }
 
@@ -1368,20 +1550,42 @@ export default function BranchPosPage() {
   }, [tabs.map(t => t.id).join(",")]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <div className="sticky top-0 z-30 bg-card border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0">
             <p className="font-black text-sm truncate">{branch?.name ?? "Branch"}</p>
             <p className="text-[10px] text-muted-foreground truncate">{user?.name} · {user?.role}</p>
           </div>
+
+          {/* Desktop tab bar inside header */}
+          <div className="hidden md:flex items-center gap-1 ml-6 flex-1">
+            {tabs.map(t => {
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    tab === t.id
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
           <button
             onClick={() => { logout(); navigate("/branch-login"); }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-xl hover:bg-muted"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-xl hover:bg-muted ml-auto"
           >
             <LogOut className="w-3.5 h-3.5" /> Logout
           </button>
@@ -1389,16 +1593,16 @@ export default function BranchPosPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4">
+      <div className="flex-1 md:overflow-hidden">
         {tab === "pos"       && <PosTab       token={token} />}
-        {tab === "history"   && <HistoryTab   token={token} />}
-        {tab === "customers" && <CustomersTab token={token} />}
-        {tab === "stats"     && <StatsTab     token={token} />}
+        {tab === "history"   && <div className="px-4 pt-4 pb-4"><HistoryTab   token={token} /></div>}
+        {tab === "customers" && <div className="px-4 pt-4 pb-4"><CustomersTab token={token} /></div>}
+        {tab === "stats"     && <div className="px-4 pt-4 pb-4"><StatsTab     token={token} /></div>}
       </div>
 
-      {/* Bottom Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border safe-area-pb">
-        <div className="max-w-lg mx-auto flex">
+      {/* Bottom Tab Bar — mobile only */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border safe-area-pb md:hidden">
+        <div className="flex">
           {tabs.map(t => (
             <button
               key={t.id}
