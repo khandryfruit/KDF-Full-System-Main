@@ -77,6 +77,23 @@ router.post("/cities/auto-save", async (req, res) => {
   }
 });
 
+/* ─── Admin: Get Maps API key for admin panel (server key — no referrer restriction) ─── */
+router.get("/admin/location-settings/map-key", adminMiddleware, async (req, res) => {
+  try {
+    const [settings] = await db.select().from(googleMapSettingsTable).limit(1);
+    if (!settings?.isEnabled) {
+      return res.json({ apiKey: null });
+    }
+    /* Prefer server key (no HTTP referrer restriction) so the admin map works
+       on any domain including Replit dev/preview domains */
+    const key = settings.serverApiKey ?? settings.apiKey ?? null;
+    return res.json({ apiKey: key });
+  } catch (err) {
+    req.log.error(err);
+    return res.json({ apiKey: null });
+  }
+});
+
 /* ─── Public: Get Location Settings (frontend needs client API key) ─── */
 router.get("/location-settings", async (req, res) => {
   try {

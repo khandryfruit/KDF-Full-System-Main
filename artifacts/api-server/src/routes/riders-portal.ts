@@ -148,6 +148,66 @@ router.get("/rider/auth/me", riderMiddleware, async (req: any, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════
+   RIDER LIVE LOCATION — UPDATE (called from mobile app)
+═══════════════════════════════════════════════════════ */
+
+router.put("/rider/location", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId = req.rider.id;
+    const { lat, lng } = req.body;
+    if (lat == null || lng == null) { res.status(400).json({ error: "lat and lng required" }); return; }
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (isNaN(latNum) || isNaN(lngNum)) { res.status(400).json({ error: "Invalid coordinates" }); return; }
+    await db.execute(sql`
+      UPDATE riders
+      SET location_lat = ${latNum}, location_lng = ${lngNum}, location_updated_at = NOW(), updated_at = NOW()
+      WHERE id = ${riderId}
+    `);
+    res.json({ ok: true });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN: GET ALL RIDERS LIVE LOCATIONS
+═══════════════════════════════════════════════════════ */
+
+router.get("/admin/riders/live-locations", adminMiddleware, async (req, res) => {
+  try {
+    const rows = await db.execute(sql`
+      SELECT
+        r.id, r.name, r.phone, r.status, r.vehicle_type, r.delivery_area,
+        r.location_lat, r.location_lng, r.location_updated_at,
+        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_deliveries,
+        (
+          SELECT jsonb_agg(jsonb_build_object(
+            'id', d2.id,
+            'customer_name', d2.customer_name,
+            'delivery_address', d2.delivery_address,
+            'status', d2.status,
+            'cod_amount', d2.cod_amount,
+            'shopify_order_number', d2.shopify_order_number
+          ) ORDER BY d2.assigned_at DESC)
+          FROM rider_deliveries d2
+          WHERE d2.rider_id = r.id AND d2.status NOT IN ('delivered','returned','failed')
+        ) AS active_orders
+      FROM riders r
+      LEFT JOIN rider_deliveries d ON d.rider_id = r.id
+      WHERE r.status != 'inactive'
+      GROUP BY r.id
+      ORDER BY r.name
+    `);
+    res.json({ riders: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
    PUSH TOKEN REGISTRATION
 ═══════════════════════════════════════════════════════ */
 

@@ -52,6 +52,13 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "KDF Rider needs location access for live delivery tracking.",
+          "locationWhenInUsePermission": "KDF Rider needs location access for live delivery tracking."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",

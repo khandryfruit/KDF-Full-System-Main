@@ -167,6 +167,7 @@ const BRANCHES_NAV_ITEMS = [
 ];
 
 const LOGISTICS_NAV_ITEMS = [
+  { href: "/logistics/live-map",       label: "🗺 Live Rider Map",   icon: MapPin          },
   { href: "/logistics/lahore",         label: "Lahore Deliveries", icon: MapPin          },
   { href: "/logistics/riders",         label: "Riders & Accounting", icon: Users         },
   { href: "/logistics/confirmations",  label: "WA Confirmations",  icon: MessageCircle   },

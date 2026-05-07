@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Device from "expo-device";
+import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -16,7 +17,9 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
-  }),
+    shouldShowBanner: true,
+    shouldShowList: true,
+  } as Notifications.NotificationBehavior),
 });
 
 export interface Rider {
@@ -96,12 +99,45 @@ async function registerForPushNotifications(token: string): Promise<void> {
   } catch {}
 }
 
+/* ── Background location push (every 15s when logged in) ── */
+async function startLocationTracking(authToken: string): Promise<() => void> {
+  if (Platform.OS === "web") return () => {};
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return () => {};
+
+    let stopped = false;
+
+    const loop = async () => {
+      while (!stopped) {
+        try {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          await fetch(`${BASE_URL}/api/rider/location`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+            body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+          }).catch(() => {});
+        } catch {}
+        await new Promise(r => setTimeout(r, 15_000));
+      }
+    };
+
+    loop();
+    return () => { stopped = true; };
+  } catch {
+    return () => {};
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rider, setRider] = useState<Rider | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const stopLocationRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -111,8 +147,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (saved && savedRider) {
           setToken(saved);
           setRider(JSON.parse(savedRider));
-          /* Re-register push token on app restart (token can change) */
           registerForPushNotifications(saved).catch(() => {});
+          /* Start location tracking on app resume */
+          startLocationTracking(saved).then(stop => {
+            stopLocationRef.current = stop;
+          });
         }
       } catch {}
       setLoading(false);
@@ -126,10 +165,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       notificationListener.current?.remove();
       responseListener.current?.remove();
+      stopLocationRef.current?.();
     };
   }, []);
 
   const login = useCallback(async (phone: string, password: string) => {
+    /* Stop any existing location loop */
+    stopLocationRef.current?.();
+    stopLocationRef.current = null;
     try {
       const res = await fetch(`${BASE_URL}/api/rider/auth/login`, {
         method: "POST",
@@ -142,8 +185,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem("kdf_rider_data", JSON.stringify(data.rider));
       setToken(data.token);
       setRider(data.rider);
-      /* Register push token after successful login */
       registerForPushNotifications(data.token).catch(() => {});
+      /* Start location tracking after login */
+      startLocationTracking(data.token).then(stop => {
+        stopLocationRef.current = stop;
+      });
       return { ok: true };
     } catch {
       return { ok: false, error: "Network error. Check your connection." };
@@ -151,6 +197,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    stopLocationRef.current?.();
+    stopLocationRef.current = null;
     await AsyncStorage.removeItem("kdf_rider_token");
     await AsyncStorage.removeItem("kdf_rider_data");
     await AsyncStorage.removeItem("kdf_expo_push_token");

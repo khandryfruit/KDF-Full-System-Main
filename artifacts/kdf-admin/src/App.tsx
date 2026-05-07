@@ -72,6 +72,7 @@ import StockMovementPage from "@/pages/StockMovementPage";
 import StockAdjustmentPage from "@/pages/StockAdjustmentPage";
 import ERPSettingsPage from "@/pages/ERPSettingsPage";
 import AdSensePage from "@/pages/AdSensePage";
+import RiderLiveMapPage from "@/pages/RiderLiveMapPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -164,6 +165,7 @@ function Router() {
       <Route path="/logistics/confirmations"><ProtectedRoute component={WaOrderConfirmationsPage} /></Route>
       <Route path="/logistics/lahore"><ProtectedRoute component={LahoreDeliveriesPage} /></Route>
       <Route path="/logistics/riders"><ProtectedRoute component={RidersPage} /></Route>
+      <Route path="/logistics/live-map"><ProtectedRoute component={RiderLiveMapPage} /></Route>
       <Route path="/shopify"><ProtectedRoute component={ShopifyDashboardPage} /></Route>
       <Route path="/shopify/orders"><ProtectedRoute component={ShopifyOrdersPage} /></Route>
       <Route path="/shopify/customers"><ProtectedRoute component={ShopifyCustomersPage} /></Route>
