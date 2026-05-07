@@ -1,0 +1,86 @@
+IMPORTANT — IMPLEMENT EVERYTHING ON LIVE PRODUCTION SERVER
+
+Do NOT keep changes only in development/testing mode.
+
+All fixes, features, syncing systems, rider tracking, assignment logic, notifications, and UI updates must be fully implemented and deployed on the LIVE PRODUCTION SERVER.
+
+====================================
+PRODUCTION REQUIREMENTS
+====================================
+
+Please ensure:
+
+- All APIs use production URLs
+- Production database is connected properly
+- Live server environment variables are configured
+- WebSockets work on production
+- Shopify webhooks work on production
+- Rider tracking works on production
+- Notifications work on production
+- Auto assignment works on production
+- Delivery status updates work on production
+
+====================================
+LIVE DEPLOYMENT
+====================================
+
+Deploy latest updated code to:
+- Production backend
+- Production admin dashboard
+- Production rider app APIs
+- Production realtime services
+
+Ensure:
+- No old cached builds
+- No old APIs
+- No development URLs
+- No Replit temp URLs
+
+====================================
+PRODUCTION TESTING
+====================================
+
+After deployment, fully test on LIVE server:
+
+1. Shopify order creation
+2. Real-time sync
+3. Rider assignment
+4. Rider notification
+5. Live tracking
+6. Google navigation
+7. Delivery completion
+8. Invoice generation
+9. WhatsApp sharing
+10. Customer tracking
+
+====================================
+PERFORMANCE & STABILITY
+====================================
+
+Production server must be:
+- Stable
+- Fast
+- Scalable
+- Optimized
+- Real-time
+- Secure
+
+====================================
+FINAL EXPECTED RESULT
+====================================
+
+On live production server:
+
+- New Shopify orders instantly sync
+- Riders instantly receive tasks
+- Notifications work live
+- Tracking works live
+- Admin sees live riders
+- Delivered orders move automatically
+- No duplicate orders
+- No old order reassignment
+- UI looks premium and modern
+- Everything works in real-time
+
+IMPORTANT:
+Do proper production deployment and production testing before sending final build/link.
