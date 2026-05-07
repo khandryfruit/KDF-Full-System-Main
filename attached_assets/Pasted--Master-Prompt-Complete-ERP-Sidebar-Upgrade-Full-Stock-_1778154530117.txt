@@ -1,0 +1,442 @@
+# Master Prompt — Complete ERP Sidebar Upgrade + Full Stock Management Module + Advanced Settings System
+
+You now need to upgrade the ERP/POS sidebar and system architecture into a complete enterprise-level ERP solution.
+
+Current sidebar and system are incomplete.
+
+Missing:
+
+❌ Proper stock management
+❌ Advanced settings
+❌ Inventory controls
+❌ Purchase management
+❌ Expense management
+❌ Backup system
+❌ Financial modules
+❌ Professional ERP navigation
+
+This must now behave like a real ERP system similar to:
+
+* Vyapar
+* Zoho Inventory
+* Oracle POS
+* Odoo ERP
+* Retail grocery ERP systems
+
+---
+
+# 1. COMPLETE SIDEBAR ERP STRUCTURE
+
+Upgrade sidebar into a professional enterprise ERP navigation.
+
+---
+
+# REQUIRED SIDEBAR MODULES
+
+## Dashboard
+
+* Overview
+* Daily Sales
+* Profit Analytics
+* Branch Performance
+
+---
+
+## Invoice & Billing
+
+* Admin POS
+* Branch POS
+* Create Invoice
+* All Invoices
+* Returns
+* Refunds
+* Draft Bills
+* Hold Bills
+
+---
+
+# 2. ADD COMPLETE STOCK MANAGEMENT MODULE (IMPORTANT)
+
+Create NEW section:
+
+# Stock Management
+
+---
+
+# REQUIRED STOCK MODULES
+
+## Products
+
+* Add Product
+* Product List
+* Categories
+* Brands
+* Units
+
+---
+
+## Inventory
+
+* Stock Overview
+* Stock Movement
+* Low Stock
+* Out of Stock
+* Dead Stock
+
+---
+
+## Stock Adjustment
+
+* Add stock
+* Remove stock
+* Damage stock
+* Manual correction
+
+---
+
+## Warehouse Management
+
+* Multiple warehouses
+* Branch inventory
+* Transfer stock
+
+---
+
+# 3. ADVANCED INVENTORY SYSTEM
+
+Support:
+
+✅ KG
+✅ Grams
+✅ PCS
+✅ Boxes
+✅ Litres
+
+---
+
+# Dynamic Unit Conversion
+
+Example:
+
+1 KG = 1000g
+
+Inventory auto deducts correctly.
+
+---
+
+# 4. PURCHASE MANAGEMENT MODULE
+
+Add:
+
+# Purchase & Expense
+
+---
+
+# REQUIRED FEATURES
+
+## Purchase Bills
+
+## Supplier Management
+
+## Expense Tracking
+
+## Purchase Returns
+
+## Stock Purchase History
+
+---
+
+# Supplier Features
+
+* Supplier ledger
+* Due payments
+* Purchase analytics
+
+---
+
+# 5. CASH & BANK MODULE
+
+Create professional finance section.
+
+---
+
+# REQUIRED FEATURES
+
+## Cash Flow
+
+## Bank Accounts
+
+## Expenses
+
+## Income Tracking
+
+## Daily Closing
+
+---
+
+# Payment Methods
+
+* Cash
+* Card
+* Easypaisa
+* JazzCash
+* Bank Transfer
+
+---
+
+# 6. REPORTS MODULE
+
+Add enterprise analytics.
+
+---
+
+# REQUIRED REPORTS
+
+## Sales Reports
+
+## Profit Reports
+
+## Inventory Reports
+
+## Tax Reports
+
+## Branch Reports
+
+## Expense Reports
+
+## Supplier Reports
+
+---
+
+# Export Support
+
+* PDF
+* Excel
+* CSV
+
+---
+
+# 7. SYNC, SHARE & BACKUP MODULE
+
+Add:
+
+# Sync, Share & Backup
+
+---
+
+# REQUIRED FEATURES
+
+## Google Drive Backup
+
+## Local Backup
+
+## Import/Export
+
+## Offline Sync
+
+## Restore Backup
+
+---
+
+# 8. SETTINGS MODULE (VERY IMPORTANT)
+
+Current settings are incomplete.
+
+Create FULL ERP settings system.
+
+---
+
+# REQUIRED SETTINGS SECTIONS
+
+## Company Settings
+
+* Company name
+* Logo
+* Address
+* Phone
+* Tax number
+
+---
+
+## Invoice Settings
+
+* Thermal print
+* A4 print
+* Invoice templates
+* QR/barcode
+
+---
+
+## POS Settings
+
+* Barcode enable
+* Keyboard shortcuts
+* Auto print
+* Default payment mode
+
+---
+
+## Stock Settings
+
+* Negative stock
+* Unit conversion
+* Stock alerts
+* Auto deduction
+
+---
+
+## Branch Settings
+
+* Branch permissions
+* Invoice permissions
+* POS permissions
+
+---
+
+## Tax Settings
+
+* GST/VAT
+* Inclusive/exclusive tax
+
+---
+
+## Backup Settings
+
+* Google Drive sync
+* Auto backup frequency
+* Local storage path
+
+---
+
+## User & Staff Settings
+
+* Roles
+* Permissions
+* Access control
+
+---
+
+# 9. UTILITIES MODULE
+
+Add:
+
+## Barcode Generator
+
+## Label Printing
+
+## Bulk Product Import
+
+## Database Tools
+
+## Activity Logs
+
+---
+
+# 10. MOBILE + DESKTOP RESPONSIVE ERP
+
+IMPORTANT.
+
+All modules must work on:
+
+✅ Desktop
+✅ Tablet
+✅ Mobile
+
+---
+
+# Mobile Features
+
+* Bottom navigation
+* Responsive sidebar
+* Touch-friendly UI
+
+---
+
+# 11. PROFESSIONAL UI/UX
+
+Design should look like modern ERP software.
+
+Use:
+
+* TailwindCSS
+* ShadCN UI
+* Smooth animations
+* Responsive layouts
+* Professional icons
+
+---
+
+# 12. PERFORMANCE OPTIMIZATION
+
+ERP must remain FAST.
+
+Use:
+
+* Lazy loading
+* Cached inventory queries
+* Optimized analytics
+* Debounced search
+
+Avoid heavy unnecessary rendering.
+
+---
+
+# 13. SECURITY REQUIREMENTS
+
+Protect ALL modules with permissions.
+
+Example:
+
+```js id="dc5nza"
+checkPermission("manage_inventory")
+```
+
+---
+
+# 14. DATABASE REQUIREMENTS
+
+Add support for:
+
+## products
+
+## inventory_logs
+
+## stock_transfers
+
+## expenses
+
+## suppliers
+
+## purchases
+
+## warehouses
+
+## backup_logs
+
+---
+
+# 15. FINAL REQUIREMENT
+
+DO NOT leave:
+
+❌ Static sidebar
+❌ Dummy stock system
+❌ Fake analytics
+❌ Incomplete settings
+❌ Broken permissions
+❌ Desktop-only modules
+
+Everything must work with:
+
+✅ Real inventory
+✅ Real stock deduction
+✅ Real ERP reports
+✅ Real branch management
+✅ Real purchase tracking
+✅ Real expenses
+✅ Real backup system
+✅ Mobile responsive UI
+✅ Role permissions
+✅ Fast POS performance
+
+This must behave like a real enterprise-grade ERP + POS + Stock Management System.
