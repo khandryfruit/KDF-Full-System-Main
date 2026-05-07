@@ -211,7 +211,7 @@ export default function LocationSettingsPage() {
               {/* Client key */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5 text-sm font-medium">
-                  <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Globe className="w-3.5 h-3.5 text-blue-500" />
                   Map api key (Client)
                 </Label>
                 <div className="relative">
@@ -230,15 +230,20 @@ export default function LocationSettingsPage() {
                     {showClientKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Used by the browser — enable Maps JS API &amp; Places API
-                </p>
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 space-y-1">
+                  <p className="text-xs font-semibold text-blue-700">Browser / Frontend key</p>
+                  <ul className="text-xs text-blue-600 space-y-0.5 list-disc list-inside">
+                    <li>Restriction: <span className="font-medium">Websites</span></li>
+                    <li>Allowed: <code className="bg-blue-100 px-1 rounded">https://khanbabadryfruits.com/*</code></li>
+                    <li>APIs: <span className="font-medium">Maps JavaScript API</span>, <span className="font-medium">Places API (New)</span></li>
+                  </ul>
+                </div>
               </div>
 
               {/* Server key */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5 text-sm font-medium">
-                  <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Server className="w-3.5 h-3.5 text-orange-500" />
                   Map api key (Server)
                 </Label>
                 <div className="relative">
@@ -257,9 +262,14 @@ export default function LocationSettingsPage() {
                     {showServerKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Used server-side — enable Geocoding API &amp; restrict by IP
-                </p>
+                <div className="bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 space-y-1">
+                  <p className="text-xs font-semibold text-orange-700">Backend / Server key</p>
+                  <ul className="text-xs text-orange-600 space-y-0.5 list-disc list-inside">
+                    <li>Restriction: <span className="font-medium">None</span> (or Server IP later)</li>
+                    <li>APIs: <span className="font-medium">Geocoding API</span> only</li>
+                    <li>Used for: reverse geocoding on location detect</li>
+                  </ul>
+                </div>
               </div>
             </div>
 

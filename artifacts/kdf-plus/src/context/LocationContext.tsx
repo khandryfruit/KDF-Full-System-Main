@@ -37,6 +37,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
   }
   mapsLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
+    // Client key: only Maps JavaScript API + Places API (domain-restricted)
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
     script.async = true;
     script.defer = true;
@@ -47,24 +48,18 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
   return mapsLoadPromise;
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<{ city: string; fullAddress: string } | null> {
+// Server-side reverse geocoding — uses Server API key (Geocoding API, no domain restriction)
+async function reverseGeocodeViaServer(lat: number, lng: number): Promise<{ city: string; fullAddress: string } | null> {
   try {
-    const g = (window as any).google;
-    if (!g?.maps?.Geocoder) return null;
-    const geocoder = new g.maps.Geocoder();
-    return new Promise((resolve) => {
-      geocoder.geocode({ location: { lat, lng } }, (results: any, status: string) => {
-        if (status !== "OK" || !results?.length) { resolve(null); return; }
-        const result = results[0];
-        const cityComponent = result.address_components?.find(
-          (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_2")
-        );
-        resolve({
-          city: cityComponent?.long_name ?? "",
-          fullAddress: result.formatted_address ?? "",
-        });
-      });
+    const res = await fetch("/api/geocode/reverse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lng }),
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.city) return { city: data.city, fullAddress: data.fullAddress ?? "" };
+    return null;
   } catch {
     return null;
   }
@@ -131,10 +126,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       let detectedCity = "";
       let fullAddress = "";
 
-      if (mapsLoaded && (window as any).google?.maps?.Geocoder) {
-        const result = await reverseGeocode(latitude, longitude);
-        if (result?.city) { detectedCity = result.city; fullAddress = result.fullAddress; }
-      }
+      // Always use server-side geocoding (Server API key — no domain restriction)
+      const result = await reverseGeocodeViaServer(latitude, longitude);
+      if (result?.city) { detectedCity = result.city; fullAddress = result.fullAddress; }
 
       if (detectedCity) setCity(detectedCity);
 

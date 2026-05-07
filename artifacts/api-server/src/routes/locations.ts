@@ -77,7 +77,7 @@ router.post("/cities/auto-save", async (req, res) => {
   }
 });
 
-/* ─── Public: Get Location Settings (frontend needs API key) ─── */
+/* ─── Public: Get Location Settings (frontend needs client API key) ─── */
 router.get("/location-settings", async (req, res) => {
   try {
     const [settings] = await db.select().from(googleMapSettingsTable).limit(1);
@@ -86,13 +86,51 @@ router.get("/location-settings", async (req, res) => {
     }
     return res.json({
       isEnabled: settings.isEnabled,
-      apiKey: settings.apiKey,
+      apiKey: settings.apiKey,          // Client key — Maps JS + Places API (browser)
       autoDetectLocation: settings.autoDetectLocation,
       defaultCountry: settings.defaultCountry,
     });
   } catch (err) {
     req.log.error(err);
     return res.json({ isEnabled: false, apiKey: null, autoDetectLocation: true });
+  }
+});
+
+/* ─── Public: Server-side Reverse Geocoding (uses Server API key) ─── */
+router.post("/geocode/reverse", async (req, res) => {
+  try {
+    const { lat, lng } = req.body as { lat?: number; lng?: number };
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      return res.status(400).json({ error: "lat and lng are required" });
+    }
+
+    const [settings] = await db.select().from(googleMapSettingsTable).limit(1);
+    const key = settings?.serverApiKey ?? settings?.apiKey;
+
+    if (!key) {
+      return res.status(503).json({ error: "Geocoding not configured" });
+    }
+
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
+    const geoRes = await fetch(url);
+    const geoData = await geoRes.json() as any;
+
+    if (geoData.status !== "OK" || !geoData.results?.length) {
+      return res.status(200).json({ city: null, fullAddress: null });
+    }
+
+    const result = geoData.results[0];
+    const cityComponent = result.address_components?.find(
+      (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+    );
+
+    return res.json({
+      city: cityComponent?.long_name ?? null,
+      fullAddress: result.formatted_address ?? null,
+    });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(500).json({ error: "Geocoding failed" });
   }
 });
 
