@@ -40,13 +40,17 @@ interface TemplateMetadata {
   products?: Product[];
   stock?: number; variants?: ProductVariant[];
 }
+interface AutoCartItem {
+  productId: number; name: string; variant?: string | null; variantId?: string | null; price: number; qty: number; image?: string | null;
+}
 interface ChatMessage {
   role: "user" | "assistant" | "admin"; content: string; timestamp: Date;
   products?: Product[];
   categories?: { id: number; name: string; slug: string; image?: string | null }[];
   orderPlaced?: { id: number; orderNumber: string };
-  type?: "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link";
+  type?: "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link" | "escalate_human";
   metadata?: TemplateMetadata;
+  autoCartAdded?: AutoCartItem[];
 }
 interface OrderForm {
   product: string; qty: number; name: string; phone: string; city: string; cityCustom: string; address: string; notes: string;
@@ -277,9 +281,59 @@ function OrderSuccessBanner({ orderNumber }: { orderNumber: string }) {
   );
 }
 
-function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCategory, onBuyNow }: {
+function HumanEscalationCard({ waPhone }: { waPhone?: string }) {
+  const waUrl = waPhone
+    ? `https://wa.me/${waPhone.replace(/\D/g, "")}?text=${encodeURIComponent("Hello! I need help with my KDF Nuts order.")}`
+    : `https://wa.me/?text=${encodeURIComponent("Hello! I need help with my KDF Nuts order.")}`;
+  return (
+    <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 max-w-[92%] shadow-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 text-sm">👋</div>
+        <div>
+          <p className="text-sm font-bold text-orange-800 leading-tight">Connect with our team</p>
+          <p className="text-[10px] text-orange-500">Live support available daily 9am–9pm PKT</p>
+        </div>
+      </div>
+      <a href={waUrl} target="_blank" rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 text-xs font-bold text-white py-2.5 px-4 rounded-xl w-full active:opacity-80 transition-opacity"
+        style={{ backgroundColor: "#25D366" }}>
+        <svg viewBox="0 0 24 24" fill="white" width={14} height={14}>
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+        </svg>
+        Chat on WhatsApp
+      </a>
+    </div>
+  );
+}
+
+function AutoCartBanner({ items, onCheckout }: { items: AutoCartItem[]; onCheckout: () => void }) {
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+  return (
+    <div className="rounded-2xl border border-[#5FA800]/30 bg-[#5FA800]/5 px-3 py-2.5 max-w-[92%] shadow-sm mt-1">
+      <div className="flex items-center gap-1.5 mb-2">
+        <ShoppingCart className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#5FA800" }} />
+        <p className="text-xs font-bold" style={{ color: "#5FA800" }}>Added to cart automatically!</p>
+      </div>
+      <div className="space-y-1 mb-2">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center justify-between text-xs">
+            <span className="text-gray-700 font-medium">{item.name}{item.variant ? ` (${item.variant})` : ""} ×{item.qty}</span>
+            <span className="font-bold" style={{ color: "#5FA800" }}>Rs.{(item.price * item.qty).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between pt-1.5 border-t border-[#5FA800]/15">
+        <span className="text-xs font-bold text-gray-700">Total: Rs.{total.toLocaleString()}</span>
+        <button onClick={onCheckout} className="text-[10px] font-bold text-white px-3 py-1.5 rounded-full active:opacity-80" style={{ backgroundColor: "#5FA800" }}>Checkout →</button>
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCategory, onBuyNow, waPhone }: {
   msg: ChatMessage; onAddToCart: (p: Product, variant: ProductVariant | null, price: number) => void; onViewProduct: (id: number) => void; onOpenForm: () => void; onViewCategory: (slug: string) => void;
   onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
+  waPhone?: string;
 }) {
   if (msg.role === "user") {
     return <div className="flex justify-end mb-3"><div className="bg-[#5FA800] text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[78%] shadow-sm"><p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p></div></div>;
@@ -306,6 +360,7 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
     if (msg.type === "payment_link" && msg.metadata) return <PaymentLinkCard meta={msg.metadata} />;
     if (msg.type === "tracking_link" && msg.metadata) return <TrackingLinkCard meta={msg.metadata} />;
     if (msg.type === "order_form") return <OrderFormPromptCard onOpenForm={onOpenForm} />;
+    if (msg.type === "escalate_human") return <HumanEscalationCard waPhone={waPhone} />;
     return null;
   };
 
@@ -319,6 +374,9 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
           <div className={`rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[92%] inline-block shadow-sm ${isAdmin ? "bg-blue-50 border border-blue-100" : "bg-white border border-gray-100"}`}>
             <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isAdmin ? "text-blue-900" : "text-gray-800"}`}>{msg.content}</p>
           </div>
+        )}
+        {msg.autoCartAdded && msg.autoCartAdded.length > 0 && (
+          <AutoCartBanner items={msg.autoCartAdded} onCheckout={onOpenForm} />
         )}
         {msg.products && msg.products.length > 0 && (
           <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
@@ -712,8 +770,23 @@ export function ChatWidget() {
       const data = await res.json();
       if (data.sessionId && !sessionId) setSessionId(data.sessionId);
       msgCountRef.current = (messages.length + 1) + 1;
-      setMessages(prev => [...prev, { role: "assistant", content: data.message, timestamp: new Date(), products: data.products, categories: data.categories, orderPlaced: data.orderPlaced, type: data.showOrderForm ? "order_form" : undefined }]);
-      if (data.showOrderForm) { setDefaultOrderProduct(""); setShowOrderForm(true); }
+      if (data.autoCart?.length > 0) {
+        data.autoCart.forEach((item: AutoCartItem) => {
+          setChatCart(prev => {
+            const key = `${item.productId}-${item.variantId ?? ""}`;
+            const idx = prev.findIndex(i => `${i.productId}-${i.variantId ?? ""}` === key);
+            if (idx >= 0) return prev.map((it, j) => j === idx ? { ...it, qty: it.qty + item.qty } : it);
+            return [...prev, { productId: item.productId, name: item.name, variant: item.variant ?? "", variantId: item.variantId ?? undefined, price: item.price, qty: item.qty, image: item.image }];
+          });
+        });
+      }
+      setMessages(prev => [...prev, {
+        role: "assistant", content: data.message, timestamp: new Date(),
+        products: data.products, categories: data.categories, orderPlaced: data.orderPlaced,
+        type: data.escalateToHuman ? "escalate_human" : (data.showOrderForm ? "order_form" : undefined),
+        autoCartAdded: data.autoCart?.length > 0 ? data.autoCart : undefined,
+      }]);
+      if (data.showOrderForm && !data.escalateToHuman) { setDefaultOrderProduct(""); setShowOrderForm(true); }
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "Sorry about that! Please try again in a moment.", timestamp: new Date() }]);
     } finally { setIsLoading(false); }
@@ -808,6 +881,7 @@ export function ChatWidget() {
     { label: "Browse Cashews", action: () => sendMessage("Show me cashews") },
     { label: "Delivery Info", action: () => sendMessage("What are your delivery options?") },
     { label: "Place Order", action: handleOpenForm, highlight: true },
+    { label: "👤 Human Support", action: () => sendMessage("I need to talk to a real person please"), highlight: false },
   ];
 
   const closeChat = () => setIsChatOpen(false);
@@ -829,7 +903,7 @@ export function ChatWidget() {
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} onAddToCart={handleAddToCart} onViewProduct={handleViewProduct} onOpenForm={handleOpenForm} onViewCategory={(slug) => { closeChat(); setLocation(`/products?category=${slug}`); }} onBuyNow={handleBuyNow} />
+          <MessageBubble key={i} msg={msg} onAddToCart={handleAddToCart} onViewProduct={handleViewProduct} onOpenForm={handleOpenForm} onViewCategory={(slug) => { closeChat(); setLocation(`/products?category=${slug}`); }} onBuyNow={handleBuyNow} waPhone={waConfig?.phone} />
         ))}
         {isLoading && <TypingIndicator />}
         <div ref={messagesEndRef} />
@@ -855,6 +929,12 @@ export function ChatWidget() {
             <button onClick={() => setChatCart([])} className="text-[10px] text-gray-500 underline">Clear</button>
             <button onClick={handleOpenForm} className="text-[10px] font-bold text-white px-2.5 py-1.5 rounded-full active:opacity-80" style={{ backgroundColor: "#5FA800" }}>Checkout →</button>
           </div>
+        </div>
+      )}
+      {messages.length <= 1 && !isLoading && (
+        <div className="px-4 py-1.5 flex items-center gap-1.5 border-t" style={{ backgroundColor: "rgba(95,168,0,0.06)", borderColor: "rgba(95,168,0,0.12)" }}>
+          <Mic className="w-3 h-3 flex-shrink-0" style={{ color: "#5FA800" }} />
+          <p className="text-[10px] font-medium" style={{ color: "#5FA800" }}>Tap mic to speak your order in Urdu or English</p>
         </div>
       )}
       <div className="bg-white border-t border-gray-100 px-3 flex gap-2 items-center flex-shrink-0" style={{ paddingTop: "10px", paddingBottom: "calc(10px + env(safe-area-inset-bottom, 0px))" }}>

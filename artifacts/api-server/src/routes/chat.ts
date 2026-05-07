@@ -77,7 +77,9 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 4. After calling a tool, reply with 1–2 short natural sentences only. The cards/form appear automatically.
 5. NEVER use markdown: no **bold**, no *italic*, no # headings, no bullet points with - or *.
 6. Keep ALL replies to 2–3 lines max. Write like a WhatsApp support agent, not a chatbot.
-7. Never say you are AI or automated. Use Rs. for prices. If user writes Urdu/Roman Urdu, reply in kind.`;
+7. Never say you are AI or automated. Use Rs. for prices. If user writes Urdu/Roman Urdu, reply in kind.
+8. When customer clearly mentions a product name AND weight/quantity in the same message (e.g. "1 kilo badam", "500 gram pista", "mujhe 2 kg cashews chahiye", "ek kilo almonds") → call auto_add_to_cart IMMEDIATELY. This is the best experience — no manual clicks needed.
+9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.`;
 
   const orderInstructions = chatbot.orderingEnabled
     ? `
@@ -121,6 +123,43 @@ function buildTools(orderingEnabled: boolean) {
       },
     },
   ];
+
+  tools.push(
+    {
+      type: "function",
+      function: {
+        name: "auto_add_to_cart",
+        description: "Auto-detect products and add them to cart from natural language. ALWAYS call when customer mentions a product name + quantity/weight in voice or text (e.g. '1 kilo badam', '500 gram pista', 'mujhe 2 kg cashews chahiye', 'ek kilo almonds dena'). Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews, kishmish=raisins, mungphali=peanuts, anjeer=figs, khajoor=dates.",
+        parameters: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  query: { type: "string", description: "Product name in any language (e.g. 'badam', 'almonds', 'pista')" },
+                  variantHint: { type: "string", description: "Weight or size if mentioned (e.g. '1kg', '500g', '250g', '1 kilo', '500 gram')" },
+                  qty: { type: "number", description: "Number of units to add, default 1" },
+                },
+                required: ["query", "qty"],
+              },
+            },
+          },
+          required: ["items"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "escalate_to_human",
+        description: "Show human agent contact options when customer asks for a real person, manager, human, or when AI has failed to resolve the issue after 2+ turns.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    }
+  );
+
   if (orderingEnabled) {
     tools.push({
       type: "function",
@@ -194,6 +233,8 @@ router.post("/chat/message", async (req, res) => {
     let foundCategories: any[] = [];
     let shouldShowOrderForm = false;
     let placedOrder: { id: number; orderNumber: string } | null = null;
+    let foundAutoCart: any[] = [];
+    let shouldEscalate = false;
 
     // Detect intent from user message to force the right tool on the first turn
     function detectForcedTool(msg: string): { type: "function"; function: { name: string } } | "auto" {
@@ -201,8 +242,14 @@ router.post("/chat/message", async (req, res) => {
       if (/(categor|browse|types of|kya types|show all|sab products|sab categor|all categor)/i.test(msg)) {
         return { type: "function", function: { name: "search_categories" } };
       }
+        if (/(human|banda|manager|real person|complaint|nahi samajh|escalate|agent chahiye|support agent|live support)/i.test(msg)) {
+        return { type: "function", function: { name: "escalate_to_human" } };
+      }
       if (/(order karna|place order|mujhe lena|mujhe chahiye|order chahiye|i want to (buy|order|purchase)|buy now|khareedna|order please|order dena)/i.test(msg)) {
         return { type: "function", function: { name: "trigger_order_form" } };
+      }
+      if (/(\d+\s*(kilo|kg|gram|g|pound)\s*\w|\w+\s+\d+\s*(kilo|kg|gram|g)|(ek|do|teen|char|1|2|3|4|5)\s*kilo)/i.test(msg)) {
+        return { type: "function", function: { name: "auto_add_to_cart" } };
       }
       if (/(almond|cashew|pistachio|walnut|raisin|peanut|hazelnut|nut|dry fruit|price|kitna|kitne|kya hai|show me|available|stock|rate|product)/i.test(msg)) {
         return { type: "function", function: { name: "search_products" } };
@@ -240,6 +287,8 @@ router.post("/chat/message", async (req, res) => {
           ...(foundCategories.length > 0 && { categories: foundCategories }),
           ...(shouldShowOrderForm && { showOrderForm: true }),
           ...(placedOrder && { orderPlaced: placedOrder }),
+          ...(foundAutoCart.length > 0 && { autoCart: foundAutoCart }),
+          ...(shouldEscalate && { escalateToHuman: true }),
         });
       }
 
@@ -313,6 +362,44 @@ router.post("/chat/message", async (req, res) => {
           } catch (e: any) {
             toolResult = `Failed to place order: ${e.message}`;
           }
+        } else if (fn === "auto_add_to_cart") {
+          const reqItems: Array<{ query: string; variantHint?: string; qty: number }> = args.items ?? [];
+          const autoCartResult: any[] = [];
+          for (const item of reqItems) {
+            const terms = expandQuery(item.query);
+            const rows = await db
+              .select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, variants: productsTable.variants, images: productsTable.images, stock: productsTable.stock })
+              .from(productsTable)
+              .where(and(eq(productsTable.active, true), or(...terms.map(t => ilike(productsTable.name, `%${t}%`)))))
+              .limit(1);
+            if (rows.length > 0) {
+              const product = rows[0];
+              const variants = (product.variants as any[]) ?? [];
+              let selectedVariant: any = null;
+              if (variants.length > 0 && item.variantHint) {
+                const hint = item.variantHint.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g").replace(/gm/g, "g");
+                selectedVariant = variants.find((v: any) => {
+                  const vn = (v.name ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+                  const vv = (v.value ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+                  return vn.includes(hint) || hint.includes(vn) || vv.includes(hint) || hint.includes(vv);
+                });
+              }
+              if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
+              const imgs = (product.images as string[]) ?? [];
+              const price = selectedVariant?.price ? Number(selectedVariant.price) : Number(product.price);
+              autoCartResult.push({ productId: product.id, name: product.name, variant: selectedVariant?.value ?? null, variantId: selectedVariant?.id ?? null, price, qty: Number(item.qty) || 1, image: imgs[0] ?? null });
+            }
+          }
+          if (autoCartResult.length > 0) {
+            foundAutoCart = autoCartResult;
+            const summary = autoCartResult.map(i => `${i.name}${i.variant ? ` (${i.variant})` : ""} ×${i.qty} — Rs.${(i.price * i.qty).toLocaleString()}`).join(", ");
+            toolResult = `Auto-added to cart: ${summary}. Total Rs.${autoCartResult.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString()}. Now ask for delivery address and name.`;
+          } else {
+            toolResult = "Products not found. Will show search results.";
+          }
+        } else if (fn === "escalate_to_human") {
+          shouldEscalate = true;
+          toolResult = "Human support escalation card will be shown to customer.";
         } else {
           toolResult = "Unknown function.";
         }

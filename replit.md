@@ -54,6 +54,9 @@ KDF NUTS is a full-stack eCommerce platform for KDF NUTS, offering a storefront,
 *   **Voice Ordering:** Web Speech API mic button in chat input (Urdu `ur-PK` → English `en-US` fallback). Red pulse when listening. Auto-sends on transcript.
 *   **GPS Address Auto-detection:** "Auto-detect my address" button in order form Step 2. Uses `POST /api/locations/geocode` → fills address + city. Falls back to OpenStreetMap Nominatim if Google Maps not configured.
 *   **Enhanced Variant Buttons:** ProductCard variant buttons show weight + price stacked (e.g. "500g / Rs.1,699"). Selected = green background. Price updates dynamically.
+*   **AI Auto-Cart Building:** AI tool `auto_add_to_cart` detects product + weight/qty from natural language ("1 kilo badam", "500g pista") and automatically adds to cart without manual clicks. Returns `autoCart` array in response → frontend auto-populates chatCart + shows `AutoCartBanner`. Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews.
+*   **Human Support Escalation:** AI tool `escalate_to_human` triggers when customer says "human/banda/manager/real person/complaint". Shows `HumanEscalationCard` with WhatsApp redirect button + support hours. "👤 Human Support" quick chip added to chat.
+*   **Voice Hint Bar:** Green hint bar "Tap mic to speak your order in Urdu or English" shown above input when chat first opens (messages ≤ 1).
 *   **AI Content Generation:** Product descriptions, categories, blog posts, and SEO content.
 *   **WhatsApp Automation:** Notifications, marketing campaigns, and customer support.
 *   **Bidding/Auction & Restock Notifications:** Customer engagement and inventory management.
