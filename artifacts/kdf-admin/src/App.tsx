@@ -54,6 +54,7 @@ import LahoreDeliveriesPage from "@/pages/LahoreDeliveriesPage";
 import RidersPage from "@/pages/RidersPage";
 import ShopifyCustomersPage from "@/pages/ShopifyCustomersPage";
 import ShopifyProductsPage from "@/pages/ShopifyProductsPage";
+import FeaturedProductsPage from "@/pages/FeaturedProductsPage";
 import ShopifyCampaignsPage from "@/pages/ShopifyCampaignsPage";
 import ShopifyEmailCampaignsPage from "@/pages/ShopifyEmailCampaignsPage";
 import ShopifyMarketingPage from "@/pages/ShopifyMarketingPage";
@@ -174,6 +175,7 @@ function Router() {
       <Route path="/shopify/orders"><ProtectedRoute component={ShopifyOrdersPage} /></Route>
       <Route path="/shopify/customers"><ProtectedRoute component={ShopifyCustomersPage} /></Route>
       <Route path="/shopify/products"><ProtectedRoute component={ShopifyProductsPage} /></Route>
+      <Route path="/shopify/featured"><ProtectedRoute component={FeaturedProductsPage} /></Route>
       <Route path="/shopify/campaigns"><ProtectedRoute component={ShopifyCampaignsPage} /></Route>
       <Route path="/shopify/email-campaigns"><ProtectedRoute component={ShopifyEmailCampaignsPage} /></Route>
       <Route path="/shopify/marketing"><ProtectedRoute component={ShopifyMarketingPage} /></Route>

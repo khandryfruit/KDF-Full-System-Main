@@ -2912,4 +2912,69 @@ router.post("/admin/logistics/confirmations/bulk-send", adminMiddleware, async (
   }
 });
 
+/* ── GET /api/admin/shopify/products/featured — list all with flags ── */
+router.get("/admin/shopify/products/featured", adminMiddleware as any, async (req, res) => {
+  try {
+    const search = (req.query.search as string ?? "").trim();
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const limit = 30;
+    const offset = (page - 1) * limit;
+
+    const conditions: any[] = [eq(shopifyProductsTable.status, "active")];
+    if (search) {
+      conditions.push(ilike(shopifyProductsTable.title, `%${search}%`));
+    }
+
+    const [rows, countRows] = await Promise.all([
+      db.select({
+        id: shopifyProductsTable.id,
+        title: shopifyProductsTable.title,
+        price: shopifyProductsTable.price,
+        imageUrl: shopifyProductsTable.imageUrl,
+        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+        productType: shopifyProductsTable.productType,
+        isFeatured: shopifyProductsTable.isFeatured,
+        badge: shopifyProductsTable.badge,
+        isRecommended: shopifyProductsTable.isRecommended,
+        recommendPriority: shopifyProductsTable.recommendPriority,
+      })
+        .from(shopifyProductsTable)
+        .where(and(...conditions))
+        .orderBy(desc(shopifyProductsTable.isFeatured), desc(shopifyProductsTable.isRecommended), desc(shopifyProductsTable.inventoryQuantity))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`COUNT(*)::int` })
+        .from(shopifyProductsTable)
+        .where(and(...conditions)),
+    ]);
+
+    res.json({ products: rows, total: countRows[0]?.count ?? 0, page, limit });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ── PUT /api/admin/shopify/products/:id/flags — update feature flags ── */
+router.put("/admin/shopify/products/:id/flags", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid id" });
+    const { isFeatured, badge, isRecommended, recommendPriority } = req.body as {
+      isFeatured?: boolean; badge?: string | null; isRecommended?: boolean; recommendPriority?: number;
+    };
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (typeof isFeatured === "boolean") updates.isFeatured = isFeatured;
+    if (badge !== undefined) updates.badge = badge ?? null;
+    if (typeof isRecommended === "boolean") updates.isRecommended = isRecommended;
+    if (typeof recommendPriority === "number") updates.recommendPriority = recommendPriority;
+
+    await db.update(shopifyProductsTable).set(updates).where(eq(shopifyProductsTable.id, id));
+    res.json({ ok: true });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

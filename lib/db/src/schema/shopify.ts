@@ -102,6 +102,10 @@ export const shopifyProductsTable = pgTable("shopify_products", {
   variants: jsonb("variants").$type<Array<{
     id: string; title: string; price: string; sku?: string; inventoryQuantity?: number;
   }>>(),
+  isFeatured: boolean("is_featured").notNull().default(false),
+  badge: text("badge"),
+  isRecommended: boolean("is_recommended").notNull().default(false),
+  recommendPriority: integer("recommend_priority").default(0),
   shopifyCreatedAt: timestamp("shopify_created_at"),
   syncedAt: timestamp("synced_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

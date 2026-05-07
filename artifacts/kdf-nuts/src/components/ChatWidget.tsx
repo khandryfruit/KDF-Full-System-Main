@@ -28,6 +28,7 @@ interface ProductVariant {
 interface Product {
   id: number; name: string; price: number; originalPrice?: number | null; discount?: number | null;
   stock: number; variants: ProductVariant[]; image?: string | null;
+  badge?: string | null; orderCount?: number;
 }
 interface ChatCartItem {
   productId: number; name: string; variant: string; variantId?: string; price: number; qty: number; image?: string | null;
@@ -78,6 +79,11 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
       <div className="relative h-36">
         <ProductImg src={product.image} alt={product.name} />
         {product.discount && product.discount > 0 && <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{product.discount}% OFF</span>}
+        {product.badge && !product.discount && (
+          <span className={`absolute top-2 left-2 text-[9px] font-bold px-2 py-0.5 rounded-full text-white shadow-sm ${product.badge === "Best Seller" ? "bg-orange-500" : product.badge === "Most Popular" || product.badge === "Popular" ? "bg-blue-500" : "bg-purple-500"}`}>
+            {product.badge === "Best Seller" ? "🔥 Best Seller" : product.badge === "Most Popular" || product.badge === "Popular" ? "⭐ Popular" : "📈 Trending"}
+          </span>
+        )}
         {!isInStock && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded">Out of Stock</span></div>}
       </div>
       <div className="p-3">

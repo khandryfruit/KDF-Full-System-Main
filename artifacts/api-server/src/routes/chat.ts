@@ -19,6 +19,30 @@ import OpenAI from "openai";
 
 const router = Router();
 
+/* ── Best-sellers cache (5-minute TTL) ── */
+let _bsCache: Map<string, number> = new Map();
+let _bsCacheTime = 0;
+async function getBestSellers(): Promise<Map<string, number>> {
+  if (Date.now() - _bsCacheTime < 5 * 60 * 1000) return _bsCache;
+  try {
+    const result = await db.execute(sql`
+      SELECT lower(li->>'title') as title, COUNT(*)::int as cnt
+      FROM shopify_orders, jsonb_array_elements(line_items) as li
+      WHERE li->>'title' IS NOT NULL
+      GROUP BY lower(li->>'title')
+      ORDER BY cnt DESC
+      LIMIT 100
+    `);
+    const map = new Map<string, number>();
+    for (const row of (result as any).rows ?? (result as any)) {
+      if (row.title) map.set(String(row.title), Number(row.cnt));
+    }
+    _bsCache = map;
+    _bsCacheTime = Date.now();
+  } catch { /* silently ignore */ }
+  return _bsCache;
+}
+
 /* Strip markdown formatting so AI responses read as plain human text */
 function stripMarkdown(text: string): string {
   return text
@@ -79,7 +103,8 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 6. Keep ALL replies to 2–3 lines max. Write like a WhatsApp support agent, not a chatbot.
 7. Never say you are AI or automated. Use Rs. for prices. If user writes Urdu/Roman Urdu, reply in kind.
 8. When customer mentions ANY product(s) with weight/quantity in one message → call auto_add_to_cart IMMEDIATELY with ALL products in the items array. CRITICAL: If multiple products are mentioned (e.g. "1kg almonds aur 500g pista", "badam aur kaju chahiye"), include ALL of them: items:[{query:"almonds",variantHint:"1kg",qty:1},{query:"pista",variantHint:"500g",qty:1}]. Never omit any mentioned product. Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews, kishmish=raisins, mungphali=peanuts, anjeer=figs, khajoor=dates, chilgoza=pine nuts, moongphali=peanuts.
-9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.`;
+9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.
+10. When customer asks for recommendations, best sellers, popular products, viral products, or seems undecided → call get_recommendations IMMEDIATELY. Never list products as text.`;
 
   const orderInstructions = chatbot.orderingEnabled
     ? `
@@ -147,6 +172,20 @@ function buildTools(orderingEnabled: boolean) {
             },
           },
           required: ["items"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_recommendations",
+        description: "Show AI-powered product recommendations with Best Seller / Popular / Trending badges. MUST call when customer asks 'recommend something', 'what's popular', 'best seller', 'konsa le loon', 'suggest karo', 'kya acha hai', 'trending', 'most popular', 'top products', 'viral', or seems undecided about what to buy.",
+        parameters: {
+          type: "object",
+          properties: {
+            category: { type: "string", description: "Optional product category to filter (e.g. 'almonds', 'dates', 'nuts'). Leave empty for global best sellers." },
+          },
+          required: [],
         },
       },
     },
@@ -251,6 +290,9 @@ router.post("/chat/message", async (req, res) => {
       if (/(\d+\s*(kilo|kg|gram|g|pound)|(ek|do|teen|char|panch|1|2|3|4|5)\s*(kilo|kg|gram|g)|(badam|pista|kaju|akhrot|kishmish|mungphali|anjeer|khajoor|chilgoza|moongphali).{0,20}\d|(almond|cashew|pistachio|walnut|raisin|peanut|fig|date).{0,20}\d|\d.{0,20}(badam|pista|kaju|akhrot))/i.test(msg)) {
         return { type: "function", function: { name: "auto_add_to_cart" } };
       }
+      if (/(recommend|best seller|bestseller|popular|trending|konsa loon|konsa le|kya le|suggest|kya acha|viral|most order|sabse zyada|best quality|top products|popular products|kya popular|kya trending)/i.test(msg)) {
+        return { type: "function", function: { name: "get_recommendations" } };
+      }
       if (/(almond|cashew|pistachio|walnut|raisin|peanut|hazelnut|nut|dry fruit|price|kitna|kitne|kya hai|show me|available|stock|rate|product)/i.test(msg)) {
         return { type: "function", function: { name: "search_products" } };
       }
@@ -298,30 +340,62 @@ router.post("/chat/message", async (req, res) => {
         let toolResult: string;
 
         if (fn === "search_products") {
-          const terms = expandQuery(args.query ?? "");
+          const query = args.query ?? "";
+          const terms = expandQuery(query);
+          const sellers = await getBestSellers();
           const rows = await db
-            .select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, originalPrice: productsTable.originalPrice, stock: productsTable.stock, variants: productsTable.variants, images: productsTable.images })
-            .from(productsTable).where(and(
-              eq(productsTable.active, true),
+            .select({
+              id: shopifyProductsTable.id,
+              title: shopifyProductsTable.title,
+              price: shopifyProductsTable.price,
+              compareAtPrice: shopifyProductsTable.compareAtPrice,
+              imageUrl: shopifyProductsTable.imageUrl,
+              variants: shopifyProductsTable.variants,
+              inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+            })
+            .from(shopifyProductsTable)
+            .where(and(
+              eq(shopifyProductsTable.status, "active"),
               or(
-                ...terms.map(t => ilike(productsTable.name, `%${t}%`)),
-                ...terms.map(t => sql`coalesce(${productsTable.tags}::text, '') ILIKE ${`%${t}%`}`),
+                ...terms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)),
+                ...terms.map(t => sql`coalesce(${shopifyProductsTable.tags}::text,'') ILIKE ${`%${t}%`}`),
+                ...terms.map(t => ilike(shopifyProductsTable.productType, `%${t}%`)),
               )
-            )).limit(6);
+            ))
+            .orderBy(desc(shopifyProductsTable.inventoryQuantity))
+            .limit(10);
 
           if (rows.length > 0) {
-            foundProducts = rows.map(p => {
-              const imgs = (p.images as string[]) ?? [];
-              const image = imgs[0] ?? null;
-              const price = Number(p.price);
-              const originalPrice = p.originalPrice ? Number(p.originalPrice) : null;
-              const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : null;
-              return { id: p.id, name: p.name, price, originalPrice, discount, stock: p.stock, variants: (p.variants as any[]) ?? [], image };
+            const topSellers = Array.from(sellers.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
+            const ranked = rows
+              .map(p => ({ ...p, score: sellers.get(p.title.toLowerCase()) ?? 0 }))
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 6);
+            foundProducts = ranked.map(p => {
+              const vars = (p.variants as any[]) ?? [];
+              const minPrice = vars.length > 0 ? Math.min(...vars.map((v: any) => Number(v.price))) : Number(p.price);
+              const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
+              const discount = compareAt && compareAt > minPrice ? Math.round(((compareAt - minPrice) / compareAt) * 100) : null;
+              const sellerRank = topSellers.indexOf(p.title.toLowerCase());
+              const badge = sellerRank >= 0 && sellerRank < 3 ? "Best Seller" : sellerRank < 7 ? "Popular" : p.score > 200 ? "Trending" : null;
+              const inStock = (p.inventoryQuantity ?? 0) > 0 || vars.some((v: any) => (v.inventoryQuantity ?? 0) > 0);
+              return {
+                id: p.id,
+                name: p.title,
+                price: minPrice,
+                originalPrice: compareAt,
+                discount,
+                stock: inStock ? Math.max(p.inventoryQuantity ?? 0, 1) : 0,
+                variants: vars.map((v: any) => ({ id: String(v.id), name: v.title, value: v.title, price: Number(v.price), stock: v.inventoryQuantity ?? 0 })),
+                image: p.imageUrl ?? null,
+                badge,
+              };
             });
-            toolResult = rows.map(p => {
+            toolResult = ranked.map(p => {
               const vs = (p.variants as any[]) ?? [];
-              const varStr = vs.length > 0 ? ` Variants: ${vs.map((v: any) => `${v.name} Rs.${v.price ?? Number(p.price)}`).join(", ")}` : "";
-              return `${p.name}: Rs. ${Number(p.price).toLocaleString()} (${p.stock > 0 ? `${p.stock} in stock` : "OUT OF STOCK"})${varStr}`;
+              const varStr = vs.length > 0 ? ` | ${vs.map((v: any) => `${v.title} Rs.${v.price}`).join(", ")}` : "";
+              const stock = (p.inventoryQuantity ?? 0) > 0 ? "in stock" : "limited";
+              return `${p.title}: Rs. ${Number(p.price).toLocaleString()} (${stock})${varStr}`;
             }).join("\n");
           } else {
             foundProducts = [];
@@ -366,13 +440,24 @@ router.post("/chat/message", async (req, res) => {
           const reqItems: Array<{ query: string; variantHint?: string; qty: number }> = args.items ?? [];
           const autoCartResult: any[] = [];
 
-          // Helper: resolve a product query to a cart item
+          // Helper: resolve a product query to a cart item (uses shopify_products)
           async function resolveProduct(query: string, variantHint: string | undefined, qty: number) {
             const terms = expandQuery(query);
             const rows = await db
-              .select({ id: productsTable.id, name: productsTable.name, price: productsTable.price, variants: productsTable.variants, images: productsTable.images, stock: productsTable.stock })
-              .from(productsTable)
-              .where(and(eq(productsTable.active, true), or(...terms.map(t => ilike(productsTable.name, `%${t}%`)))))
+              .select({
+                id: shopifyProductsTable.id,
+                title: shopifyProductsTable.title,
+                price: shopifyProductsTable.price,
+                variants: shopifyProductsTable.variants,
+                imageUrl: shopifyProductsTable.imageUrl,
+                inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+              })
+              .from(shopifyProductsTable)
+              .where(and(
+                eq(shopifyProductsTable.status, "active"),
+                or(...terms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)))
+              ))
+              .orderBy(desc(shopifyProductsTable.inventoryQuantity))
               .limit(1);
             if (rows.length === 0) return null;
             const product = rows[0];
@@ -381,15 +466,21 @@ router.post("/chat/message", async (req, res) => {
             if (variants.length > 0 && variantHint) {
               const hint = variantHint.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g").replace(/gm/g, "g");
               selectedVariant = variants.find((v: any) => {
-                const vn = (v.name ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
-                const vv = (v.value ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
-                return vn.includes(hint) || hint.includes(vn) || vv.includes(hint) || hint.includes(vv);
+                const vt = (v.title ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+                return vt.includes(hint) || hint.includes(vt);
               });
             }
             if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
-            const imgs = (product.images as string[]) ?? [];
             const price = selectedVariant?.price ? Number(selectedVariant.price) : Number(product.price);
-            return { productId: product.id, name: product.name, variant: selectedVariant?.value ?? null, variantId: selectedVariant?.id ?? null, price, qty: Number(qty) || 1, image: imgs[0] ?? null };
+            return {
+              productId: product.id,
+              name: product.title,
+              variant: selectedVariant?.title ?? null,
+              variantId: selectedVariant?.id ? String(selectedVariant.id) : null,
+              price,
+              qty: Number(qty) || 1,
+              image: product.imageUrl ?? null,
+            };
           }
 
           for (const item of reqItems) {
@@ -438,6 +529,57 @@ router.post("/chat/message", async (req, res) => {
             toolResult = `Auto-added to cart: ${summary}. Total Rs.${autoCartResult.reduce((s, i) => s + i.price * i.qty, 0).toLocaleString()}. Now ask for delivery address and name.`;
           } else {
             toolResult = "Products not found. Will show search results.";
+          }
+        } else if (fn === "get_recommendations") {
+          const category = args.category as string | undefined;
+          const sellers = await getBestSellers();
+          const whereConditions: any[] = [eq(shopifyProductsTable.status, "active")];
+          if (category) {
+            const catTerms = expandQuery(category);
+            whereConditions.push(or(...catTerms.map(t => ilike(shopifyProductsTable.title, `%${t}%`))));
+          }
+          const recRows = await db
+            .select({
+              id: shopifyProductsTable.id,
+              title: shopifyProductsTable.title,
+              price: shopifyProductsTable.price,
+              compareAtPrice: shopifyProductsTable.compareAtPrice,
+              imageUrl: shopifyProductsTable.imageUrl,
+              variants: shopifyProductsTable.variants,
+              inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+            })
+            .from(shopifyProductsTable)
+            .where(and(...whereConditions))
+            .orderBy(desc(shopifyProductsTable.inventoryQuantity))
+            .limit(30);
+          const ranked = recRows
+            .map(p => ({ ...p, score: sellers.get(p.title.toLowerCase()) ?? 0 }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 6);
+          if (ranked.length > 0) {
+            foundProducts = ranked.map((p, idx) => {
+              const vars = (p.variants as any[]) ?? [];
+              const minPrice = vars.length > 0 ? Math.min(...vars.map((v: any) => Number(v.price))) : Number(p.price);
+              const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
+              const discount = compareAt && compareAt > minPrice ? Math.round(((compareAt - minPrice) / compareAt) * 100) : null;
+              const badge = idx === 0 ? "Best Seller" : idx === 1 ? "Most Popular" : idx < 4 ? "Trending" : null;
+              return {
+                id: p.id,
+                name: p.title,
+                price: minPrice,
+                originalPrice: compareAt,
+                discount,
+                stock: p.inventoryQuantity ?? 0,
+                variants: vars.map((v: any) => ({ id: String(v.id), name: v.title, value: v.title, price: Number(v.price), stock: v.inventoryQuantity ?? 0 })),
+                image: p.imageUrl ?? null,
+                badge,
+                orderCount: p.score,
+              };
+            });
+            toolResult = `Top recommendations: ${ranked.slice(0, 3).map(p => `${p.title} (${p.score} orders)`).join(", ")}. Show as product cards.`;
+          } else {
+            foundProducts = [];
+            toolResult = "No recommendations available.";
           }
         } else if (fn === "escalate_to_human") {
           shouldEscalate = true;
