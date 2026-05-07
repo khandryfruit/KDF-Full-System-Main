@@ -64,6 +64,7 @@ import PaymentGatewayPage from "@/pages/PaymentGatewayPage";
 import BranchesPage from "@/pages/BranchesPage";
 import BranchLoginPage from "@/pages/BranchLoginPage";
 import BranchPosPage from "@/pages/BranchPosPage";
+import AdminPOSPage from "@/pages/AdminPOSPage";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
@@ -105,6 +106,9 @@ function Router() {
       {/* ── Branch Portal (no Layout wrapper, self-contained) ── */}
       <Route path="/branch-login" component={BranchLoginPage} />
       <Route path="/branch-pos" component={BranchPosPage} />
+
+      {/* ── Admin POS (fullscreen, own auth check) ── */}
+      <Route path="/pos" component={AdminPOSPage} />
 
       {/* ── Invoice & Billing (admin) ── */}
       <Route path="/invoice/purchase/history"><ProtectedRoute component={InvoicePage} /></Route>

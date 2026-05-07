@@ -64,14 +64,15 @@ import { NotificationBell } from "./NotificationBell";
    NAV DATA
 ═══════════════════════════════════════════════ */
 const INVOICE_NAV_ITEMS = [
-  { href: "/invoice",                   label: "Create Invoice",    icon: Receipt        },
-  { href: "/invoice/history",           label: "All Invoices",      icon: History        },
-  { href: "/invoice/purchase",          label: "Purchase Bill",     icon: ClipboardList  },
-  { href: "/invoice/purchase/history",  label: "Purchase History",  icon: FileText       },
-  { href: "/branch-pos",                label: "Branch POS",        icon: Store          },
-  { href: "/branches",                  label: "Branches",          icon: Building2      },
-  { href: "/customers",                 label: "Customers",         icon: UserCheck      },
-  { href: "/analytics",                 label: "Analytics",         icon: PieChart       },
+  { href: "/pos",                        label: "🖥 Admin POS",       icon: Zap            },
+  { href: "/invoice",                    label: "Create Invoice",    icon: Receipt        },
+  { href: "/invoice/history",            label: "All Invoices",      icon: History        },
+  { href: "/invoice/purchase",           label: "Purchase Bill",     icon: ClipboardList  },
+  { href: "/invoice/purchase/history",   label: "Purchase History",  icon: FileText       },
+  { href: "/branch-pos",                 label: "Branch POS",        icon: Store          },
+  { href: "/branches",                   label: "Branches",          icon: Building2      },
+  { href: "/customers",                  label: "Customers",         icon: UserCheck      },
+  { href: "/analytics",                  label: "Analytics",         icon: PieChart       },
 ];
 
 const NAV_ITEMS = [

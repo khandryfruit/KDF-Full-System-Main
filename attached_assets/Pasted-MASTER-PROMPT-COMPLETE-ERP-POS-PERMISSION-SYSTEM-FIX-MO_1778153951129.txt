@@ -1,0 +1,575 @@
+MASTER PROMPT — COMPLETE ERP/POS PERMISSION SYSTEM FIX + MOBILE/DESKTOP SYNC + BRANCH ACCESS CONTROL
+You need to COMPLETELY rebuild and FIX the entire Permission System, Branch Access Control, Mobile POS Rendering, Sidebar Logic, and Role-Based Access Control (RBAC).
+Right now the system is BROKEN.
+Admin already enables permissions from settings, BUT:
+❌ Branch users cannot see features
+❌ Mobile panel missing menus
+❌ Desktop and mobile inconsistent
+❌ Sidebar items hidden incorrectly
+❌ POS features not appearing
+❌ Invoice actions missing
+❌ Analytics not showing
+❌ Permissions not syncing live
+❌ APIs not properly protected
+This must now become a FULL enterprise-grade RBAC + ERP permission architecture.
+
+1. COMPLETE RBAC (ROLE-BASED ACCESS CONTROL)
+Build a professional permission system.
+
+REQUIRED ACCESS LAYERS
+Super Admin
+Full access.
+
+Branch Manager
+Branch-specific control.
+
+Cashier
+Limited POS access.
+
+Staff
+Custom permissions.
+
+REQUIRED PERMISSION MODULES
+Create modular permissions:
+
+Invoice Permissions
+
+
+create_invoice
+
+
+edit_invoice
+
+
+delete_invoice
+
+
+print_invoice
+
+
+process_return
+
+
+apply_discount
+
+
+hold_invoice
+
+
+view_all_invoices
+
+
+
+POS Permissions
+
+
+access_pos
+
+
+barcode_scan
+
+
+split_payment
+
+
+thermal_print
+
+
+edit_cart
+
+
+remove_item
+
+
+
+Inventory Permissions
+
+
+view_inventory
+
+
+edit_inventory
+
+
+stock_adjustment
+
+
+add_product
+
+
+delete_product
+
+
+
+Analytics Permissions
+
+
+view_analytics
+
+
+branch_reports
+
+
+profit_reports
+
+
+export_reports
+
+
+
+Customer Permissions
+
+
+add_customer
+
+
+edit_customer
+
+
+delete_customer
+
+
+loyalty_points
+
+
+
+Settings Permissions
+
+
+manage_settings
+
+
+manage_branches
+
+
+manage_staff
+
+
+backup_restore
+
+
+
+2. FIX CURRENT PROBLEM (VERY IMPORTANT)
+Currently admin enables permissions BUT branch/mobile UI does NOT update.
+This is WRONG.
+
+REQUIRED FLOW
+Step 1
+Admin enables permission.
+Step 2
+Permission saves in database.
+Step 3
+Permission API updates.
+Step 4
+Desktop UI updates.
+Step 5
+Mobile UI updates.
+Step 6
+Sidebar/menu/actions appear instantly.
+WITHOUT logout.
+
+3. REMOVE HARDCODED MENUS
+Current menus are likely hardcoded.
+This must be completely dynamic.
+
+REQUIRED DYNAMIC SIDEBAR SYSTEM
+Sidebar items should render ONLY from permissions.
+
+Example Logic
+if (permissions.includes("view_analytics")) {   showAnalyticsMenu = true;}
+
+Sidebar Menus Must Be Dynamic
+Invoice & Billing
+
+
+Create Invoice
+
+
+All Invoices
+
+
+Returns
+
+
+Refunds
+
+
+
+POS
+
+
+Branch POS
+
+
+Barcode Billing
+
+
+
+Inventory
+
+
+Products
+
+
+Stock
+
+
+Categories
+
+
+
+Analytics
+
+
+Daily Sales
+
+
+Profit Reports
+
+
+Branch Reports
+
+
+
+Settings
+
+
+Staff Permissions
+
+
+Branch Settings
+
+
+Backup System
+
+
+
+4. FIX MOBILE ERP/POS PANEL (IMPORTANT)
+Current mobile screen only shows:
+
+
+Customer
+
+
+Add Item
+
+
+This is incomplete and broken.
+
+REQUIRED MOBILE FEATURES
+If enabled by admin, mobile MUST show:
+✅ POS
+✅ Invoice history
+✅ Analytics
+✅ Inventory
+✅ Reports
+✅ Discounts
+✅ Returns
+✅ Barcode scan
+✅ Customer management
+✅ Hold invoices
+✅ Draft invoices
+
+5. SAME DESKTOP + MOBILE BEHAVIOR
+IMPORTANT:
+Desktop and mobile MUST use SAME:
+
+
+Permission APIs
+
+
+Menu rendering logic
+
+
+Access checks
+
+
+Feature flags
+
+
+
+DO NOT CREATE
+❌ Separate mobile permissions
+❌ Separate sidebar logic
+❌ Separate APIs
+
+6. REAL-TIME PERMISSION SYNC
+When admin changes permissions:
+Branch UI updates instantly.
+WITHOUT:
+
+
+Logout
+
+
+Refresh
+
+
+Cache issues
+
+
+Use:
+
+
+React Query invalidate
+
+
+WebSocket sync
+
+
+Real-time permission refresh
+
+
+
+7. BACKEND SECURITY (CRITICAL)
+Do NOT trust frontend only.
+Protect ALL APIs.
+
+REQUIRED MIDDLEWARE
+Example:
+checkPermission("edit_invoice")
+
+Protect:
+
+
+Invoice APIs
+
+
+POS APIs
+
+
+Inventory APIs
+
+
+Analytics APIs
+
+
+Reports APIs
+
+
+Settings APIs
+
+
+
+8. FIX MOBILE NAVIGATION SYSTEM
+Add professional mobile ERP navigation.
+
+Bottom Navigation
+Home
+POS
+Invoices
+Products
+Analytics
+Settings
+Dynamic based on permissions.
+
+Mobile Sidebar
+
+
+Slide drawer
+
+
+Touch-friendly
+
+
+Fast navigation
+
+
+Responsive layout
+
+
+
+9. FIX POS FEATURE VISIBILITY
+If admin enables:
+✅ Discount
+✅ Return
+✅ Barcode
+✅ Thermal print
+Then POS screen MUST show:
+
+
+Discount buttons
+
+
+Return options
+
+
+Barcode scanner
+
+
+Print buttons
+
+
+
+10. FIX BRANCH-SPECIFIC ACCESS
+Branch users should ONLY access:
+
+
+Their branch invoices
+
+
+Their inventory
+
+
+Their reports
+
+
+Unless admin allows global access.
+
+11. FEATURE FLAG SYSTEM
+Create dynamic feature toggles.
+Admin can enable/disable:
+
+
+POS
+
+
+Analytics
+
+
+Discounts
+
+
+Returns
+
+
+Refunds
+
+
+Inventory
+
+
+Loyalty points
+
+
+WITHOUT code changes.
+
+12. FIX CACHING ISSUES
+Possible current issue:
+Permissions cached incorrectly.
+
+REQUIRED FIXES
+
+
+Clear stale cache
+
+
+Refresh permission store
+
+
+Re-fetch permissions after update
+
+
+Sync mobile + desktop state
+
+
+
+13. ADD PERMISSION DEBUGGING
+Create admin debugging tools.
+
+Debug Panel
+Show:
+UserRoleBranchActive Permissions
+
+Add:
+
+
+Refresh permissions
+
+
+Force sync
+
+
+View permission logs
+
+
+
+14. DATABASE REQUIREMENTS
+Ensure support for:
+roles
+permissions
+role_permissions
+user_permissions
+branch_permissions
+
+Example Permission Storage
+[  "create_invoice",  "access_pos",  "view_inventory",  "view_analytics"]
+
+15. PERFORMANCE OPTIMIZATION
+Permission system must be FAST.
+Use:
+
+
+Cached permission maps
+
+
+Optimized queries
+
+
+Lazy menu rendering
+
+
+Debounced updates
+
+
+
+16. UI/UX REQUIREMENTS
+The system must look:
+✅ Professional ERP
+✅ Modern POS
+✅ Mobile responsive
+✅ Dynamic
+✅ Real-time
+✅ Enterprise-grade
+Use:
+
+
+TailwindCSS
+
+
+ShadCN UI
+
+
+Framer Motion
+
+
+Responsive layouts
+
+
+
+17. TESTING CHECKLIST
+Verify ALL:
+✅ Admin enables permission
+✅ Database updates
+✅ APIs return permission
+✅ Desktop shows feature
+✅ Mobile shows feature
+✅ Sidebar updates
+✅ POS updates
+✅ Invoice actions visible
+✅ Analytics visible
+✅ Inventory visible
+✅ No hidden menus
+✅ No stale cache
+✅ Unauthorized APIs blocked
+✅ Real-time sync works
+
+18. FINAL REQUIREMENT
+DO NOT leave:
+❌ Hardcoded menus
+❌ Fake permissions
+❌ Static sidebar
+❌ Mobile-only bugs
+❌ Desktop-only features
+❌ Frontend-only security
+❌ Separate mobile logic
+Everything must be:
+✅ Dynamic
+✅ Database-driven
+✅ Permission-controlled
+✅ Mobile responsive
+✅ Real-time synced
+✅ Branch-based
+✅ Secure
+✅ Production-ready
+This must behave like a real enterprise-grade ERP + POS + Branch Management + Mobile Billing System.I prefer this response
