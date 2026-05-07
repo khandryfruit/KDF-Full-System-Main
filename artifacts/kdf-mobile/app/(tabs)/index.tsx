@@ -174,9 +174,10 @@ export default function DashboardScreen() {
 
   const s = statsData?.stats ?? {};
   const allDels = delData?.deliveries ?? [];
-  const active = sortByPriority(
-    allDels.filter((d: any) => ["assigned", "picked", "out_for_delivery"].includes(d.status))
-  );
+  /* Active tasks — newest assigned_at first */
+  const active = [...allDels
+    .filter((d: any) => ["assigned", "picked", "out_for_delivery"].includes(d.status))]
+    .sort((a: any, b: any) => new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime());
   const criticalCount = active.filter((d: any) =>
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
   ).length;
