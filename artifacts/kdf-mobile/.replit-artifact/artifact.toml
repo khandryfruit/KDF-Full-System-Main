@@ -18,10 +18,6 @@ localPort = 23443
 [services.development]
 run = "pnpm --filter @workspace/kdf-mobile run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/kdf-mobile", "run", "build" ]
-run = [ "pnpm", "--filter", "@workspace/kdf-mobile", "run", "serve" ]
-
 [services.env]
 PORT = "23443"
 BASE_PATH = "/kdf-mobile/"
