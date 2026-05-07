@@ -557,9 +557,9 @@ export function ChatWidget() {
     });
   }, []);
 
-  const handleViewProduct = useCallback((id: number) => {
+  const handleViewProduct = useCallback((id: number, slug?: string) => {
     setIsChatOpen(false);
-    setLocation(`/product/${id}`);
+    setLocation(`/product/${slug || id}`);
   }, [setLocation]);
 
   const handleOpenForm = () => setShowOrderForm(true);

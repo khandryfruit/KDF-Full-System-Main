@@ -483,28 +483,129 @@ export function ProductDetailPage() {
     }
   }, [product?.id]);
 
-  /* ── SEO: dynamic page title & meta tags ── */
+  /* ── SEO: redirect numeric ID → slug URL (client-side 301 equivalent) ── */
   useEffect(() => {
     if (!product) return;
-    const title = `${product.name} | KDF NUTS`;
+    const slug = (product as any).slug;
+    const isNumeric = /^\d+$/.test(param);
+    if (slug && isNumeric) {
+      window.history.replaceState(null, "", `/product/${slug}`);
+    }
+  }, [product, param]);
+
+  /* ── SEO: dynamic page title, meta tags, canonical, JSON-LD ── */
+  useEffect(() => {
+    if (!product) return;
+    const slug = (product as any).slug || product.id;
+    const canonicalBase = "https://khanbabadryfruits.com";
+    const pageUrl = `${canonicalBase}/product/${slug}`;
+    const title = (product as any).meta_title || `${product.name} | KDF NUTS`;
+    const rawDesc = (product as any).meta_description
+      || (product as any).description?.replace(/<[^>]+>/g, "").slice(0, 160)
+      || `Buy ${product.name} online from KDF NUTS. Premium quality dry fruits delivered across Pakistan.`;
+    const desc = rawDesc.slice(0, 160);
+
+    const images: string[] = (product as any).images ?? [];
+    const firstImage = images[0];
+    const imgUrl = firstImage
+      ? (firstImage.startsWith("http") ? firstImage : `${canonicalBase}/api/storage/objects/${firstImage}`)
+      : "";
+
+    const price = Number(product.price);
+    const inStock = ((product as any).stock ?? 1) > 0;
+
     document.title = title;
+
+    /* helper: upsert a <meta> tag */
     const setMeta = (name: string, content: string, prop = false) => {
       const sel = prop ? `meta[property="${name}"]` : `meta[name="${name}"]`;
       let el = document.querySelector<HTMLMetaElement>(sel);
-      if (!el) { el = document.createElement("meta"); prop ? el.setAttribute("property", name) : el.setAttribute("name", name); document.head.appendChild(el); }
+      if (!el) {
+        el = document.createElement("meta");
+        prop ? el.setAttribute("property", name) : el.setAttribute("name", name);
+        document.head.appendChild(el);
+      }
       el.setAttribute("content", content);
     };
-    const desc = (product as any).seoDescription || (product as any).description?.replace(/<[^>]+>/g, "").slice(0, 160) || `Buy ${product.name} online from KDF NUTS. Premium quality dry fruits delivered across Pakistan.`;
-    const imgUrl = (product as any).images?.[0] ? `${window.location.origin}/${(product as any).images[0]}` : "";
-    const pageUrl = `${window.location.origin}/kdf-nuts/product/${(product as any).slug || product.id}`;
+
+    /* helper: upsert <link rel="canonical"> */
+    const setCanonical = (url: string) => {
+      let el = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+      if (!el) { el = document.createElement("link"); el.setAttribute("rel", "canonical"); document.head.appendChild(el); }
+      el.setAttribute("href", url);
+    };
+
+    /* helper: upsert JSON-LD */
+    const setJsonLd = (data: object) => {
+      const id = "product-jsonld";
+      let el = document.getElementById(id);
+      if (!el) { el = document.createElement("script"); el.id = id; el.setAttribute("type", "application/ld+json"); document.head.appendChild(el); }
+      el.textContent = JSON.stringify(data);
+    };
+
+    /* Standard meta */
     setMeta("description", desc);
-    setMeta("keywords", `${product.name}, dry fruits, KDF NUTS, buy online`);
-    setMeta("og:title", title, true);
-    setMeta("og:description", desc, true);
-    setMeta("og:url", pageUrl, true);
-    setMeta("og:type", "product", true);
-    if (imgUrl) setMeta("og:image", imgUrl, true);
-    return () => { document.title = "KDF NUTS"; };
+    setMeta("keywords", `${product.name}, dry fruits, nuts, KDF NUTS, buy online Pakistan`);
+    setMeta("robots", "index, follow");
+
+    /* Canonical */
+    setCanonical(pageUrl);
+
+    /* Open Graph */
+    setMeta("og:type",         "product",  true);
+    setMeta("og:title",        title,      true);
+    setMeta("og:description",  desc,       true);
+    setMeta("og:url",          pageUrl,    true);
+    setMeta("og:site_name",    "KDF NUTS", true);
+    setMeta("og:locale",       "en_PK",    true);
+    setMeta("product:price:amount",   String(price),    true);
+    setMeta("product:price:currency", "PKR",            true);
+    if (imgUrl) {
+      setMeta("og:image",       imgUrl,  true);
+      setMeta("og:image:width", "800",   true);
+      setMeta("og:image:height","800",   true);
+      setMeta("og:image:alt",   product.name, true);
+    }
+
+    /* Twitter Card */
+    setMeta("twitter:card",        imgUrl ? "summary_large_image" : "summary");
+    setMeta("twitter:title",       title);
+    setMeta("twitter:description", desc);
+    setMeta("twitter:site",        "@kdfnuts");
+    if (imgUrl) setMeta("twitter:image", imgUrl);
+
+    /* JSON-LD Product Schema */
+    setJsonLd({
+      "@context":   "https://schema.org",
+      "@type":      "Product",
+      name:         product.name,
+      description:  rawDesc,
+      url:          pageUrl,
+      ...(imgUrl && { image: [imgUrl] }),
+      brand:        { "@type": "Brand", name: "KDF NUTS" },
+      offers: {
+        "@type":         "Offer",
+        url:             pageUrl,
+        priceCurrency:   "PKR",
+        price:           price.toFixed(2),
+        availability:    inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+        seller:          { "@type": "Organization", name: "KDF NUTS" },
+      },
+      ...(Number(product.rating) > 0 && {
+        aggregateRating: {
+          "@type":       "AggregateRating",
+          ratingValue:   Number(product.rating).toFixed(1),
+          reviewCount:   (product as any).reviewCount ?? 1,
+          bestRating:    "5",
+          worstRating:   "1",
+        },
+      }),
+    });
+
+    return () => {
+      document.title = "KDF NUTS";
+      document.getElementById("product-jsonld")?.remove();
+    };
   }, [product]);
 
   if (isLoading) {

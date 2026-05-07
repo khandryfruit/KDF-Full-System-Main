@@ -1,0 +1,159 @@
+Use this fix prompt for your developer/Replit AI:
+
+---
+
+Critical SEO & URL Structure Fix Required (Production Issue)
+
+Current product URLs are incorrect and not SEO-friendly.
+
+Example:
+Current URL:
+`/product/11`
+
+This is bad for:
+
+* SEO
+* Google indexing
+* Social sharing
+* User trust
+* Search rankings
+
+We need dynamic SEO-friendly product slugs immediately.
+
+Required URL Structure:
+Instead of:
+`/product/11`
+
+Use:
+`/product/cashews-nuts-250g`
+
+Or:
+`/products/cashews-nuts-250g`
+
+The system must dynamically generate the URL slug from the product title automatically.
+
+Requirements:
+
+1. Dynamic Product Slug System
+
+* Auto-generate slug from product title
+* Convert:
+
+  * lowercase
+  * spaces → hyphens
+  * remove special characters
+* Example:
+
+  * “Cashews nuts 250g”
+  * becomes:
+  * `cashews-nuts-250g`
+
+2. Database Changes
+   Add fields:
+
+* slug
+* meta_title
+* meta_description
+* canonical_url
+
+3. Auto Slug Generation
+   When:
+
+* Product created
+* Product edited
+
+Then:
+
+* Slug auto-update option
+* Manual override option
+
+4. Important SEO Rules
+
+* Slugs must be unique
+* No duplicate URLs
+* Auto append number if duplicate exists
+  Example:
+* cashews-nuts-250g
+* cashews-nuts-250g-2
+
+5. Redirect System (Very Important)
+   Current old URLs:
+   `/product/11`
+
+Must automatically 301 redirect to:
+`/product/cashews-nuts-250g`
+
+This is critical to preserve SEO rankings and indexing.
+
+6. Dynamic Meta SEO
+   Generate dynamic:
+
+* Meta title
+* Meta description
+* Open Graph tags
+* Twitter Card tags
+* Structured schema markup
+
+Use product data dynamically.
+
+7. Canonical URLs
+   Add canonical tag dynamically:
+   Example:
+
+```html
+<link rel="canonical" href="https://khanbabadryfruits.com/product/cashews-nuts-250g" />
+```
+
+8. Breadcrumb SEO
+   Improve breadcrumb URLs dynamically:
+   Home → Dry Fruits → Cashews Nuts 250g
+
+9. Sitemap Integration
+   Ensure new product slug URLs automatically appear in:
+
+* sitemap.xml
+
+10. Production Deployment
+    This fix must be applied directly on LIVE production server.
+
+Requirements:
+
+* Existing products migrate automatically
+* Old links continue working via redirects
+* No broken links
+* No SEO loss
+* Fully tested on mobile + desktop
+
+11. Performance
+
+* Keep routing optimized
+* Avoid slow database queries
+* Use indexed slug column
+
+12. Framework Logic
+    If using Laravel:
+
+* Use route model binding with slug
+* Example:
+
+```php
+Route::get('/product/{slug}', ...)
+```
+
+If using Node/Express:
+
+* Fetch product by slug instead of ID
+
+13. Additional SEO Improvements
+    Also implement:
+
+* Product schema JSON-LD
+* OG image tags
+* SEO-friendly page titles
+* Dynamic keywords
+* Clean readable URLs everywhere
+
+Goal:
+The website must become fully SEO optimized like professional eCommerce stores where product URLs automatically use product titles instead of numeric IDs.
+
+Deploy directly to live production after testing.

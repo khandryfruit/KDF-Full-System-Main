@@ -8,6 +8,7 @@ import { VariantPickerModal } from './VariantPickerModal';
 import type { VariantProduct } from './VariantPickerModal';
 
 interface Product extends VariantProduct {
+  slug?: string;
   originalPrice?: string | number | null;
   rating?: string | number;
   reviewCount?: number;
@@ -49,7 +50,7 @@ export function ProductCard({ product, mode = 'scroll' }: ProductCardProps) {
     toggleItem({ id: product.id, name: product.name, price, gradient: product.gradient || 'from-green-400 to-emerald-600' });
   }, [toggleItem, product.id, product.name, product.gradient, price]);
 
-  const handleNavigate = useCallback(() => setLocation(`/product/${product.id}`), [setLocation, product.id]);
+  const handleNavigate = useCallback(() => setLocation(`/product/${product.slug || product.id}`), [setLocation, product.slug, product.id]);
   const inWishlist = isInWishlist(product.id);
 
   const StarRow = () => (

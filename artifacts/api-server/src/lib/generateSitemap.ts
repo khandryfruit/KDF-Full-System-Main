@@ -7,7 +7,7 @@ export async function generateSitemapXml(domain: string): Promise<string> {
 
   const [products, categories, posts] = await Promise.all([
     db
-      .select({ id: productsTable.id, updatedAt: productsTable.updatedAt })
+      .select({ id: productsTable.id, slug: productsTable.slug, updatedAt: productsTable.updatedAt })
       .from(productsTable)
       .where(eq(productsTable.active, true)),
     db
@@ -41,8 +41,9 @@ export async function generateSitemapXml(domain: string): Promise<string> {
     const lastmod = product.updatedAt
       ? new Date(product.updatedAt).toISOString().split("T")[0]
       : today;
+    const identifier = product.slug || String(product.id);
     urls.push(
-      `  <url><loc>${base}/product/${product.id}</loc><changefreq>weekly</changefreq><priority>0.6</priority><lastmod>${lastmod}</lastmod></url>`
+      `  <url><loc>${base}/product/${identifier}</loc><changefreq>weekly</changefreq><priority>0.8</priority><lastmod>${lastmod}</lastmod></url>`
     );
   }
 
