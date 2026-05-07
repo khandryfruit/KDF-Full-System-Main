@@ -1,0 +1,386 @@
+```text
+Rebuild and redesign the complete Rider Delivery App for “KDF RIDER LAHORE” into a premium production-ready real-time delivery platform with live tracking, modern UI/UX, Shopify integration, professional maps, customer tracking, notifications, and enterprise-grade rider management.
+
+Main Goal:
+Transform the current rider app into a modern delivery experience similar to:
+- Foodpanda Rider
+- Bykea Captain
+- Careem Captain
+- Uber Driver
+- Shopify Local Delivery
+- Amazon Delivery UI
+
+The current design looks outdated, cluttered, and unprofessional.
+Completely redesign the entire app with smooth animations, premium UI/UX, real-time syncing, professional maps, and live tracking.
+
+====================================
+1. COMPLETE UI/UX REDESIGN
+====================================
+
+Completely redesign all rider app screens.
+
+Current issues:
+- UI feels outdated
+- Buttons are unclear
+- Sections overlap
+- Table/cards alignment broken
+- Elements going outside container
+- Text spacing inconsistent
+- Cards too crowded
+- Visual hierarchy weak
+- Navigation feels confusing
+
+Fix everything properly.
+
+New Design Requirements:
+- Premium modern design
+- Smooth card layouts
+- Professional spacing
+- Better typography
+- Modern colors
+- Better shadows
+- Rounded clean cards
+- Sticky actions
+- Fast transitions
+- Smooth scrolling
+- Mobile-first UI
+- Clear CTA buttons
+- Better delivery status indicators
+
+Design Style:
+- Enterprise-level UI
+- Minimal modern design
+- Fast lightweight rendering
+- Clean white cards
+- Dark premium header
+- Better color consistency
+
+====================================
+2. FIX BROKEN LAYOUT ISSUES
+====================================
+
+Fix all alignment and overflow issues.
+
+Current issue:
+- Top UI overlaps
+- Buttons inside tabs are broken
+- Elements go below containers
+- Header spacing broken
+
+Fix:
+- Proper responsive layouts
+- Proper safe area spacing
+- Dynamic mobile sizing
+- Better tab navigation
+- Fixed card padding
+- Proper flex layouts
+- Smooth responsive scaling
+
+====================================
+3. PROFESSIONAL DELIVERY CARDS
+====================================
+
+Redesign order cards completely.
+
+Each card should include:
+- Order ID
+- Rider status
+- COD amount
+- Customer name
+- Customer phone
+- Address
+- Google Maps button
+- Call customer button
+- WhatsApp button
+- Navigation button
+- Delivery timer
+- Distance
+- Estimated arrival time
+- Product summary
+- Order notes
+- Payment status
+- Priority badge
+
+Actions:
+- Accept Order
+- Start Delivery
+- Reached Location
+- Delivered
+- Failed Delivery
+- Return Order
+- Call
+- Navigate
+- WhatsApp
+
+====================================
+4. GOOGLE MAPS + LIVE MAP API
+====================================
+
+Integrate professional maps system.
+
+Use:
+- Google Maps API
+OR
+- Mapbox API
+
+Requirements:
+- Live rider location
+- Real-time GPS updates
+- Live customer location
+- Route optimization
+- Distance calculation
+- ETA estimation
+- Navigation support
+- Traffic-aware routes
+
+Add:
+- Start navigation button
+- Open Google Maps
+- Live moving rider marker
+- Route preview
+
+====================================
+5. LIVE RIDER TRACKING SYSTEM
+====================================
+
+Build real-time rider tracking.
+
+Admin Dashboard Features:
+- Track all riders live
+- See rider current location
+- See delivery progress
+- See route movement
+- See last online time
+- See delivery history
+- See active orders
+- See completed orders
+
+Map Features:
+- Live rider markers
+- Live order status
+- Heatmaps
+- Rider activity
+
+====================================
+6. CUSTOMER LIVE TRACKING
+====================================
+
+Create customer live delivery tracking.
+
+Requirements:
+- Shopify integration
+- Tracking page
+- Live rider location for customer
+- Delivery ETA
+- Rider name
+- Rider phone
+- Live order progress
+
+Customer should see:
+- Order accepted
+- Rider assigned
+- Rider on the way
+- Rider nearby
+- Delivered
+
+Add:
+- Real-time map tracking
+- Auto refresh
+- Tracking URL
+
+====================================
+7. REAL-TIME SHOPIFY ORDER SYNC
+====================================
+
+Current issue:
+Orders are NOT syncing correctly in production and development.
+
+Fix the root problem properly.
+
+Requirements:
+- Real-time Shopify webhook sync
+- Auto order assignment
+- Instant rider notification
+- Background sync service
+- Retry failed syncs
+- Queue system
+- Offline-safe syncing
+- Production-safe architecture
+
+When Shopify order arrives:
+1. Order instantly syncs
+2. Rider gets notification
+3. Admin sees live update
+4. Customer tracking activates
+
+====================================
+8. PUSH NOTIFICATIONS SYSTEM
+====================================
+
+Add professional notification system.
+
+Requirements:
+- Push notifications
+- Sound alerts
+- Order alerts
+- Rider assignment alerts
+- Delivery reminders
+- Critical order alerts
+
+Use:
+- Firebase Cloud Messaging (FCM)
+OR
+- Expo Notifications
+
+Notification types:
+- New order
+- Order assigned
+- Order updated
+- Customer call reminder
+- Delivery delayed
+- Return request
+
+====================================
+9. PROFESSIONAL LOGO + BRANDING
+====================================
+
+Current logo looks unprofessional.
+
+Redesign branding completely.
+
+New App Name:
+KDF RIDER LAHORE
+
+Requirements:
+- Premium delivery logo
+- Modern icon
+- Delivery-themed branding
+- Professional splash screen
+- App icon redesign
+- Better typography
+- Consistent colors
+
+Color Theme:
+- Premium dark blue
+- White
+- Green accents
+- Modern gradients
+
+====================================
+10. NEW IMPORTANT PAGES
+====================================
+
+Add professional screens/pages.
+
+Required pages:
+- Dashboard
+- Active Orders
+- Completed Orders
+- Failed Deliveries
+- Earnings
+- Wallet
+- Rider Profile
+- Notifications
+- Live Map
+- Analytics
+- Settings
+- Help Center
+- Order History
+
+====================================
+11. DELIVERY FLOW IMPROVEMENT
+====================================
+
+Create smooth delivery workflow.
+
+Flow:
+- New order arrives
+- Rider notified instantly
+- Rider accepts order
+- Navigation starts
+- Customer gets tracking
+- Admin sees live movement
+- Delivery completes
+- Proof uploaded
+
+Add:
+- Delivery proof upload
+- OTP verification
+- Signature support
+- Delivery photo
+- Notes
+
+====================================
+12. PERFORMANCE OPTIMIZATION
+====================================
+
+Requirements:
+- Smooth animations
+- Fast loading
+- Lightweight rendering
+- Optimized API calls
+- Cached maps
+- Battery optimization
+- GPS optimization
+- Background services optimization
+
+====================================
+13. PRODUCTION READY ARCHITECTURE
+====================================
+
+Fix all production issues.
+
+Requirements:
+- Proper API architecture
+- Secure authentication
+- Production-safe builds
+- Stable sync engine
+- Error logging
+- Crash reporting
+- Queue system
+- Background jobs
+- Proper environment configs
+
+====================================
+14. SHOPIFY TRACKING INTEGRATION
+====================================
+
+Create tracking integration for Shopify website.
+
+Requirements:
+- Customer tracking page
+- Real-time rider tracking
+- Embedded tracking widget
+- API integration
+- Shopify app block/snippet
+- Dynamic ETA
+
+Customer should track:
+- Rider location
+- Delivery progress
+- Estimated arrival
+
+====================================
+15. FINAL EXPECTED RESULT
+====================================
+
+The final app should feel:
+- Smooth
+- Fast
+- Professional
+- Enterprise-grade
+- Modern
+- Production-ready
+
+The app should look like a real logistics company delivery platform — not a basic demo app.
+
+Important:
+- Fix all current syncing issues
+- Fix all UI problems
+- Use real-time architecture
+- Ensure Shopify sync works properly
+- Ensure live tracking works properly
+- Ensure production build works correctly
+- Ensure mobile performance is smooth
+- Keep code optimized and scalable
+```
