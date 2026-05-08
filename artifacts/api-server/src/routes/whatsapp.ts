@@ -896,14 +896,7 @@ router.post("/admin/whatsapp/test-webhook", adminMiddleware as any, async (req, 
 });
 
 /* ─── Admin: Get Settings ────────────────────────────── */
-router.get("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) => {
-  try {
-    const [s] = await db.select().from(whatsappSettingsTable).limit(1);
-    return res.json(s ?? null);
-  } catch {
-    return res.status(500).json({ error: "Failed" });
-  }
-});
+/* settings GET is now registered after PUT above */
 
 /* ─── Admin: Save Settings ───────────────────────────── */
 router.put("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) => {
@@ -912,27 +905,47 @@ router.put("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) 
       accessToken, phoneNumberId, businessAccountId, webhookVerifyToken,
       isActive, chatButtonEnabled, chatButtonPhone, chatButtonMessage,
       abandonedRecoveryEnabled, abandonedRecoveryDelayMinutes, abandonedRecoveryCouponCode,
+      appSecret, apiVersion, businessPortfolioId,
     } = req.body;
     const existing = await db.select().from(whatsappSettingsTable).limit(1);
-    const payload = {
+    const payload: Record<string, any> = {
       accessToken, phoneNumberId, businessAccountId, webhookVerifyToken,
       isActive, chatButtonEnabled, chatButtonPhone, chatButtonMessage,
       abandonedRecoveryEnabled: abandonedRecoveryEnabled ?? false,
       abandonedRecoveryDelayMinutes: abandonedRecoveryDelayMinutes ?? 45,
       abandonedRecoveryCouponCode: abandonedRecoveryCouponCode ?? null,
     };
+    if (apiVersion)          payload.apiVersion          = apiVersion;
+    if (businessPortfolioId) payload.businessPortfolioId = businessPortfolioId;
+    // Only update appSecret if provided (non-empty) — never clear an existing secret
+    if (appSecret && appSecret.trim()) payload.appSecret = appSecret.trim();
+
     if (existing.length > 0) {
       const [updated] = await db.update(whatsappSettingsTable)
         .set({ ...payload, updatedAt: new Date() })
         .where(eq(whatsappSettingsTable.id, existing[0]!.id))
         .returning();
-      return res.json(updated);
+      // Mask appSecret in response
+      const resp = { ...updated, appSecret: updated.appSecret ? "••••••••" : null };
+      return res.json(resp);
     } else {
-      const [created] = await db.insert(whatsappSettingsTable)
-        .values(payload)
-        .returning();
-      return res.status(201).json(created);
+      const [created] = await db.insert(whatsappSettingsTable).values(payload).returning();
+      const resp = { ...created, appSecret: created.appSecret ? "••••••••" : null };
+      return res.status(201).json(resp);
     }
+  } catch {
+    return res.status(500).json({ error: "Failed" });
+  }
+});
+
+/* ─── Admin: Mask secret but return other settings ────── */
+router.get("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) => {
+  try {
+    const [s] = await db.select().from(whatsappSettingsTable).limit(1);
+    if (!s) return res.json(null);
+    // Mask sensitive values before sending to frontend
+    const safe = { ...s, appSecret: s.appSecret ? "••••••••" : null };
+    return res.json(safe);
   } catch {
     return res.status(500).json({ error: "Failed" });
   }
