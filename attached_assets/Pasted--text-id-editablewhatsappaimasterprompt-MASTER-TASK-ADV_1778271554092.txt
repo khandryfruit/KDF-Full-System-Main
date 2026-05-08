@@ -1,0 +1,393 @@
+```text id="editablewhatsappaimasterprompt"
+MASTER TASK — ADVANCED EDITABLE WHATSAPP AI CHATBOT BUILDER + PROFESSIONAL TEMPLATE SYSTEM
+
+First of all, the WhatsApp AI system structure is looking much better now and the templates/messages are sending correctly. However, the current setup still feels too static and developer-dependent.
+
+I want to transform this into a HIGH-END PROFESSIONAL EDITABLE AI AUTOMATION SYSTEM where the admin can fully customize flows, menus, templates, buttons, links, campaigns, and customer experiences WITHOUT touching code.
+
+This should feel like a PREMIUM SAAS PLATFORM — modern, flexible, editable, beautiful, and production-ready.
+
+═══════════════════════════════
+MAIN GOAL
+═══════════════════════════════
+
+Convert the current WhatsApp AI panel into a:
+
+✅ Fully Editable AI Automation Builder
+✅ Editable Interactive Menu Builder
+✅ Editable Template System
+✅ Editable Campaign Manager
+✅ Editable WhatsApp Flow Builder
+✅ Editable CTA/Button Builder
+✅ Editable Product/Offer Flow System
+✅ Editable Customer Journey Builder
+
+I want FULL CONTROL from admin panel.
+
+═══════════════════════════════
+1. MAKE EVERYTHING EDITABLE
+═══════════════════════════════
+
+Currently many things are hardcoded.
+
+I want:
+✅ Dynamic editable sections
+✅ Drag/drop style management
+✅ Add/remove/edit buttons
+✅ Add/remove/edit menu items
+✅ Add/remove/edit templates
+✅ Add/remove/edit links
+✅ Add/remove/edit replies
+✅ Add/remove/edit AI flows
+✅ Add/remove/edit quick actions
+✅ Add/remove/edit campaign templates
+
+Admin should NOT need developer every time.
+
+═══════════════════════════════
+2. EDITABLE INTERACTIVE MENU BUILDER
+═══════════════════════════════
+
+Current menu system is nice but too limited.
+
+I want:
+✅ Fully editable menu system
+✅ Reorder menu items
+✅ Add unlimited options
+✅ Custom icons
+✅ Custom colors
+✅ Custom button labels
+✅ Dynamic URLs
+✅ Product linking
+✅ Collection linking
+✅ Tracking linking
+✅ Coupon linking
+✅ WhatsApp CTA buttons
+✅ AI trigger buttons
+✅ External URL buttons
+
+Example:
+- Shop Products
+- Hot Deals
+- Flash Sale
+- New Arrivals
+- Order Tracking
+- Payment Help
+- Human Support
+- Visit Website
+- Download App
+- Seasonal Offers
+- Dry Fruits Catalog
+- Gift Boxes
+- COD Help
+
+All editable from admin panel.
+
+═══════════════════════════════
+3. NEXT-LEVEL TEMPLATE DESIGN SYSTEM
+═══════════════════════════════
+
+Current templates work but visually still basic.
+
+I want:
+✅ Beautiful premium templates
+✅ Modern WhatsApp-style cards
+✅ Premium layouts
+✅ Clean spacing
+✅ Better typography
+✅ Beautiful icons
+✅ Better colors
+✅ Professional CTA buttons
+✅ Gradient styles
+✅ Product highlight cards
+✅ Discount banners
+✅ Offer layouts
+✅ Carousel-like product experience
+✅ Better customer engagement UI
+
+Customer should feel:
+“This is a premium international brand.”
+
+═══════════════════════════════
+4. TEMPLATE EDITOR PANEL
+═══════════════════════════════
+
+Add a FULL TEMPLATE EDITOR.
+
+Need:
+✅ Live preview
+✅ Edit text
+✅ Edit title
+✅ Edit subtitle
+✅ Edit icons
+✅ Edit CTA buttons
+✅ Edit colors
+✅ Edit product layouts
+✅ Edit offers
+✅ Edit discounts
+✅ Edit greetings
+✅ Edit emojis
+✅ Edit images
+✅ Add custom links
+✅ Add custom buttons
+✅ Duplicate templates
+✅ Save templates
+✅ Draft mode
+✅ Publish mode
+
+Basically:
+A COMPLETE VISUAL TEMPLATE BUILDER.
+
+═══════════════════════════════
+5. ADD BEAUTIFUL READY-MADE TEMPLATES
+═══════════════════════════════
+
+Add professional prebuilt templates like:
+
+✅ Premium Welcome Template
+✅ Flash Sale Template
+✅ Festival Offer Template
+✅ Dry Fruit Catalog Template
+✅ Premium Product Showcase
+✅ Gift Box Offer
+✅ Coupon Reward Template
+✅ Cart Recovery Template
+✅ Order Confirmation Template
+✅ Payment Reminder Template
+✅ Tracking Update Template
+✅ COD Confirmation Template
+✅ Delivery Notification Template
+✅ VIP Customer Template
+✅ New Arrival Template
+✅ Subscription Offer Template
+
+All professionally designed.
+
+═══════════════════════════════
+6. KEEP WHATSAPP COMPATIBILITY SAFE
+═══════════════════════════════
+
+VERY IMPORTANT:
+
+Do NOT break WhatsApp delivery compatibility.
+
+Even after redesign:
+✅ Templates MUST send correctly
+✅ Meta API compatibility MUST remain safe
+✅ Interactive buttons MUST work
+✅ Messages MUST deliver properly
+✅ AI replies MUST work
+✅ Media MUST work
+✅ Product cards MUST work
+✅ No Meta rejection issues
+
+Design improvements should NOT break WhatsApp delivery.
+
+═══════════════════════════════
+7. EDITABLE AI FLOW BUILDER
+═══════════════════════════════
+
+I want:
+✅ Visual AI flow builder
+✅ Conversation flow editor
+✅ Add conditions
+✅ Add actions
+✅ Add delays
+✅ Add AI triggers
+✅ Add keyword triggers
+✅ Add order triggers
+✅ Add product triggers
+✅ Add coupon triggers
+✅ Add support triggers
+
+Example:
+IF customer says:
+- almonds
+- badam
+- pista
+- price
+- order
+- tracking
+
+THEN:
+→ Send matching flow automatically
+
+Admin should manage flows visually.
+
+═══════════════════════════════
+8. CUSTOM LINK SUPPORT
+═══════════════════════════════
+
+Admin should be able to add:
+✅ Shopify product links
+✅ Collection links
+✅ App links
+✅ Tracking links
+✅ Coupon links
+✅ Payment links
+✅ External websites
+✅ Custom landing pages
+
+Every menu/template/button should support editable URLs.
+
+═══════════════════════════════
+9. ADVANCED CAMPAIGN SYSTEM
+═══════════════════════════════
+
+Current campaign system is incomplete.
+
+Need:
+✅ Push campaign system
+✅ Start/stop campaign toggle
+✅ Pause campaigns
+✅ Resume campaigns
+✅ Schedule campaigns
+✅ Audience filtering
+✅ Customer tagging
+✅ Segment targeting
+✅ Bulk WhatsApp sending
+✅ Campaign analytics
+✅ CTR tracking
+✅ Delivery reports
+✅ Open tracking
+✅ Conversion tracking
+
+Also:
+✅ Campaign ON/OFF toggle
+Very important.
+
+═══════════════════════════════
+10. WHATSAPP COST TRACKING SYSTEM
+═══════════════════════════════
+
+VERY IMPORTANT FEATURE.
+
+Because we are using Official Meta WhatsApp API.
+
+Inside admin dashboard add:
+✅ Message cost tracking
+✅ Total messages sent
+✅ Daily message count
+✅ Monthly message count
+✅ Incoming/outgoing counts
+✅ Cost per message
+✅ Cost per campaign
+✅ Total Meta API spend
+✅ AI reply costs
+✅ WhatsApp billing analytics
+
+Dashboard should show:
+- Today cost
+- Yesterday cost
+- Monthly spend
+- Cost by campaign
+- Cost by automation
+- Cost by AI replies
+- Cost by human chats
+
+This is VERY IMPORTANT for business scaling.
+
+═══════════════════════════════
+11. PROFESSIONAL UI/UX REDESIGN
+═══════════════════════════════
+
+Current admin panel still feels developer-style.
+
+I want:
+✅ Premium SaaS dashboard design
+✅ Clean spacing
+✅ Better typography
+✅ Better cards
+✅ Better toggles
+✅ Better analytics widgets
+✅ Better responsive layouts
+✅ Modern animations
+✅ Better mobile responsiveness
+✅ Cleaner settings panels
+✅ Better visual hierarchy
+
+Reference quality:
+- Intercom
+- Zendesk
+- Gorgias
+- Crisp
+- Tidio
+- HubSpot
+- WhatsApp Business SaaS tools
+
+═══════════════════════════════
+12. MOBILE RESPONSIVE ADMIN PANEL
+═══════════════════════════════
+
+Must work beautifully on:
+✅ Desktop
+✅ Tablet
+✅ Mobile
+
+No broken layouts.
+No overflow issues.
+No tiny buttons.
+
+═══════════════════════════════
+13. AI + PRODUCT + TRACKING INTEGRATION
+═══════════════════════════════
+
+AI should dynamically:
+✅ Access Shopify products
+✅ Access inventory
+✅ Access tracking system
+✅ Access order status
+✅ Access courier APIs
+✅ Access CRM
+✅ Access payment status
+
+And send:
+✅ Product cards
+✅ Tracking updates
+✅ Payment reminders
+✅ Delivery updates
+✅ AI recommendations
+
+Automatically.
+
+═══════════════════════════════
+14. DO NOT BREAK EXISTING FEATURES
+═══════════════════════════════
+
+IMPORTANT:
+While redesigning/improving:
+❌ Do NOT break WhatsApp delivery
+❌ Do NOT break AI replies
+❌ Do NOT break tracking
+❌ Do NOT break product cards
+❌ Do NOT break Meta API
+❌ Do NOT break campaigns
+❌ Do NOT break inbox
+
+Only IMPROVE and MODERNIZE.
+
+═══════════════════════════════
+FINAL EXPECTATION
+═══════════════════════════════
+
+I want a:
+WORLD-CLASS
+PROFESSIONAL
+EDITABLE
+AI WHATSAPP COMMERCE PLATFORM
+
+that feels:
+✅ Premium
+✅ Smart
+✅ Flexible
+✅ Beautiful
+✅ Scalable
+✅ Modern
+✅ Fast
+✅ User-friendly
+✅ Business-ready
+
+This should look and feel like a serious international SaaS product — not a basic admin panel.
+
+Please implement this professionally with deep UI/UX thinking and scalable architecture.
+```
