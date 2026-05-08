@@ -704,8 +704,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     onLogout:           handleLogout,
   };
 
+  const FULL_SCREEN_ROUTES = ["/wa-inbox", "/shopify/wa-inbox", "/wa-chat"];
+  const isFullScreen = FULL_SCREEN_ROUTES.some(r => location === r || location.startsWith(r + "/"));
+
   return (
-    <div className="min-h-screen bg-background flex w-full">
+    <div className="h-screen overflow-hidden bg-background flex w-full">
 
       {/* ── Desktop Sidebar ── */}
       <div
@@ -726,7 +729,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Content area ── */}
-      <div className="flex-1 flex flex-col min-w-0 transition-all duration-300">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
 
         {/* Desktop topbar */}
         <div className="hidden md:flex h-12 border-b border-border bg-card items-center justify-between px-5 gap-3 shrink-0">
@@ -775,11 +778,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-7 overflow-x-hidden">
-          <div className="mx-auto max-w-6xl">
+        {isFullScreen ? (
+          <main className="flex-1 overflow-hidden flex flex-col">
             {children}
-          </div>
-        </main>
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-4 md:p-7">
+            <div className="mx-auto max-w-6xl">
+              {children}
+            </div>
+          </main>
+        )}
       </div>
     </div>
   );

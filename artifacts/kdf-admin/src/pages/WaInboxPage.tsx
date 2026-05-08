@@ -659,9 +659,10 @@ export default function WaInboxPage() {
 
   /* ══ LEFT PANEL — Conversation List ══ */
   const ConvList = (
-    <div className={`flex flex-col h-full bg-white border-r border-gray-100 ${showMobile === "list" ? "flex" : "hidden md:flex"} w-full md:w-[300px] lg:w-[320px] shrink-0`}>
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-100 bg-white">
+    <div className={`flex flex-col bg-white border-r border-gray-200 ${showMobile === "list" ? "flex" : "hidden md:flex"} w-full md:w-[320px] shrink-0`}
+      style={{ height: "100%" }}>
+      {/* Header — sticky, never scrolls */}
+      <div className="px-4 py-3 border-b border-gray-200 bg-white shrink-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-[#25D366]/10 rounded-xl flex items-center justify-center">
@@ -688,14 +689,14 @@ export default function WaInboxPage() {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search — sticky */}
         <div className="relative mb-2">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder="Search conversations…"
-            className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition-all"
+            className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition-all"
           />
         </div>
 
@@ -710,7 +711,7 @@ export default function WaInboxPage() {
         </div>
       </div>
 
-      {/* List */}
+      {/* List — only this scrolls, header/search stay fixed */}
       <div className="flex-1 overflow-y-auto">
         {convLoading ? (
           <div className="flex items-center justify-center p-8">
@@ -723,15 +724,19 @@ export default function WaInboxPage() {
           </div>
         ) : conversations.map((c: any) => (
           <button key={c.id} onClick={() => selectConversation(c.id)}
-            className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-all flex gap-3 items-start group ${selectedId === c.id ? "bg-[#25D366]/5 border-l-2 border-l-[#25D366]" : ""}`}>
+            className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-all duration-150 flex gap-3 items-start
+              ${selectedId === c.id
+                ? "bg-[#25D366]/8 border-l-[3px] border-l-[#25D366] shadow-sm"
+                : "hover:bg-gray-50 border-l-[3px] border-l-transparent"
+              }`}>
 
             {/* Avatar */}
             <div className="relative shrink-0">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${selectedId === c.id ? "bg-[#25D366] text-white" : "bg-gray-100 text-gray-600"}`}>
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${selectedId === c.id ? "bg-[#25D366] text-white" : "bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600"}`}>
                 {(c.contactName ?? c.contactPhone)?.[0]?.toUpperCase() ?? "?"}
               </div>
               {c.isStarred && (
-                <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-yellow-400 rounded-full flex items-center justify-center">
+                <div className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm">
                   <Star className="w-2 h-2 text-white fill-white" />
                 </div>
               )}
@@ -739,16 +744,16 @@ export default function WaInboxPage() {
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
-                <span className={`text-sm font-semibold truncate ${selectedId === c.id ? "text-[#128C7E]" : "text-gray-900"}`}>
+                <span className={`text-sm font-semibold truncate ${selectedId === c.id ? "text-[#075e54]" : "text-gray-900"}`}>
                   {c.contactName ?? c.contactPhone}
                 </span>
-                <span className="text-[9px] text-gray-400 shrink-0">{timeAgo(c.lastMessageAt)}</span>
+                <span className="text-[10px] text-gray-400 shrink-0 font-medium">{timeAgo(c.lastMessageAt)}</span>
               </div>
-              <p className="text-xs text-gray-500 truncate mt-0.5">{c.lastMessage ?? "No messages yet"}</p>
-              <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-gray-500 truncate mt-0.5 leading-relaxed">{c.lastMessage ?? "No messages yet"}</p>
+              <div className="flex items-center justify-between mt-1.5">
                 <BotBadge mode={c.botMode ?? "auto"} />
                 {c.unreadCount > 0 && (
-                  <span className="text-[9px] bg-[#25D366] text-white px-1.5 py-0.5 rounded-full font-bold min-w-[18px] text-center">{c.unreadCount}</span>
+                  <span className="text-[9px] bg-[#25D366] text-white px-1.5 py-0.5 rounded-full font-bold min-w-[20px] text-center shadow-sm">{c.unreadCount}</span>
                 )}
               </div>
             </div>
@@ -761,7 +766,7 @@ export default function WaInboxPage() {
   /* ══ MIDDLE PANEL — Chat ══ */
   const ChatPanel = (
     <div
-      className={`flex flex-col flex-1 h-full min-w-0 ${showMobile === "chat" ? "flex" : "hidden md:flex"}`}
+      className={`flex flex-col flex-1 min-w-0 overflow-hidden ${showMobile === "chat" ? "flex" : "hidden md:flex"}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23000000' fill-opacity='0.02' fill-rule='evenodd'/%3E%3C/svg%3E"), linear-gradient(135deg, #e5ddd5 0%, #d9d0c7 100%)`,
       }}
@@ -781,8 +786,8 @@ export default function WaInboxPage() {
         </div>
       ) : (
         <>
-          {/* Chat header */}
-          <div className="bg-[#075e54] px-3 py-2.5 flex items-center gap-2.5 shrink-0 shadow-md">
+          {/* Chat header — sticky, never moves */}
+          <div className="bg-[#075e54] px-3 py-2.5 flex items-center gap-2.5 shrink-0 shadow-md z-10">
             <button className="md:hidden text-white/80 hover:text-white mr-1" onClick={() => setShowMobile("list")}>
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -814,8 +819,8 @@ export default function WaInboxPage() {
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+          {/* Messages — ONLY this area scrolls */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1 scroll-smooth">
             {msgLoading ? (
               <div className="flex justify-center pt-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
             ) : messages.length === 0 ? (
@@ -860,8 +865,8 @@ export default function WaInboxPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick reply chips */}
-          <div className="bg-[#f0f0f0]/80 backdrop-blur-sm px-3 pt-2 flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          {/* Quick reply chips — sticky above input */}
+          <div className="bg-[#f0f0f0]/80 backdrop-blur-sm px-3 pt-2 flex gap-1.5 overflow-x-auto pb-1 shrink-0" style={{ scrollbarWidth: "none" }}>
             {QUICK_REPLIES.slice(0, 5).map((qr, i) => (
               <button key={i} onClick={() => setMessage(qr.text)}
                 className="flex-shrink-0 text-[10px] px-2.5 py-1 bg-white border border-gray-200 rounded-full text-gray-600 hover:border-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/5 transition-all font-medium shadow-sm">
@@ -870,8 +875,8 @@ export default function WaInboxPage() {
             ))}
           </div>
 
-          {/* Reply box */}
-          <div className="bg-[#f0f0f0]/80 backdrop-blur-sm px-3 py-2.5 flex items-end gap-2 shrink-0 border-t border-gray-200/50">
+          {/* Reply box — fixed at bottom, never moves */}
+          <div className="bg-[#f0f0f0]/90 backdrop-blur-sm px-3 py-2.5 flex items-end gap-2 shrink-0 border-t border-gray-200/60 shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
             {/* Action buttons */}
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -925,7 +930,7 @@ export default function WaInboxPage() {
 
   /* ══ RIGHT PANEL — Customer Info ══ */
   const InfoPanel = selectedId && conv ? (
-    <div className="hidden lg:flex flex-col w-72 shrink-0 bg-white border-l border-gray-100 h-full">
+    <div className="hidden lg:flex flex-col w-[340px] shrink-0 bg-white border-l border-gray-200 shadow-[-1px_0_4px_rgba(0,0,0,0.04)]">
       {/* Customer header */}
       <div className="bg-gradient-to-b from-[#075e54] to-[#128C7E] p-4 text-center shrink-0">
         <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center font-bold text-white text-2xl mx-auto mb-2 shadow-lg">
@@ -964,6 +969,7 @@ export default function WaInboxPage() {
         ))}
       </div>
 
+      {/* Right panel content — only this scrolls */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
         {/* INFO TAB */}
@@ -1138,7 +1144,7 @@ export default function WaInboxPage() {
   ) : null;
 
   return (
-    <div className="flex flex-col h-full -m-4 md:-m-8">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Toast */}
       {toastMsg && (
         <div className={`fixed top-4 right-4 z-[100] px-4 py-2.5 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-2 transition-all ${toastMsg.type === "error" ? "bg-red-600 text-white" : "bg-gray-900 text-white"}`}>
@@ -1151,8 +1157,8 @@ export default function WaInboxPage() {
       {showProductPicker && <ProductPickerModal onClose={() => setShowProductPicker(false)} onSend={handleSendProduct} />}
       {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} onSend={handleSendPayment} />}
 
-      {/* Page header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-gray-100 bg-white shrink-0">
+      {/* Page header — sticky, never moves */}
+      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-gray-200 bg-white shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-[#25D366]/10 rounded-xl flex items-center justify-center">
             <MessageCircle className="w-4 h-4 text-[#25D366]" />
@@ -1194,6 +1200,7 @@ export default function WaInboxPage() {
         </div>
       </div>
 
+      {/* Three-panel area — fills all remaining height, nothing scrolls here */}
       <div className="flex flex-1 overflow-hidden">
         {/* Analytics panel — replaces chat on mobile, sidebar on desktop */}
         {showMobile === "analytics" && (
@@ -1211,8 +1218,8 @@ export default function WaInboxPage() {
 
         {/* Desktop analytics sidebar */}
         {showAnalytics && (
-          <div className="hidden md:flex flex-col w-72 shrink-0 bg-gray-50 border-l border-gray-100 h-full">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
+          <div className="hidden md:flex flex-col w-[340px] shrink-0 bg-gray-50 border-l border-gray-200 shadow-[-1px_0_4px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white shrink-0">
               <span className="text-sm font-bold text-gray-800 flex items-center gap-2">
                 <BarChart2 className="w-4 h-4 text-[#25D366]" /> Analytics
               </span>
