@@ -79,78 +79,77 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
   const isInStock = selectedVariant ? selectedVariant.stock > 0 : product.stock > 0;
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col"
-      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.10)" }}>
       {/* Product Image */}
-      <div className="relative w-full" style={{ paddingBottom: "75%" }}>
+      <div className="relative w-full" style={{ paddingBottom: "80%" }}>
         <div className="absolute inset-0">
           <ProductImg src={product.image} alt={product.name} />
         </div>
-        {/* Badges */}
         {product.discount && product.discount > 0 && (
-          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md">
             {product.discount}% OFF
           </span>
         )}
         {product.badge && !product.discount && (
-          <span className={`absolute top-2 left-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white shadow ${product.badge === "Best Seller" ? "bg-orange-500" : product.badge === "Popular" ? "bg-blue-500" : "bg-purple-500"}`}>
+          <span className={`absolute top-2 left-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white shadow-md ${product.badge === "Best Seller" ? "bg-orange-500" : product.badge === "Popular" ? "bg-blue-500" : "bg-purple-500"}`}>
             {product.badge === "Best Seller" ? "🔥 Top" : product.badge === "Popular" ? "⭐ Hot" : "📈 Trend"}
           </span>
         )}
         {!isInStock && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-t-2xl">
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
             <span className="text-white text-[11px] font-bold bg-black/70 px-2.5 py-1 rounded-full">Out of Stock</span>
           </div>
         )}
       </div>
       {/* Card Body */}
-      <div className="p-2.5 flex flex-col flex-1">
-        <p className="font-bold text-gray-900 text-[12px] leading-tight mb-2 line-clamp-2 min-h-[32px]">{product.name}</p>
+      <div className="p-2.5 flex flex-col flex-1 gap-1.5">
+        <p className="font-bold text-gray-900 text-[12.5px] leading-snug line-clamp-2 min-h-[34px]">{product.name}</p>
         {/* Variant Pills */}
         {hasVariants && (
-          <div className="flex flex-wrap gap-1 mb-2">
+          <div className="flex flex-wrap gap-1">
             {realVariants.map(v => {
               const isSelected = selectedVariant?.id === v.id;
               return (
                 <button key={v.id} onClick={() => setSelectedVariant(v)}
-                  className={`flex flex-col items-center px-2 py-1 rounded-lg border-2 transition-all active:scale-95 ${isSelected ? "text-white border-transparent shadow-sm" : "bg-white border-gray-200 text-gray-700"}`}
+                  className={`flex flex-col items-center px-2.5 py-1.5 rounded-lg border-2 transition-all active:scale-95 ${isSelected ? "text-white border-transparent shadow" : "bg-white border-gray-200 text-gray-700"}`}
                   style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : undefined}>
                   <span className="text-[10px] font-bold leading-none">{v.value}</span>
-                  {v.price != null && <span className={`text-[8px] mt-0.5 font-semibold leading-none ${isSelected ? "text-green-100" : "text-gray-400"}`}>Rs.{v.price.toLocaleString()}</span>}
+                  {v.price != null && <span className={`text-[9px] mt-0.5 font-semibold leading-none ${isSelected ? "text-green-100" : "text-gray-400"}`}>Rs.{v.price.toLocaleString()}</span>}
                 </button>
               );
             })}
           </div>
         )}
         {/* Price Row */}
-        <div className="flex items-baseline gap-1.5 mb-2.5 mt-auto">
-          <span className="font-black text-[#5FA800] text-sm">Rs.{currentPrice.toLocaleString()}</span>
+        <div className="flex items-baseline gap-1.5 mt-auto pt-0.5">
+          <span className="font-black text-[#5FA800] text-[15px]">Rs.{currentPrice.toLocaleString()}</span>
           {product.originalPrice && product.originalPrice > currentPrice && (
-            <span className="text-gray-400 text-[10px] line-through font-medium">Rs.{product.originalPrice.toLocaleString()}</span>
+            <span className="text-gray-400 text-[11px] line-through font-medium">Rs.{product.originalPrice.toLocaleString()}</span>
           )}
         </div>
         {/* Action Buttons */}
         <div className="flex gap-1.5">
           <button onClick={() => onView(product.id)}
-            className="flex items-center justify-center gap-1 py-2 px-2.5 rounded-xl border border-gray-200 bg-gray-50 text-[11px] font-bold text-gray-700 active:bg-gray-100 transition-colors shrink-0">
-            <Eye className="w-3 h-3" /> View
+            className="flex items-center justify-center gap-1 py-2.5 px-3 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold text-gray-700 active:bg-gray-100 transition-colors shrink-0">
+            <Eye className="w-3.5 h-3.5" /> View
           </button>
           {isInStock ? (
             <button onClick={() => onAddToCart(product, selectedVariant, currentPrice)}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-white text-[11px] font-black active:opacity-80 transition-opacity"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-white text-xs font-black active:opacity-80 transition-opacity"
               style={{ backgroundColor: "#5FA800" }}>
-              <ShoppingCart className="w-3 h-3" /> Add
+              <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
             </button>
           ) : (
-            <div className="flex-1 flex items-center justify-center py-2 rounded-xl bg-gray-100 text-[11px] font-bold text-gray-400">
+            <div className="flex-1 flex items-center justify-center py-2.5 rounded-xl bg-gray-100 text-xs font-bold text-gray-400">
               Sold Out
             </div>
           )}
         </div>
         {isInStock && onBuyNow && (
           <button onClick={() => onBuyNow(product, selectedVariant, currentPrice)}
-            className="w-full mt-1.5 flex items-center justify-center gap-1 py-2 rounded-xl text-white text-[11px] font-black active:opacity-80 transition-opacity"
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-white text-xs font-black active:opacity-80 transition-opacity"
             style={{ backgroundColor: "#F58300" }}>
-            <Zap className="w-3 h-3" /> Buy Now
+            <Zap className="w-3.5 h-3.5" /> Buy Now
           </button>
         )}
       </div>
@@ -405,33 +404,38 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
     return null;
   };
 
+  const hasProducts = (msg.products?.length ?? 0) > 0;
+  const hasCategories = (msg.categories?.length ?? 0) > 0;
+  const template = renderTemplate();
   return (
-    <div className="flex items-end gap-2 mb-3">
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-xs ${isAdmin ? "bg-blue-600" : "bg-[#5FA800]"}`}>{isAdmin ? "S" : "K"}</div>
-      <div className="flex-1 min-w-0">
-        {isAdmin && <p className="text-[9px] font-semibold text-blue-600 mb-0.5 ml-1 uppercase tracking-wider">Support Team</p>}
-        {msg.orderPlaced && <OrderSuccessBanner orderNumber={msg.orderPlaced.orderNumber} />}
-        {renderTemplate() ?? (
-          <div className={`rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[92%] inline-block shadow-sm ${isAdmin ? "bg-blue-50 border border-blue-100" : "bg-white border border-gray-100"}`}>
-            <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isAdmin ? "text-blue-900" : "text-gray-800"}`}>{msg.content}</p>
-          </div>
-        )}
-        {msg.autoCartAdded && msg.autoCartAdded.length > 0 && (
-          <AutoCartBanner items={msg.autoCartAdded} onCheckout={onOpenForm} />
-        )}
-        {msg.products && msg.products.length > 0 && (
-          msg.products.length === 1
-            ? <div className="mt-2 w-[85%]"><ProductCard product={msg.products[0]} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} /></div>
-            : <div className="mt-2 w-[96%] grid grid-cols-2 gap-2">
-                {msg.products.map(p => <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} />)}
-              </div>
-        )}
-        {msg.categories && msg.categories.length > 0 && (
-          <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
-            {msg.categories.map(c => <CategoryCard key={c.id} meta={{ id: c.id, name: c.name, slug: c.slug, image: c.image ?? undefined }} onView={onViewCategory} />)}
-          </div>
-        )}
+    <div className="mb-3">
+      <div className="flex items-end gap-2">
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-xs ${isAdmin ? "bg-blue-600" : "bg-[#5FA800]"}`}>{isAdmin ? "S" : "K"}</div>
+        <div className="flex-1 min-w-0">
+          {isAdmin && <p className="text-[9px] font-semibold text-blue-600 mb-0.5 ml-1 uppercase tracking-wider">Support Team</p>}
+          {msg.orderPlaced && <OrderSuccessBanner orderNumber={msg.orderPlaced.orderNumber} />}
+          {msg.autoCartAdded && msg.autoCartAdded.length > 0 && (
+            <AutoCartBanner items={msg.autoCartAdded} onCheckout={onOpenForm} />
+          )}
+          {template ?? (msg.content ? (
+            <div className={`rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[92%] inline-block shadow-sm ${isAdmin ? "bg-blue-50 border border-blue-100" : "bg-white border border-gray-100"}`}>
+              <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isAdmin ? "text-blue-900" : "text-gray-800"}`}>{msg.content}</p>
+            </div>
+          ) : null)}
+        </div>
       </div>
+      {hasProducts && (
+        msg.products!.length === 1
+          ? <div className="mt-2 w-[68%]"><ProductCard product={msg.products![0]} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} /></div>
+          : <div className="mt-2 grid grid-cols-2 gap-2">
+              {msg.products!.map(p => <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onViewProduct} onBuyNow={onBuyNow} />)}
+            </div>
+      )}
+      {hasCategories && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {msg.categories!.map(c => <CategoryCard key={c.id} meta={{ id: c.id, name: c.name, slug: c.slug, image: c.image ?? undefined }} onView={onViewCategory} />)}
+        </div>
+      )}
     </div>
   );
 }
