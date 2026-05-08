@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, orderItemsTable, walletTransactionsTable, loyaltyTransactionsTable, couponsTable, couponUsagesTable, usersTable, adminNotificationsTable, waAutomationRulesTable } from "@workspace/db";
+import { db, ordersTable, orderItemsTable, walletTransactionsTable, loyaltyTransactionsTable, couponsTable, couponUsagesTable, usersTable, adminNotificationsTable } from "@workspace/db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { productsTable } from "@workspace/db";
 import { authMiddleware, adminMiddleware, optionalAuthMiddleware, type AuthRequest } from "../lib/auth";
@@ -446,23 +446,13 @@ router.patch("/orders/:id/status", adminMiddleware as any, async (req, res) => {
         }).catch(() => {});
       }
 
-      /* ── Post-delivery review request with auto-coupon lookup ── */
+      /* ── Post-delivery review request (fire-and-forget, 24h delay handled by engine) ── */
       if (status === "delivered") {
-        /* Look up coupon from active order_delivered automation rule */
-        const couponCode = await db.select({ triggerConfig: waAutomationRulesTable.triggerConfig })
-          .from(waAutomationRulesTable)
-          .where(and(
-            eq(waAutomationRulesTable.triggerType, "order_delivered"),
-            eq(waAutomationRulesTable.isActive, true),
-          )).limit(1)
-          .then(rows => (rows[0]?.triggerConfig as any)?.couponCode as string | undefined)
-          .catch(() => undefined);
         sendReviewRequest({
           phone: waPhone,
           userId: order.userId ?? undefined,
           orderNumber: order.orderNumber,
           customerName: addr?.name ?? undefined,
-          couponCode,
         }).catch(() => {});
       }
 

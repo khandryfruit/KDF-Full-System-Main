@@ -2,9 +2,7 @@ import { Router } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
-import { sendWhatsAppMessage, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest, normalizePhone as normalizePhoneWA } from "../lib/whatsapp";
-import { db as riderDb, waAutomationRulesTable } from "@workspace/db";
-import { and as drizzleAnd, eq as drizzleEq } from "drizzle-orm";
+import { sendWhatsAppMessage, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
 import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
 
 const router = Router();
