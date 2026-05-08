@@ -99,6 +99,31 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .bubble-wrap{animation:fadeIn .25s ease;}
+
+  /* Order status card */
+  .order-card{background:#fff;border-radius:14px;overflow:hidden;max-width:88%;box-shadow:0 2px 10px rgba(0,0,0,0.1);margin-top:4px;font-size:13px;}
+  .oc-hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);padding:10px 12px;display:flex;align-items:center;gap:8px;}
+  .oc-hdr-left{flex:1;}
+  .oc-hdr-label{font-size:10px;color:rgba(255,255,255,0.6);}
+  .oc-hdr-num{font-size:14px;font-weight:700;color:#fff;font-family:monospace;}
+  .oc-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;border:1px solid;}
+  .oc-body{padding:10px 12px;}
+  .oc-row{display:flex;align-items:center;gap:6px;margin-bottom:7px;}
+  .oc-row svg{flex-shrink:0;opacity:0.6;}
+  .oc-row-label{font-size:10px;color:#999;}
+  .oc-row-val{font-size:12px;font-weight:600;color:#1a1a2e;}
+  .oc-courier{background:#f5f5f5;border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+  .oc-track-id{font-family:monospace;font-size:11px;font-weight:700;color:#1a1a2e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .oc-track-link{font-size:10px;font-weight:700;color:#5FA800;text-decoration:none;display:flex;align-items:center;gap:2px;flex-shrink:0;}
+  .oc-items{border-top:1px solid #f0f0f0;padding-top:7px;margin-top:3px;}
+  .oc-item{display:flex;justify-content:space-between;font-size:11px;color:#555;padding:2px 0;}
+  .oc-item span:last-child{font-weight:600;color:#1a1a2e;}
+  .oc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f0f0f0;padding-top:7px;margin-top:5px;}
+  .oc-pay{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;}
+  .oc-total{font-size:14px;font-weight:700;color:#1a1a2e;}
+  .oc-btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;margin-top:8px;padding:9px;border-radius:10px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5FA800,#3d7000);text-decoration:none;border:none;cursor:pointer;}
+  .order-notfound{background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:10px 12px;max-width:88%;margin-top:4px;display:flex;gap:8px;align-items:flex-start;}
+  .order-notfound p{font-size:12px;color:#92400e;margin:0;}
 </style>
 </head>
 <body>
@@ -137,6 +162,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
 <!-- Quick chips -->
 <div id="chips" style="display:none;">
+  <span class="chip" data-msg="mera order kahan hai">📍 Track Order</span>
   <span class="chip" data-msg="What products do you have?">🛒 Products</span>
   <span class="chip" data-msg="What are your prices?">💰 Prices</span>
   <span class="chip" data-msg="How long is delivery?">🚚 Delivery</span>
@@ -215,6 +241,79 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     if (show) msgs.scrollTop = msgs.scrollHeight;
   }
 
+  /* ── Order status card builder ── */
+  function buildOrderCard(os) {
+    if (os.notFound) {
+      var nf = document.createElement('div');
+      nf.className = 'order-notfound';
+      nf.innerHTML = '<span style="font-size:18px;">⚠️</span><p>Order nahi mila. Phone number ya order ID check karein aur dobara try karein.</p>';
+      return nf;
+    }
+    if (!os.found || !os.orderNumber) return null;
+
+    var statusMap = {
+      'Delivered':        { bg:'#dcfce7', color:'#166534', border:'#bbf7d0' },
+      'Out for Delivery': { bg:'#dbeafe', color:'#1e40af', border:'#bfdbfe' },
+      'In Transit':       { bg:'#e0e7ff', color:'#3730a3', border:'#c7d2fe' },
+      'Shipped':          { bg:'#f3e8ff', color:'#6b21a8', border:'#e9d5ff' },
+      'Processing':       { bg:'#fef9c3', color:'#854d0e', border:'#fef08a' },
+      'Order Received':   { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' },
+      'Delivery Failed':  { bg:'#fee2e2', color:'#991b1b', border:'#fecaca' },
+    };
+    var sc = statusMap[os.fulfillmentStatus] || { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' };
+    var isDelivered = os.fulfillmentStatus && os.fulfillmentStatus.toLowerCase().includes('delivered');
+    var isTransit   = os.fulfillmentStatus && (os.fulfillmentStatus.toLowerCase().includes('transit') || os.fulfillmentStatus.toLowerCase().includes('out for'));
+
+    var card = document.createElement('div');
+    card.className = 'order-card';
+
+    var hdrPrefix = isDelivered ? '✓ ' : isTransit ? '⟳ ' : '';
+    card.innerHTML =
+      '<div class="oc-hdr">' +
+        '<div class="oc-hdr-left">' +
+          '<div class="oc-hdr-label">Order</div>' +
+          '<div class="oc-hdr-num">#' + (os.orderNumber || '') + '</div>' +
+        '</div>' +
+        '<span class="oc-badge" style="background:' + sc.bg + ';color:' + sc.color + ';border-color:' + sc.border + '">' + hdrPrefix + (os.fulfillmentStatus || '') + '</span>' +
+      '</div>' +
+      '<div class="oc-body">' +
+        (os.customerName ? '<div class="oc-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><div><div class="oc-row-label">Customer</div><div class="oc-row-val">' + os.customerName + '</div></div></div>' : '') +
+        (os.city ? '<div class="oc-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><div><div class="oc-row-label">City</div><div class="oc-row-val">' + os.city + '</div></div></div>' : '') +
+        (os.courierName || os.trackingId ?
+          '<div class="oc-courier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5FA800" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' +
+            '<div style="flex:1;min-width:0;">' +
+              (os.courierName ? '<div style="font-size:10px;color:#999;">' + os.courierName + '</div>' : '') +
+              (os.trackingId ? '<div class="oc-track-id">' + os.trackingId + '</div>' : '') +
+            '</div>' +
+            (os.trackingUrl ? '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-track-link">Track ↗</a>' : '') +
+          '</div>'
+        : '') +
+        (os.items && os.items.length ?
+          '<div class="oc-items">' +
+            os.items.map(function(it) {
+              return '<div class="oc-item"><span>' + it.name + ' × ' + it.qty + '</span><span>Rs.' + it.price + '</span></div>';
+            }).join('') +
+          '</div>'
+        : '') +
+        '<div class="oc-footer">' +
+          (os.financialStatus ?
+            '<span class="oc-pay" style="background:' + (os.financialStatus==='paid'?'#dcfce7':'#fff7ed') + ';color:' + (os.financialStatus==='paid'?'#166534':'#9a3412') + '">' +
+              (os.financialStatus==='paid' ? '✓ Paid' : 'COD Pending') +
+            '</span>'
+          : '<span></span>') +
+          (os.totalPrice ? '<span class="oc-total">Rs.' + Number(os.totalPrice).toLocaleString() + '</span>' : '<span></span>') +
+        '</div>' +
+        (os.trackingUrl ?
+          '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-btn">' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' +
+            ' Track Live Parcel' +
+          '</a>'
+        : '') +
+      '</div>';
+    return card;
+  }
+
   /* ── Send message ── */
   async function sendMessage(text) {
     if (!text.trim()) return;
@@ -235,6 +334,22 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
       var reply = data.reply || data.message || data.text || (data.error ? '❌ ' + data.error : 'Sorry, I could not process that.');
       addBubble(reply, 'bot');
+
+      /* Render order tracking card if present */
+      if (data.orderStatus && (data.orderStatus.found || data.orderStatus.notFound)) {
+        var card = buildOrderCard(data.orderStatus);
+        if (card) {
+          /* Attach card below last bot bubble */
+          var lastWrap = msgs.querySelector('.bubble-wrap:last-child');
+          if (lastWrap) {
+            var cardWrap = document.createElement('div');
+            cardWrap.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
+            cardWrap.appendChild(card);
+            msgs.appendChild(cardWrap);
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+        }
+      }
     } catch(e) {
       showTyping(false);
       addBubble('⚠️ Connection error. Please try WhatsApp instead.', 'bot');
@@ -307,7 +422,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 </html>`;
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=60");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   res.setHeader("X-Frame-Options", "ALLOWALL");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.send(html);
@@ -325,7 +441,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.1 — Floating Action Stack */
+  const js = `/* KDF NUTS Chat Widget v3.2 — Floating Action Stack + Order Tracking */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -472,7 +588,8 @@ router.get("/widget.js", (req: Request, res: Response) => {
 `;
 
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=60");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.send(js);
 });

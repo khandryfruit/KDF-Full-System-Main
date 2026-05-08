@@ -1,0 +1,376 @@
+# MASTER FIX PROMPT — STOP LOADING SHOPIFY WEBSITE INSIDE CHAT WIDGET
+
+## CRITICAL ISSUE — THIS MUST BE FIXED PROPERLY
+
+آپ بار بار:
+
+# ❌ Complete Shopify Website
+
+چیٹ widget کے اندر render/load کر رہے ہیں۔
+
+یہ مکمل غلط architecture ہے۔
+
+---
+
+# CURRENT WRONG BEHAVIOR
+
+جب customer floating chat button click کرتا ہے تو:
+
+❌ پوری mobile storefront کھل جاتی ہے
+❌ banners show ہوتے ہیں
+❌ products load ہوتے ہیں
+❌ categories show ہوتی ہیں
+❌ search bar show ہوتی ہے
+❌ navigation show ہوتی ہے
+❌ homepage render ہوتی ہے
+
+یہ unacceptable ہے۔
+
+---
+
+# WHAT I ACTUALLY WANT
+
+میں صرف:
+
+# ✅ Floating Chat System
+
+چاہتا ہوں۔
+
+---
+
+# FINAL REQUIRED BEHAVIOR
+
+## CLOSED STATE
+
+Website پر صرف:
+
+# Small Floating Circular Button
+
+show ہو۔
+
+مثال:
+
+* WhatsApp icon
+* bottom-right
+* lightweight
+* no overlay
+
+---
+
+# WHEN USER CLICKS BUTTON
+
+صرف:
+
+# Small Chat Popup
+
+کھلے۔
+
+---
+
+# REQUIRED POPUP
+
+مثال:
+
+```bash id="w3n8kp"
+┌─────────────────────┐
+│ 💬 Chat with Us     │
+│ 📦 Track Order      │
+│ 📱 WhatsApp         │
+└─────────────────────┘
+```
+
+---
+
+# WHEN USER CLICKS CHAT
+
+صرف:
+
+# Compact Chat Window
+
+open ہو۔
+
+---
+
+# CHAT WINDOW SHOULD CONTAIN
+
+✅ messages only
+✅ chatbot only
+✅ tracking only
+✅ WhatsApp actions only
+
+---
+
+# IT MUST NOT CONTAIN
+
+❌ homepage
+❌ products grid
+❌ banners
+❌ categories
+❌ navigation
+❌ search bars
+❌ cart
+❌ storefront UI
+❌ mobile preview
+
+---
+
+# ROOT CAUSE
+
+آپ currently:
+
+# Entire Shopify Frontend App
+
+widget کے اندر mount/render کر رہے ہیں۔
+
+مثال:
+
+```bash id="d7q2mf"
+<iframe src="shopify-storefront" />
+```
+
+یا:
+
+```bash id="j8x5tr"
+<ShopifyApp />
+```
+
+یہ غلط ہے۔
+
+---
+
+# CORRECT APPROACH
+
+Use ONLY:
+
+# Dedicated Chat Component
+
+---
+
+# REQUIRED ARCHITECTURE
+
+```bash id="c2m7vz"
+/wa-chat-widget/
+│
+├── floating-launcher
+├── compact-popup
+├── ai-chat
+├── whatsapp-action
+├── tracking-module
+└── support-window
+```
+
+---
+
+# IMPORTANT
+
+## Widget MUST BE ISOLATED
+
+Use:
+
+✅ isolated component mount
+✅ portal rendering
+✅ scoped styles
+✅ independent state
+✅ async lazy loading
+
+---
+
+# DO NOT USE
+
+❌ iframe storefront
+❌ full React app mount
+❌ app shell injection
+❌ page replacement
+❌ fullscreen overlay
+
+---
+
+# SHOPIFY SAFE IMPLEMENTATION
+
+Recommended implementation:
+
+## Option 1 (BEST)
+
+Use:
+
+# Shopify App Embed Block
+
+اور صرف:
+
+# Chat Component
+
+inject کریں۔
+
+---
+
+## Option 2
+
+Use:
+
+# Lightweight Floating Script
+
+مثال:
+
+```bash id="m6p4qa"
+<script src="wa-chat-widget.js" async></script>
+```
+
+---
+
+# REQUIRED CHAT UI
+
+## Compact Layout
+
+```bash id="t5v1kx"
+┌────────────────────────┐
+│ WA Chat                │
+├────────────────────────┤
+│ Customer Messages      │
+│ AI Replies             │
+│ Tracking Responses     │
+├────────────────────────┤
+│ Type Message...        │
+└────────────────────────┘
+```
+
+---
+
+# REQUIRED TRACKING FLOW
+
+Customer:
+
+# “Track my order”
+
+↓
+
+Bot asks:
+
+* Order ID
+* Tracking Number
+* Email/Phone
+
+↓
+
+System fetches:
+
+* Shopify order
+* Courier tracking
+* Payment status
+
+↓
+
+Compact tracking card send ہو۔
+
+---
+
+# CLOSE BUTTON FIX
+
+Current issue:
+
+❌ close button broken
+❌ overlay stuck
+
+---
+
+# REQUIRED
+
+Add:
+
+# Proper Floating Close Button
+
+Features:
+
+✅ visible
+✅ clickable
+✅ proper z-index
+✅ mobile safe-area support
+✅ smooth animation
+
+---
+
+# AUTO REOPEN FEATURE
+
+If customer closes widget:
+
+✅ minimize کریں
+✅ hidden state رکھیں
+
+اور:
+
+# 1–2 minutes بعد
+
+soft reminder bubble show کریں۔
+
+---
+
+# IMPORTANT PERFORMANCE RULES
+
+Widget ہونا چاہیے:
+
+✅ lightweight
+✅ under 100kb initial load
+✅ lazy loaded
+✅ non-blocking
+✅ fast on mobile
+
+---
+
+# FINAL RESULT I WANT
+
+Customer website open کرے:
+
+↓
+
+Only small floating chat icon نظر آئے
+
+↓
+
+Customer click کرے
+
+↓
+
+Compact popup open ہو
+
+↓
+
+Customer chat کرے
+
+↓
+
+AI replies دے
+
+↓
+
+Tracking check کرے
+
+↓
+
+WhatsApp open کرے
+
+↓
+
+بس۔
+
+---
+
+# FINAL WARNING
+
+STOP rendering:
+
+# Entire Shopify Website
+
+inside WA Chat widget.
+
+یہ:
+
+# Chat Widget
+
+ہے۔
+
+یہ:
+
+❌ mobile storefront preview
+❌ embedded website
+❌ full Shopify app
+
+نہیں ہے۔
