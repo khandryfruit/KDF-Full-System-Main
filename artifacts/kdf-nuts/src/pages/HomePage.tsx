@@ -29,6 +29,7 @@ const AI_PROMO_BANNERS = [
     cta: 'Shop Now',
     linkUrl: '/products',
     icon: '🚚',
+    bgColor: 'from-[#166534] to-[#14532d]',
     g1: '#0d3200', g2: '#245a00', g3: '#3d8a00',
     orb1: '#5aaa00', orb2: '#8fcc44', orb3: '#1a5000',
   },
@@ -39,6 +40,7 @@ const AI_PROMO_BANNERS = [
     cta: 'Explore Gifts',
     linkUrl: '/products',
     icon: '🎁',
+    bgColor: 'from-[#7c3aed] to-[#be185d]',
     g1: '#220040', g2: '#5e0055', g3: '#9e1e7a',
     orb1: '#d63da8', orb2: '#e870c4', orb3: '#6b0e90',
   },
@@ -49,6 +51,7 @@ const AI_PROMO_BANNERS = [
     cta: 'Contact Now',
     linkUrl: '/products',
     icon: '📦',
+    bgColor: 'from-[#0f766e] to-[#0369a1]',
     g1: '#002838', g2: '#004d68', g3: '#006d7a',
     orb1: '#00a8b4', orb2: '#4fd8e0', orb3: '#00586a',
   },
@@ -881,15 +884,11 @@ export function HomePage() {
         {(() => {
           const src = banners.length > 0 ? banners[0] : null;
           const b = src
-            ? { ...AI_PROMO_BANNERS[0], ...{ label: src.label ? `🚚 ${src.label}` : AI_PROMO_BANNERS[0].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[0].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[0].cta, imageUrl: (src as any).imageUrl ?? null } }
+            ? { ...AI_PROMO_BANNERS[0], label: src.label ?? AI_PROMO_BANNERS[0].label, title: src.title, subtitle: (src.subtitle ?? AI_PROMO_BANNERS[0].subtitle), cta: (src.cta ?? AI_PROMO_BANNERS[0].cta), bgColor: ((src as any).bgColor ?? AI_PROMO_BANNERS[0].bgColor), linkUrl: (src.linkUrl ?? AI_PROMO_BANNERS[0].linkUrl) }
             : AI_PROMO_BANNERS[0];
           return (
             <section className="px-4">
-              <PromoBannerCard
-                banner={b}
-                idx={0}
-                onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)}
-              />
+              <PromoBannerCard banner={b} idx={0} onClick={() => setLocation(b.linkUrl)} />
             </section>
           );
         })()}
@@ -925,11 +924,11 @@ export function HomePage() {
         {(() => {
           const src = banners.length > 1 ? banners[1] : null;
           const b = src
-            ? { ...AI_PROMO_BANNERS[1], ...{ label: src.label ? `🎁 ${src.label}` : AI_PROMO_BANNERS[1].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[1].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[1].cta, imageUrl: (src as any).imageUrl ?? null } }
+            ? { ...AI_PROMO_BANNERS[1], label: src.label ?? AI_PROMO_BANNERS[1].label, title: src.title, subtitle: (src.subtitle ?? AI_PROMO_BANNERS[1].subtitle), cta: (src.cta ?? AI_PROMO_BANNERS[1].cta), bgColor: ((src as any).bgColor ?? AI_PROMO_BANNERS[1].bgColor), linkUrl: (src.linkUrl ?? AI_PROMO_BANNERS[1].linkUrl) }
             : AI_PROMO_BANNERS[1];
           return (
             <section className="px-4">
-              <PromoBannerCard banner={b} idx={1} onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)} />
+              <PromoBannerCard banner={b} idx={1} onClick={() => setLocation(b.linkUrl)} />
             </section>
           );
         })()}
@@ -953,11 +952,11 @@ export function HomePage() {
         {(() => {
           const src = banners.length > 2 ? banners[2] : null;
           const b = src
-            ? { ...AI_PROMO_BANNERS[2], ...{ label: src.label ? `📦 ${src.label}` : AI_PROMO_BANNERS[2].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[2].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[2].cta, imageUrl: (src as any).imageUrl ?? null } }
+            ? { ...AI_PROMO_BANNERS[2], label: src.label ?? AI_PROMO_BANNERS[2].label, title: src.title, subtitle: (src.subtitle ?? AI_PROMO_BANNERS[2].subtitle), cta: (src.cta ?? AI_PROMO_BANNERS[2].cta), bgColor: ((src as any).bgColor ?? AI_PROMO_BANNERS[2].bgColor), linkUrl: (src.linkUrl ?? AI_PROMO_BANNERS[2].linkUrl) }
             : AI_PROMO_BANNERS[2];
           return (
             <section className="px-4">
-              <PromoBannerCard banner={b} idx={2} onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)} />
+              <PromoBannerCard banner={b} idx={2} onClick={() => setLocation(b.linkUrl)} />
             </section>
           );
         })()}
