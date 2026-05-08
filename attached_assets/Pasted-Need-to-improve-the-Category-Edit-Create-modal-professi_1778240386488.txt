@@ -1,0 +1,150 @@
+Need to improve the Category Edit/Create modal professionally.
+
+Current issue:
+There is NO category image upload option.
+
+We need full category image support with professional UI/UX.
+
+--------------------------------------------------
+REQUIRED FEATURES
+--------------------------------------------------
+
+1. Add Category Image Upload Section
+
+Add a new section inside:
+- Create Category Modal
+- Edit Category Modal
+
+Place it under:
+Parent Category
+or inside:
+Image & SEO tab
+
+--------------------------------------------------
+2. Required Upload Features
+--------------------------------------------------
+
+Add:
+
+✅ Upload Image button
+✅ Drag & Drop upload
+✅ Mobile gallery picker
+✅ Camera support on mobile
+✅ Image preview
+✅ Remove image button
+✅ Replace image button
+
+--------------------------------------------------
+3. Image Preview UI
+--------------------------------------------------
+
+Show:
+- Rounded preview
+- Professional card style
+- Skeleton loading
+- Upload progress
+
+Recommended size text:
+"Recommended: 512x512px"
+
+--------------------------------------------------
+4. Supported Formats
+--------------------------------------------------
+
+Allow:
+- JPG
+- PNG
+- WEBP
+
+Max:
+2MB
+
+--------------------------------------------------
+5. Backend Support
+--------------------------------------------------
+
+Store category image in database.
+
+Need:
+- image_url
+- image_alt
+- image_path
+
+Save properly on:
+Create + Update
+
+--------------------------------------------------
+6. SEO Improvements
+--------------------------------------------------
+
+Inside Image & SEO tab add:
+
+✅ SEO Image Alt Text
+✅ Meta Title
+✅ Meta Description
+✅ Open Graph Image
+
+--------------------------------------------------
+7. Frontend Usage
+--------------------------------------------------
+
+Category images should automatically appear in:
+
+✅ Homepage category slider
+✅ Mobile category menu
+✅ Product filters
+✅ Search suggestions
+✅ Mega menu
+✅ App category cards
+
+--------------------------------------------------
+8. Professional Mobile UI
+--------------------------------------------------
+
+Make upload section:
+- Mobile responsive
+- Shopify-style
+- Clean spacing
+- Smooth animations
+
+--------------------------------------------------
+9. Image Optimization
+--------------------------------------------------
+
+Auto:
+✅ Compress image
+✅ Convert to WEBP
+✅ Lazy load
+✅ CDN ready
+
+Do NOT reduce website speed.
+
+--------------------------------------------------
+10. Add Fallback Image
+--------------------------------------------------
+
+If category image missing:
+Show default placeholder icon.
+
+--------------------------------------------------
+11. Add Crop Feature
+--------------------------------------------------
+
+Before upload:
+Allow crop/resize.
+
+Aspect ratio:
+1:1
+
+--------------------------------------------------
+12. Required Final Result
+--------------------------------------------------
+
+Admin should be able to:
+
+✅ Upload category image
+✅ Edit image
+✅ Remove image
+✅ Preview image instantly
+
+And frontend should automatically display category images everywhere professionally.
