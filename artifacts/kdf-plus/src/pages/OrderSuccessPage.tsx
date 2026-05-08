@@ -100,7 +100,7 @@ export default function OrderSuccessPage() {
   // Loading skeleton
   if (isLoading) {
     return (
-      <main className="max-w-2xl mx-auto px-4 py-10 space-y-4">
+      <main className="max-w-2xl mx-auto px-4 py-10 pb-10 space-y-4">
         <div className="bg-white border border-border rounded-2xl p-6 text-center">
           <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4 animate-pulse" />
           <Skeleton className="h-6 w-48 mx-auto mb-2" />
@@ -118,7 +118,7 @@ export default function OrderSuccessPage() {
         <title>{`Order${displayOrderNumber ? ` #${displayOrderNumber}` : ""} Confirmed — KDF NUTS`}</title>
       </Helmet>
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-5">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 pb-8 space-y-5">
 
         {/* ── Success Header ── */}
         <div className="bg-white border border-border rounded-2xl p-6 text-center">

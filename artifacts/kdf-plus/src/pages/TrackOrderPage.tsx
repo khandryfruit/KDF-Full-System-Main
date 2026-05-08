@@ -110,7 +110,7 @@ export default function TrackOrderPage() {
         <title>Track Your Order — KDF Plus</title>
       </Helmet>
 
-      <main className="min-h-screen bg-gray-50">
+      <main className="min-h-screen bg-gray-50 pb-4 sm:pb-0">
         {/* Hero banner */}
         <div className="bg-gradient-to-br from-[#0D2B00] to-[#1a4a00] text-white py-12 px-4">
           <div className="max-w-2xl mx-auto text-center">

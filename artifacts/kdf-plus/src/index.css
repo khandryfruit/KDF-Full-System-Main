@@ -360,3 +360,34 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL MOBILE BOTTOM-NAV SAFE AREA
+   The bottom nav (sm:hidden) is ~56px tall on mobile.
+   #root::after injects a transparent spacer at the very end
+   of every page so scrollable content is never hidden behind
+   the fixed nav — no per-page changes needed.
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --mobile-nav-h: 0px;
+}
+
+@media (max-width: 639px) {
+  :root {
+    --mobile-nav-h: 56px;
+  }
+
+  /* Spacer that pushes all page bottoms above the nav */
+  #root::after {
+    content: '';
+    display: block;
+    height: max(var(--mobile-nav-h), calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px)));
+    width: 100%;
+    pointer-events: none;
+    flex-shrink: 0;
+  }
+
+  /* Any fixed/sticky CTA that needs to sit above the nav:
+     use  bottom: var(--mobile-nav-h)  in inline styles,
+     or   class="bottom-14 sm:bottom-0"  in Tailwind.        */
+}

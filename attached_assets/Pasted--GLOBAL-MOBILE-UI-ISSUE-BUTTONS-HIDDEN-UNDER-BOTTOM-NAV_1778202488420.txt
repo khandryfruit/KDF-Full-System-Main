@@ -1,0 +1,109 @@
+========================
+GLOBAL MOBILE UI ISSUE — BUTTONS HIDDEN UNDER BOTTOM NAVIGATION
+
+Please stop fixing this page-by-page.
+
+This is now a GLOBAL mobile layout issue across the entire website.
+
+I uploaded another screenshot clearly showing the problem again.
+
+========================
+CURRENT PROBLEM
+
+The fixed bottom mobile navigation:
+
+✅ Home
+✅ Categories
+✅ Search
+✅ Cart
+✅ Account
+
+is overlapping content and buttons on MULTIPLE pages.
+
+Now this issue is appearing on:
+
+❌ Order confirmation page
+❌ Tracking page
+❌ Cart drawer
+❌ Product page
+❌ Checkout popup
+❌ Sticky CTA sections
+❌ Buy Now buttons
+❌ Checkout buttons
+
+Buttons and content are going UNDER the bottom navbar.
+
+========================
+THIS IS A GLOBAL RESPONSIVE ISSUE
+
+You need to implement a PROPER global mobile-safe layout system.
+
+Do NOT manually patch one page at a time.
+
+========================
+REQUIRED GLOBAL FIX
+
+Create a reusable mobile-safe-area system for the ENTIRE website.
+
+========================
+IMPORTANT IMPLEMENTATION
+
+1. GLOBAL SAFE AREA
+   ========================
+
+Apply globally:
+
+✅ padding-bottom
+✅ safe-area-inset-bottom
+✅ mobile navigation height spacing
+
+to ALL pages and ALL sticky sections.
+
+========================
+2. FIXED BOTTOM NAVBAR LOGIC
+
+The bottom navbar height must be respected everywhere.
+
+No content should ever render behind it.
+
+========================
+3. STICKY CTA SYSTEM
+
+All sticky buttons must automatically appear:
+
+✅ ABOVE navbar
+✅ Fully visible
+✅ Fully clickable
+
+========================
+4. APPLY TO ALL PAGES
+
+Fix across:
+
+✅ Homepage
+✅ Product page
+✅ Cart page
+✅ Cart drawer
+✅ Checkout page
+✅ Order confirmation page
+✅ Tracking page
+✅ Live chat order flow
+✅ Popup modals
+✅ Sticky bars
+
+========================
+5. RESPONSIVE TESTING
+
+Properly test entire mobile flow on:
+
+✅ Android Chrome
+✅ Samsung devices
+✅ Small mobile screens
+✅ Real device testing
+
+========================
+FINAL GOAL
+
+NO button, popup, CTA, sticky bar, or important content should EVER go under the bottom mobile navigation again.
+
+This needs a professional GLOBAL responsive fix.
