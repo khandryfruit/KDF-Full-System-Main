@@ -1,0 +1,393 @@
+# Master Prompt — WA Chat Unified Inbox & Dashboard Merge
+
+آپ existing system میں کوئی بھی working functionality، APIs، payment flow، chatbot logic، Shopify sync، WhatsApp integration یا database structure کو break یا replace نہیں کریں گے۔
+صرف UI/UX restructuring، location merge، folder organization، dashboard enhancement، اور editable settings add کرنی ہیں۔
+
+---
+
+## Main Goal
+
+تمام chat systems کو merge کر کے ایک ہی professional unified communication center بنائیں جس کا نام ہو:
+
+# “WA Chat”
+
+اس کے اندر یہ تمام چیزیں ایک جگہ manage ہوں:
+
+* Website Live Chat
+* WhatsApp Inbox
+* Shopify Chat Actions
+* AI Chatbot Conversations
+* Customer Sessions
+* Product Sharing
+* Coupons
+* Payment Links
+* Tracking Links
+
+---
+
+# Important Instructions
+
+## ❌ یہ چیزیں touch نہیں کرنی
+
+* Existing APIs
+* Existing chatbot logic
+* WhatsApp webhook
+* Payment gateway integration
+* Shopify sync
+* Order flow
+* Database tables
+* Existing automation rules
+* Existing campaigns
+* Existing authentication/login system
+
+صرف structure، UI location، folders، navigation، editable settings، اور professional dashboard layout improve کرنا ہے۔
+
+---
+
+# Required Structure
+
+## Current Problem
+
+ابھی:
+
+* Website chat الگ location پر ہے
+* WhatsApp inbox الگ ہے
+* Shopify chat actions الگ ہیں
+* Multiple inboxes مختلف جگہوں پر ہیں
+
+یہ confusing لگ رہا ہے۔
+
+---
+
+# Required Solution
+
+ایک centralized module بنائیں:
+
+# 📁 `/modules/wa-chat/`
+
+یا
+
+# 📁 `/src/features/wa-chat/`
+
+اس folder کے اندر تمام related files move اور organize کریں۔
+
+---
+
+# Required Sections Inside WA Chat
+
+## 1. Unified Inbox
+
+یہ main inbox ہوگا۔
+
+اس میں tabs ہوں:
+
+* All Chats
+* WhatsApp
+* Website Live Chat
+* AI Bot
+* Shopify Customers
+* Active Chats
+* Unread
+* Closed
+
+---
+
+## 2. Left Sidebar Improvements
+
+Sidebar کو زیادہ professional بنائیں۔
+
+Current duplicate chat menus remove کریں۔
+
+صرف ایک menu رکھیں:
+
+# ✅ WA Chat
+
+اور اس کے اندر nested items:
+
+* Inbox
+* AI Assistant
+* Automation
+* Campaigns
+* Templates
+* Broadcasts
+* Customer Sessions
+* Payments
+* Orders
+* Tracking
+* Settings
+
+---
+
+# Chat Merge Logic
+
+## Website Chat + WhatsApp Chat Merge
+
+اگر customer:
+
+* Website سے message کرے
+  یا
+* WhatsApp سے message کرے
+
+تو دونوں chats ایک ہی customer thread کے اندر نظر آئیں۔
+
+Example:
+
+Customer:
+Muhammad Ali
+
+Channels:
+
+* Website
+* WhatsApp
+
+ایک unified conversation timeline ہو۔
+
+---
+
+# Required UI Layout
+
+## Professional 3 Panel Layout
+
+### Left Panel
+
+* Chat List
+* Search
+* Filters
+* Channel Icons
+* Unread Badges
+
+### Center Panel
+
+* Conversation
+* AI Suggestions
+* Product Cards
+* Coupons
+* Order Buttons
+* Payment Links
+* Tracking Links
+
+### Right Panel
+
+* Customer Info
+* Order History
+* Shopify Data
+* Tags
+* Notes
+* AI Insights
+
+---
+
+# AI Chatbot Instructions
+
+AI chatbot already موجود ہے۔
+
+اس کو replace نہیں کرنا۔
+
+صرف:
+
+* WA Chat کے اندر move کریں
+* Better UI دیں
+* Suggested replies add کریں
+* Quick actions add کریں
+* Chat context بہتر کریں
+
+---
+
+# Shopify Integration
+
+Shopify actions directly chat کے اندر accessible ہوں:
+
+* Send Product
+* Create Coupon
+* Share Checkout Link
+* Share Tracking
+* Order Status
+* Abandoned Cart Recovery
+
+---
+
+# Payment System Issue (IMPORTANT)
+
+## Current Issue
+
+Default bank/payment account editable نہیں۔
+
+---
+
+# Required Fix
+
+Payments settings کے اندر:
+
+# ✅ Editable Accounts System
+
+Admin یہ کر سکے:
+
+* Add Bank Account
+* Edit Bank Account
+* Delete Bank Account
+* Set Default Account
+* JazzCash
+* EasyPaisa
+* Bank Transfer
+* Stripe
+* Shopify Payments
+
+---
+
+# Payment Settings UI
+
+## Add Professional Settings Page
+
+# WA Chat → Settings → Payments
+
+ہر account کے لیے fields:
+
+* Account Title
+* Bank Name
+* IBAN
+* Account Number
+* QR Code
+* Payment Instructions
+* Status (Active/Inactive)
+* Default Toggle
+
+---
+
+# Dashboard Improvements
+
+Current dashboard کو modern SaaS style میں redesign کریں۔
+
+---
+
+# Required Design Style
+
+UI style inspired by:
+
+* Intercom
+* Zendesk
+* HubSpot
+* WhatsApp Business
+* Shopify Admin
+
+---
+
+# Required Improvements
+
+## Dashboard Cards
+
+Show:
+
+* Active Chats
+* WhatsApp Messages
+* Website Visitors
+* Conversion Rate
+* Orders From Chat
+* Revenue From Chat
+* AI Responses
+* Pending Replies
+
+---
+
+# Chat Features
+
+## Add Quick Actions
+
+Inside chat:
+
+* Send Product
+* Send Invoice
+* Request Payment
+* Assign Rider
+* Share Tracking
+* AI Reply
+* Internal Notes
+
+---
+
+# Search & Filters
+
+Add advanced filters:
+
+* By Channel
+* By Tags
+* By Order Status
+* By Payment Status
+* By Unread
+* By Date
+
+---
+
+# Required Technical Instructions
+
+## Folder Cleanup
+
+Create clean structure:
+
+```bash
+/modules/wa-chat/
+│
+├── inbox/
+├── ai/
+├── campaigns/
+├── templates/
+├── payments/
+├── settings/
+├── components/
+├── services/
+├── hooks/
+├── utils/
+└── layouts/
+```
+
+---
+
+# IMPORTANT
+
+## No Breaking Changes
+
+یہ migration safe ہونا چاہیے۔
+
+کوئی existing functionality break نہیں ہونی چاہیے۔
+
+---
+
+# Performance Optimization
+
+* Lazy loading use کریں
+* Duplicate API calls remove کریں
+* Real-time updates optimize کریں
+* Mobile responsive کریں
+* Sidebar collapsible کریں
+
+---
+
+# Final Goal
+
+ایک ایسا centralized professional system بنائیں جہاں:
+
+✅ Website Chat
+✅ WhatsApp Inbox
+✅ Shopify Chat Tools
+✅ AI Chatbot
+✅ Payments
+✅ Tracking
+✅ Campaigns
+
+سب کچھ:
+
+# “WA Chat”
+
+کے اندر ایک ہی جگہ manage ہو۔
+
+---
+
+# Final UI Result Should Feel Like
+
+* Enterprise SaaS
+* Clean
+* Fast
+* Professional
+* Modern
+* Mobile Friendly
+* AI Powered
+* Shopify + WhatsApp Unified CRM
