@@ -4,7 +4,7 @@ import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { productsTable } from "@workspace/db";
 import { authMiddleware, adminMiddleware, optionalAuthMiddleware, type AuthRequest } from "../lib/auth";
 import { sendOrderNotification } from "./notifications";
-import { sendOrderConfirmation, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
+import { sendOrderConfirmation, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest, sendReturnRefundNotification } from "../lib/whatsapp";
 import { sendSocialOrderMessage } from "../lib/socialMessenger";
 import { broadcastSSE } from "../lib/sse";
 import type { Response } from "express";
@@ -453,6 +453,20 @@ router.patch("/orders/:id/status", adminMiddleware as any, async (req, res) => {
           userId: order.userId ?? undefined,
           orderNumber: order.orderNumber,
           customerName: addr?.name ?? undefined,
+        }).catch(() => {});
+      }
+
+      /* ── Return/Refund/Exchange WA notification ── */
+      if (status === "returned" || status === "refunded" || status === "exchanged") {
+        const typeMap: Record<string, "return"|"refund"|"exchange"> = {
+          returned: "return", refunded: "refund", exchanged: "exchange",
+        };
+        sendReturnRefundNotification({
+          phone: waPhone,
+          userId: order.userId ?? undefined,
+          orderNumber: order.orderNumber,
+          customerName: addr?.name ?? undefined,
+          type: typeMap[status] ?? "return",
         }).catch(() => {});
       }
 

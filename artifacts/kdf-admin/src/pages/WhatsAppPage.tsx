@@ -481,6 +481,18 @@ export default function WhatsAppPage() {
   const [isSendingReply, setIsSendingReply] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  /* ── Multi-agent & Conversations CRM state ── */
+  const [convSearch, setConvSearch]           = useState("");
+  const [convFilter, setConvFilter]           = useState<"all"|"open"|"resolved"|"spam">("all");
+  const [convDetail, setConvDetail]           = useState<any>(null);
+  const [convNotes, setConvNotes]             = useState<any[]>([]);
+  const [showNoteInput, setShowNoteInput]     = useState(false);
+  const [noteText, setNoteText]               = useState("");
+  const [agentName]                           = useState(() => localStorage.getItem("kdf_agent_name") ?? "Admin");
+  const [botModeChanging, setBotModeChanging] = useState(false);
+  const [showRightPanel, setShowRightPanel]   = useState(true);
+  const sseRef = useRef<EventSource | null>(null);
+
   /* ── Settings ── */
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["/api/admin/whatsapp/settings"],
@@ -496,6 +508,7 @@ export default function WhatsAppPage() {
     webhookVerifyToken: "kdfnuts_webhook_token", isActive: false,
     chatButtonEnabled: false, chatButtonPhone: "", chatButtonMessage: "Hi! I'd like to know more about your products.",
     abandonedRecoveryEnabled: false, abandonedRecoveryDelayMinutes: 45, abandonedRecoveryCouponCode: "",
+    appSecret: "", apiVersion: "v18.0", businessPortfolioId: "",
   });
   useEffect(() => {
     if (settings) setForm({
@@ -510,6 +523,9 @@ export default function WhatsAppPage() {
       abandonedRecoveryEnabled: settings.abandonedRecoveryEnabled ?? false,
       abandonedRecoveryDelayMinutes: settings.abandonedRecoveryDelayMinutes ?? 45,
       abandonedRecoveryCouponCode: settings.abandonedRecoveryCouponCode ?? "",
+      appSecret: settings.appSecret ?? "",
+      apiVersion: settings.apiVersion ?? "v18.0",
+      businessPortfolioId: settings.businessPortfolioId ?? "",
     });
   }, [settings]);
   const saveSettings = useMutation({
@@ -619,10 +635,15 @@ export default function WhatsAppPage() {
   /* ── Conversations ── */
   const [showTemplatePickerConv, setShowTemplatePickerConv] = useState(false);
   const { data: conversations = [], isLoading: convsLoading, refetch: refetchConvs } = useQuery<any[]>({
-    queryKey: ["/api/admin/whatsapp/conversations"],
-    queryFn: () => apiFetch("/api/admin/whatsapp/conversations"),
+    queryKey: ["/api/admin/whatsapp/conversations", convFilter, convSearch],
+    queryFn: () => {
+      const p = new URLSearchParams();
+      if (convFilter !== "all") p.set("status", convFilter);
+      if (convSearch.trim()) p.set("search", convSearch.trim());
+      return apiFetch(`/api/admin/whatsapp/conversations?${p}`);
+    },
     enabled: tab === "conversations",
-    refetchInterval: tab === "conversations" ? 15000 : false,
+    refetchInterval: tab === "conversations" ? 20000 : false,
   });
   const { data: approvedTemplates = [] } = useQuery<any[]>({
     queryKey: ["/api/admin/whatsapp/templates/approved"],
@@ -633,18 +654,92 @@ export default function WhatsAppPage() {
     queryKey: ["/api/admin/whatsapp/conversations", selectedPhone],
     queryFn: () => apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone!)}`),
     enabled: !!selectedPhone,
-    refetchInterval: selectedPhone ? 5000 : false,
+    refetchInterval: selectedPhone ? 8000 : false,
   });
+
+  /* ── Load conversation detail & notes on selection ── */
+  useEffect(() => {
+    if (!selectedPhone) return;
+    apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/detail`)
+      .then((d: any) => { setConvDetail(d?.conversation ?? null); setConvNotes(d?.notes ?? []); })
+      .catch(() => {});
+  }, [selectedPhone]);
+
+  /* ── SSE — real-time incoming messages ── */
+  useEffect(() => {
+    if (tab !== "conversations") return;
+    const token = localStorage.getItem("kdf_admin_token") ?? "";
+    const es = new EventSource(`/api/admin/sse?token=${encodeURIComponent(token)}`);
+    sseRef.current = es;
+    es.addEventListener("wa_message", (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        refetchConvs();
+        if (selectedPhone && data.phone === selectedPhone) refetchMsgs();
+      } catch {}
+    });
+    return () => { es.close(); sseRef.current = null; };
+  }, [tab, selectedPhone]);
+
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  /* ── Toggle bot mode ── */
+  const toggleBotMode = async (mode: "auto"|"human"|"off") => {
+    if (!selectedPhone) return;
+    setBotModeChanging(true);
+    try {
+      await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/bot-mode`, {
+        method: "PATCH", body: JSON.stringify({ mode }),
+      });
+      setConvDetail((d: any) => d ? { ...d, bot_mode: mode } : d);
+      toast({ title: `Bot mode → ${mode}` });
+    } catch (e: any) { toast({ variant: "destructive", title: e.message }); }
+    finally { setBotModeChanging(false); }
+  };
+
+  /* ── Toggle resolved/open ── */
+  const toggleConvStatus = async (status: "open"|"resolved") => {
+    if (!selectedPhone) return;
+    try {
+      await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/status`, {
+        method: "PATCH", body: JSON.stringify({ status }),
+      });
+      setConvDetail((d: any) => d ? { ...d, status } : d);
+      refetchConvs();
+      toast({ title: `Marked as ${status}` });
+    } catch (e: any) { toast({ variant: "destructive", title: e.message }); }
+  };
+
+  /* ── Star conversation ── */
+  const toggleStar = async () => {
+    if (!selectedPhone) return;
+    await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/star`, { method: "PATCH" });
+    setConvDetail((d: any) => d ? { ...d, is_starred: !d.is_starred } : d);
+    refetchConvs();
+  };
+
+  /* ── Add internal note ── */
+  const addNote = async () => {
+    if (!noteText.trim() || !selectedPhone) return;
+    try {
+      await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/note`, {
+        method: "POST", body: JSON.stringify({ note: noteText, agentName }),
+      });
+      setNoteText(""); setShowNoteInput(false);
+      const d = await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/detail`);
+      setConvNotes((d as any)?.notes ?? []);
+      toast({ title: "Note saved" });
+    } catch (e: any) { toast({ variant: "destructive", title: e.message }); }
+  };
 
   const sendReply = async () => {
     if (!replyMsg.trim() || !selectedPhone) return;
     setIsSendingReply(true);
     try {
       await apiFetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/reply`, {
-        method: "POST", body: JSON.stringify({ message: replyMsg }),
+        method: "POST", body: JSON.stringify({ message: replyMsg, agentName }),
       });
       setReplyMsg("");
       refetchMsgs();
@@ -978,9 +1073,57 @@ export default function WhatsAppPage() {
   );
 
   function msgBubble(msg: any) {
-    const isIncoming = msg.templateName === "incoming";
-    const isAI       = msg.templateName === "ai_reply";
-    const isAdmin    = msg.templateName === "admin_reply";
+    /* Support both old whatsapp_logs schema and new wa_messages schema */
+    const direction  = msg.direction ?? (msg.templateName === "incoming" ? "in" : "out");
+    const msgType    = msg.type ?? "text";
+    const content    = msg.content ?? msg.message ?? "";
+    const isIncoming = direction === "in";
+    const isAI       = msg.isBot || msg.templateName === "ai_reply";
+    const isAdmin    = !isAI && !isIncoming;
+    const ts         = msg.createdAt ?? msg.created_at;
+    const reaction   = msg.reaction;
+    const mediaUrl   = msg.media_url ?? msg.mediaUrl;
+    const caption    = msg.caption;
+    const agentLabel = msg.agent_name ?? (isAI ? "AI" : isAdmin ? "Admin" : null);
+
+    const renderContent = () => {
+      if (reaction) return <span className="text-2xl">{reaction}</span>;
+      switch (msgType) {
+        case "image":
+          return (
+            <div>
+              {mediaUrl ? (
+                <div className="rounded-xl overflow-hidden mb-1 bg-black/10 flex items-center justify-center w-48 h-32">
+                  <span className="text-xs text-muted-foreground">🖼 Image</span>
+                </div>
+              ) : <span className="text-xs opacity-70">🖼 Image (no preview)</span>}
+              {caption && <p className="text-xs mt-1">{caption}</p>}
+            </div>
+          );
+        case "video":
+          return <span className="text-sm">🎬 Video{caption ? ` — ${caption}` : ""}</span>;
+        case "audio":
+        case "voice":
+          return (
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">🎤</div>
+              <div>
+                <p className="text-xs font-medium">Voice note</p>
+                <p className="text-[10px] opacity-70">Tap to play</p>
+              </div>
+            </div>
+          );
+        case "document":
+          return <span className="text-sm">📄 Document{caption ? ` — ${caption}` : ""}</span>;
+        case "sticker":
+          return <span className="text-sm">🎭 Sticker</span>;
+        case "location":
+          return <span className="text-sm">{content}</span>;
+        default:
+          return <span className="whitespace-pre-wrap">{content}</span>;
+      }
+    };
+
     return (
       <div key={msg.id} className={`flex gap-2 ${isIncoming ? "justify-start" : "justify-end"}`}>
         {isIncoming && (
@@ -989,27 +1132,29 @@ export default function WhatsAppPage() {
           </div>
         )}
         <div className={`max-w-[70%] ${isIncoming ? "" : "items-end flex flex-col"}`}>
-          <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+          <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
             isIncoming ? "bg-white border border-border text-gray-800 rounded-tl-sm" :
             isAI       ? "bg-[#5FA800] text-white rounded-tr-sm" :
                          "bg-gray-800 text-white rounded-tr-sm"
           }`}>
-            {msg.message}
+            {renderContent()}
           </div>
           <div className="flex items-center gap-1.5 mt-1 px-1">
-            {isAI    && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Sparkles className="w-2.5 h-2.5" />AI Reply</span>}
-            {isAdmin && <span className="text-[10px] text-muted-foreground">Admin</span>}
-            <span className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" })}</span>
+            {isAI    && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Sparkles className="w-2.5 h-2.5" />AI</span>}
+            {agentLabel && !isIncoming && <span className="text-[10px] text-muted-foreground">{agentLabel}</span>}
+            <span className="text-[10px] text-muted-foreground">
+              {ts ? new Date(ts).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" }) : ""}
+            </span>
             {!isIncoming && (
-              <span className={`text-[10px] ${msg.status === "sent" ? "text-green-500" : msg.status === "failed" ? "text-red-400" : "text-gray-400"}`}>
-                {msg.status === "sent" ? "✓✓" : msg.status === "failed" ? "✗" : "⏳"}
+              <span className={`text-[10px] ${msg.status === "sent" || msg.status === "delivered" ? "text-green-500" : msg.status === "failed" ? "text-red-400" : "text-gray-400"}`}>
+                {msg.status === "delivered" ? "✓✓" : msg.status === "sent" ? "✓" : msg.status === "failed" ? "✗" : "⏳"}
               </span>
             )}
           </div>
         </div>
         {!isIncoming && (
           <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${isAI ? "bg-[#5FA800]/20" : "bg-gray-200"}`}>
-            {isAI ? <Sparkles className="w-3.5 h-3.5 text-[#5FA800]" /> : <Settings className="w-3.5 h-3.5 text-gray-600" />}
+            {isAI ? <Sparkles className="w-3.5 h-3.5 text-[#5FA800]" /> : <User className="w-3.5 h-3.5 text-gray-600" />}
           </div>
         )}
       </div>
@@ -1370,6 +1515,45 @@ export default function WhatsAppPage() {
                             className="font-mono text-xs"
                           />
                           <p className="text-[11px] text-muted-foreground">WhatsApp Business Account ID — needed for template management</p>
+                        </div>
+                      </div>
+
+                      {/* Advanced Official API Fields */}
+                      <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Official API Security &amp; Advanced Settings</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium">App Secret <span className="text-xs text-muted-foreground">(for webhook HMAC)</span></Label>
+                            <Input
+                              type="password"
+                              value={form.appSecret}
+                              onChange={(e) => setForm((f) => ({ ...f, appSecret: e.target.value }))}
+                              placeholder={settings?.appSecret ? "••••••••  (saved)" : "Enter App Secret"}
+                              className="font-mono text-xs"
+                              autoComplete="new-password"
+                            />
+                            <p className="text-[11px] text-muted-foreground">Meta App → Settings → Basic → App Secret. Used to verify webhook signatures (X-Hub-Signature-256).</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium">API Version</Label>
+                            <Input
+                              value={form.apiVersion}
+                              onChange={(e) => setForm((f) => ({ ...f, apiVersion: e.target.value }))}
+                              placeholder="v18.0"
+                              className="font-mono text-xs"
+                            />
+                            <p className="text-[11px] text-muted-foreground">Graph API version used for all WA calls (e.g. v18.0, v19.0, v20.0).</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium">Business Portfolio ID</Label>
+                            <Input
+                              value={form.businessPortfolioId}
+                              onChange={(e) => setForm((f) => ({ ...f, businessPortfolioId: e.target.value }))}
+                              placeholder="123456789"
+                              className="font-mono text-xs"
+                            />
+                            <p className="text-[11px] text-muted-foreground">Meta Business Manager → Business Settings → Business Portfolio ID.</p>
+                          </div>
                         </div>
                       </div>
 
@@ -2877,13 +3061,38 @@ export default function WhatsAppPage() {
 
       {/* ── CONVERSATIONS TAB ── */}
       {tab === "conversations" && (
-        <div className="flex gap-4 h-[calc(100vh-280px)] min-h-[500px]">
-          {/* Conversation list */}
-          <div className="w-72 flex-shrink-0 border border-border rounded-xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-              <p className="text-sm font-semibold">Conversations</p>
-              <button onClick={() => refetchConvs()} className="text-muted-foreground hover:text-foreground transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+        <div className="flex gap-3 h-[calc(100vh-260px)] min-h-[560px]">
+
+          {/* ── LEFT: Conversation list ── */}
+          <div className="w-72 flex-shrink-0 border border-border rounded-xl overflow-hidden flex flex-col bg-white">
+            {/* Header + search */}
+            <div className="px-3 py-2.5 border-b bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Conversations</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-[#25D366] font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#25D366] animate-pulse inline-block" />SSE Live
+                  </span>
+                  <button onClick={() => refetchConvs()} className="ml-1 text-muted-foreground hover:text-foreground transition-colors p-1 rounded"><RefreshCw className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+              <Input
+                value={convSearch}
+                onChange={e => setConvSearch(e.target.value)}
+                placeholder="Search phone or name…"
+                className="h-7 text-xs"
+              />
+              {/* Status filter tabs */}
+              <div className="flex gap-1">
+                {(["all","open","resolved","spam"] as const).map(f => (
+                  <button key={f} onClick={() => setConvFilter(f)}
+                    className={`flex-1 text-[10px] py-0.5 rounded font-medium transition-colors ${convFilter === f ? "bg-[#25D366] text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                    {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
+
             <div className="flex-1 overflow-y-auto">
               {convsLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground p-4"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
@@ -2895,25 +3104,38 @@ export default function WhatsAppPage() {
                 </div>
               ) : (
                 (conversations as any[]).map((conv: any) => (
-                  <button key={conv.phone} onClick={() => setSelectedPhone(conv.phone)}
-                    className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/30 transition-colors ${selectedPhone === conv.phone ? "bg-[#5FA800]/5 border-l-2 border-l-[#5FA800]" : ""}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium font-mono">{conv.phone}</span>
-                      {parseInt(conv.unread_count) > 0 && (
-                        <span className="text-[10px] font-bold text-white bg-[#25D366] rounded-full px-1.5 py-0.5">{conv.unread_count}</span>
+                  <button key={conv.phone ?? conv.id} onClick={() => { setSelectedPhone(conv.phone); setConvDetail(null); setConvNotes([]); }}
+                    className={`w-full text-left px-3 py-2.5 border-b border-border/50 hover:bg-muted/30 transition-colors ${selectedPhone === conv.phone ? "bg-[#5FA800]/5 border-l-2 border-l-[#5FA800]" : ""}`}>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {conv.is_starred && <span className="text-yellow-400 text-[10px]">★</span>}
+                        <span className="text-xs font-medium font-mono truncate">{conv.contact_name ?? conv.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {parseInt(conv.unread_count ?? "0") > 0 && (
+                          <span className="text-[10px] font-bold text-white bg-[#25D366] rounded-full px-1.5 py-0.5">{conv.unread_count}</span>
+                        )}
+                        {conv.bot_mode === "human" && <span className="text-[9px] bg-orange-100 text-orange-600 rounded px-1 font-medium">Human</span>}
+                        {conv.bot_mode === "off"   && <span className="text-[9px] bg-gray-100 text-gray-500 rounded px-1 font-medium">Off</span>}
+                      </div>
+                    </div>
+                    {conv.contact_name && <p className="text-[10px] text-muted-foreground font-mono">{conv.phone}</p>}
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.last_message ?? "—"}</p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-[10px] text-muted-foreground/60">
+                        {conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString("en-PK", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                      </p>
+                      {conv.intent && (
+                        <span className="text-[9px] bg-blue-50 text-blue-600 rounded px-1">{conv.intent.replace(/_/g, " ")}</span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{conv.last_message ?? "—"}</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                      {conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString("en-PK", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
-                    </p>
                   </button>
                 ))
               )}
             </div>
           </div>
 
-          {/* Chat window */}
+          {/* ── MIDDLE: Chat window ── */}
           <div className="flex-1 border border-border rounded-xl overflow-hidden flex flex-col">
             {!selectedPhone ? (
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
@@ -2923,19 +3145,67 @@ export default function WhatsAppPage() {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                      <User className="w-4 h-4 text-gray-500" />
+                {/* Chat header */}
+                <div className="px-4 py-2.5 border-b bg-muted/10 flex items-center justify-between gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-[#25D366]/10 flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-[#25D366]" />
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold font-mono">{selectedPhone}</p>
-                      <p className="text-xs text-muted-foreground">{(chatMessages as any[]).length} messages</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold font-mono truncate">
+                        {convDetail?.contact_name ?? selectedPhone}
+                        {convDetail?.is_starred && <span className="ml-1 text-yellow-400 text-xs">★</span>}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{(chatMessages as any[]).length} msgs
+                        {convDetail?.agent_name && <span className="ml-2 text-blue-500">Agent: {convDetail.agent_name}</span>}
+                        {convDetail?.intent && <span className="ml-2 text-orange-500">Intent: {convDetail.intent.replace(/_/g, " ")}</span>}
+                      </p>
                     </div>
                   </div>
-                  <button onClick={() => refetchMsgs()} className="text-muted-foreground hover:text-foreground"><RefreshCw className="w-3.5 h-3.5" /></button>
+                  {/* Action toolbar */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Bot mode switcher */}
+                    <div className="flex items-center rounded-lg border border-border overflow-hidden text-[10px] font-medium">
+                      {(["auto","human","off"] as const).map(m => (
+                        <button key={m} onClick={() => toggleBotMode(m)} disabled={botModeChanging}
+                          className={`px-2 py-1 transition-colors ${convDetail?.bot_mode === m ? "bg-[#25D366] text-white" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
+                          {m === "auto" ? "🤖" : m === "human" ? "👤" : "🔕"}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Resolve */}
+                    <button onClick={() => toggleConvStatus(convDetail?.status === "resolved" ? "open" : "resolved")}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-medium border transition-colors ${convDetail?.status === "resolved" ? "bg-gray-100 text-gray-600" : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"}`}>
+                      {convDetail?.status === "resolved" ? "Reopen" : "✓ Resolve"}
+                    </button>
+                    {/* Star */}
+                    <button onClick={toggleStar} className={`p-1.5 rounded-lg border transition-colors ${convDetail?.is_starred ? "text-yellow-500 border-yellow-200 bg-yellow-50" : "text-muted-foreground border-border hover:bg-muted/30"}`}>
+                      <span className="text-sm">★</span>
+                    </button>
+                    {/* Note */}
+                    <button onClick={() => setShowNoteInput(v => !v)}
+                      className={`p-1.5 rounded-lg border text-xs transition-colors ${showNoteInput ? "bg-blue-50 text-blue-600 border-blue-200" : "text-muted-foreground border-border hover:bg-muted/30"}`}
+                      title="Add internal note">
+                      📝
+                    </button>
+                    <button onClick={() => refetchMsgs()} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg border border-border hover:bg-muted/30"><RefreshCw className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setShowRightPanel(v => !v)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg border border-border hover:bg-muted/30" title="Toggle info panel">
+                      <span className="text-xs">⚙</span>
+                    </button>
+                  </div>
                 </div>
 
+                {/* Internal note input */}
+                {showNoteInput && (
+                  <div className="px-4 py-2 border-b bg-blue-50/60 flex items-center gap-2">
+                    <span className="text-[10px] text-blue-600 font-semibold">Internal Note</span>
+                    <Input value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add note (not sent to customer)…" className="flex-1 h-7 text-xs bg-white" />
+                    <Button size="sm" onClick={addNote} className="h-7 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white">Save</Button>
+                    <button onClick={() => setShowNoteInput(false)} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+                  </div>
+                )}
+
+                {/* Messages area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5]/20">
                   {msgsLoading ? (
                     <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -2992,6 +3262,111 @@ export default function WhatsAppPage() {
               </>
             )}
           </div>
+
+          {/* ── RIGHT: Conversation Info Panel ── */}
+          {selectedPhone && showRightPanel && (
+            <div className="w-60 flex-shrink-0 border border-border rounded-xl overflow-hidden flex flex-col bg-white text-xs">
+              <div className="px-3 py-2.5 border-b bg-muted/20 flex items-center justify-between">
+                <p className="text-xs font-semibold">Contact Info</p>
+                <button onClick={() => setShowRightPanel(false)} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {/* Contact details */}
+                <div className="px-3 py-3 border-b space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-[#25D366]/10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-[#25D366]" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{convDetail?.contact_name ?? "Unknown"}</p>
+                      <p className="text-muted-foreground font-mono">{selectedPhone}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className={`font-medium ${convDetail?.status === "open" ? "text-green-600" : convDetail?.status === "resolved" ? "text-blue-600" : "text-gray-500"}`}>
+                        {convDetail?.status ?? "open"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Bot Mode</span>
+                      <span className={`font-medium ${convDetail?.bot_mode === "auto" ? "text-green-600" : convDetail?.bot_mode === "human" ? "text-orange-600" : "text-gray-500"}`}>
+                        {convDetail?.bot_mode ?? "auto"}
+                      </span>
+                    </div>
+                    {convDetail?.agent_name && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Agent</span>
+                        <span className="font-medium text-blue-600">{convDetail.agent_name}</span>
+                      </div>
+                    )}
+                    {convDetail?.intent && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Intent</span>
+                        <span className="font-medium text-orange-600">{convDetail.intent.replace(/_/g, " ")}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Messages</span>
+                      <span className="font-medium">{chatMessages.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Starred</span>
+                      <span>{convDetail?.is_starred ? "⭐ Yes" : "No"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Internal note */}
+                {convDetail?.internal_note && (
+                  <div className="px-3 py-2.5 border-b bg-blue-50/50">
+                    <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider mb-1">Latest Note</p>
+                    <p className="text-muted-foreground leading-relaxed">{convDetail.internal_note}</p>
+                  </div>
+                )}
+
+                {/* Agent notes history */}
+                {convNotes.length > 0 && (
+                  <div className="px-3 py-2.5 border-b">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Notes History</p>
+                    <div className="space-y-2">
+                      {convNotes.map((n: any) => (
+                        <div key={n.id} className="bg-yellow-50 rounded-lg p-2 border border-yellow-100">
+                          <p className="leading-relaxed mb-1">{n.note}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {n.agent_name} · {n.created_at ? new Date(n.created_at).toLocaleDateString("en-PK", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick actions */}
+                <div className="px-3 py-2.5 space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Actions</p>
+                  <a href={`https://wa.me/${selectedPhone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-colors font-medium">
+                    <MessageCircle className="w-3.5 h-3.5" />Open in WhatsApp
+                  </a>
+                  <button onClick={() => toggleBotMode("human")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors font-medium">
+                    <User className="w-3.5 h-3.5" />Take Over (Human)
+                  </button>
+                  <button onClick={() => toggleBotMode("auto")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors font-medium">
+                    <Sparkles className="w-3.5 h-3.5" />Return to AI Bot
+                  </button>
+                  <button onClick={() => toggleConvStatus(convDetail?.status === "resolved" ? "open" : "resolved")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors font-medium">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    {convDetail?.status === "resolved" ? "Reopen" : "Mark Resolved"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -27,6 +27,10 @@ export const whatsappSettingsTable = pgTable("whatsapp_settings", {
   qrScanCount: integer("qr_scan_count").notNull().default(0),
   qrVersion: integer("qr_version").notNull().default(1),
   qrLastScanned: timestamp("qr_last_scanned"),
+  /* ── Official Meta API advanced credentials ── */
+  appSecret: text("app_secret"),
+  apiVersion: text("api_version").default("v18.0"),
+  businessPortfolioId: text("business_portfolio_id"),
   /* ── Meta connection metadata (populated by Embedded Signup) ── */
   verifiedName: text("verified_name"),
   qualityRating: text("quality_rating"),

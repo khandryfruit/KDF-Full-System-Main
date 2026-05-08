@@ -171,11 +171,46 @@ router.post("/webhooks/whatsapp", async (req, res) => {
           const interactionId  = listReplyId ?? buttonReplyId;
           const interactionTitle: string | undefined = msg.interactive?.list_reply?.title ?? msg.interactive?.button_reply?.title;
 
-          const rawText = msgType === "text"
-            ? (msg.text?.body ?? "")
-            : msgType === "interactive"
-            ? (interactionTitle ?? interactionId ?? "")
-            : msg.type ?? "non-text";
+          /* ── Extract rich content based on message type ── */
+          let rawText = "";
+          let mediaUrl: string | null = null;
+          let mediaCaption: string | null = null;
+          let reactionEmoji: string | null = null;
+
+          switch (msgType) {
+            case "text":
+              rawText = msg.text?.body ?? "";
+              break;
+            case "interactive":
+              rawText = interactionTitle ?? interactionId ?? "";
+              break;
+            case "image":
+            case "video":
+            case "document":
+            case "sticker":
+              rawText = `[${msgType}]`;
+              mediaUrl = msg[msgType]?.id ? `https://media-msgid/${msg[msgType].id}` : null;
+              mediaCaption = msg[msgType]?.caption ?? null;
+              if (mediaCaption) rawText = `[${msgType}] ${mediaCaption}`;
+              break;
+            case "audio":
+            case "voice":
+              rawText = `[Voice note 🎤]`;
+              mediaUrl = msg.audio?.id ? `https://media-msgid/${msg.audio.id}` : null;
+              break;
+            case "location":
+              rawText = `📍 Location: ${msg.location?.name ?? `${msg.location?.latitude},${msg.location?.longitude}`}`;
+              break;
+            case "reaction":
+              reactionEmoji = msg.reaction?.emoji ?? "❤️";
+              rawText = `[Reaction: ${reactionEmoji}]`;
+              break;
+            case "contacts":
+              rawText = `[Contact shared]`;
+              break;
+            default:
+              rawText = msg.type ?? "non-text";
+          }
 
           /* Deduplicate */
           if (msgId) {
@@ -220,16 +255,33 @@ router.post("/webhooks/whatsapp", async (req, res) => {
 
           const waConvId = (waConv as any)?.id;
           if (waConvId) {
-            await db.insert(waMessagesTable).values({
-              conversationId: waConvId,
-              waMessageId: msgId ?? null,
-              direction: "in",
-              type: msgType === "interactive" ? "interactive" : msgType,
-              content: rawText,
-              status: "received",
-              isBot: false,
-            }).catch(() => {});
-            broadcastSSE("wa_message", { conversationId: waConvId, direction: "in", content: rawText, phone });
+            await db.execute(sql`
+              INSERT INTO wa_messages (conversation_id, wa_message_id, direction, type, content, media_url, caption, reaction, status, is_bot, created_at)
+              VALUES (${waConvId}, ${msgId ?? null}, 'in', ${msgType}, ${rawText}, ${mediaUrl}, ${mediaCaption}, ${reactionEmoji}, 'received', false, NOW())
+            `).catch(() => {});
+            broadcastSSE("wa_message", { conversationId: waConvId, direction: "in", content: rawText, phone, msgType, mediaUrl, mediaCaption, reactionEmoji });
+          }
+
+          /* ── Intent detection + save in conversation ── */
+          const lowerText = rawText.toLowerCase();
+          const AI_KEYWORDS: Record<string, string> = {
+            badam: "almonds", almond: "almonds", pista: "pistachios", pistachio: "pistachios",
+            akhrot: "walnuts", walnut: "walnuts", kaju: "cashews", cashew: "cashews",
+            "dry fruit": "dry_fruits", "dry fruits": "dry_fruits", mewa: "dry_fruits",
+            price: "price_inquiry", rate: "price_inquiry", qeemat: "price_inquiry",
+            discount: "discount", offer: "discount", sale: "discount",
+            delivery: "delivery", "deliver kar": "delivery", shipping: "delivery",
+            cod: "cod", "cash on delivery": "cod",
+            complaint: "complaint", problem: "complaint", shikayat: "complaint",
+            return: "return_request", refund: "return_request", wapas: "return_request",
+            order: "order_inquiry", track: "order_inquiry",
+          };
+          let detectedIntent: string | null = null;
+          for (const [kw, intent] of Object.entries(AI_KEYWORDS)) {
+            if (lowerText.includes(kw)) { detectedIntent = intent; break; }
+          }
+          if (detectedIntent && waConvId) {
+            await db.execute(sql`UPDATE wa_conversations SET intent = ${detectedIntent} WHERE id = ${waConvId}`).catch(() => {});
           }
 
           /* ── Check if conversation is in human or off mode ── */
@@ -1388,41 +1440,153 @@ router.get("/admin/whatsapp/chatbot-stats", adminMiddleware as any, async (req, 
 /* ─── Admin: Conversations (unique phones) ────────────── */
 router.get("/admin/whatsapp/conversations", adminMiddleware as any, async (req, res) => {
   try {
-    const rows = await db.execute(
-      sql`SELECT phone,
-               COUNT(*) as message_count,
-               MAX(created_at) as last_message_at,
-               (SELECT message FROM whatsapp_logs wl2 WHERE wl2.phone = wl.phone ORDER BY created_at DESC LIMIT 1) as last_message,
-               (SELECT template_name FROM whatsapp_logs wl3 WHERE wl3.phone = wl.phone ORDER BY created_at DESC LIMIT 1) as last_template,
-               SUM(CASE WHEN template_name = 'incoming' AND created_at > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as unread_count
-          FROM whatsapp_logs wl
-         WHERE phone != 'unknown'
-         GROUP BY phone
-         ORDER BY MAX(created_at) DESC
-         LIMIT 100`
-    );
+    const { status, assigned, search, intent } = req.query as Record<string, string>;
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.contact_phone as phone, c.contact_name, c.contact_wa_id,
+        c.last_message, c.last_message_at, c.unread_count, c.bot_mode,
+        c.status, c.assigned_to, c.agent_name, c.internal_note, c.intent,
+        c.is_starred, c.tags, c.created_at, c.updated_at,
+        (SELECT COUNT(*) FROM wa_messages m WHERE m.conversation_id = c.id) as message_count
+      FROM wa_conversations c
+      WHERE 1=1
+        ${status  ? sql`AND c.status = ${status}`               : sql``}
+        ${assigned === "me" ? sql`AND c.assigned_to IS NOT NULL` : sql``}
+        ${intent   ? sql`AND c.intent = ${intent}`              : sql``}
+        ${search   ? sql`AND (c.contact_phone ILIKE ${'%' + search + '%'} OR c.contact_name ILIKE ${'%' + search + '%'})` : sql``}
+      ORDER BY c.last_message_at DESC NULLS LAST
+      LIMIT 200
+    `);
     return res.json(rows.rows ?? rows);
-  } catch (e) { console.error(e); return res.status(500).json({ error: "Failed" }); }
+  } catch (e) { req.log?.error(e); return res.status(500).json({ error: "Failed" }); }
 });
 
-/* ─── Admin: Single Conversation ─────────────────────── */
+/* ─── Admin: Single Conversation messages ─────────────── */
 router.get("/admin/whatsapp/conversations/:phone", adminMiddleware as any, async (req, res) => {
   try {
+    const phone = req.params.phone;
+    /* Try wa_messages first (rich data), fall back to whatsapp_logs */
+    const [conv] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${phone} LIMIT 1`);
+    const convId = (conv as any)?.id;
+    if (convId) {
+      const msgs = await db.execute(sql`
+        SELECT m.*, 'wa_message' as source
+        FROM wa_messages m
+        WHERE m.conversation_id = ${convId}
+        ORDER BY m.created_at ASC
+        LIMIT 200
+      `);
+      /* Mark as read */
+      await db.execute(sql`UPDATE wa_conversations SET unread_count = 0 WHERE id = ${convId}`).catch(() => {});
+      return res.json(msgs.rows ?? msgs);
+    }
+    /* Fallback to logs */
     const messages = await db.select().from(whatsappLogsTable)
-      .where(eq(whatsappLogsTable.phone, req.params.phone))
-      .orderBy(desc(whatsappLogsTable.createdAt))
-      .limit(100);
-    return res.json(messages.reverse());
+      .where(eq(whatsappLogsTable.phone, phone))
+      .orderBy(whatsappLogsTable.createdAt)
+      .limit(200);
+    return res.json(messages);
+  } catch { return res.status(500).json({ error: "Failed" }); }
+});
+
+/* ─── Admin: Conversation detail (meta + notes) ────────── */
+router.get("/admin/whatsapp/conversations/:phone/detail", adminMiddleware as any, async (req, res) => {
+  try {
+    const [conv] = await db.execute(sql`SELECT * FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+    const notes  = await db.execute(sql`SELECT * FROM wa_agent_notes WHERE phone = ${req.params.phone} ORDER BY created_at DESC LIMIT 50`);
+    return res.json({ conversation: conv, notes: notes.rows ?? notes });
   } catch { return res.status(500).json({ error: "Failed" }); }
 });
 
 /* ─── Admin: Manual Reply ────────────────────────────── */
 router.post("/admin/whatsapp/conversations/:phone/reply", adminMiddleware as any, async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, agentName } = req.body;
     if (!message) return res.status(400).json({ error: "message required" });
     const ok = await sendWhatsAppMessage({ phone: req.params.phone, message, templateName: "admin_reply" });
+    if (ok) {
+      /* Log to wa_messages */
+      const [conv] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+      const convId = (conv as any)?.id;
+      if (convId) {
+        await db.execute(sql`
+          INSERT INTO wa_messages (conversation_id, direction, type, content, status, is_bot, agent_name, created_at)
+          VALUES (${convId}, 'out', 'text', ${message}, 'sent', false, ${agentName ?? 'Admin'}, NOW())
+        `).catch(() => {});
+        await db.execute(sql`
+          UPDATE wa_conversations SET last_message = ${message.slice(0, 120)}, last_message_at = NOW(), agent_name = ${agentName ?? 'Admin'}, last_agent_at = NOW() WHERE id = ${convId}
+        `).catch(() => {});
+        broadcastSSE("wa_message", { conversationId: convId, direction: "out", content: message, phone: req.params.phone, agentName: agentName ?? "Admin" });
+      }
+    }
     return res.json({ success: ok });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Assign conversation ─────────────────────── */
+router.patch("/admin/whatsapp/conversations/:phone/assign", adminMiddleware as any, async (req, res) => {
+  try {
+    const { agentName, agentId } = req.body;
+    await db.execute(sql`
+      UPDATE wa_conversations SET assigned_to = ${agentId ?? agentName ?? null}, agent_name = ${agentName ?? null}, updated_at = NOW()
+      WHERE contact_phone = ${req.params.phone}
+    `);
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Toggle bot mode ─────────────────────────── */
+router.patch("/admin/whatsapp/conversations/:phone/bot-mode", adminMiddleware as any, async (req, res) => {
+  try {
+    const { mode } = req.body; // "auto" | "human" | "off"
+    if (!["auto", "human", "off"].includes(mode)) return res.status(400).json({ error: "Invalid mode" });
+    await db.execute(sql`UPDATE wa_conversations SET bot_mode = ${mode}, updated_at = NOW() WHERE contact_phone = ${req.params.phone}`);
+    broadcastSSE("wa_bot_mode", { phone: req.params.phone, mode });
+    return res.json({ success: true, mode });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Toggle conversation status ──────────────── */
+router.patch("/admin/whatsapp/conversations/:phone/status", adminMiddleware as any, async (req, res) => {
+  try {
+    const { status } = req.body; // "open" | "resolved" | "spam"
+    await db.execute(sql`UPDATE wa_conversations SET status = ${status}, updated_at = NOW() WHERE contact_phone = ${req.params.phone}`);
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Toggle star ─────────────────────────────── */
+router.patch("/admin/whatsapp/conversations/:phone/star", adminMiddleware as any, async (req, res) => {
+  try {
+    await db.execute(sql`UPDATE wa_conversations SET is_starred = NOT is_starred, updated_at = NOW() WHERE contact_phone = ${req.params.phone}`);
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Internal note ───────────────────────────── */
+router.post("/admin/whatsapp/conversations/:phone/note", adminMiddleware as any, async (req, res) => {
+  try {
+    const { note, agentName } = req.body;
+    if (!note?.trim()) return res.status(400).json({ error: "note required" });
+    const [convRow] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+    const convId = (convRow as any)?.id ?? 0;
+    await db.execute(sql`
+      INSERT INTO wa_agent_notes (conversation_id, phone, agent_name, note, created_at)
+      VALUES (${convId}, ${req.params.phone}, ${agentName ?? 'Admin'}, ${note.trim()}, NOW())
+    `);
+    /* Update internal_note shortcut on conversation */
+    await db.execute(sql`UPDATE wa_conversations SET internal_note = ${note.trim()}, updated_at = NOW() WHERE contact_phone = ${req.params.phone}`);
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Send template from conversation ──────────── */
+router.post("/admin/whatsapp/conversations/:phone/send-template", adminMiddleware as any, async (req, res) => {
+  try {
+    const { templateName, languageCode, components } = req.body;
+    if (!templateName) return res.status(400).json({ error: "templateName required" });
+    const result = await sendWhatsAppTemplate({ phone: req.params.phone, templateName, languageCode: languageCode ?? "en_US", components: components ?? [] });
+    return res.json(result);
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
