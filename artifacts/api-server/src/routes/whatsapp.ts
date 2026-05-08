@@ -8,6 +8,7 @@ import { broadcastSSE } from "../lib/sse";
 import OpenAI from "openai";
 import { aiSettingsTable } from "@workspace/db";
 import crypto from "crypto";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -126,7 +127,15 @@ router.post("/webhooks/whatsapp", async (req, res) => {
     recentWebhookPayloads.unshift({ ts: new Date().toISOString(), body });
     if (recentWebhookPayloads.length > 50) recentWebhookPayloads.pop();
     if (body?.object !== "whatsapp_business_account") return;
+    await processWaWebhookBody(body, req.log ?? logger);
+  } catch (err) {
+    req.log?.error(err, "Webhook event processing error");
+  }
+});
 
+/* ─── Exported: process a whatsapp_business_account webhook body ── */
+export async function processWaWebhookBody(body: any, log: any = logger): Promise<void> {
+  try {
     for (const entry of (body.entry ?? [])) {
       for (const change of (entry.changes ?? [])) {
         const value = change?.value ?? {};
@@ -141,7 +150,7 @@ router.post("/webhooks/whatsapp", async (req, res) => {
           await db.execute(
             sql`UPDATE wa_messages SET status = ${deliveryStatus}, updated_at = NOW() WHERE wa_message_id = ${s.id}`
           ).catch(() => {});
-          req.log?.info({ messageId: s.id, deliveryStatus, errors: s.errors }, "WhatsApp delivery status update");
+          log?.info({ messageId: s.id, deliveryStatus, errors: s.errors }, "WhatsApp delivery status update");
 
           if (deliveryStatus === "delivered" || deliveryStatus === "read") {
             const [logRow] = await db.select({ id: whatsappLogsTable.id, templateName: whatsappLogsTable.templateName })
@@ -216,7 +225,7 @@ router.post("/webhooks/whatsapp", async (req, res) => {
           if (msgId) {
             const [dup] = await db.select({ id: whatsappLogsTable.id })
               .from(whatsappLogsTable).where(eq(whatsappLogsTable.messageId, msgId)).limit(1);
-            if (dup) { req.log?.info({ msgId }, "Duplicate webhook message, skipping"); continue; }
+            if (dup) { log?.info({ msgId }, "Duplicate webhook message, skipping"); continue; }
           }
 
           /* Log incoming */
@@ -288,7 +297,7 @@ router.post("/webhooks/whatsapp", async (req, res) => {
           if (waConv) {
             const currentBotMode = (waConv as any)?.botMode ?? "auto";
             if (currentBotMode === "human" || currentBotMode === "off") {
-              req.log?.info({ phone, botMode: currentBotMode }, "Bot skipped — human/off mode");
+              log?.info({ phone, botMode: currentBotMode }, "Bot skipped — human/off mode");
               continue;
             }
           }
@@ -314,18 +323,18 @@ router.post("/webhooks/whatsapp", async (req, res) => {
               interactionId,
             });
             if (confResult.handled) {
-              req.log?.info({ phone, action: confResult.action, orderId: confResult.orderId }, "OnDrive: confirmation handled");
+              log?.info({ phone, action: confResult.action, orderId: confResult.orderId }, "OnDrive: confirmation handled");
               continue;
             }
           } catch (confErr) {
-            req.log?.warn(confErr, "OnDrive confirmation check failed (non-fatal)");
+            log?.warn(confErr, "OnDrive confirmation check failed (non-fatal)");
           }
 
           /* ═══════════════════════════════════════════════
              BRANCH 1: Interactive reply (button / list tap)
              ═══════════════════════════════════════════════ */
           if (msgType === "interactive" && interactionId) {
-            req.log?.info({ phone, interactionId, interactionTitle }, "Interactive reply received");
+            log?.info({ phone, interactionId, interactionTitle }, "Interactive reply received");
 
             /* "Main Menu" button — show the menu again */
             if (interactionId === "main_menu") {
@@ -469,13 +478,13 @@ router.post("/webhooks/whatsapp", async (req, res) => {
 
           /* In ai_chat state — go straight to AI (skip menu check) */
           if (currentState === "ai_chat") {
-            await handleAiReply({ phone, textBody, chatbot, waSettings, req });
+            await handleAiReply({ phone, textBody, chatbot, waSettings, log });
             continue;
           }
 
           /* ── Product catalog intent check (before greeting/AI) ── */
           if (chatbot?.isEnabled && (chatbot as any)?.catalogEnabled) {
-            const catalogMatched = await handleProductCatalog({ phone, textBody, chatbot, waSettings, req });
+            const catalogMatched = await handleProductCatalog({ phone, textBody, chatbot, waSettings, log });
             if (catalogMatched) continue;
           }
 
@@ -488,15 +497,15 @@ router.post("/webhooks/whatsapp", async (req, res) => {
 
           /* AI chatbot fallback */
           if (chatbot?.isEnabled) {
-            await handleAiReply({ phone, textBody, chatbot, waSettings, req });
+            await handleAiReply({ phone, textBody, chatbot, waSettings, log });
           }
         }
       }
     }
   } catch (err) {
-    req.log?.error(err, "Webhook event processing error");
+    log?.error(err, "Webhook event processing error");
   }
-});
+}
 
 /* ─── Helper: Send interactive welcome menu ─────────── */
 async function handleSendMenu(
@@ -606,9 +615,9 @@ async function handleProductCatalog(opts: {
   textBody: string;
   chatbot: any;
   waSettings: any;
-  req: any;
+  log?: any;
 }): Promise<boolean> {
-  const { phone, textBody, chatbot, waSettings, req } = opts;
+  const { phone, textBody, chatbot, waSettings, log } = opts;
   try {
     /* ── Detect product intent keywords ── */
     const PRODUCT_KEYWORDS = [
@@ -677,7 +686,7 @@ async function handleProductCatalog(opts: {
         productUrl: `${websiteUrl}/products/${p.slug}`,
       }));
     } catch (dbErr) {
-      req.log?.warn(dbErr, "Product catalog DB lookup failed");
+      log?.warn(dbErr, "Product catalog DB lookup failed");
     }
 
     if (products.length === 0) return false;
@@ -737,7 +746,7 @@ async function handleProductCatalog(opts: {
 
     return true;
   } catch (err) {
-    req.log?.warn(err, "handleProductCatalog error");
+    log?.warn(err, "handleProductCatalog error");
     return false;
   }
 }
@@ -751,9 +760,9 @@ async function handleAiReply(opts: {
   textBody: string;
   chatbot: any;
   waSettings: any;
-  req: any;
+  log?: any;
 }): Promise<void> {
-  const { phone, textBody, chatbot, waSettings, req } = opts;
+  const { phone, textBody, chatbot, waSettings, log } = opts;
   try {
     /* Rate limit check */
     const cooldownSec = chatbot.replyDelaySec ?? 30;
@@ -765,7 +774,7 @@ async function handleAiReply(opts: {
     if (lastAiReplyRow) {
       const secsSinceLast = (Date.now() - new Date(lastAiReplyRow.createdAt).getTime()) / 1000;
       if (secsSinceLast < cooldownSec) {
-        req.log?.info({ phone, secsSinceLast, cooldownSec }, "AI reply rate-limited");
+        log?.info({ phone, secsSinceLast, cooldownSec }, "AI reply rate-limited");
         return;
       }
     }
@@ -778,7 +787,7 @@ async function handleAiReply(opts: {
     );
     const todaySent = Number((dailyCount as any)?.rows?.[0]?.cnt ?? 0);
     if (todaySent >= maxDaily) {
-      req.log?.warn({ todaySent, maxDaily }, "AI reply daily cap reached");
+      log?.warn({ todaySent, maxDaily }, "AI reply daily cap reached");
       return;
     }
 
@@ -808,7 +817,7 @@ async function handleAiReply(opts: {
           orderContextBlock = `\n\n[CUSTOMER CONTEXT — use this to answer their questions]\nCustomer Name: ${customerName}\nPhone: ${phone}\nRecent Orders:\n${lines.join("\n")}\n[END CONTEXT]`;
         }
       } catch (ctxErr) {
-        req.log?.warn(ctxErr, "Failed to fetch order context");
+        log?.warn(ctxErr, "Failed to fetch order context");
       }
     }
 
@@ -873,7 +882,7 @@ async function handleAiReply(opts: {
       }
     }
   } catch (aiErr) {
-    req.log?.warn(aiErr, "AI auto-reply error");
+    log?.warn(aiErr, "AI auto-reply error");
     try {
       if (chatbot?.fallbackMessage && waSettings?.isActive && waSettings.accessToken && waSettings.phoneNumberId) {
         const normPhone = normalizePhone(phone);

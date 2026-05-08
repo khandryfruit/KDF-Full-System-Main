@@ -604,6 +604,13 @@ router.post("/meta/webhook", async (req, res) => {
     if (recentSocialPayloads.length > 50) recentSocialPayloads.pop();
     logger.info({ object: body.object, entries: body.entry?.length ?? 0 }, "Meta unified webhook received");
 
+    /* ── WhatsApp Business Account — route to WA processor (bypasses social settings) ── */
+    if (body.object === "whatsapp_business_account") {
+      const { processWaWebhookBody } = await import("./whatsapp.js");
+      await processWaWebhookBody(body, logger);
+      return;
+    }
+
     const settings = await getSocialSettings();
     if (!settings?.isEnabled) {
       logger.warn("Meta webhook skipped — social AI is disabled");
