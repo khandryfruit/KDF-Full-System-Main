@@ -1,0 +1,255 @@
+# URGENT Debug & Fix — Instagram/Facebook AI Reply System
+
+Facebook and Instagram are already connected successfully.
+
+Current status:
+- Instagram connected
+- Facebook connected
+- Inbox receiving customer chats/messages
+- Instagram DMs are appearing
+- Comments/messages are coming successfully
+- AI Engine toggle is enabled
+
+But there is a critical issue:
+
+## Problem
+Customer messages/comments are coming IN correctly,
+BUT AI replies/messages/comments are NOT going OUT from our side.
+
+The AI is not replying properly to:
+- Instagram DMs
+- Facebook messages
+- Instagram comments
+- Facebook comments
+
+This needs deep debugging and complete fixing.
+
+---
+
+# Required Action
+
+Please deeply debug the entire messaging pipeline from start to finish.
+
+Do NOT assume anything.
+
+You must:
+- Test manually
+- Send test comments
+- Send test DMs
+- Verify webhook events
+- Verify outgoing API calls
+- Verify Meta permissions
+- Verify AI triggers
+- Verify reply delivery
+
+Confirm everything practically.
+
+---
+
+# Current Working Parts
+
+These parts are already working:
+- Instagram connected
+- Facebook connected
+- Incoming DMs working
+- Incoming comments working
+- Webhook receiving events
+- Conversations visible in inbox
+
+So the issue is specifically with:
+- Outgoing AI replies
+- Comment replies
+- DM replies
+- Auto responses
+
+---
+
+# Deep Debug Checklist
+
+## 1. Verify Meta Permissions
+
+Check whether these permissions are fully approved and active:
+
+- instagram_manage_messages
+- instagram_manage_comments
+- pages_manage_metadata
+- pages_messaging
+- pages_read_engagement
+- business_management
+
+Check:
+- Token scopes
+- Expired permissions
+- App review status
+- Live mode vs development mode
+
+---
+
+# 2. Verify Webhook Events
+
+Check:
+- Incoming webhook payloads
+- Message event structure
+- Comment event structure
+- Instagram messaging events
+- Facebook page events
+
+Ensure:
+- Events trigger AI properly
+- Events map to correct conversation
+- User IDs are stored correctly
+
+---
+
+# 3. Verify AI Trigger Pipeline
+
+Currently AI engine toggle is ON.
+
+Check:
+- Is AI trigger firing?
+- Is OpenAI response generating?
+- Is AI response returning successfully?
+- Is response blocked before sending?
+- Are async queues failing?
+- Is message formatter crashing?
+
+Add detailed logs for:
+- AI input
+- AI output
+- Meta send response
+- Delivery status
+
+---
+
+# 4. Verify Outgoing Meta API Calls
+
+This is VERY IMPORTANT.
+
+Check:
+- Instagram Send API
+- Facebook Send API
+- Comment Reply API
+
+Verify:
+- Correct endpoint
+- Correct Page Access Token
+- Correct IG Scoped User ID
+- Correct recipient ID
+- Correct Page ID
+- Correct Instagram Business Account ID
+
+---
+
+# 5. Comment Reply Debugging
+
+Currently comment replies are not posting.
+
+Deeply verify:
+- Comment reply endpoint
+- Comment permissions
+- Public/private reply logic
+- Rate limits
+- Invalid comment IDs
+
+Test manually:
+- Post test comment
+- Trigger AI reply
+- Confirm reply appears publicly
+
+---
+
+# 6. DM Reply Debugging
+
+DMs are coming in but replies are failing.
+
+Check:
+- Messaging API endpoint
+- Recipient PSID/IGSID mapping
+- Token validity
+- JSON payload structure
+- Message queue failures
+- Retry failures
+
+Test manually:
+- Send test DM
+- Generate AI response
+- Confirm message delivered
+
+---
+
+# 7. Live vs Development Mode
+
+Check Meta App mode.
+
+If app is in Development Mode:
+- Only test users receive replies
+
+Ensure:
+- App is LIVE
+- Instagram account added correctly
+- Facebook Page linked correctly
+- Test users configured properly
+
+---
+
+# 8. AI Response Delivery
+
+Check if AI responses are generated but blocked.
+
+Verify:
+- OpenAI API response
+- Response sanitization
+- Meta formatting rules
+- Invalid emoji handling
+- Unsupported content handling
+
+---
+
+# 9. Database & Queue System
+
+Check:
+- Failed jobs table
+- Queue workers
+- Redis queues
+- Delayed jobs
+- Webhook queue processing
+
+Ensure failed jobs retry properly.
+
+---
+
+# 10. Real-Time Inbox Sync
+
+Fix inbox behavior:
+- Replies should appear instantly
+- Delivery status should update live
+- AI typing state should show
+- Comments should sync live
+
+---
+
+# 11. Required Final Result
+
+After fixing:
+
+The system must:
+- Automatically reply to Instagram DMs
+- Automatically reply to Facebook messages
+- Automatically reply to Instagram comments
+- Automatically reply to Facebook comments
+- Use AI-generated smart replies
+- Work in real-time
+- Sync instantly in inbox
+- Show delivery/read status
+
+WITHOUT any manual intervention.
+
+---
+
+# Final Instruction
+
+Please deeply inspect the entire production system end-to-end and identify the exact root cause.
+
+Do not provide assumptions.
+
+Fix the issue completely, test everything yourself practically, and send back a fully working production-ready solution.

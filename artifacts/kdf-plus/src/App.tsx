@@ -34,7 +34,7 @@ const BlogPostPage    = lazy(() => import("@/pages/BlogPostPage"));
 const PolicyPage      = lazy(() => import("@/pages/PolicyPage"));
 import NotFound from "@/pages/not-found";
 
-setAuthTokenGetter(() => localStorage.getItem("kdf_web_token") ?? "");
+setAuthTokenGetter(() => { try { return localStorage.getItem("kdf_web_token") ?? ""; } catch { return ""; } });
 
 const queryClient = new QueryClient({
   defaultOptions: {

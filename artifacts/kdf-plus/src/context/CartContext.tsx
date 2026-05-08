@@ -30,21 +30,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lastAdded, setLastAdded] = useState<CartItem | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("kdf_cart");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setItems(parsed.filter((item) => item?.product?.price !== undefined));
+    try {
+      const saved = localStorage.getItem("kdf_cart");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setItems(parsed.filter((item) => item?.product?.price !== undefined));
+          }
+        } catch {
+          try { localStorage.removeItem("kdf_cart"); } catch {}
         }
-      } catch {
-        localStorage.removeItem("kdf_cart");
       }
-    }
+    } catch {}
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("kdf_cart", JSON.stringify(items));
+    try { localStorage.setItem("kdf_cart", JSON.stringify(items)); } catch {}
     if (items.length > 0) {
       const subtotal = items.reduce((sum, item) => {
         const variant = item.variantId

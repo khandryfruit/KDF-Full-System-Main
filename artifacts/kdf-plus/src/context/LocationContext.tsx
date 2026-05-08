@@ -72,8 +72,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [locationPermission, setLocationPermission] = useState<"unknown" | "granted" | "denied">(() => {
-    const saved = localStorage.getItem("kdf_location_permission");
-    return (saved as any) ?? "unknown";
+    try { const saved = localStorage.getItem("kdf_location_permission"); return (saved as any) ?? "unknown"; } catch { return "unknown"; }
   });
 
   useEffect(() => {

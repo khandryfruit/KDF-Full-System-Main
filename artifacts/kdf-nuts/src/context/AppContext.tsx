@@ -24,25 +24,27 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("kdf_token"));
+  const [token, setToken] = useState<string | null>(() => {
+    try { return localStorage.getItem("kdf_token"); } catch { return null; }
+  });
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const stored = localStorage.getItem("kdf_user");
-    if (stored) {
-      try { return JSON.parse(stored) as UserProfile; } catch { return null; }
-    }
+    try {
+      const stored = localStorage.getItem("kdf_user");
+      if (stored) {
+        try { return JSON.parse(stored) as UserProfile; } catch { return null; }
+      }
+    } catch {}
     return null;
   });
 
   const setAuth = (newToken: string, newUser: UserProfile) => {
-    localStorage.setItem("kdf_token", newToken);
-    localStorage.setItem("kdf_user", JSON.stringify(newUser));
+    try { localStorage.setItem("kdf_token", newToken); localStorage.setItem("kdf_user", JSON.stringify(newUser)); } catch {}
     setToken(newToken);
     setUser(newUser);
   };
 
   const logout = () => {
-    localStorage.removeItem("kdf_token");
-    localStorage.removeItem("kdf_user");
+    try { localStorage.removeItem("kdf_token"); localStorage.removeItem("kdf_user"); } catch {}
     setToken(null);
     setUser(null);
   };
