@@ -918,7 +918,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.2 — Floating Action Stack + Order Tracking */
+  const js = `/* KDF NUTS Chat Widget v4.0 — Direct Open (1-click) */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -927,138 +927,167 @@ router.get("/widget.js", (req: Request, res: Response) => {
   var cfg       = window.KDFChatConfig || {};
   var EMBED_URL = cfg.embedUrl  || ${JSON.stringify(embedUrl)};
   var WA_HREF   = cfg.whatsapp  || ${JSON.stringify(WA_URL)};
-  var REOPEN_DELAY = cfg.reopenDelay || 90000; /* 90s auto-reopen after close */
+  var REOPEN_DELAY = cfg.reopenDelay || 90000;
 
   /* ── Styles ─────────────────────────────────────────── */
   var s = document.createElement('style');
   s.textContent = \`
     #kdf-w *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483640;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
-    #kdf-fab{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 22px rgba(37,211,102,0.45);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;}
-    #kdf-fab:hover{transform:scale(1.08);}
+    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483640;display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+
+    /* Main chat FAB */
+    #kdf-fab{width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#128C7E,#25D366);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(37,211,102,0.5);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;touch-action:manipulation;}
+    #kdf-fab:active{transform:scale(0.93);}
     #kdf-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff;}
-    .kdf-ab{display:flex;align-items:center;gap:9px;background:#fff;border:none;border-radius:28px;padding:8px 16px 8px 8px;cursor:pointer;box-shadow:0 3px 16px rgba(0,0,0,0.16);white-space:nowrap;font-size:13.5px;font-weight:600;color:#1a1a2e;transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;}
-    .kdf-ab:hover{transform:translateX(-3px);box-shadow:0 5px 22px rgba(0,0,0,0.2);}
-    .kdf-ai{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-    #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .2s,transform .2s;opacity:0;transform:translateY(8px) scale(0.95);pointer-events:none;}
-    #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
-    #kdf-popup{position:fixed;bottom:90px;right:20px;width:360px;height:560px;border:none;border-radius:20px;box-shadow:0 16px 56px rgba(0,0,0,0.22);z-index:2147483641;display:none;opacity:0;transform:translateY(10px) scale(0.97);transition:opacity .25s,transform .25s;}
-    #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
+
+    /* WhatsApp mini button — appears below FAB when chat closed */
+    #kdf-wa-btn{display:flex;align-items:center;gap:7px;background:#fff;border:none;border-radius:24px;padding:7px 14px 7px 7px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.15);font-size:13px;font-weight:600;color:#128C7E;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .15s;}
+    #kdf-wa-btn:active{transform:scale(0.96);}
+    #kdf-wa-icon{width:28px;height:28px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+    /* Chat label tooltip */
+    #kdf-label{background:rgba(0,0,0,0.75);color:#fff;font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s;position:absolute;right:68px;bottom:10px;}
+    #kdf-w:hover #kdf-label,#kdf-w:focus-within #kdf-label{opacity:1;}
+
+    /* Popup iframe */
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:580px;border:none;border-radius:20px;box-shadow:0 16px 56px rgba(0,0,0,0.25);z-index:2147483641;opacity:0;pointer-events:none;transform:translateY(12px) scale(0.97);transition:opacity .22s ease,transform .22s ease;background:#f0f0f0;}
+    #kdf-popup.kdf-open{opacity:1;pointer-events:auto;transform:none;}
+
+    /* Loading overlay on top of iframe */
+    #kdf-loading{position:fixed;bottom:90px;right:20px;width:370px;height:580px;border-radius:20px;background:#fff;z-index:2147483642;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;box-shadow:0 16px 56px rgba(0,0,0,0.25);}
+    #kdf-loading.kdf-open{display:flex;}
+    #kdf-spinner{width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:#25D366;border-radius:50%;animation:kdf-spin .7s linear infinite;}
+    #kdf-loading p{font-size:13px;color:#888;margin:0;}
+    @keyframes kdf-spin{to{transform:rotate(360deg)}}
+
     @media(max-width:480px){
-      #kdf-w{bottom:14px;right:14px;}
-      #kdf-popup{bottom:0;right:0;width:100%;height:82vh;border-radius:20px 20px 0 0;}
+      #kdf-w{bottom:16px;right:16px;}
+      #kdf-popup{bottom:0;right:0;width:100%;height:88vh;border-radius:20px 20px 0 0;}
+      #kdf-loading{bottom:0;right:0;width:100%;height:88vh;border-radius:20px 20px 0 0;}
     }
-    @keyframes kdfP{0%,100%{box-shadow:0 4px 22px rgba(37,211,102,0.45)}50%{box-shadow:0 4px 36px rgba(37,211,102,0.72)}}
-    #kdf-fab:not([data-open]).kdf-pulse{animation:kdfP 2.2s ease-in-out 3}
+    @keyframes kdfP{0%,100%{box-shadow:0 4px 24px rgba(37,211,102,0.5)}50%{box-shadow:0 4px 40px rgba(37,211,102,0.8)}}
+    #kdf-fab.kdf-pulse{animation:kdfP 2s ease-in-out 3;}
   \`;
   document.head.appendChild(s);
 
   /* ── Icons ──────────────────────────────────────────── */
-  var I_CHAT  = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-  var I_CLOSE = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  var I_WA    = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.963 2C6.466 2 2 6.466 2 11.963c0 1.82.49 3.524 1.345 4.989L2 22l5.217-1.319A9.925 9.925 0 0 0 11.963 22C17.46 22 22 17.534 22 12.037 22 6.54 17.46 2 11.963 2zm0 18.12a8.168 8.168 0 0 1-4.152-1.132l-.297-.177-3.095.782.812-3.006-.198-.31A8.12 8.12 0 0 1 3.88 12.037c0-4.46 3.624-8.085 8.083-8.085 4.46 0 8.084 3.624 8.084 8.085 0 4.46-3.624 8.083-8.084 8.083z"/></svg>';
+  var I_CHAT  = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  var I_CLOSE = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  var I_WA    = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.963 2C6.466 2 2 6.466 2 11.963c0 1.82.49 3.524 1.345 4.989L2 22l5.217-1.319A9.925 9.925 0 0 0 11.963 22C17.46 22 22 17.534 22 12.037 22 6.54 17.46 2 11.963 2zm0 18.12a8.168 8.168 0 0 1-4.152-1.132l-.297-.177-3.095.782.812-3.006-.198-.31A8.12 8.12 0 0 1 3.88 12.037c0-4.46 3.624-8.085 8.083-8.085 4.46 0 8.084 3.624 8.084 8.085 0 4.46-3.624 8.083-8.084 8.083z"/></svg>';
 
   /* ── DOM ────────────────────────────────────────────── */
   var wrap  = document.createElement('div'); wrap.id = 'kdf-w';
-  var stack = document.createElement('div'); stack.id = 'kdf-stack';
 
-  var bWA = document.createElement('button'); bWA.className = 'kdf-ab'; bWA.setAttribute('aria-label','WhatsApp');
-  bWA.innerHTML = '<span class="kdf-ai" style="background:#25D366">' + I_WA + '</span><span>WhatsApp</span>';
+  /* WhatsApp pill button */
+  var bWA = document.createElement('button'); bWA.id = 'kdf-wa-btn'; bWA.setAttribute('aria-label','WhatsApp Support');
+  bWA.innerHTML = '<span id="kdf-wa-icon">' + I_WA + '</span><span>WhatsApp</span>';
 
-  var bChat = document.createElement('button'); bChat.className = 'kdf-ab'; bChat.setAttribute('aria-label','Chat with Us');
-  bChat.innerHTML = '<span class="kdf-ai" style="background:#1a1a2e">' + I_CHAT + '</span><span>Chat with Us</span>';
-
-  stack.appendChild(bWA);
-  stack.appendChild(bChat);
-
-  var fab   = document.createElement('button'); fab.id = 'kdf-fab'; fab.setAttribute('aria-label','Open Chat');
+  /* Main FAB */
+  var fab   = document.createElement('button'); fab.id = 'kdf-fab'; fab.setAttribute('aria-label','Chat with KDF NUTS');
   fab.innerHTML = I_CHAT;
   var badge = document.createElement('span'); badge.id = 'kdf-badge'; fab.appendChild(badge);
+  var label = document.createElement('span'); label.id = 'kdf-label'; label.textContent = 'Chat with us'; fab.appendChild(label);
 
+  wrap.appendChild(bWA);
+  wrap.appendChild(fab);
+
+  /* Popup iframe */
   var popup = document.createElement('iframe'); popup.id = 'kdf-popup'; popup.allow = 'microphone';
-  popup.setAttribute('aria-label','KDF NUTS Chat');
+  popup.setAttribute('aria-label','KDF NUTS Live Chat');
+  popup.setAttribute('title','KDF NUTS Chat');
 
-  wrap.appendChild(stack); wrap.appendChild(fab);
-  document.body.appendChild(popup); document.body.appendChild(wrap);
+  /* Loading spinner overlay */
+  var loading = document.createElement('div'); loading.id = 'kdf-loading';
+  loading.innerHTML = '<div id="kdf-spinner"></div><p>Connecting to chat…</p>';
+
+  document.body.appendChild(loading);
+  document.body.appendChild(popup);
+  document.body.appendChild(wrap);
 
   /* ── State ──────────────────────────────────────────── */
-  var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null;
+  var chatOpen = false, iframeReady = false, reopenTimer = null;
 
-  /* ── Functions ──────────────────────────────────────── */
-  function openStack() {
-    stackOpen = true;
-    stack.classList.add('kdf-vis');
-    fab.setAttribute('data-open', '1');
-    fab.innerHTML = I_CLOSE; fab.appendChild(badge);
+  /* ── Load iframe ─────────────────────────────────────── */
+  function loadIframe() {
+    if (iframeReady) return;
+    loading.classList.add('kdf-open');
+    popup.src = EMBED_URL;
+    popup.onload = function() {
+      iframeReady = true;
+      loading.classList.remove('kdf-open');
+      /* Pass Shopify customer data into iframe */
+      try {
+        var cdata = cfg.customer || {};
+        popup.contentWindow.postMessage({ type: 'KDF_INIT', customer: cdata, store: cfg.store || 'shopify' }, '*');
+      } catch(e){}
+    };
+    /* Fallback — hide loader after 6s even if onload didn't fire */
+    setTimeout(function() { loading.classList.remove('kdf-open'); }, 6000);
   }
-  function closeStack() {
-    stackOpen = false;
-    stack.classList.remove('kdf-vis');
-    fab.removeAttribute('data-open');
-    fab.innerHTML = I_CHAT; fab.appendChild(badge);
-  }
+
+  /* ── Open / Close ────────────────────────────────────── */
   function openChat() {
-    if (!iframeLoaded) {
-      popup.src = EMBED_URL;
-      iframeLoaded = true;
-    }
+    loadIframe();
     chatOpen = true;
     popup.classList.add('kdf-open');
+    fab.innerHTML = I_CLOSE; fab.appendChild(badge); fab.appendChild(label);
+    fab.setAttribute('data-open','1');
+    bWA.style.display = 'none';
+    if (reopenTimer) { clearTimeout(reopenTimer); reopenTimer = null; }
   }
   function closeChat() {
     chatOpen = false;
     popup.classList.remove('kdf-open');
-    /* Auto-reopen after delay */
+    fab.innerHTML = I_CHAT; fab.appendChild(badge); fab.appendChild(label);
+    fab.removeAttribute('data-open');
+    bWA.style.display = '';
     if (reopenTimer) clearTimeout(reopenTimer);
     reopenTimer = setTimeout(function() {
       fab.classList.add('kdf-pulse');
-      setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 8000);
+      setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 7000);
     }, REOPEN_DELAY);
   }
 
   /* ── Events ─────────────────────────────────────────── */
   fab.addEventListener('click', function(e) {
     e.stopPropagation();
-    if (chatOpen) { closeChat(); closeStack(); return; }
-    stackOpen ? closeStack() : openStack();
-  });
-
-  bChat.addEventListener('click', function(e) {
-    e.stopPropagation();
-    closeStack();
     chatOpen ? closeChat() : openChat();
   });
 
   bWA.addEventListener('click', function(e) {
     e.stopPropagation();
-    closeStack();
     window.open(WA_HREF, '_blank', 'noopener,noreferrer');
   });
 
-  document.addEventListener('click', function(e) {
-    if (stackOpen && !wrap.contains(e.target) && !popup.contains(e.target)) closeStack();
-  });
-
-  /* Close from iframe message */
+  /* Close from iframe postMessage */
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
-    if (e.data.type === 'KDF_CLOSE') { closeChat(); closeStack(); fab.innerHTML = I_CHAT; fab.appendChild(badge); fab.removeAttribute('data-open'); }
+    if (e.data.type === 'KDF_CLOSE') closeChat();
     if (e.data.type === 'KDF_UNREAD') {
       var c = parseInt(e.data.count, 10) || 0;
       badge.textContent = c > 99 ? '99+' : String(c);
       badge.style.display = c > 0 ? 'flex' : 'none';
     }
+    /* iframe signals it is ready early */
+    if (e.data.type === 'KDF_READY') {
+      iframeReady = true;
+      loading.classList.remove('kdf-open');
+    }
   });
 
-  /* Pulse after 3s to attract attention */
-  setTimeout(function() { fab.classList.add('kdf-pulse'); setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 8000); }, 3000);
+  /* Pulse on load to attract attention */
+  setTimeout(function() {
+    fab.classList.add('kdf-pulse');
+    setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 7000);
+  }, 2500);
 
   /* Public API */
   window.KDFChat = {
-    open: openStack,
-    openChat: function() { openStack(); openChat(); },
-    close: function() { closeStack(); closeChat(); },
-    init: function(c) { cfg = Object.assign({}, cfg, c); },
+    open:      openChat,
+    close:     closeChat,
+    toggle:    function() { chatOpen ? closeChat() : openChat(); },
+    init:      function(c) { cfg = Object.assign({}, cfg, c); },
+    openChat:  openChat,
   };
 
 })();

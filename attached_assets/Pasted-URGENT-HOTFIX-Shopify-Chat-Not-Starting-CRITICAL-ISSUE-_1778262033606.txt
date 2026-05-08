@@ -1,0 +1,187 @@
+URGENT HOTFIX — Shopify Chat Not Starting
+
+CRITICAL ISSUE
+
+Currently:
+
+❌ Shopify Chat Not Opening / Starting
+
+Customer click کرتا ہے لیکن:
+
+* chat start نہیں ہو رہی
+* messages load نہیں ہو رہے
+* widget stuck ہے
+* button response نہیں دے رہا
+* AI initialize نہیں ہو رہا
+
+یہ production blocker ہے۔
+
+⸻
+
+REQUIRED IMMEDIATE DEBUG
+
+Please inspect:
+
+- console errors
+- failed network requests
+- websocket connection
+- Shopify app embed status
+- event listeners
+- React hydration errors
+- floating widget mount
+- API auth tokens
+- async loading failures
+
+⸻
+
+CHECK THESE FIRST
+
+1. Widget Mount Issue
+
+Confirm:
+
+#wa-chat-widget-root
+
+properly render ہو رہا ہے۔
+
+⸻
+
+2. Click Event Broken
+
+Check:
+
+onClick
+pointer-events
+z-index
+overlay blocking
+
+⸻
+
+3. Shopify App Embed
+
+Ensure:
+
+✅ app embed enabled
+✅ script injected correctly
+✅ no duplicate scripts
+✅ theme extension active
+
+⸻
+
+4. Realtime Chat Connection
+
+Check:
+
+socket connection
+chat session init
+visitor session creation
+
+⸻
+
+REQUIRED FIX
+
+Chat MUST
+
+✅ open instantly
+✅ create session
+✅ connect AI
+✅ load messages
+✅ show products
+✅ send replies
+
+⸻
+
+IMPORTANT
+
+DO NOT LOAD
+
+❌ full storefront
+❌ homepage preview
+❌ iframe website
+
+inside widget۔
+
+⸻
+
+ONLY LOAD
+
+- live chat
+- messages
+- AI replies
+- product cards
+- tracking cards
+
+⸻
+
+REQUIRED FALLBACK
+
+If realtime fails:
+
+✅ auto reconnect
+✅ restore session
+✅ retry API connection
+
+⸻
+
+REQUIRED USER EXPERIENCE
+
+Customer clicks chat:
+
+↓
+
+24/7 Live Support
+
+opens instantly
+
+↓
+
+AI greets customer
+
+↓
+
+Customer can:
+
+✅ message
+✅ voice input
+✅ browse products
+✅ track order
+
+⸻
+
+REQUIRED ADMIN SIDE
+
+Every Shopify chat MUST:
+
+✅ save in database
+✅ appear in WA Chat admin
+✅ create lead
+✅ sync customer history
+
+⸻
+
+REQUIRED PERFORMANCE
+
+Chat load time:
+
+✅ under 2 seconds
+✅ mobile optimized
+✅ smooth animations
+✅ no freeze
+✅ lightweight
+
+⸻
+
+FINAL GOAL
+
+Restore:
+
+Fully Working Shopify Live Chat
+
+with:
+
+✅ working popup
+✅ working AI
+✅ working product cards
+✅ working admin sync
+✅ working lead capture
+✅ realtime messaging
