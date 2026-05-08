@@ -151,95 +151,143 @@ router.get("/admin/wa/cost-stats", adminMiddleware as any, async (req, res) => {
     const days = Math.min(90, Number(req.query.days) || 30);
 
     /* aggregate from logs */
-    const [agg] = await db.execute(sql`
+    const agg = await db.execute(sql`
       SELECT
-        COUNT(*)                                                           AS total_sent,
-        COUNT(*) FILTER (WHERE status = 'sent' AND delivery_status = 'delivered') AS total_delivered,
-        COUNT(*) FILTER (WHERE status = 'failed')                         AS total_failed,
-        COUNT(*) FILTER (WHERE delivery_status = 'read')                  AS total_read,
-        COUNT(*) FILTER (WHERE template_name LIKE 'campaign:%')           AS campaign_msgs,
-        COUNT(*) FILTER (WHERE template_name NOT LIKE 'campaign:%' AND template_name NOT LIKE 'automation:%' AND status = 'sent') AS utility_msgs,
-        COUNT(*) FILTER (WHERE template_name LIKE 'automation:%')         AS automation_msgs,
-        COUNT(DISTINCT DATE(created_at))                                  AS active_days
+        COUNT(*)                                                                    AS total_sent,
+        COUNT(*) FILTER (WHERE status = 'sent' AND delivery_status = 'delivered')  AS total_delivered,
+        COUNT(*) FILTER (WHERE status = 'failed')                                  AS total_failed,
+        COUNT(*) FILTER (WHERE delivery_status = 'read')                           AS total_read,
+        COUNT(*) FILTER (WHERE template_name LIKE 'campaign:%')                    AS campaign_msgs,
+        COUNT(*) FILTER (WHERE template_name NOT LIKE 'campaign:%' AND template_name NOT LIKE 'automation:%') AS utility_msgs,
+        COUNT(*) FILTER (WHERE template_name LIKE 'automation:%')                  AS automation_msgs
       FROM whatsapp_logs
       WHERE created_at >= NOW() - (${days} || ' days')::interval
     `);
-
     const stats = agg.rows[0] as any;
 
     /* Meta WA pricing (Pakistan, 2024 rates in USD) */
-    const utilityPerMsg    = 0.0040;
-    const marketingPerMsg  = 0.0100;
-    const usdToPkr         = 278;
+    const utilityPerMsg   = 0.0040;
+    const marketingPerMsg = 0.0100;
+    const usdToPkr        = 278;
 
-    const utilityCount     = Number(stats.utility_msgs   ?? 0) + Number(stats.automation_msgs ?? 0);
-    const marketingCount   = Number(stats.campaign_msgs  ?? 0);
-    const totalSent        = Number(stats.total_sent     ?? 0);
+    const totalSent      = Number(stats.total_sent    ?? 0);
+    const totalDelivered = Number(stats.total_delivered ?? 0);
+    const totalFailed    = Number(stats.total_failed   ?? 0);
+    const totalRead      = Number(stats.total_read     ?? 0);
+    const marketingCount = Number(stats.campaign_msgs  ?? 0);
+    const utilityCount   = Number(stats.utility_msgs   ?? 0) + Number(stats.automation_msgs ?? 0);
+    const automationCount = Number(stats.automation_msgs ?? 0);
 
     const utilityCostUsd   = utilityCount   * utilityPerMsg;
     const marketingCostUsd = marketingCount * marketingPerMsg;
     const totalCostUsd     = utilityCostUsd + marketingCostUsd;
+    const totalCostPkr     = Math.round(totalCostUsd * usdToPkr);
 
-    /* 7-day daily breakdown */
-    const daily = await db.execute(sql`
+    /* daily trend with per-day cost estimate */
+    const dailyRaw = await db.execute(sql`
       SELECT
-        DATE(created_at)::text AS date,
-        COUNT(*)                                           AS sent,
-        COUNT(*) FILTER (WHERE status = 'failed')         AS failed,
-        COUNT(*) FILTER (WHERE delivery_status = 'read')  AS read_count,
-        COUNT(*) FILTER (WHERE template_name LIKE 'campaign:%')  AS campaign,
-        COUNT(*) FILTER (WHERE template_name NOT LIKE 'campaign:%') AS utility
+        DATE(created_at)::text                                              AS date,
+        COUNT(*)                                                            AS sent,
+        COUNT(*) FILTER (WHERE status = 'sent' AND delivery_status = 'delivered') AS delivered,
+        COUNT(*) FILTER (WHERE status = 'failed')                          AS failed,
+        COUNT(*) FILTER (WHERE delivery_status = 'read')                   AS read_count,
+        COUNT(*) FILTER (WHERE template_name LIKE 'campaign:%')            AS campaign,
+        COUNT(*) FILTER (WHERE template_name NOT LIKE 'campaign:%')        AS utility
       FROM whatsapp_logs
-      WHERE created_at >= NOW() - INTERVAL '7 days'
+      WHERE created_at >= NOW() - (${days} || ' days')::interval
       GROUP BY DATE(created_at)
       ORDER BY DATE(created_at) ASC
     `);
 
-    /* campaign analytics */
-    const campaigns = await db.select({
-      id: whatsappCampaignsTable.id,
-      name: whatsappCampaignsTable.name,
-      status: whatsappCampaignsTable.status,
-      recipientCount: whatsappCampaignsTable.recipientCount,
-      sentCount: whatsappCampaignsTable.sentCount,
-      failedCount: whatsappCampaignsTable.failedCount,
+    const dailyTrend = (dailyRaw.rows as any[]).map(r => {
+      const dayCampaign = Number(r.campaign ?? 0);
+      const dayUtility  = Number(r.utility  ?? 0);
+      const dayCostUsd  = dayCampaign * marketingPerMsg + dayUtility * utilityPerMsg;
+      return {
+        date:             r.date,
+        sent:             Number(r.sent ?? 0),
+        delivered:        Number(r.delivered ?? 0),
+        failed:           Number(r.failed ?? 0),
+        readCount:        Number(r.read_count ?? 0),
+        estimatedCostPKR: Math.round(dayCostUsd * usdToPkr),
+      };
+    });
+
+    /* by-type breakdown */
+    const byTypeRaw = await db.execute(sql`
+      SELECT
+        COALESCE(template_name, 'unknown') AS type,
+        COUNT(*)                           AS count
+      FROM whatsapp_logs
+      WHERE created_at >= NOW() - (${days} || ' days')::interval
+        AND template_name IS NOT NULL
+      GROUP BY template_name
+      ORDER BY count DESC
+      LIMIT 15
+    `);
+    const byType = (byTypeRaw.rows as any[]).map(r => ({
+      type:  r.type as string,
+      count: Number(r.count),
+    }));
+
+    /* campaign performance */
+    const campaignsRaw = await db.select({
+      id:             whatsappCampaignsTable.id,
+      name:           whatsappCampaignsTable.name,
+      status:         whatsappCampaignsTable.status,
+      sentCount:      whatsappCampaignsTable.sentCount,
+      failedCount:    whatsappCampaignsTable.failedCount,
       deliveredCount: whatsappCampaignsTable.deliveredCount,
-      readCount: whatsappCampaignsTable.readCount,
-      skippedCount: whatsappCampaignsTable.skippedCount,
-      sentAt: whatsappCampaignsTable.sentAt,
-      createdAt: whatsappCampaignsTable.createdAt,
-    })
-      .from(whatsappCampaignsTable)
-      .orderBy(desc(whatsappCampaignsTable.createdAt))
-      .limit(20);
+      readCount:      whatsappCampaignsTable.readCount,
+      sentAt:         whatsappCampaignsTable.sentAt,
+      createdAt:      whatsappCampaignsTable.createdAt,
+    }).from(whatsappCampaignsTable).orderBy(desc(whatsappCampaignsTable.createdAt)).limit(20);
+
+    const campaignPerformance = campaignsRaw.map(c => {
+      const sent = Number(c.sentCount ?? 0);
+      const delivered = Number(c.deliveredCount ?? 0);
+      const failed = Number(c.failedCount ?? 0);
+      return {
+        campaignId:   c.id,
+        name:         c.name,
+        status:       c.status,
+        sent,
+        delivered,
+        failed,
+        readCount:    Number(c.readCount ?? 0),
+        deliveryRate: sent > 0 ? +((delivered / sent) * 100).toFixed(1) : 0,
+        sentAt:       c.sentAt,
+      };
+    });
 
     return res.json({
+      /* top-level KPIs — matches frontend field names */
+      totalMessages:          totalSent,
+      delivered:              totalDelivered,
+      failed:                 totalFailed,
+      readCount:              totalRead,
+      deliveryRate:           totalSent > 0 ? +((totalDelivered / totalSent) * 100).toFixed(1) : 0,
+      readRate:               totalSent > 0 ? +((totalRead       / totalSent) * 100).toFixed(1) : 0,
+
+      /* cost estimates */
+      estimatedCostPKR:       totalCostPkr,
+      estimatedCostUSD:       +totalCostUsd.toFixed(4),
+      utilityCostPKR:         Math.round(utilityCostUsd   * usdToPkr),
+      marketingCostPKR:       Math.round(marketingCostUsd * usdToPkr),
+
+      /* conversation type counts */
+      marketingConversations: marketingCount,
+      utilityConversations:   utilityCount,
+      serviceConversations:   automationCount,
+
+      /* breakdowns */
+      byType,
+      dailyTrend,
+      campaignPerformance,
+
+      /* meta */
       period: { days, startDate: new Date(Date.now() - days * 86400000).toISOString().split("T")[0], endDate: new Date().toISOString().split("T")[0] },
-      totals: {
-        totalSent,
-        totalDelivered: Number(stats.total_delivered ?? 0),
-        totalFailed:    Number(stats.total_failed    ?? 0),
-        totalRead:      Number(stats.total_read      ?? 0),
-        utilityCount,
-        marketingCount,
-        automationCount: Number(stats.automation_msgs ?? 0),
-        activeDays:     Number(stats.active_days     ?? 0),
-      },
-      costs: {
-        utilityCostUsd:   +utilityCostUsd.toFixed(4),
-        marketingCostUsd: +marketingCostUsd.toFixed(4),
-        totalCostUsd:     +totalCostUsd.toFixed(4),
-        utilityCostPkr:   Math.round(utilityCostUsd   * usdToPkr),
-        marketingCostPkr: Math.round(marketingCostUsd * usdToPkr),
-        totalCostPkr:     Math.round(totalCostUsd     * usdToPkr),
-        rateUtility:      utilityPerMsg,
-        rateMarketing:    marketingPerMsg,
-        usdToPkr,
-      },
-      deliveryRate: totalSent > 0 ? +((Number(stats.total_delivered ?? 0) / totalSent) * 100).toFixed(1) : 0,
-      readRate:     totalSent > 0 ? +((Number(stats.total_read      ?? 0) / totalSent) * 100).toFixed(1) : 0,
-      daily: daily.rows,
-      campaigns,
+      rates:  { utilityPerMsg, marketingPerMsg, usdToPkr },
     });
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });

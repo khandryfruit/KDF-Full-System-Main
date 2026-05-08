@@ -2,7 +2,7 @@ import { Router } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
-import { sendWhatsAppMessage } from "../lib/whatsapp";
+import { sendWhatsAppMessage, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
 import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
 
 const router = Router();
@@ -502,7 +502,7 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
 
     res.json({ ok: true, status });
 
-    /* ── Non-blocking Shopify sync ── */
+    /* ── Non-blocking: Shopify sync + Customer WA notification ── */
     setImmediate(async () => {
       try {
         const delRow = await db.execute(sql`
@@ -515,6 +515,33 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
         if (!del) return;
         const rider = del.rider_name ? { name: del.rider_name, phone: del.rider_phone } : undefined;
         await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, del, rider, notes));
+
+        /* ── Customer WA notification on delivery outcome ── */
+        if (status === "delivered" || status === "failed") {
+          try {
+            const orderRows = await db.execute(sql`
+              SELECT order_number, shipping_address FROM shopify_orders
+              WHERE id = ${del.shopify_order_db_id} LIMIT 1
+            `);
+            const order = orderRows.rows[0] as any;
+            if (order) {
+              const addr = typeof order.shipping_address === "string"
+                ? JSON.parse(order.shipping_address)
+                : order.shipping_address;
+              const customerPhone = addr?.phone;
+              const customerName  = addr?.name ?? undefined;
+              const orderNumber   = order.order_number ?? del.shopify_order_db_id;
+              if (customerPhone) {
+                if (status === "delivered") {
+                  await sendOrderStatusUpdate({ phone: customerPhone, orderNumber, status: "delivered" }).catch(() => {});
+                  await sendReviewRequest({ phone: customerPhone, orderNumber, customerName }).catch(() => {});
+                } else {
+                  await sendFailedDeliveryNotification({ phone: customerPhone, orderNumber, customerName }).catch(() => {});
+                }
+              }
+            }
+          } catch {}
+        }
       } catch {}
     });
   } catch (err: any) {
