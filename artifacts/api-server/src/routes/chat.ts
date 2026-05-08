@@ -1047,4 +1047,65 @@ router.get("/chat/products/search", async (req, res) => {
   }
 });
 
+/* ── POST /api/chat/image-search (camera product detection via OpenAI Vision) ── */
+router.post("/chat/image-search", async (req, res) => {
+  try {
+    const { image } = req.body ?? {};
+    if (!image || typeof image !== "string") return res.status(400).json({ error: "image required" });
+
+    const openai = await getOpenAIClient();
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: "Identify the dry fruit, nut, or food product in this image. Reply with ONLY one English word or short phrase: almonds, walnuts, cashews, pistachios, dates, raisins, figs, pine nuts, peanuts, apricots, mixed nuts, gift box, seeds, or similar. If unclear, reply: unknown" },
+          { type: "image_url", image_url: { url: image, detail: "low" } },
+        ],
+      }],
+      max_tokens: 20,
+    });
+
+    const detected = (completion.choices[0]?.message?.content ?? "unknown").trim().toLowerCase();
+    if (detected === "unknown") return res.json({ detected: "unknown", products: [] });
+
+    const expanded = expandQuery(detected);
+    const rows = await db.select({
+      id: shopifyProductsTable.id,
+      title: shopifyProductsTable.title,
+      price: shopifyProductsTable.price,
+      compareAtPrice: shopifyProductsTable.compareAtPrice,
+      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+      imageUrl: shopifyProductsTable.imageUrl,
+      variants: shopifyProductsTable.variants,
+    })
+    .from(shopifyProductsTable)
+    .where(and(
+      eq(shopifyProductsTable.status, "active"),
+      or(
+        ilike(shopifyProductsTable.title, `%${detected}%`),
+        ilike(shopifyProductsTable.title, `%${expanded}%`),
+      )
+    ))
+    .orderBy(desc(shopifyProductsTable.updatedAt))
+    .limit(8);
+
+    const products = rows.map(p => {
+      const price = Number(p.price) || 0;
+      const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
+      const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : null;
+      const vars = (p.variants as any[]) ?? [];
+      return {
+        id: p.id, name: p.title, price, originalPrice: compareAt, discount, stock: p.inventoryQuantity ?? 0,
+        variants: vars.map((v: any) => ({ id: String(v.id), value: v.title, price: Number(v.price) || price, stock: v.inventoryQuantity ?? 0 })),
+        image: p.imageUrl ?? null,
+      };
+    });
+
+    return res.json({ detected, products });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
