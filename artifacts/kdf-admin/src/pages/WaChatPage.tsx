@@ -2,15 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle, Search, Send, Bot, User, RefreshCw, CheckCheck, Check,
-  Clock, Phone, ShoppingCart, X, Sparkles, Loader2, Package, Circle,
-  Inbox, ChevronDown, Filter, Tag, Star, StickyNote, CreditCard,
-  BarChart2, Users, MessageSquareDashed, Zap, Globe, ArrowRight,
-  MoreVertical, Hash, PhoneCall, ShoppingBag, Truck, Plus, Settings,
-  AlertTriangle, TrendingUp, MessageSquare, Archive, Bell, Eye,
-  ChevronRight, ExternalLink, Wifi, WifiOff, Activity,
+  Clock, Globe, X, Sparkles, Loader2, Circle,
+  Inbox, Bell, Activity,
+  MessageSquareDashed, Zap, ArrowRight,
+  MoreVertical, ExternalLink, Wifi, WifiOff,
+  TrendingUp, Archive, Eye,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -33,21 +30,25 @@ function timeAgo(date: string | null | undefined) {
   return `${Math.floor(h / 24)}d`;
 }
 
-function fmtTime(date: string) {
+function fmtTime(date: string | null | undefined) {
+  if (!date) return "";
   return new Date(date).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
 type Channel = "all" | "whatsapp" | "website" | "ai" | "unread" | "active";
 
+/* ── API response types (matching actual Drizzle ORM camelCase fields) ── */
 interface WaConv {
   id: number;
-  customer_phone: string;
-  customer_name?: string;
-  last_message?: string;
-  last_message_at?: string;
-  unread_count?: number;
-  bot_mode?: string;
-  status?: string;
+  contactPhone: string;
+  contactName?: string | null;
+  lastMessage?: string | null;
+  lastMessageAt?: string | null;
+  unreadCount?: number;
+  botMode?: string | null;
+  status?: string | null;
+  isStarred?: boolean;
+  agentName?: string | null;
 }
 
 interface ChatSession {
@@ -55,8 +56,9 @@ interface ChatSession {
   sessionId: string;
   messages: any[];
   updatedAt: string;
-  leadName?: string;
-  leadPhone?: string;
+  leadName?: string | null;
+  leadPhone?: string | null;
+  createdAt?: string;
 }
 
 interface UnifiedConv {
@@ -67,7 +69,7 @@ interface UnifiedConv {
   lastMsg: string;
   lastAt: string;
   unread: number;
-  botMode?: string;
+  botMode?: string | null;
   raw: WaConv | ChatSession;
 }
 
@@ -83,10 +85,11 @@ function StatsBar() {
     queryKey: ["chat-sessions-unified"],
     queryFn: () => api("/admin/chat/sessions").then(r => r.json()).then(d => Array.isArray(d) ? d : []),
     staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
   const s = waData?.stats ?? {};
-  const activeSessions = sessions.filter(sess => Date.now() - new Date(sess.updatedAt).getTime() < 5 * 60 * 1000).length;
+  const activeSessions = sessions.filter(sess => sess?.updatedAt && Date.now() - new Date(sess.updatedAt).getTime() < 5 * 60 * 1000).length;
 
   const stats = [
     { label: "WA Open", value: s.open_conversations ?? 0, icon: MessageCircle, color: "text-[#25D366]", bg: "bg-[#25D366]/10" },
@@ -98,7 +101,7 @@ function StatsBar() {
   ];
 
   return (
-    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3">
+    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3 shrink-0">
       {stats.map(st => (
         <div key={st.label} className="bg-white border border-gray-100 rounded-xl p-2.5 flex items-center gap-2.5 shadow-sm">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${st.bg}`}>
@@ -129,8 +132,8 @@ function ChannelBadge({ channel }: { channel: "whatsapp" | "website" }) {
 }
 
 /* ── Bot badge ── */
-function BotBadge({ mode }: { mode?: string }) {
-  if (mode === "auto") return (
+function BotBadge({ mode }: { mode?: string | null }) {
+  if (mode === "auto" || !mode) return (
     <span className="inline-flex items-center gap-0.5 text-[8px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded-full font-semibold">
       <Bot className="w-2 h-2" /> Auto
     </span>
@@ -138,6 +141,11 @@ function BotBadge({ mode }: { mode?: string }) {
   if (mode === "human") return (
     <span className="inline-flex items-center gap-0.5 text-[8px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded-full font-semibold">
       <User className="w-2 h-2" /> Human
+    </span>
+  );
+  if (mode === "off") return (
+    <span className="inline-flex items-center gap-0.5 text-[8px] bg-gray-100 text-gray-600 px-1 py-0.5 rounded-full font-semibold">
+      <WifiOff className="w-2 h-2" /> Off
     </span>
   );
   return null;
@@ -164,42 +172,54 @@ function ConvList({
   onChannelChange: (c: Channel) => void;
 }) {
   const [search, setSearch] = useState("");
+  const qc = useQueryClient();
 
-  const { data: waConvs = [], isLoading: waLoading, refetch: refetchWa } = useQuery<WaConv[]>({
-    queryKey: ["wa-convs-unified"],
-    queryFn: () => api("/admin/wa/conversations").then(r => r.json()).then(d => Array.isArray(d) ? d : []),
+  /* ─── WA conversations (correct response: { conversations: [...] }) ─── */
+  const { data: waData, isLoading: waLoading, refetch: refetchWa } = useQuery({
+    queryKey: ["wa-convs-unified", search],
+    queryFn: () =>
+      api(`/admin/wa/conversations?limit=60${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+        .then(r => r.json())
+        .then(d => (Array.isArray(d?.conversations) ? d.conversations : Array.isArray(d) ? d : []) as WaConv[]),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
+  const waConvs: WaConv[] = waData ?? [];
 
+  /* ─── Website chat sessions (correct response: direct array) ─── */
   const { data: chatSessions = [], isLoading: sessLoading, refetch: refetchSess } = useQuery<ChatSession[]>({
     queryKey: ["chat-sessions-unified"],
-    queryFn: () => api("/admin/chat/sessions").then(r => r.json()).then(d => Array.isArray(d) ? d : []),
+    queryFn: () =>
+      api("/admin/chat/sessions")
+        .then(r => r.json())
+        .then(d => Array.isArray(d) ? d : []),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
 
+  /* ─── Merge into unified list ─── */
   const unified: UnifiedConv[] = [
     ...waConvs.map((c): UnifiedConv => ({
       id: `wa-${c.id}`,
       channel: "whatsapp",
-      name: c.customer_name || c.customer_phone,
-      phone: c.customer_phone,
-      lastMsg: c.last_message ?? "",
-      lastAt: c.last_message_at ?? "",
-      unread: c.unread_count ?? 0,
-      botMode: c.bot_mode,
+      name: c.contactName || c.contactPhone,
+      phone: c.contactPhone,
+      lastMsg: c.lastMessage ?? "",
+      lastAt: c.lastMessageAt ?? "",
+      unread: c.unreadCount ?? 0,
+      botMode: c.botMode,
       raw: c,
     })),
     ...chatSessions.map((s): UnifiedConv => {
-      const msgs = s.messages ?? [];
+      const msgs: any[] = Array.isArray(s.messages) ? s.messages : [];
       const last = msgs[msgs.length - 1];
+      const lastContent = last?.content ?? last?.message ?? last?.text ?? "";
       return {
         id: `web-${s.id}`,
         channel: "website",
         name: s.leadName || `Visitor ${s.id}`,
-        phone: s.leadPhone,
-        lastMsg: last?.content?.slice(0, 80) ?? "",
+        phone: s.leadPhone ?? undefined,
+        lastMsg: lastContent.slice(0, 80),
         lastAt: s.updatedAt,
         unread: 0,
         raw: s,
@@ -222,14 +242,13 @@ function ConvList({
     if (channel === "ai" && c.botMode !== "auto") return false;
     if (channel === "unread" && c.unread === 0) return false;
     if (channel === "active" && !isActive(c)) return false;
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !(c.phone ?? "").includes(search)) return false;
     return true;
   });
 
   const tabs: { key: Channel; label: string; icon: any; count?: number }[] = [
     { key: "all", label: "All", icon: Inbox },
-    { key: "whatsapp", label: "WA", icon: MessageCircle, count: waConvs.reduce((s, c) => s + (c.unread_count ?? 0), 0) },
-    { key: "website", label: "Web", icon: Globe, count: chatSessions.filter(s => isActive({ id: "", channel: "website", name: "", lastMsg: "", lastAt: s.updatedAt, unread: 0, raw: s })).length },
+    { key: "whatsapp", label: "WA", icon: MessageCircle, count: waConvs.reduce((s, c) => s + (c.unreadCount ?? 0), 0) },
+    { key: "website", label: "Web", icon: Globe, count: chatSessions.length },
     { key: "ai", label: "AI Bot", icon: Bot },
     { key: "unread", label: "Unread", icon: Bell },
     { key: "active", label: "Active", icon: Activity },
@@ -240,7 +259,7 @@ function ConvList({
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-100">
       {/* Search */}
-      <div className="p-3 border-b border-gray-100">
+      <div className="p-3 border-b border-gray-100 shrink-0">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
           <input
@@ -253,7 +272,7 @@ function ConvList({
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 overflow-x-auto shrink-0" style={{ scrollbarWidth: "none" }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
@@ -276,7 +295,7 @@ function ConvList({
           </button>
         ))}
         <button
-          onClick={() => { refetchWa(); refetchSess(); }}
+          onClick={() => { refetchWa(); refetchSess(); qc.invalidateQueries({ queryKey: ["wa-convs-unified"] }); }}
           className="ml-auto p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors shrink-0"
           title="Refresh"
         >
@@ -285,7 +304,7 @@ function ConvList({
       </div>
 
       {/* Count */}
-      <div className="px-3 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-50">
+      <div className="px-3 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-50 shrink-0">
         {isLoading ? "Loading…" : `${filtered.length} conversation${filtered.length !== 1 ? "s" : ""}`}
       </div>
 
@@ -316,16 +335,14 @@ function ConvList({
                 }`}>
                   {conv.name.charAt(0).toUpperCase()}
                 </div>
-                {conv.channel === "whatsapp" && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#25D366] rounded-full border border-white flex items-center justify-center">
-                    <MessageCircle className="w-2 h-2 text-white" />
-                  </div>
-                )}
-                {conv.channel === "website" && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-blue-500 rounded-full border border-white flex items-center justify-center">
-                    <Globe className="w-2 h-2 text-white" />
-                  </div>
-                )}
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-white flex items-center justify-center ${
+                  conv.channel === "whatsapp" ? "bg-[#25D366]" : "bg-blue-500"
+                }`}>
+                  {conv.channel === "whatsapp"
+                    ? <MessageCircle className="w-2 h-2 text-white" />
+                    : <Globe className="w-2 h-2 text-white" />
+                  }
+                </div>
               </div>
 
               {/* Info */}
@@ -336,7 +353,7 @@ function ConvList({
                 </div>
                 <div className="flex items-center gap-1 mb-1">
                   <ChannelBadge channel={conv.channel} />
-                  <BotBadge mode={conv.botMode} />
+                  {conv.channel === "whatsapp" && <BotBadge mode={conv.botMode} />}
                 </div>
                 <p className="text-xs text-gray-500 truncate">{conv.lastMsg || "No messages yet"}</p>
               </div>
@@ -373,52 +390,63 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
   ];
 
   const isWa = conv?.channel === "whatsapp";
-  const waId = (isWa && conv) ? parseInt(conv.id.split("-")[1]) : null;
-  const webId = (!isWa && conv) ? parseInt(conv.id.split("-")[1]) : null;
+  /* Numeric conversation ID from the unified conv id string */
+  const waConvId = (isWa && conv) ? parseInt(conv.id.split("-")[1]) : null;
 
-  const { data: waMsgs = [], isLoading: waLoading } = useQuery({
-    queryKey: ["wa-msgs-unified", waId],
-    queryFn: () => api(`/admin/wa/conversations/${waId}/messages`).then(r => r.json()).then(d => Array.isArray(d) ? d : []),
-    enabled: !!waId,
+  /* ─── WA messages (correct response: { messages: [...] }) ─── */
+  const { data: waMsgData, isLoading: waLoading } = useQuery({
+    queryKey: ["wa-msgs-unified", waConvId],
+    queryFn: () =>
+      api(`/admin/wa/conversations/${waConvId}/messages?limit=100`)
+        .then(r => r.json())
+        .then(d => Array.isArray(d?.messages) ? d.messages : Array.isArray(d) ? d : []),
+    enabled: !!waConvId,
     staleTime: 10_000,
     refetchInterval: 15_000,
   });
 
-  const { data: webSession, isLoading: webLoading } = useQuery({
-    queryKey: ["chat-session-unified", webId],
-    queryFn: () => api(`/admin/chat/sessions/${webId}`).then(r => r.json()),
-    enabled: !!webId,
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-  });
+  /* ─── Website chat: messages come directly from the session's messages JSONB ─── */
+  const webSession = (!isWa && conv) ? (conv.raw as ChatSession) : null;
+  const webMessages: any[] = webSession ? (Array.isArray(webSession.messages) ? webSession.messages : []) : [];
 
-  const messages = isWa ? waMsgs : (webSession?.messages ?? []);
-  const isLoading = isWa ? waLoading : webLoading;
+  const messages: any[] = isWa ? (waMsgData ?? []) : webMessages;
+  const isLoading = isWa ? waLoading : false;
 
+  /* ─── Auto-scroll ─── */
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   }, [messages.length]);
 
+  /* ─── Send WA reply (correct endpoint: /admin/wa/conversations/:id/reply) ─── */
   const sendWa = useCallback(async (text: string) => {
-    if (!waId || !text.trim()) return;
+    if (!waConvId || !text.trim()) return;
     setSending(true);
     try {
-      const phone = (conv?.raw as WaConv).customer_phone;
-      const res = await api("/admin/wa/send", {
+      const res = await api(`/admin/wa/conversations/${waConvId}/reply`, {
         method: "POST",
-        body: JSON.stringify({ to: phone, message: text }),
+        body: JSON.stringify({ message: text.trim() }),
       });
-      if (!res.ok) throw new Error("Failed");
-      qc.invalidateQueries({ queryKey: ["wa-msgs-unified", waId] });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error ?? "Failed");
+      }
+      qc.invalidateQueries({ queryKey: ["wa-msgs-unified", waConvId] });
       qc.invalidateQueries({ queryKey: ["wa-convs-unified"] });
       setMsg("");
       toast({ title: "Sent ✓" });
-    } catch {
-      toast({ title: "Failed to send", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: e.message ?? "Failed to send", variant: "destructive" });
     } finally {
       setSending(false);
     }
-  }, [waId, conv, qc, toast]);
+  }, [waConvId, qc, toast]);
+
+  /* ─── AI suggest ─── */
+  const aiSuggestMutation = useMutation({
+    mutationFn: () => api(`/admin/wa/conversations/${waConvId}/ai-suggest`, { method: "POST" }).then(r => r.json()),
+    onSuccess: (d: any) => { if (d.suggestion) setMsg(d.suggestion); },
+    onError: () => toast({ title: "AI suggestion failed", variant: "destructive" }),
+  });
 
   if (!conv) {
     return (
@@ -443,11 +471,22 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
           <div className="flex items-center gap-2">
             <p className="text-sm font-bold text-gray-900 truncate">{conv.name}</p>
             <ChannelBadge channel={conv.channel} />
-            <BotBadge mode={conv.botMode} />
+            {isWa && <BotBadge mode={conv.botMode} />}
           </div>
           {conv.phone && <p className="text-[11px] text-gray-500">{conv.phone}</p>}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isWa && waConvId && (
+            <button
+              onClick={() => aiSuggestMutation.mutate()}
+              disabled={aiSuggestMutation.isPending}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors font-medium"
+              title="AI reply suggestion"
+            >
+              {aiSuggestMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              AI
+            </button>
+          )}
           {isWa && conv.phone && (
             <a
               href={`https://wa.me/${conv.phone.replace(/[^0-9]/g, "")}`}
@@ -469,13 +508,13 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
             <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">No messages</div>
+          <div className="flex items-center justify-center h-full text-gray-400 text-sm">No messages yet</div>
         ) : (
           messages.map((m: any, i: number) => {
-            const isMe = m.direction === "outbound" || m.role === "assistant" || m.role === "admin";
-            const isBot = m.role === "assistant";
-            const text = m.content ?? m.message ?? m.body ?? "";
-            const ts = m.created_at ?? m.timestamp ?? m.createdAt ?? "";
+            const isMe = m.direction === "out" || m.direction === "outbound" || m.role === "assistant" || m.role === "admin";
+            const isBot = m.isBot || m.role === "assistant" || m.botReply;
+            const text = m.content ?? m.message ?? m.body ?? m.text ?? "";
+            const ts = m.createdAt ?? m.created_at ?? m.timestamp ?? m.updatedAt ?? "";
 
             return (
               <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -498,7 +537,7 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
                   )}
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{text}</p>
                   <div className="flex items-center justify-end gap-1 mt-1">
-                    <span className="text-[10px] opacity-60">{ts ? fmtTime(ts) : ""}</span>
+                    <span className="text-[10px] opacity-60">{fmtTime(ts)}</span>
                     {isMe && !isBot && <StatusIcon status={m.status} />}
                   </div>
                 </div>
@@ -509,9 +548,9 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick replies */}
+      {/* Quick replies (WA only) */}
       {showQuick && isWa && (
-        <div className="border-t border-gray-100 bg-white px-3 py-2">
+        <div className="border-t border-gray-100 bg-white px-3 py-2 shrink-0">
           <p className="text-[10px] font-semibold text-gray-500 mb-1.5">Quick Replies</p>
           <div className="flex flex-wrap gap-1.5">
             {QUICK_REPLIES.map(q => (
@@ -542,7 +581,7 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
               value={msg}
               onChange={e => setMsg(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendWa(msg); } }}
-              placeholder="Type a message…"
+              placeholder="Type a message… (Enter to send)"
               rows={1}
               className="w-full resize-none border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#25D366] bg-gray-50 max-h-[120px]"
             />
@@ -557,14 +596,14 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
         </div>
       ) : (
         <div className="flex items-center gap-2 px-3 py-3 bg-blue-50 border-t border-blue-100 shrink-0">
-          <Globe className="w-4 h-4 text-blue-400" />
-          <p className="text-xs text-blue-600 font-medium">Website chat — read only. Reply via WhatsApp or escalate.</p>
+          <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+          <p className="text-xs text-blue-600 font-medium flex-1">Website chat — read only. Reply via WhatsApp or escalate.</p>
           {conv.phone && (
             <a
               href={`https://wa.me/${conv.phone.replace(/[^0-9]/g, "")}`}
               target="_blank"
               rel="noreferrer"
-              className="ml-auto text-xs bg-[#25D366] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#128C7E] transition-colors font-medium flex items-center gap-1"
+              className="text-xs bg-[#25D366] text-white px-2.5 py-1.5 rounded-lg hover:bg-[#128C7E] transition-colors font-medium flex items-center gap-1 shrink-0"
             >
               <MessageCircle className="w-3 h-3" /> Reply on WA
             </a>
@@ -579,15 +618,6 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
 function CustomerPanel({ conv }: { conv: UnifiedConv | null }) {
   const [, nav] = useLocation();
 
-  const waId = conv?.channel === "whatsapp" ? parseInt(conv.id.split("-")[1]) : null;
-
-  const { data: lead } = useQuery({
-    queryKey: ["chat-lead-by-phone", conv?.phone],
-    queryFn: () => api(`/admin/chat/leads?phone=${encodeURIComponent(conv!.phone!)}`).then(r => r.json()).then((d: any) => Array.isArray(d?.leads) ? d.leads[0] : null),
-    enabled: !!conv?.phone,
-    staleTime: 30_000,
-  });
-
   if (!conv) {
     return (
       <div className="flex items-center justify-center h-full text-gray-300 text-xs">
@@ -596,12 +626,16 @@ function CustomerPanel({ conv }: { conv: UnifiedConv | null }) {
     );
   }
 
+  const isWa = conv.channel === "whatsapp";
+  const waConv = isWa ? (conv.raw as WaConv) : null;
+  const webSession = !isWa ? (conv.raw as ChatSession) : null;
+
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-gray-50 border-l border-gray-100">
       {/* Customer header */}
-      <div className="p-4 bg-white border-b border-gray-100">
+      <div className="p-4 bg-white border-b border-gray-100 shrink-0">
         <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-3 ${
-          conv.channel === "whatsapp" ? "bg-[#25D366]" : "bg-blue-500"
+          isWa ? "bg-[#25D366]" : "bg-blue-500"
         }`}>
           {conv.name.charAt(0).toUpperCase()}
         </div>
@@ -611,7 +645,7 @@ function CustomerPanel({ conv }: { conv: UnifiedConv | null }) {
         )}
         <div className="flex justify-center gap-1.5 mt-2">
           <ChannelBadge channel={conv.channel} />
-          <BotBadge mode={conv.botMode} />
+          {isWa && <BotBadge mode={conv.botMode} />}
         </div>
       </div>
 
@@ -633,76 +667,86 @@ function CustomerPanel({ conv }: { conv: UnifiedConv | null }) {
             onClick={() => nav("/chat-leads")}
             className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 px-2.5 py-2 rounded-lg hover:bg-blue-100 transition-colors font-medium"
           >
-            <Users className="w-3 h-3" /> CRM
+            <User className="w-3 h-3" /> CRM
           </button>
           <button
             onClick={() => nav("/orders")}
             className="flex items-center gap-1.5 text-xs bg-amber-50 text-amber-600 px-2.5 py-2 rounded-lg hover:bg-amber-100 transition-colors font-medium"
           >
-            <ShoppingCart className="w-3 h-3" /> Orders
+            <Archive className="w-3 h-3" /> Orders
           </button>
           <button
             onClick={() => nav("/coupons")}
             className="flex items-center gap-1.5 text-xs bg-violet-50 text-violet-600 px-2.5 py-2 rounded-lg hover:bg-violet-100 transition-colors font-medium"
           >
-            <Tag className="w-3 h-3" /> Coupon
+            <Sparkles className="w-3 h-3" /> Coupon
           </button>
         </div>
       </div>
 
-      {/* Lead info */}
-      {lead && (
-        <div className="p-3 border-b border-gray-100 bg-white mt-2">
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Lead Info</p>
-          <div className="space-y-1.5">
-            {lead.name && (
-              <div className="flex items-center gap-2">
-                <User className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-700">{lead.name}</span>
+      {/* WA-specific info */}
+      {isWa && waConv && (
+        <div className="p-3 mt-2">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Conversation</p>
+          <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Channel</span>
+              <ChannelBadge channel="whatsapp" />
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Bot mode</span>
+              <BotBadge mode={waConv.botMode} />
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Status</span>
+              <span className="text-gray-700 font-medium capitalize">{waConv.status ?? "open"}</span>
+            </div>
+            {waConv.agentName && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Agent</span>
+                <span className="text-gray-700 font-medium">{waConv.agentName}</span>
               </div>
             )}
-            {lead.email && (
-              <div className="flex items-center gap-2">
-                <Hash className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-700 truncate">{lead.email}</span>
-              </div>
-            )}
-            {lead.city && (
-              <div className="flex items-center gap-2">
-                <Truck className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-700">{lead.city}</span>
-              </div>
-            )}
-            {lead.status && (
-              <div className="flex items-center gap-2">
-                <Circle className="w-3 h-3 text-gray-400" />
-                <Badge className="text-[9px] h-4">{lead.status}</Badge>
-              </div>
-            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Last active</span>
+              <span className="text-gray-700 font-medium">{timeAgo(conv.lastAt)}</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Channel info */}
-      <div className="p-3 mt-2">
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Session Info</p>
-        <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Channel</span>
-            <ChannelBadge channel={conv.channel} />
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Last active</span>
-            <span className="text-gray-700 font-medium">{timeAgo(conv.lastAt)}</span>
-          </div>
-          {conv.botMode && (
+      {/* Web session info */}
+      {!isWa && webSession && (
+        <div className="p-3 mt-2">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Session Info</p>
+          <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">Bot mode</span>
-              <BotBadge mode={conv.botMode} />
+              <span className="text-gray-500">Channel</span>
+              <ChannelBadge channel="website" />
             </div>
-          )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Messages</span>
+              <span className="text-gray-700 font-medium">{(webSession.messages ?? []).length}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Last active</span>
+              <span className="text-gray-700 font-medium">{timeAgo(conv.lastAt)}</span>
+            </div>
+            {webSession.sessionId && (
+              <div className="flex items-center justify-between text-xs gap-2">
+                <span className="text-gray-500 shrink-0">Session ID</span>
+                <span className="text-gray-600 font-mono text-[9px] truncate">{webSession.sessionId}</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => nav("/chat-conversations")}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs bg-blue-50 text-blue-600 px-2.5 py-2 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+          >
+            <ArrowRight className="w-3 h-3" /> Full Chat Page
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -716,54 +760,54 @@ export default function WaChatPage() {
   const [showRight, setShowRight] = useState(true);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)]">
-        {/* Page header */}
-        <div className="flex items-center justify-between mb-3 shrink-0">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-[#25D366]" />
-              WA Chat
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">Unified inbox — WhatsApp + Website + AI</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowRight(s => !s)}
-              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 transition-colors"
-              title={showRight ? "Hide customer panel" : "Show customer panel"}
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-          </div>
+    <div className="flex flex-col h-full bg-gray-50 p-4 overflow-hidden">
+      {/* Page header */}
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-[#25D366]" />
+            WA Chat
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">Unified inbox — WhatsApp + Website + AI</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowRight(s => !s)}
+            className={`p-2 rounded-lg border transition-colors ${showRight ? "border-[#25D366] bg-[#25D366]/5 text-[#25D366]" : "border-gray-200 hover:bg-gray-50 text-gray-500"}`}
+            title={showRight ? "Hide customer panel" : "Show customer panel"}
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <StatsBar />
+
+      {/* 3-panel layout */}
+      <div className="flex-1 flex rounded-2xl overflow-hidden border border-gray-200 shadow-sm min-h-0">
+        {/* Left: conv list */}
+        <div className="w-[280px] shrink-0 flex flex-col overflow-hidden">
+          <ConvList
+            selected={selected}
+            onSelect={setSelected}
+            channel={channel}
+            onChannelChange={setChannel}
+          />
         </div>
 
-        {/* Stats */}
-        <StatsBar />
-
-        {/* 3-panel layout */}
-        <div className="flex-1 flex rounded-2xl overflow-hidden border border-gray-200 shadow-sm min-h-0">
-          {/* Left: conv list */}
-          <div className="w-[280px] shrink-0 flex flex-col overflow-hidden">
-            <ConvList
-              selected={selected}
-              onSelect={setSelected}
-              channel={channel}
-              onChannelChange={setChannel}
-            />
-          </div>
-
-          {/* Center: thread */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <ConvThread conv={selected} />
-          </div>
-
-          {/* Right: customer info */}
-          {showRight && (
-            <div className="w-[240px] shrink-0 overflow-hidden">
-              <CustomerPanel conv={selected} />
-            </div>
-          )}
+        {/* Center: thread */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <ConvThread conv={selected} />
         </div>
+
+        {/* Right: customer info */}
+        {showRight && (
+          <div className="w-[240px] shrink-0 overflow-hidden">
+            <CustomerPanel conv={selected} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
