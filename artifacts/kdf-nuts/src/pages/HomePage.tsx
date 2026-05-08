@@ -176,11 +176,11 @@ export function HomePage() {
     return () => clearInterval(t);
   }, []);
 
+  const totalBanners = banners.length > 0 ? banners.length : 4;
   useEffect(() => {
-    if (banners.length <= 1) return;
-    const t = setInterval(() => setActiveBanner(p => (p + 1) % banners.length), 4000);
+    const t = setInterval(() => setActiveBanner(p => (p + 1) % totalBanners), 5000);
     return () => clearInterval(t);
-  }, [banners.length]);
+  }, [totalBanners]);
 
   const fmt = (s: number) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -429,51 +429,193 @@ export function HomePage() {
 
       <main className="flex flex-col gap-6 pt-5">
 
-        {/* ── Hero Banner ── */}
+        {/* ── Premium Hero Banner ── */}
         <section className="px-4">
-          <div className="w-full h-[185px] rounded-3xl overflow-hidden relative shadow-md bg-white">
-            {banners.length > 0 ? (
-              <>
-                {banners.map((banner, idx) => (
+          {(() => {
+            /* AI fallback banners — shown when no DB banners exist */
+            const AI_BANNERS = [
+              {
+                id: 'ai-0', label: '🚚 FREE DELIVERY',
+                title: 'Order Rs. 1,500+\nGet Free Shipping',
+                subtitle: 'Delivered in 60–72 hrs across Pakistan · Same-day in Karachi',
+                cta: 'Shop Now', linkUrl: '/products',
+                g1: '#0f3300', g2: '#3d7a00',
+                orb1: '#6dbf2f', orb2: '#a3d96e', orb3: '#1a5200', icon: '🚚',
+              },
+              {
+                id: 'ai-1', label: '⚡ FLASH OFFER',
+                title: 'Flat 20% OFF\nPremium Dry Fruits',
+                subtitle: 'Today only · Limited stock · Order before midnight',
+                cta: 'Claim Offer', linkUrl: '/products',
+                g1: '#5c1a00', g2: '#b83200',
+                orb1: '#f97316', orb2: '#fb923c', orb3: '#7c2d12', icon: '⚡',
+              },
+              {
+                id: 'ai-2', label: '🎁 GIFT PACKS',
+                title: 'Perfect for Every\nOccasion',
+                subtitle: 'Eid · Birthdays · Corporate gifting — curated with love',
+                cta: 'Explore Gifts', linkUrl: '/products',
+                g1: '#2d0a38', g2: '#7e1d5f',
+                orb1: '#db2777', orb2: '#e879a0', orb3: '#6b21a8', icon: '🎁',
+              },
+              {
+                id: 'ai-3', label: '✨ NEW ARRIVALS',
+                title: 'Fresh Premium\nNuts Just Landed',
+                subtitle: '100% authentic · Sourced directly from farms',
+                cta: 'Shop New', linkUrl: '/products',
+                g1: '#082440', g2: '#035b96',
+                orb1: '#38bdf8', orb2: '#7dd3fc', orb3: '#0369a1', icon: '✨',
+              },
+            ];
+
+            /* Merge: real DB banners take priority */
+            const displayBanners = banners.length > 0
+              ? banners.map((b: any, i: number) => ({
+                  id: b.id,
+                  label: b.label ? `🛍 ${b.label}` : '🛍 KDF NUTS',
+                  title: b.title ?? '',
+                  subtitle: b.subtitle ?? '',
+                  cta: b.cta ?? 'Shop Now',
+                  linkUrl: b.linkUrl ?? '/products',
+                  imageUrl: b.imageUrl ?? null,
+                  g1: ['#0f3300','#5c1a00','#2d0a38','#082440'][i % 4],
+                  g2: ['#3d7a00','#b83200','#7e1d5f','#035b96'][i % 4],
+                  orb1: ['#6dbf2f','#f97316','#db2777','#38bdf8'][i % 4],
+                  orb2: ['#a3d96e','#fb923c','#e879a0','#7dd3fc'][i % 4],
+                  orb3: ['#1a5200','#7c2d12','#6b21a8','#0369a1'][i % 4],
+                  icon: ['🥜','🎁','⚡','✨'][i % 4],
+                }))
+              : AI_BANNERS;
+
+            const cur = displayBanners[activeBanner % displayBanners.length];
+            if (!cur) return null;
+
+            return (
+              <div
+                key={cur.id}
+                className="relative w-full overflow-hidden select-none active:scale-[0.99] transition-transform duration-200"
+                style={{
+                  height: '215px',
+                  borderRadius: '28px',
+                  background: `linear-gradient(145deg, ${cur.g1} 0%, ${cur.g2} 100%)`,
+                  boxShadow: `0 12px 40px ${cur.g2}55, 0 4px 12px rgba(0,0,0,0.3)`,
+                  cursor: 'pointer',
+                }}
+                onClick={() => cur.linkUrl && setLocation(cur.linkUrl)}
+              >
+                {/* Real banner image */}
+                {(cur as any).imageUrl && (
+                  <img
+                    src={getProductImageSrc((cur as any).imageUrl)}
+                    alt={cur.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                )}
+                {(cur as any).imageUrl && <div className="absolute inset-0 bg-black/35" />}
+
+                {/* Floating orbs — GPU-animated */}
+                <div className="banner-orb-1 absolute -top-10 -right-10 w-36 h-36 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${cur.orb1}60 0%, transparent 70%)`, filter: 'blur(20px)' }} />
+                <div className="banner-orb-2 absolute -bottom-8 left-2 w-28 h-28 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${cur.orb2}50 0%, transparent 70%)`, filter: 'blur(18px)' }} />
+                <div className="banner-orb-3 absolute top-2 left-1/2 w-20 h-20 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${cur.orb3}40 0%, transparent 70%)`, filter: 'blur(24px)' }} />
+
+                {/* Floating particles */}
+                {[
+                  { top: '18%', left: '68%', size: 4, delay: '0s' },
+                  { top: '55%', left: '78%', size: 3, delay: '1.2s' },
+                  { top: '30%', left: '85%', size: 5, delay: '0.6s' },
+                ].map((p, i) => (
                   <div
-                    key={banner.id}
-                    onClick={() => banner.linkUrl && setLocation(banner.linkUrl)}
-                    className={`absolute inset-0 transition-opacity duration-500 cursor-pointer ${idx === activeBanner ? 'opacity-100' : 'opacity-0'}`}
-                    style={{ background: `linear-gradient(135deg, #2c4c00 0%, ${GREEN} 100%)` }}
+                    key={i}
+                    className="banner-particle absolute rounded-full pointer-events-none"
+                    style={{
+                      top: p.top, left: p.left,
+                      width: p.size, height: p.size,
+                      background: 'rgba(255,255,255,0.55)',
+                      animationDelay: p.delay,
+                    }}
+                  />
+                ))}
+
+                {/* Diagonal shimmer */}
+                <div className="banner-shine-anim absolute inset-y-0 w-20 pointer-events-none"
+                  style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.14) 50%, transparent 70%)' }} />
+
+                {/* Main content */}
+                <div className="absolute inset-0 flex flex-col justify-center px-5 pb-3 pt-3">
+
+                  {/* Label pill — glassmorphism */}
+                  <span
+                    className="w-max text-[10px] font-black px-3 py-1 rounded-full mb-3 tracking-wider"
+                    style={{
+                      background: 'rgba(255,255,255,0.18)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      backdropFilter: 'blur(10px)',
+                      WebkitBackdropFilter: 'blur(10px)',
+                    }}
                   >
-                    {banner.imageUrl && (
-                      <img src={getProductImageSrc(banner.imageUrl)} alt={banner.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                    )}
-                    <div className="absolute inset-0 flex flex-col justify-center px-6 bg-black/15">
-                      {banner.label && <span className="text-white/80 text-[11px] font-bold uppercase tracking-widest mb-1">{banner.label}</span>}
-                      <h2 className="text-[22px] font-black text-white leading-tight mb-3">{banner.title}</h2>
-                      {banner.cta && (
-                        <button className="bg-white text-xs font-bold px-5 py-2.5 rounded-2xl w-max shadow-lg" style={{ color: GREEN }}>
-                          {banner.cta}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="absolute inset-0 flex flex-col justify-center px-6" style={{ background: `linear-gradient(135deg, #2c4c00 0%, ${GREEN} 100%)` }}>
-                <span className="text-white/80 text-[11px] font-bold uppercase tracking-widest mb-1">New Collection</span>
-                <h2 className="text-[22px] font-black text-white leading-tight mb-3">Fresh<br/>Arrivals</h2>
-                <button onClick={() => setLocation('/products')} className="bg-white text-xs font-bold px-5 py-2.5 rounded-2xl w-max shadow-lg" style={{ color: GREEN }}>
-                  Shop Now
-                </button>
+                    {cur.label}
+                  </span>
+
+                  {/* Headline */}
+                  <h2
+                    className="font-black text-white leading-[1.15] mb-1.5"
+                    style={{ fontSize: '21px', textShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
+                  >
+                    {cur.title.split('\n').map((line: string, i: number) => (
+                      <React.Fragment key={i}>{line}{i < cur.title.split('\n').length - 1 && <br />}</React.Fragment>
+                    ))}
+                  </h2>
+
+                  {/* Subtitle */}
+                  {cur.subtitle && (
+                    <p className="text-white/70 text-[11.5px] font-medium leading-snug mb-3">
+                      {cur.subtitle}
+                    </p>
+                  )}
+
+                  {/* CTA pill */}
+                  <button
+                    className="banner-cta-glow w-max flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-[13px] active:scale-95 transition-transform"
+                    style={{
+                      background: 'rgba(255,255,255,0.94)',
+                      color: cur.g2,
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    {cur.cta}
+                    <span style={{ fontSize: '15px', fontWeight: 900 }}>→</span>
+                  </button>
+                </div>
+
+                {/* Floating emoji icon — top right */}
+                <div
+                  className="banner-icon-float absolute right-5 top-4 pointer-events-none select-none"
+                  style={{ fontSize: '44px', opacity: 0.28, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }}
+                >
+                  {cur.icon}
+                </div>
+
+                {/* Swipe dots */}
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none z-10">
+                  {displayBanners.map((_: any, i: number) => (
+                    <div
+                      key={i}
+                      className="h-[5px] rounded-full bg-white transition-all duration-500"
+                      style={{
+                        width: i === activeBanner % displayBanners.length ? '22px' : '5px',
+                        opacity: i === activeBanner % displayBanners.length ? 1 : 0.35,
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-            )}
-            {/* Dots */}
-            {banners.length > 1 && (
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
-                {banners.map((_, i) => (
-                  <div key={i} className={`h-1.5 rounded-full bg-white transition-all duration-300 ${i === activeBanner ? 'w-5 opacity-100' : 'w-1.5 opacity-50'}`} />
-                ))}
-              </div>
-            )}
-          </div>
+            );
+          })()}
         </section>
 
         {/* ── Shop by Category — Premium Redesign ── */}

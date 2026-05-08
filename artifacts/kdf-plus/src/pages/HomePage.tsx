@@ -94,12 +94,21 @@ function CountdownTimer({ endAt }: { endAt: string }) {
   );
 }
 
+/* ─── AI Fallback Slides ─── */
+const BANNER_AI_SLIDES = [
+  { label: '🚚 FREE DELIVERY', headline: "Pakistan's Finest\nNuts & Dry Fruits", sub: 'Order Rs. 1,500+ and get free shipping nationwide', cta: 'Shop Now', g1: '#0b2e00', g2: '#2d6600', g3: '#4a9e00', orb1: '#6dbf2f', orb2: '#a3d96e', orb3: '#1a5200', icon: '🥜' },
+  { label: '⚡ FLASH OFFER', headline: "Flat 20% OFF\nPremium Selection", sub: 'Today only · Limited stock available', cta: 'Claim Offer', g1: '#4a0e00', g2: '#8c2200', g3: '#c23000', orb1: '#f97316', orb2: '#fb923c', orb3: '#7c2d12', icon: '⚡' },
+  { label: '🎁 GIFT PACKS', headline: "Perfect for Every\nOccasion", sub: 'Eid · Birthdays · Corporate gifting — curated with love', cta: 'Explore Gifts', g1: '#200832', g2: '#5e1155', g3: '#9e1a7a', orb1: '#db2777', orb2: '#e879a0', orb3: '#6b21a8', icon: '🎁' },
+  { label: '✨ NEW ARRIVALS', headline: "Fresh Premium\nNuts Just Landed", sub: '100% authentic · Sourced directly from farms', cta: 'See New', g1: '#051830', g2: '#0a3870', g3: '#0e5aaa', orb1: '#38bdf8', orb2: '#7dd3fc', orb3: '#0369a1', icon: '✨' },
+];
+
 /* ─── Hero Banner ────────────────────────────────────────────── */
 function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean }) {
-  const [idx, setIdx]       = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  const [, setLocation]     = useLocation();
+  const [idx, setIdx]             = useState(0);
+  const [fallbackIdx, setFallbackIdx] = useState(0);
+  const [paused, setPaused]       = useState(false);
+  const [isMobile, setIsMobile]   = useState(() => window.innerWidth < 768);
+  const [, setLocation]           = useLocation();
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -116,6 +125,13 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
     return () => clearInterval(t);
   }, [banners.length, paused, next]);
 
+  /* fallback auto-rotate — only active when no DB banners */
+  useEffect(() => {
+    if (banners.length > 0) return;
+    const t = setInterval(() => setFallbackIdx(p => (p + 1) % BANNER_AI_SLIDES.length), 5000);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
   const handleBannerClick = (banner: Banner) => {
     if (banner.targetType === "product" && banner.targetId) setLocation(`/products/${banner.targetId}`);
     else if (banner.targetType === "category" && banner.targetId) setLocation(`/products?category=${banner.targetId}`);
@@ -131,40 +147,74 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
     );
   }
 
-  /* ── fallback (no banners from DB) ── */
+  /* ── fallback (no banners from DB) — Premium AI Banners ── */
   if (!banners.length) {
+    const s = BANNER_AI_SLIDES[fallbackIdx];
     return (
       <div className="px-3 sm:px-6 py-4">
         <div
-          className="relative overflow-hidden rounded-2xl shadow-xl h-[220px] sm:h-[420px] flex items-center"
-          style={{ background: `linear-gradient(135deg, ${DARK} 0%, #1a4d00 60%, #2d7a00 100%)` }}
+          className="relative overflow-hidden h-[220px] sm:h-[420px] flex items-center active:scale-[0.995] transition-transform duration-200 cursor-pointer"
+          style={{ borderRadius: '24px', background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`, boxShadow: `0 16px 48px ${s.g3}55, 0 4px 16px rgba(0,0,0,0.4)` }}
+          onClick={() => setLocation('/products')}
         >
-          <div className="absolute inset-0 opacity-10"
-            style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #5FA800 0%, transparent 60%), radial-gradient(circle at 80% 20%, #8bc34a 0%, transparent 50%)" }}
-          />
+          {/* Animated floating orbs */}
+          <div className="plus-orb-1 absolute -top-12 -right-12 w-52 h-52 rounded-full pointer-events-none"
+            style={{ background: `radial-gradient(circle, ${s.orb1}55 0%, transparent 70%)`, filter: 'blur(28px)' }} />
+          <div className="plus-orb-2 absolute -bottom-10 left-4 w-40 h-40 rounded-full pointer-events-none"
+            style={{ background: `radial-gradient(circle, ${s.orb2}45 0%, transparent 70%)`, filter: 'blur(22px)' }} />
+          <div className="plus-orb-3 absolute top-4 left-1/3 w-28 h-28 rounded-full pointer-events-none"
+            style={{ background: `radial-gradient(circle, ${s.orb3}35 0%, transparent 70%)`, filter: 'blur(30px)' }} />
+          {/* Floating particles */}
+          {[{top:'15%',left:'62%',sz:5,dl:'0s'},{top:'50%',left:'75%',sz:3,dl:'1.5s'},{top:'28%',left:'82%',sz:6,dl:'0.7s'},{top:'65%',left:'55%',sz:4,dl:'2s'}].map((p, i) => (
+            <div key={i} className="plus-particle absolute rounded-full pointer-events-none"
+              style={{ top: p.top, left: p.left, width: p.sz, height: p.sz, background: 'rgba(255,255,255,0.55)', animationDelay: p.dl }} />
+          ))}
+          {/* Diagonal shimmer */}
+          <div className="plus-shine-anim absolute inset-y-0 w-24 pointer-events-none"
+            style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)' }} />
+          {/* Content */}
           <div className="relative z-10 px-6 sm:px-14 flex-1">
-            <span className="inline-block text-xs font-bold uppercase tracking-widest bg-white/20 text-white px-3 py-1 rounded-full mb-3">
-              Premium Quality
+            <span className="inline-block text-[11px] sm:text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 sm:mb-4"
+              style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)' }}>
+              {s.label}
             </span>
-            <h1 className="text-2xl sm:text-5xl font-black text-white leading-tight mb-3">
-              Pakistan's Finest<br />
-              <span style={{ color: "#a8e063" }}>Nuts & Dry Fruits</span>
+            <h1 className="text-2xl sm:text-5xl font-black text-white leading-tight mb-2 sm:mb-3"
+              style={{ textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
+              {s.headline.split('\n').map((line, i) => (
+                <React.Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</React.Fragment>
+              ))}
             </h1>
-            <p className="text-white/70 text-sm sm:text-lg mb-5 max-w-md hidden sm:block">
-              Pure, fresh &amp; straight from the source.
-            </p>
+            <p className="text-white/70 text-xs sm:text-base mb-4 sm:mb-6 max-w-md">{s.sub}</p>
             <button
-              onClick={() => setLocation("/products")}
-              className="px-7 py-2.5 rounded-full font-bold text-sm text-white shadow-xl hover:opacity-90 active:scale-95 transition-all"
-              style={{ backgroundColor: GREEN }}
+              className="plus-cta-glow inline-flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-black text-sm text-white shadow-xl hover:brightness-110 active:scale-95 transition-all"
+              style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.3)' }}
             >
-              Shop Now <ArrowRight className="inline w-4 h-4 ml-1" />
+              {s.cta} <ArrowRight className="w-4 h-4" />
             </button>
+          </div>
+          {/* Floating icon right */}
+          <div className="plus-icon-float absolute right-6 sm:right-16 bottom-4 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 pointer-events-none select-none"
+            style={{ fontSize: 'clamp(48px,8vw,80px)', opacity: 0.22, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }}>
+            {s.icon}
+          </div>
+          {/* Slide dots */}
+          <div className="absolute bottom-3 sm:bottom-4 left-0 right-0 flex justify-center gap-1.5 pointer-events-none z-20">
+            {BANNER_AI_SLIDES.map((_, i) => (
+              <div key={i} className="h-[5px] rounded-full bg-white transition-all duration-500"
+                style={{ width: i === fallbackIdx ? '20px' : '5px', opacity: i === fallbackIdx ? 1 : 0.35 }} />
+            ))}
           </div>
         </div>
       </div>
     );
   }
+
+  const ORB_PALETTES = [
+    { o1: '#6dbf2f', o2: '#a3d96e', o3: '#1a5200' },
+    { o1: '#f97316', o2: '#fb923c', o3: '#7c2d12' },
+    { o1: '#db2777', o2: '#e879a0', o3: '#6b21a8' },
+    { o1: '#38bdf8', o2: '#7dd3fc', o3: '#0369a1' },
+  ];
 
   return (
     <div
@@ -172,8 +222,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative rounded-2xl overflow-hidden shadow-xl h-[220px] sm:h-[420px]">
-
+      <div
+        className="relative overflow-hidden h-[220px] sm:h-[420px]"
+        style={{ borderRadius: '24px', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+      >
         {/* Slides */}
         {banners.map((banner, i) => {
           const desktopImg = banner.imageUrl ? getProductImageSrc(banner.imageUrl) : null;
@@ -185,6 +237,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           const videoSrc = isMobile
             ? ((banner as any).mobileVideoUrl || (banner as any).videoUrl || null)
             : ((banner as any).videoUrl || null);
+
+          const pal = ORB_PALETTES[i % ORB_PALETTES.length];
 
           return (
             <div
@@ -206,14 +260,33 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                   playsInline
                   preload={i === 0 ? "auto" : "none"}
                 />
-              ) : bgImg && (
+              ) : bgImg ? (
                 <img
                   src={bgImg}
                   alt={banner.title}
                   className="absolute inset-0 w-full h-full object-cover object-center"
                   loading={i === 0 ? "eager" : "lazy"}
                 />
+              ) : (
+                /* No image — AI gradient background */
+                <div className="absolute inset-0"
+                  style={{ background: `linear-gradient(145deg, #0b2e00 0%, #2d6600 55%, #4a9e00 100%)` }} />
               )}
+
+              {/* Ambient orbs — visible on no-image slides, subtle on image slides */}
+              {!bgImg && !videoSrc && (<>
+                <div className="plus-orb-1 absolute -top-12 -right-12 w-52 h-52 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${pal.o1}55 0%, transparent 70%)`, filter: 'blur(28px)' }} />
+                <div className="plus-orb-2 absolute -bottom-10 left-8 w-40 h-40 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${pal.o2}45 0%, transparent 70%)`, filter: 'blur(22px)' }} />
+                <div className="plus-orb-3 absolute top-6 left-1/3 w-28 h-28 rounded-full pointer-events-none"
+                  style={{ background: `radial-gradient(circle, ${pal.o3}35 0%, transparent 70%)`, filter: 'blur(30px)' }} />
+              </>)}
+
+              {/* Diagonal shimmer — always visible */}
+              <div className="plus-shine-anim absolute inset-y-0 w-24 pointer-events-none z-[5]"
+                style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%)' }} />
+
               {/* Gradient overlay for text readability */}
               <div
                 className="absolute inset-0"

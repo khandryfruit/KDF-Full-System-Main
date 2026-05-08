@@ -368,6 +368,49 @@
    of every page so scrollable content is never hidden behind
    the fixed nav — no per-page changes needed.
    ═══════════════════════════════════════════════════════════ */
+/* ── Premium Banner Animations (kdf-plus) ── */
+@keyframes plus-orb-drift-1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(24px, -16px) scale(1.1); }
+  66%       { transform: translate(-12px, 10px) scale(0.92); }
+}
+@keyframes plus-orb-drift-2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  40%       { transform: translate(-28px, 18px) scale(0.88); }
+  75%       { transform: translate(16px, -22px) scale(1.14); }
+}
+@keyframes plus-orb-drift-3 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  50%       { transform: translate(12px, 20px) scale(1.08); }
+}
+@keyframes plus-banner-shine {
+  0%   { transform: translateX(-200%) skewX(-18deg); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(600%) skewX(-18deg); opacity: 0; }
+}
+@keyframes plus-cta-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.3); }
+  50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+}
+@keyframes plus-icon-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); }
+  50%       { transform: translateY(-9px) rotate(7deg) scale(1.06); }
+}
+@keyframes plus-particle-drift {
+  0%   { transform: translate(0,0) scale(1);   opacity: 0.5; }
+  33%  { transform: translate(14px,-10px) scale(1.3);  opacity: 0.25; }
+  66%  { transform: translate(-8px,12px) scale(0.75); opacity: 0.4; }
+  100% { transform: translate(0,0) scale(1);   opacity: 0.5; }
+}
+.plus-orb-1      { animation: plus-orb-drift-1 8s ease-in-out infinite; }
+.plus-orb-2      { animation: plus-orb-drift-2 10s ease-in-out infinite 2.5s; }
+.plus-orb-3      { animation: plus-orb-drift-3 7s ease-in-out infinite 1.2s; }
+.plus-shine-anim { animation: plus-banner-shine 5s ease-in-out infinite 1s; }
+.plus-cta-glow   { animation: plus-cta-glow 2.4s ease-in-out infinite; }
+.plus-icon-float { animation: plus-icon-float 4s ease-in-out infinite; }
+.plus-particle   { animation: plus-particle-drift 6s ease-in-out infinite; }
+
 :root {
   --mobile-nav-h: 0px;
 }
