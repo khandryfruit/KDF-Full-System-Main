@@ -143,19 +143,14 @@ async function runFailedDeliveryRule(rule: any, settings: any) {
   const cutoff    = new Date(Date.now() - delayHours * 60 * 60 * 1000);
   const windowEnd = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-  const rows = await db.select({
-    id: ordersTable.id,
-    orderNumber: ordersTable.orderNumber,
-    shippingAddress: ordersTable.shippingAddress,
-    updatedAt: ordersTable.updatedAt,
-  })
-    .from(ordersTable)
-    .where(and(
-      eq(ordersTable.status, "failed_delivery"),
-      lte(ordersTable.updatedAt, cutoff),
-      gte(ordersTable.updatedAt, windowEnd),
-    ))
-    .limit(50);
+  const rows = await db.execute(sql`
+    SELECT id, order_number AS "orderNumber", shipping_address AS "shippingAddress", updated_at AS "updatedAt"
+    FROM orders
+    WHERE status = 'failed_delivery'
+      AND updated_at <= ${cutoff.toISOString()}
+      AND updated_at >= ${windowEnd.toISOString()}
+    LIMIT 50
+  `).then(r => r.rows as Array<{ id: number; orderNumber: string; shippingAddress: unknown; updatedAt: Date }>);
 
   for (const order of rows) {
     const addr = order.shippingAddress as any;

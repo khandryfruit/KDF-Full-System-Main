@@ -1,0 +1,174 @@
+# URGENT Production White Screen Fix — Live Domain Issue
+
+The live production website is currently showing a white screen/blank page on the main domain.
+
+Issue:
+- Website opens slightly
+- Then turns completely white
+- Happening on production/live domain
+- Issue appears on mobile browsers as well
+- This MUST be fixed directly on production urgently
+
+Domains:
+- khanbabadryfruits.com
+- admin.khanbabadryfruits.com
+
+---
+
+# Critical Requirement
+
+DO NOT keep redeploying full builds repeatedly because production republishing takes too much time.
+
+Instead:
+- Properly debug the live production issue
+- Find exact root cause
+- Patch only affected files/services
+- Use production-safe fixes
+- Avoid unnecessary full rebuilds
+
+---
+
+# Possible Root Causes To Check
+
+## Frontend Runtime Errors
+Check:
+- React hydration errors
+- JavaScript crashes
+- Undefined variables
+- Infinite loops
+- Failed lazy loading
+- Broken dynamic imports
+- White screen after app mount
+
+---
+
+# Console + Production Logs
+
+Check:
+- Browser console errors
+- Production logs
+- Nginx/Apache logs
+- Vercel/Render logs
+- API failures
+- Network request failures
+- 500 errors
+- Memory crashes
+
+---
+
+# API Connection Failures
+
+Check if white screen occurs because:
+- Backend API not responding
+- Environment variables missing
+- Shopify API failing
+- WhatsApp API timeout
+- AI API failure
+- Authentication loop
+
+Add proper:
+- Fallback UI
+- Error boundaries
+- Loading states
+- Retry system
+
+---
+
+# Mobile Safari / iPhone Compatibility
+
+This issue is happening on iPhone Safari.
+
+Check:
+- Safari rendering issues
+- Unsupported JS syntax
+- WebView crashes
+- Heavy animation freezes
+- Memory overload
+- Infinite re-rendering
+
+Optimize specifically for:
+- iOS Safari
+- Mobile responsiveness
+- Low memory devices
+
+---
+
+# Environment Variables Validation
+
+Verify production env values:
+- Domain URLs
+- API URLs
+- WebSocket URLs
+- Meta API keys
+- Shopify keys
+- OpenAI keys
+- Session secrets
+
+Ensure production environment matches live domain correctly.
+
+---
+
+# Authentication & Session Issues
+
+Check:
+- Broken auth middleware
+- Cookie/session conflicts
+- Redirect loops
+- HTTPS issues
+- CORS issues
+- Invalid tokens
+
+---
+
+# Real-Time System Stability
+
+Temporarily isolate and test:
+- WebSocket system
+- WhatsApp live sync
+- AI live suggestions
+- Real-time dashboard updates
+
+One failing service should NOT crash entire frontend.
+
+---
+
+# Add Production Error Protection
+
+Implement:
+- React Error Boundary
+- Global crash handler
+- Fallback components
+- Graceful API failure handling
+- Automatic retry
+- Production monitoring
+
+---
+
+# Performance Optimization
+
+Reduce:
+- Initial JS bundle size
+- Heavy animations
+- Unnecessary API calls
+- Large image loading
+- Blocking scripts
+
+Enable:
+- Lazy loading
+- Code splitting
+- Cache optimization
+- CDN optimization
+
+---
+
+# Required Final Result
+
+The live production website must:
+- Open instantly
+- Work smoothly on iPhone Safari
+- Not show white screen
+- Handle API failures gracefully
+- Stay stable under production load
+- Work on both domains properly
+
+WITHOUT repeated full production republishes.

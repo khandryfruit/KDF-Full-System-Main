@@ -89,7 +89,7 @@ router.get("/admin/wa/automation/logs", adminMiddleware as any, async (req, res)
 
 router.get("/admin/wa/automation/stats", adminMiddleware as any, async (req, res) => {
   try {
-    const [totals] = await db.execute(sql`
+    const totalsResult = await db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE status = 'sent')    AS total_sent,
         COUNT(*) FILTER (WHERE status = 'failed')  AS total_failed,
@@ -98,10 +98,11 @@ router.get("/admin/wa/automation/stats", adminMiddleware as any, async (req, res
       FROM wa_automation_logs
       WHERE created_at >= NOW() - INTERVAL '30 days'
     `);
+    const totals = totalsResult.rows[0] as any ?? {};
     const rules = await db.select({ id: waAutomationRulesTable.id, name: waAutomationRulesTable.name, runCount: waAutomationRulesTable.runCount, lastRunAt: waAutomationRulesTable.lastRunAt, isActive: waAutomationRulesTable.isActive })
       .from(waAutomationRulesTable)
       .orderBy(desc(waAutomationRulesTable.runCount));
-    return res.json({ ...totals.rows[0], rules });
+    return res.json({ ...totals, rules });
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
@@ -295,8 +296,8 @@ router.get("/admin/wa/cost-stats", adminMiddleware as any, async (req, res) => {
 /* ── Notification Settings: new events ─────────────────── */
 router.get("/admin/wa/notification-settings-extended", adminMiddleware as any, async (req, res) => {
   try {
-    const [s] = await db.execute(sql`SELECT * FROM whatsapp_settings LIMIT 1`);
-    return res.json(s.rows[0] ?? {});
+    const sResult = await db.execute(sql`SELECT * FROM whatsapp_settings LIMIT 1`);
+    return res.json(sResult.rows[0] ?? {});
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
