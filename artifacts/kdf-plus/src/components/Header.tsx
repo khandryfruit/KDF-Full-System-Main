@@ -19,6 +19,40 @@ import {
 const GREEN  = "#5FA800";
 const ORANGE = "#F58300";
 
+/* ── Urdu / Roman-Urdu → English word map for voice/AI search ── */
+const URDU_WORD_MAP: Record<string, string> = {
+  badam: 'almonds', badaam: 'almonds', baadam: 'almonds',
+  pista: 'pistachios', pistay: 'pistachios', pisteh: 'pistachios',
+  akhrot: 'walnuts', akhroot: 'walnuts', akhroat: 'walnuts',
+  kaju: 'cashews', kajoo: 'cashews', kaaju: 'cashews',
+  kishmish: 'raisins', kishmash: 'raisins', kismis: 'raisins',
+  khajoor: 'dates', khajur: 'dates',
+  anjeer: 'figs', anjir: 'figs', angeer: 'figs',
+  chilgoza: 'pine nuts', chilghoza: 'pine nuts',
+  mungfali: 'peanuts', mungphali: 'peanuts', moongfali: 'peanuts', moongphali: 'peanuts',
+  khumani: 'apricots', khubani: 'apricots', khobani: 'apricots',
+  meva: 'dry fruits', mewa: 'dry fruits', maywa: 'dry fruits',
+  'بادام': 'almonds', 'پستہ': 'pistachios', 'اخروٹ': 'walnuts',
+  'کاجو': 'cashews', 'کشمش': 'raisins', 'خشک میوہ': 'dry fruits',
+  'انجیر': 'figs', 'کھجور': 'dates', 'مونگ پھلی': 'peanuts',
+  'چلغوزہ': 'pine nuts', 'خوبانی': 'apricots', 'مغز': 'nuts',
+};
+
+const FILLER_RE = /\b(mujhe|mujhy|muje|dikhao|dikhayein|chahiye|chahie|dena|please|show me|i want|de do|lena|batao|kya hai|kitna|kitne)\b/gi;
+
+function translateVoiceQuery(raw: string): string {
+  const trimmed = raw.trim();
+  if (URDU_WORD_MAP[trimmed]) return URDU_WORD_MAP[trimmed];
+  const lower = trimmed.toLowerCase();
+  if (URDU_WORD_MAP[lower]) return URDU_WORD_MAP[lower];
+  let result = lower;
+  for (const [key, val] of Object.entries(URDU_WORD_MAP)) {
+    result = result.replace(new RegExp(`\\b${key.toLowerCase()}\\b`, 'gi'), val);
+  }
+  result = result.replace(FILLER_RE, '').replace(/\s+/g, ' ').trim();
+  return result || trimmed;
+}
+
 /* ─── Typing Placeholder ─────────────────────────────────────── */
 const PLACEHOLDERS = [
   "Search almonds…", "Search pistachios…", "Search cashews…",
@@ -396,20 +430,34 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
   const recRef = useRef<any>(null);
 
   const startVoice = () => {
-    if (isListening) { recRef.current?.stop(); return; }
+    if (isListening) { recRef.current?.stop(); setIsListening(false); return; }
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return;
-    const rec = new SpeechRec();
-    rec.continuous = false; rec.interimResults = false; rec.lang = "ur-PK";
-    rec.onstart = () => setIsListening(true);
-    rec.onend = () => setIsListening(false);
-    rec.onerror = () => setIsListening(false);
-    rec.onresult = (e: any) => {
-      const t = e.results[0]?.[0]?.transcript ?? "";
-      if (t) { setQ(t); setTimeout(() => onNavigate(`/products?search=${encodeURIComponent(t)}`), 100); onClose(); }
+
+    const startRec = (lang: string, fallback?: string) => {
+      const rec = new SpeechRec();
+      rec.continuous = false; rec.interimResults = false; rec.lang = lang;
+      rec.onstart = () => setIsListening(true);
+      rec.onend = () => setIsListening(false);
+      rec.onerror = (err: any) => {
+        setIsListening(false);
+        if (fallback && (err.error === "no-speech" || err.error === "network")) {
+          setTimeout(() => startRec(fallback), 400);
+        }
+      };
+      rec.onresult = (e: any) => {
+        const raw = e.results[0]?.[0]?.transcript ?? "";
+        if (raw) {
+          const translated = translateVoiceQuery(raw);
+          setQ(translated);
+          setTimeout(() => { onNavigate(`/products?search=${encodeURIComponent(translated)}`); onClose(); }, 100);
+        }
+      };
+      recRef.current = rec;
+      rec.start();
     };
-    recRef.current = rec;
-    rec.start();
+
+    startRec("ur-PK", "en-US");
   };
 
   const handleCameraImg = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,15 +510,36 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
             onKeyDown={e => { if (e.key === "Enter" && q.trim()) go(`/products?search=${encodeURIComponent(q.trim())}`); }}
           />
           {q
-            ? <button onClick={() => setQ("")}><X className="w-4 h-4 text-gray-400" /></button>
+            ? <button onClick={() => setQ("")} className="p-1"><X className="w-4 h-4 text-gray-400" /></button>
             : <div className="flex items-center gap-2 flex-shrink-0">
-                <button type="button" onClick={() => cameraRef.current?.click()}
-                  className={`p-1 rounded-lg active:scale-95 transition-all ${isCameraLoading ? "text-green-500" : "text-gray-400"}`}>
-                  {isCameraLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                {/* Camera */}
+                <button type="button" onClick={() => cameraRef.current?.click()} disabled={isCameraLoading}
+                  title="Search by image"
+                  className={`relative w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90
+                    ${isCameraLoading ? 'bg-green-500 shadow-sm' : 'bg-gray-200 hover:bg-gray-300'}`}>
+                  {isCameraLoading
+                    ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                    : <Camera className="w-3.5 h-3.5 text-gray-600" />}
+                  {isCameraLoading && (
+                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-green-600 whitespace-nowrap">
+                      AI Scan
+                    </span>
+                  )}
                 </button>
+                {/* Mic */}
                 <button type="button" onClick={startVoice}
-                  className={`p-1 rounded-lg active:scale-95 transition-all ${isListening ? "text-red-500 animate-pulse" : "text-gray-400"}`}>
-                  <Mic className="w-4 h-4" />
+                  title={isListening ? "Tap to stop" : "Voice search (Urdu/English)"}
+                  className={`relative w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90
+                    ${isListening ? 'bg-red-500 shadow-sm' : 'bg-gray-200 hover:bg-gray-300'}`}>
+                  <Mic className={`w-3.5 h-3.5 ${isListening ? 'text-white' : 'text-gray-600'}`} />
+                  {isListening && (
+                    <>
+                      <span className="absolute inset-0 rounded-xl bg-red-400 animate-ping opacity-30 pointer-events-none" />
+                      <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-red-500 whitespace-nowrap">
+                        Listening…
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
           }
@@ -554,20 +623,34 @@ export function Header() {
   const [headerCamLoad, setHeaderCamLoad]       = useState(false);
 
   const startHeaderVoice = () => {
-    if (headerListening) { headerRecRef.current?.stop(); return; }
+    if (headerListening) { headerRecRef.current?.stop(); setHeaderListening(false); return; }
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return;
-    const rec = new SpeechRec();
-    rec.continuous = false; rec.interimResults = false; rec.lang = "ur-PK";
-    rec.onstart = () => setHeaderListening(true);
-    rec.onend   = () => setHeaderListening(false);
-    rec.onerror = () => setHeaderListening(false);
-    rec.onresult = (e: any) => {
-      const t = e.results[0]?.[0]?.transcript ?? "";
-      if (t) { setSearchQuery(t); setShowHints(true); }
+
+    const startRec = (lang: string, fallback?: string) => {
+      const rec = new SpeechRec();
+      rec.continuous = false; rec.interimResults = false; rec.lang = lang;
+      rec.onstart = () => setHeaderListening(true);
+      rec.onend   = () => setHeaderListening(false);
+      rec.onerror = (err: any) => {
+        setHeaderListening(false);
+        if (fallback && (err.error === "no-speech" || err.error === "network")) {
+          setTimeout(() => startRec(fallback), 400);
+        }
+      };
+      rec.onresult = (e: any) => {
+        const raw = e.results[0]?.[0]?.transcript ?? "";
+        if (raw) {
+          const translated = translateVoiceQuery(raw);
+          setSearchQuery(translated);
+          setShowHints(true);
+        }
+      };
+      headerRecRef.current = rec;
+      rec.start();
     };
-    headerRecRef.current = rec;
-    rec.start();
+
+    startRec("ur-PK", "en-US");
   };
 
   const handleHeaderCamImg = async (e: React.ChangeEvent<HTMLInputElement>) => {

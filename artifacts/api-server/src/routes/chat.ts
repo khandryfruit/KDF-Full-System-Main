@@ -1059,17 +1059,33 @@ router.post("/chat/image-search", async (req, res) => {
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Identify the dry fruit, nut, or food product in this image. Reply with ONLY one English word or short phrase: almonds, walnuts, cashews, pistachios, dates, raisins, figs, pine nuts, peanuts, apricots, mixed nuts, gift box, seeds, or similar. If unclear, reply: unknown" },
-          { type: "image_url", image_url: { url: image, detail: "low" } },
+          {
+            type: "text",
+            text: `You are a product identifier for a premium dry fruits & nuts e-commerce store.
+Carefully examine the image and identify the primary product shown.
+
+Reply with ONLY one English product name from this list (no punctuation, no extra words):
+almonds, walnuts, cashews, pistachios, dates, raisins, figs, pine nuts, peanuts, apricots, hazelnuts, mixed nuts, seeds, honey, dry fruits, gift box
+
+Rules:
+- If a bag/package/bowl is shown, identify what is INSIDE it
+- Focus on the most prominent or closest item
+- If you see a mix of multiple nuts, reply: mixed nuts
+- If truly unidentifiable, reply: unknown`
+          },
+          { type: "image_url", image_url: { url: image, detail: "auto" } },
         ],
       }],
-      max_tokens: 20,
+      max_tokens: 15,
     });
 
-    const detected = (completion.choices[0]?.message?.content ?? "unknown").trim().toLowerCase();
-    if (detected === "unknown") return res.json({ detected: "unknown", products: [] });
+    const detected = (completion.choices[0]?.message?.content ?? "unknown").trim().toLowerCase()
+      .replace(/[^a-z\s]/g, "").trim();
+    if (!detected || detected === "unknown") return res.json({ detected: "unknown", products: [] });
 
     const expanded = expandQuery(detected);
+    const searchTerms = [...new Set([detected, ...expanded])];
+
     const rows = await db.select({
       id: shopifyProductsTable.id,
       title: shopifyProductsTable.title,
@@ -1082,10 +1098,7 @@ router.post("/chat/image-search", async (req, res) => {
     .from(shopifyProductsTable)
     .where(and(
       eq(shopifyProductsTable.status, "active"),
-      or(
-        ilike(shopifyProductsTable.title, `%${detected}%`),
-        ilike(shopifyProductsTable.title, `%${expanded}%`),
-      )
+      or(...searchTerms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)))
     ))
     .orderBy(desc(shopifyProductsTable.updatedAt))
     .limit(8);

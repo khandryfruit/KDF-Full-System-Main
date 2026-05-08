@@ -1,0 +1,150 @@
+========================
+AI SEARCH BAR — VOICE & CAMERA SEARCH NEEDS IMPROVEMENT
+
+Please improve the homepage AI search experience professionally.
+
+The current search bar works partially, but several important features are incomplete.
+
+========================
+CURRENT ISSUES
+
+1. CAMERA SEARCH
+   ========================
+
+The camera opens correctly.
+
+BUT:
+
+❌ Image recognition/search is NOT working
+❌ Product detection is incomplete
+❌ Uploaded image does not properly search Shopify products
+
+Current behavior:
+Camera only captures image.
+
+Required behavior:
+✅ Detect product using AI
+✅ Match related Shopify products
+✅ Show visually similar products
+✅ Auto-open relevant results
+
+Example:
+If user scans:
+✅ Almonds
+✅ Pistachios
+✅ Walnuts
+✅ Dry fruits
+
+AI should automatically:
+✅ Detect object
+✅ Search Shopify catalog
+✅ Show matching products instantly
+
+========================
+2. VOICE SEARCH
+
+Voice search is currently weak.
+
+Problems:
+
+❌ Urdu search only partially works
+❌ Roman Urdu recognition incomplete
+❌ English products not mapped correctly
+❌ AI translation/matching incomplete
+
+========================
+REQUIRED AI SEARCH LOGIC
+
+If customer says in Urdu:
+
+✅ بادام
+✅ پستہ
+✅ اخروٹ
+✅ کاجو
+
+AI should automatically map to:
+
+✅ Almonds
+✅ Pistachios
+✅ Walnuts
+✅ Cashews
+
+and search English Shopify product titles automatically.
+
+========================
+LANGUAGE SUPPORT REQUIRED
+
+Support:
+
+✅ Urdu
+✅ Roman Urdu
+✅ English
+✅ Mixed language queries
+
+Examples:
+
+"mujhe badam dikhayein"
+"pista price"
+"akhrot"
+"almonds 500g"
+
+All should correctly search Shopify products.
+
+========================
+3. SEARCH UI/UX
+
+Please redesign the search bar professionally.
+
+Current design still feels basic.
+
+Need:
+
+✅ Premium ecommerce search UI
+✅ Smooth animations
+✅ Better spacing
+✅ Elegant icons
+✅ Modern mobile design
+✅ Faster interaction feel
+
+========================
+4. MIC & CAMERA ICONS
+
+Improve:
+
+✅ Microphone icon design
+✅ Camera icon design
+✅ Touch interaction
+✅ Visual feedback
+✅ Active listening animation
+✅ AI processing animation
+
+Need premium modern look similar to top ecommerce apps.
+
+========================
+5. CLICK EXPERIENCE
+
+Improve tap/click responsiveness.
+
+Currently interaction feels weak.
+
+Need:
+
+✅ Fast response
+✅ Smooth opening
+✅ Better transitions
+✅ Professional UX feedback
+
+========================
+FINAL GOAL
+
+Build a fully intelligent AI search system:
+
+✅ Voice search
+✅ AI image search
+✅ Urdu → English product mapping
+✅ Roman Urdu recognition
+✅ Shopify catalog integration
+✅ Smart AI recommendations
+✅ Premium mobile UI/UX
+
+The system should feel modern, fast, intelligent, and professional.

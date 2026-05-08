@@ -20,6 +20,40 @@ import {
 const BG = '#F4F6F8';
 const GREEN = '#5FA800';
 
+/* ── Urdu / Roman-Urdu → English word map for voice search ── */
+const URDU_WORD_MAP: Record<string, string> = {
+  badam: 'almonds', badaam: 'almonds', baadam: 'almonds',
+  pista: 'pistachios', pistay: 'pistachios', pisteh: 'pistachios',
+  akhrot: 'walnuts', akhroot: 'walnuts', akhroat: 'walnuts',
+  kaju: 'cashews', kajoo: 'cashews', kaaju: 'cashews',
+  kishmish: 'raisins', kishmash: 'raisins', kismis: 'raisins',
+  khajoor: 'dates', khajur: 'dates',
+  anjeer: 'figs', anjir: 'figs', angeer: 'figs',
+  chilgoza: 'pine nuts', chilghoza: 'pine nuts',
+  mungfali: 'peanuts', mungphali: 'peanuts', moongfali: 'peanuts', moongphali: 'peanuts',
+  khumani: 'apricots', khubani: 'apricots', khobani: 'apricots',
+  meva: 'dry fruits', mewa: 'dry fruits', maywa: 'dry fruits',
+  'بادام': 'almonds', 'پستہ': 'pistachios', 'اخروٹ': 'walnuts',
+  'کاجو': 'cashews', 'کشمش': 'raisins', 'خشک میوہ': 'dry fruits',
+  'انجیر': 'figs', 'کھجور': 'dates', 'مونگ پھلی': 'peanuts',
+  'چلغوزہ': 'pine nuts', 'خوبانی': 'apricots', 'مغز': 'nuts',
+};
+
+const FILLER_RE = /\b(mujhe|mujhy|muje|dikhao|dikhayein|chahiye|chahie|dena|please|show me|i want|de do|lena|batao|kya hai|kitna|kitne)\b/gi;
+
+function translateVoiceQuery(raw: string): string {
+  const trimmed = raw.trim();
+  if (URDU_WORD_MAP[trimmed]) return URDU_WORD_MAP[trimmed];
+  const lower = trimmed.toLowerCase();
+  if (URDU_WORD_MAP[lower]) return URDU_WORD_MAP[lower];
+  let result = lower;
+  for (const [key, val] of Object.entries(URDU_WORD_MAP)) {
+    result = result.replace(new RegExp(`\\b${key.toLowerCase()}\\b`, 'gi'), val);
+  }
+  result = result.replace(FILLER_RE, '').replace(/\s+/g, ' ').trim();
+  return result || trimmed;
+}
+
 export function HomePage() {
   const [, setLocation] = useLocation();
   const { totalItems } = useCart();
@@ -41,22 +75,36 @@ export function HomePage() {
   const [cameraDetected, setCameraDetected] = useState('');
 
   const handleVoiceSearch = () => {
-    if (isListening) { recognitionRef.current?.stop(); return; }
+    if (isListening) { recognitionRef.current?.stop(); setIsListening(false); return; }
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return;
-    const rec = new SpeechRec();
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.lang = 'ur-PK';
-    rec.onstart = () => setIsListening(true);
-    rec.onend = () => setIsListening(false);
-    rec.onerror = () => setIsListening(false);
-    rec.onresult = (e: any) => {
-      const t = e.results[0]?.[0]?.transcript ?? '';
-      if (t) { setSearchQuery(t); setTimeout(() => handleSearch(t), 50); }
+
+    const startRec = (lang: string, fallback?: string) => {
+      const rec = new SpeechRec();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = lang;
+      rec.onstart = () => setIsListening(true);
+      rec.onend = () => setIsListening(false);
+      rec.onerror = (err: any) => {
+        setIsListening(false);
+        if (fallback && (err.error === 'no-speech' || err.error === 'network')) {
+          setTimeout(() => startRec(fallback), 400);
+        }
+      };
+      rec.onresult = (e: any) => {
+        const raw = e.results[0]?.[0]?.transcript ?? '';
+        if (raw) {
+          const translated = translateVoiceQuery(raw);
+          setSearchQuery(translated);
+          setTimeout(() => handleSearch(translated), 60);
+        }
+      };
+      recognitionRef.current = rec;
+      rec.start();
     };
-    recognitionRef.current = rec;
-    rec.start();
+
+    startRec('ur-PK', 'en-US');
   };
 
   const handleImageSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,18 +286,50 @@ export function HomePage() {
                 className="bg-transparent text-[14px] text-gray-800 placeholder-gray-400 flex-1 outline-none"
               />
               {searchQuery ? (
-                <button type="submit" className="ml-2 w-8 h-8 flex items-center justify-center rounded-xl bg-[#5FA800] shrink-0">
+                <button type="submit" className="ml-2 w-9 h-9 flex items-center justify-center rounded-xl shrink-0 active:scale-90 transition-transform" style={{ background: GREEN }}>
                   <Search size={15} className="text-white" />
                 </button>
               ) : (
                 <div className="ml-2 flex items-center gap-1.5 shrink-0">
-                  <button type="button" onClick={() => cameraInputRef.current?.click()}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl shadow-sm active:scale-95 transition-all ${isCameraLoading ? 'bg-green-500' : 'bg-white'}`}>
-                    {isCameraLoading ? <Loader2 size={15} className="text-white animate-spin" /> : <Camera size={16} className="text-gray-500" />}
+                  {/* Camera button */}
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={isCameraLoading}
+                    title="Search by image"
+                    className={`relative w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90
+                      ${isCameraLoading
+                        ? 'bg-green-500 shadow-md shadow-green-200'
+                        : 'bg-white border border-gray-100 shadow-sm hover:border-gray-300'}`}
+                  >
+                    {isCameraLoading
+                      ? <Loader2 size={15} className="text-white animate-spin" />
+                      : <Camera size={16} className="text-gray-500" />}
+                    {isCameraLoading && (
+                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold text-green-600 whitespace-nowrap bg-green-50 px-1.5 py-0.5 rounded-full border border-green-200">
+                        AI Scan
+                      </span>
+                    )}
                   </button>
-                  <button type="button" onClick={handleVoiceSearch}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl shadow-sm active:scale-95 transition-all ${isListening ? 'bg-red-500 animate-pulse' : 'bg-white'}`}>
+                  {/* Mic button */}
+                  <button
+                    type="button"
+                    onClick={handleVoiceSearch}
+                    title={isListening ? 'Tap to stop' : 'Voice search (Urdu/English)'}
+                    className={`relative w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90
+                      ${isListening
+                        ? 'bg-red-500 shadow-md shadow-red-200'
+                        : 'bg-white border border-gray-100 shadow-sm hover:border-gray-300'}`}
+                  >
                     <Mic size={15} className={isListening ? 'text-white' : 'text-gray-500'} />
+                    {isListening && (
+                      <>
+                        <span className="absolute inset-0 rounded-xl bg-red-400 animate-ping opacity-40 pointer-events-none" />
+                        <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold text-red-500 whitespace-nowrap bg-red-50 px-1.5 py-0.5 rounded-full border border-red-200">
+                          Listening…
+                        </span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}
