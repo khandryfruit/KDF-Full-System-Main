@@ -1,0 +1,307 @@
+آپ اس کو بہت ہی پروفیشنل اور world-class level تک لے جا سکتے ہیں۔
+اصل مسئلہ design نہیں، architecture ہے۔ ابھی آپ کا widget direct script injection پر چل رہا ہے، اسی لیے mobile freeze, overlay issues, event conflicts آ رہے ہیں۔
+
+Best approach یہ ہوگا:
+
+* Shopify کے لیے lightweight snippet
+* Render/Replit پہ separate optimized widget app
+* Shopify صرف loader inject کرے
+* اصل chat isolated shadow DOM یا iframe container میں render ہو
+* React website اور Shopify دونوں same core use کریں
+
+یہ prompt/use-case architecture آپ اپنے developer کو دے دیں:
+
+# KDF NUTS — NEXT GENERATION SHOPIFY LIVE CHAT ARCHITECTURE
+
+## IMPORTANT
+
+Current widget works partially but architecture is weak.
+
+Right now Shopify loads:
+
+```liquid
+<script>
+  window.KDFChatConfig = {
+    customer: {%- if customer -%}{
+      id:    "{{ customer.id }}",
+      name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
+      email: "{{ customer.email | escape }}",
+      phone: "{{ customer.phone | escape }}"
+    }{%- else -%}null{%- endif -%},
+    cart:  {{ cart | json }},
+    store: "shopify"
+  };
+</script>
+
+<script src="https://khanbabadryfruits.com/api/widget.js"></script>
+```
+
+But current architecture is causing:
+
+❌ mobile freeze
+❌ overlay conflicts
+❌ Start Chat issues
+❌ touch blocking
+❌ Shopify conflicts
+❌ rendering instability
+
+---
+
+# REQUIRED NEW ARCHITECTURE
+
+## DO NOT render heavy app directly inside Shopify theme
+
+Instead:
+
+# Shopify should ONLY inject lightweight loader snippet
+
+and entire chat system should render from:
+
+# Render / Replit / Dedicated Widget Server
+
+---
+
+# REQUIRED SYSTEM DESIGN
+
+## Shopify Theme
+
+Only inject:
+
+```html
+<div id="kdf-chat-root"></div>
+<script src="https://chat.kdfnuts.com/widget-loader.js"></script>
+```
+
+---
+
+# REQUIRED WIDGET STRUCTURE
+
+Create isolated architecture:
+
+```bash
+/kdf-chat-system
+│
+├── widget-loader.js
+├── chat-core/
+├── ui-engine/
+├── ai-engine/
+├── realtime-engine/
+├── product-engine/
+├── voice-engine/
+├── lead-engine/
+├── tracking-engine/
+└── shopify-sync/
+```
+
+---
+
+# IMPORTANT
+
+## Use SHADOW DOM or ISOLATED IFRAME
+
+to avoid:
+
+❌ Shopify CSS conflicts
+❌ z-index issues
+❌ mobile freezes
+❌ body scroll lock
+❌ theme JS conflicts
+
+---
+
+# REQUIRED RENDERING STRATEGY
+
+## BEST OPTION
+
+Render chat inside:
+
+# isolated iframe container
+
+OR
+
+# shadow DOM app
+
+---
+
+# REQUIRED UI/UX
+
+Make widget:
+
+# PREMIUM WORLD-CLASS EXPERIENCE
+
+similar to:
+
+✅ Intercom
+✅ Drift
+✅ Crisp
+✅ Apple-style smooth UI
+✅ modern SaaS widgets
+
+---
+
+# REQUIRED FLOATING BUTTONS
+
+## Default State
+
+Only show:
+
+✅ Live Chat icon
+✅ WhatsApp icon
+
+---
+
+# HOVER / TAP STATE
+
+Expand beautifully:
+
+```bash
+Chat with Us
+WhatsApp
+24/7 Support
+```
+
+with:
+
+✅ glassmorphism
+✅ soft shadows
+✅ smooth animation
+✅ floating motion
+✅ mobile-safe spacing
+
+---
+
+# REQUIRED MOBILE EXPERIENCE
+
+Widget MUST:
+
+✅ open smoothly
+✅ never freeze screen
+✅ support Safari
+✅ support Android Chrome
+✅ use smooth scrolling
+✅ support swipe gestures
+✅ support keyboard resize properly
+
+---
+
+# REQUIRED PERFORMANCE
+
+Chat bundle MUST:
+
+✅ lazy load
+✅ under 150kb initial load
+✅ use code splitting
+✅ realtime optimized
+✅ GPU animations only
+
+---
+
+# REQUIRED CHAT FEATURES
+
+## AI Commerce Chat
+
+Customer can:
+
+✅ search products
+✅ browse variants
+✅ add to cart
+✅ place orders
+✅ track order
+✅ voice order
+✅ WhatsApp support
+
+inside chat.
+
+---
+
+# REQUIRED SHOPIFY INTEGRATION
+
+AI should access:
+
+```bash
+- Shopify products
+- variants
+- inventory
+- customers
+- orders
+- carts
+- tracking
+```
+
+through secure APIs.
+
+---
+
+# REQUIRED ADMIN SYSTEM
+
+All chats MUST sync into:
+
+# Unified WA Chat Admin
+
+with:
+
+✅ website chats
+✅ Shopify chats
+✅ WhatsApp chats
+✅ leads
+✅ customer memory
+
+---
+
+# REQUIRED VOICE SYSTEM
+
+Add:
+
+✅ speech-to-text
+✅ Roman Urdu support
+✅ Urdu support
+✅ voice replies later
+
+---
+
+# REQUIRED VISUAL QUALITY
+
+Use:
+
+✅ premium typography
+✅ smooth gradients
+✅ responsive cards
+✅ animated transitions
+✅ modern shadows
+✅ dynamic product cards
+
+---
+
+# REQUIRED SAFETY
+
+Prevent:
+
+❌ fullscreen blocking
+❌ pointer-event lock
+❌ infinite overlays
+❌ memory leaks
+❌ event duplication
+
+---
+
+# FINAL GOAL
+
+Build:
+
+# KDF NUTS AI Commerce Chat Platform
+
+that works:
+
+✅ perfectly on Shopify
+✅ perfectly on React website
+✅ perfectly on mobile
+✅ perfectly on desktop
+
+with:
+
+✅ premium UI/UX
+✅ realtime AI
+✅ stable performance
+✅ scalable architecture
+✅ zero freezing
+✅ enterprise-grade experience
