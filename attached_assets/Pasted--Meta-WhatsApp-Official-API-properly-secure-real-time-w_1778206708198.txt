@@ -1,0 +1,203 @@
+یہ سیکشن بھی لازمی ایڈ کریں تاکہ Meta WhatsApp Official API properly secure اور real-time webhook messaging کے ساتھ کام کرے۔
+
+21. Meta WhatsApp API Credentials + Webhook Configuration
+
+Inside WhatsApp Integration → API Settings section:
+
+Add complete Meta WhatsApp Cloud API credential management system.
+
+Required Secure Fields
+
+Add these secure fields inside settings panel:
+
+- Meta App ID
+- Meta App Secret
+- WhatsApp Business Account ID
+- Phone Number ID
+- Permanent Access Token
+- Verify Token
+- Webhook Callback URL
+- API Version Selector
+- Business Portfolio ID
+
+---
+
+Secure Storage Requirements
+
+All credentials must:
+
+- Be encrypted in database
+- Hidden in UI
+- Mask sensitive values
+- Support secure update flow
+- Have role-based access permissions
+
+Example:
+
+- Only Super Admin can view/edit secrets
+- Staff cannot access credentials
+
+---
+
+Real-Time Incoming Customer Messages
+
+When customer sends message on WhatsApp:
+
+The system must:
+
+- Receive incoming webhook events instantly
+- Save customer messages in conversations table
+- Show message live in conversation panel
+- Trigger AI response engine
+- Trigger automation rules
+- Detect customer intent
+
+---
+
+Meta Webhook Event Support
+
+Support all important webhook events:
+
+- Incoming messages
+- Delivered status
+- Read receipts
+- Message failed
+- Template status
+- Button clicks
+- Interactive replies
+- Media messages
+- Voice notes
+- Image uploads
+- Customer reactions
+
+---
+
+AI + Webhook Integration
+
+When webhook receives customer message:
+
+AI should:
+
+- Analyze customer message
+- Detect product interest
+- Detect order inquiry
+- Detect complaint
+- Detect language
+- Generate smart response suggestions
+
+---
+
+Incoming + Outgoing Full Sync
+
+Both directions must work properly.
+
+Incoming:
+
+Customer → WhatsApp → Meta Webhook → Our System
+
+Outgoing:
+
+Admin/AI → Dashboard → Meta API → Customer WhatsApp
+
+Everything must sync in real-time without refresh.
+
+---
+
+Webhook Security Requirements
+
+Add:
+
+- Signature verification
+- Token validation
+- Request verification
+- Retry handling
+- Failed webhook logs
+- Queue retry system
+- Error monitoring
+
+---
+
+Debug + Testing Panel
+
+Add professional debug section:
+
+- Test webhook
+- Test message sending
+- View API logs
+- View failed requests
+- View delivery reports
+- View Meta API responses
+- Live webhook event monitor
+
+---
+
+AI Trigger Automation
+
+If customer sends:
+
+- "price"
+- "discount"
+- "offer"
+- "badam"
+- "dry fruits"
+- "shoes"
+- "delivery"
+- "COD"
+
+AI should instantly:
+
+- Recommend products
+- Recommend coupons
+- Generate reply
+- Suggest checkout links
+
+---
+
+Multi-Agent Support
+
+Allow:
+
+- Admin chats
+- Staff chats
+- AI chats
+
+With:
+
+- Chat assignment
+- Conversation ownership
+- Internal notes
+- AI takeover/manual takeover
+
+---
+
+Performance Requirements
+
+The conversation system must:
+
+- Load instantly
+- Support thousands of chats
+- Use pagination
+- Use lazy loading
+- Support WebSocket live updates
+- Work smoothly on mobile and desktop
+
+---
+
+Final Critical Requirement
+
+This WhatsApp Conversation module should behave like a complete AI-powered commerce CRM system — not just a simple chat box.
+
+It must combine:
+
+- Shopify
+- Meta WhatsApp Official API
+- AI Chatbot
+- Product selling
+- Coupons
+- Automation
+- Real-time messaging
+- Customer retention
+- Smart recommendations
+- Sales optimization
+
+into one seamless professional system.

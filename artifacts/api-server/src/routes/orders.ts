@@ -4,7 +4,7 @@ import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import { productsTable } from "@workspace/db";
 import { authMiddleware, adminMiddleware, optionalAuthMiddleware, type AuthRequest } from "../lib/auth";
 import { sendOrderNotification } from "./notifications";
-import { sendOrderConfirmation, sendOrderStatusUpdate } from "../lib/whatsapp";
+import { sendOrderConfirmation, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
 import { sendSocialOrderMessage } from "../lib/socialMessenger";
 import { broadcastSSE } from "../lib/sse";
 import type { Response } from "express";
@@ -435,6 +435,26 @@ router.patch("/orders/:id/status", adminMiddleware as any, async (req, res) => {
         status,
         trackingId: trackingId ?? undefined,
       }).catch(() => {});
+
+      /* ── Failed delivery WA (fire-and-forget) ── */
+      if (status === "failed_delivery") {
+        sendFailedDeliveryNotification({
+          phone: waPhone,
+          userId: order.userId ?? undefined,
+          orderNumber: order.orderNumber,
+          customerName: addr?.name ?? undefined,
+        }).catch(() => {});
+      }
+
+      /* ── Post-delivery review request (fire-and-forget, 24h delay handled by engine) ── */
+      if (status === "delivered") {
+        sendReviewRequest({
+          phone: waPhone,
+          userId: order.userId ?? undefined,
+          orderNumber: order.orderNumber,
+          customerName: addr?.name ?? undefined,
+        }).catch(() => {});
+      }
 
       /* ── Social (FB/IG) order message (fire-and-forget) ── */
       sendSocialOrderMessage({

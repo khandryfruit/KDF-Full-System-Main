@@ -9,7 +9,7 @@ import {
   Copy, Wifi, WifiOff, ExternalLink, ShieldCheck, Bot,
   ChevronRight, User, Sparkles, Info, ShoppingBag, Zap, RotateCw,
   Megaphone, Bug, Play, Users, Filter, TimerIcon, TrendingUp,
-  CheckSquare, Globe, QrCode, Download, MessageSquare,
+  CheckSquare, Globe, QrCode, Download, MessageSquare, Tag,
 } from "lucide-react";
 import { WhatsAppTemplatesTab } from "./WhatsAppTemplatesTab";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 
-type Tab = "settings" | "recovery" | "chatbot" | "conversations" | "templates" | "logs" | "automations" | "campaigns" | "debug" | "qr";
+type Tab = "settings" | "recovery" | "chatbot" | "conversations" | "templates" | "logs" | "automations" | "campaigns" | "debug" | "qr" | "analytics" | "rules";
 
 const AI_MODELS = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast, Recommended)" },
@@ -741,6 +741,78 @@ export default function WhatsAppPage() {
     onSuccess: (d: any) => { refetchCampaigns(); toast({ title: "Campaign launched!", description: d.message }); },
     onError: (e: any) => toast({ title: "Launch failed", description: e.message, variant: "destructive" }),
   });
+  const pauseCampaign = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/campaigns/${id}/pause`, { method: "POST" }),
+    onSuccess: () => { refetchCampaigns(); toast({ title: "Campaign paused" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const resumeCampaign = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/campaigns/${id}/resume`, { method: "POST" }),
+    onSuccess: () => { refetchCampaigns(); toast({ title: "Campaign resumed" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const cancelCampaign = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/campaigns/${id}/cancel`, { method: "POST" }),
+    onSuccess: () => { refetchCampaigns(); toast({ title: "Campaign cancelled" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  /* ── Analytics + Cost Data ── */
+  const [analyticsDays, setAnalyticsDays] = useState(30);
+  const { data: costStats, isLoading: costLoading, refetch: refetchCostStats } = useQuery<any>({
+    queryKey: ["/api/admin/wa/cost-stats", analyticsDays],
+    queryFn: () => apiFetch(`/api/admin/wa/cost-stats?days=${analyticsDays}`),
+    enabled: tab === "analytics",
+    staleTime: 60_000,
+  });
+
+  /* ── Smart Automation Rules ── */
+  const { data: autoRules = [], refetch: refetchRules } = useQuery<any[]>({
+    queryKey: ["/api/admin/wa/automation/rules"],
+    queryFn: () => apiFetch("/api/admin/wa/automation/rules"),
+    enabled: tab === "rules",
+  });
+  const { data: autoStats } = useQuery<any>({
+    queryKey: ["/api/admin/wa/automation/stats"],
+    queryFn: () => apiFetch("/api/admin/wa/automation/stats"),
+    enabled: tab === "rules",
+  });
+  const { data: autoLogs = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/wa/automation/logs"],
+    queryFn: () => apiFetch("/api/admin/wa/automation/logs?limit=50"),
+    enabled: tab === "rules",
+    refetchInterval: tab === "rules" ? 30000 : false,
+  });
+  const RULE_TEMPLATES = [
+    { id: "cart_abandoned", label: "🛒 Abandoned Cart Recovery", desc: "Message customers who left items in cart", defaultDelay: 60, defaultCoupon: "SAVE10" },
+    { id: "order_delivered", label: "⭐ Post-Delivery Review Request", desc: "Ask for review after delivery + optional coupon", defaultDelay: 24, defaultCoupon: "THANKYOU10" },
+    { id: "order_failed_delivery", label: "🔔 Failed Delivery Follow-up", desc: "Notify customer when delivery failed", defaultDelay: 2, defaultCoupon: "" },
+    { id: "customer_inactive", label: "💤 Inactive Customer Re-engagement", desc: "Win back customers who haven't ordered in a while", defaultDelay: 30, defaultCoupon: "COMEBACK15" },
+  ];
+  const EMPTY_RULE = { name: "", triggerType: "cart_abandoned", triggerConfig: { delayMinutes: 60, couponCode: "" }, messageTemplate: "", isActive: true };
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [newRule, setNewRule] = useState<any>(EMPTY_RULE);
+  const [editingRule, setEditingRule] = useState<any>(null);
+  const createRule = useMutation({
+    mutationFn: (data: any) => apiFetch("/api/admin/wa/automation/rules", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { refetchRules(); setShowRuleForm(false); setNewRule(EMPTY_RULE); toast({ title: "Rule created!" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const updateRule = useMutation({
+    mutationFn: ({ id, ...data }: any) => apiFetch(`/api/admin/wa/automation/rules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => { refetchRules(); setEditingRule(null); toast({ title: "Rule updated" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const toggleRule = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/automation/rules/${id}/toggle`, { method: "PATCH" }),
+    onSuccess: () => refetchRules(),
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const deleteRule = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/automation/rules/${id}`, { method: "DELETE" }),
+    onSuccess: () => { refetchRules(); toast({ title: "Rule deleted" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   /* ── Debug ── */
   const [connStatus, setConnStatus] = useState<{ success?: boolean; status?: string; message?: string; data?: any } | null>(null);
@@ -884,7 +956,9 @@ export default function WhatsAppPage() {
 
   const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "settings",      label: "API Settings",    icon: Settings },
-    { id: "automations",   label: "Automations",     icon: Zap },
+    { id: "analytics",     label: "Analytics",       icon: TrendingUp },
+    { id: "rules",         label: "Smart Rules",     icon: Zap },
+    { id: "automations",   label: "Automations",     icon: CheckSquare },
     { id: "campaigns",     label: "Campaigns",       icon: Megaphone },
     { id: "recovery",      label: "Auto Recovery",   icon: RotateCcw },
     { id: "chatbot",       label: "AI Chatbot",      icon: Bot },
@@ -1997,11 +2071,26 @@ export default function WhatsAppPage() {
                           {c.sentAt && <span>{new Date(c.sentAt).toLocaleDateString("en-PK")}</span>}
                         </div>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0 items-start">
+                      <div className="flex gap-2 flex-shrink-0 items-start flex-wrap justify-end">
                         {c.status === "draft" && (
                           <Button size="sm" onClick={() => { if (confirm(`Launch "${c.name}"?\n\nThis will send to all audience members with anti-spam delays and frequency cap.`)) sendCampaign.mutate(c.id); }} disabled={sendCampaign.isPending} style={{ backgroundColor: "#5FA800" }} className="text-white gap-1.5">
                             <Play className="w-3.5 h-3.5" /> Launch
                           </Button>
+                        )}
+                        {c.status === "sending" && (
+                          <Button size="sm" variant="outline" onClick={() => pauseCampaign.mutate(c.id)} disabled={pauseCampaign.isPending} className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50">
+                            <TimerIcon className="w-3.5 h-3.5" /> Pause
+                          </Button>
+                        )}
+                        {c.status === "paused" && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => resumeCampaign.mutate(c.id)} disabled={resumeCampaign.isPending} className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50">
+                              <Play className="w-3.5 h-3.5" /> Resume
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => { if (confirm("Cancel this campaign permanently?")) cancelCampaign.mutate(c.id); }} className="text-red-500 hover:bg-red-50 gap-1.5">
+                              <XCircle className="w-3.5 h-3.5" /> Cancel
+                            </Button>
+                          </>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this campaign?")) deleteCampaign.mutate(c.id); }} disabled={deleteCampaign.isPending || c.status === "sending"} className="text-red-500 hover:text-red-700 hover:bg-red-50">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -2908,6 +2997,312 @@ export default function WhatsAppPage() {
 
       {/* ── TEMPLATES TAB ── */}
       {tab === "templates" && <WhatsAppTemplatesTab />}
+
+      {/* ── ANALYTICS TAB ── */}
+      {tab === "analytics" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2"><TrendingUp className="w-5 h-5 text-[#25D366]" />Meta WA Cost &amp; Analytics</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Message volume, delivery rates, and estimated Meta conversation charges</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {([7, 14, 30, 90] as const).map(d => (
+                <button key={d} onClick={() => setAnalyticsDays(d)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${analyticsDays === d ? "bg-[#5FA800] text-white shadow" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{d}d</button>
+              ))}
+              <button onClick={() => refetchCostStats()} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><RefreshCw className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          {costLoading ? (
+            <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : !costStats ? (
+            <div className="text-center py-16 text-muted-foreground">No analytics data available yet.</div>
+          ) : (
+            <>
+              {/* KPI cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Messages", value: costStats.totalMessages ?? 0, icon: MessageCircle, color: "#25D366" },
+                  { label: "Delivered", value: costStats.delivered ?? 0, icon: CheckSquare, color: "#5FA800" },
+                  { label: "Failed", value: costStats.failed ?? 0, icon: XCircle, color: "#ef4444" },
+                  { label: "Delivery Rate", value: `${costStats.deliveryRate ?? 0}%`, icon: TrendingUp, color: "#6366f1" },
+                ].map(({ label, value, icon: Icon, color }) => (
+                  <div key={label} className="bg-card border border-border rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+                        <Icon className="w-3.5 h-3.5" style={{ color }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{label}</span>
+                    </div>
+                    <p className="text-2xl font-bold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Cost estimate card */}
+              <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-1">Estimated Meta API Cost</p>
+                    <p className="text-3xl font-bold text-emerald-900">PKR {(costStats.estimatedCostPKR ?? 0).toLocaleString()}</p>
+                    <p className="text-xs text-emerald-600 mt-1">≈ USD {(costStats.estimatedCostUSD ?? 0).toFixed(2)} · Based on Meta's per-conversation pricing</p>
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-blue-400" /><span className="text-muted-foreground">Marketing:</span><span className="font-semibold">{costStats.marketingConversations ?? 0}</span></div>
+                    <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-purple-400" /><span className="text-muted-foreground">Utility:</span><span className="font-semibold">{costStats.utilityConversations ?? 0}</span></div>
+                    <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-400" /><span className="text-muted-foreground">Service:</span><span className="font-semibold">{costStats.serviceConversations ?? 0}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message type breakdown */}
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="font-semibold text-sm mb-4">Message Type Breakdown</h3>
+                <div className="space-y-3">
+                  {(costStats.byType ?? []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No message data for this period</p>
+                  ) : (costStats.byType as any[]).map((row: any) => {
+                    const pct = costStats.totalMessages > 0 ? Math.round((row.count / costStats.totalMessages) * 100) : 0;
+                    const colors: Record<string, string> = { order_confirmation: "#25D366", order_packed: "#5FA800", order_failed_delivery: "#ef4444", review_request: "#6366f1", campaign: "#f59e0b", cart_recovery: "#ec4899", rider_assigned: "#0ea5e9", return_refund: "#8b5cf6" };
+                    const col = colors[row.type] ?? "#94a3b8";
+                    return (
+                      <div key={row.type} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-40 shrink-0 capitalize">{row.type.replace(/_/g, " ")}</span>
+                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                          <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: col }} />
+                        </div>
+                        <span className="text-xs font-semibold w-8 text-right">{row.count}</span>
+                        <span className="text-[10px] text-muted-foreground w-9 text-right">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Daily trend */}
+              {(costStats.dailyTrend ?? []).length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b bg-muted/30"><h3 className="font-semibold text-sm">Daily Trend</h3></div>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b bg-muted/20">
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Sent</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Delivered</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Failed</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground hidden md:table-cell">Est. PKR</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-border">
+                      {(costStats.dailyTrend as any[]).slice(0, 14).map((row: any) => (
+                        <tr key={row.date} className="hover:bg-muted/20">
+                          <td className="px-4 py-2.5 text-xs font-mono">{row.date}</td>
+                          <td className="px-4 py-2.5 text-xs text-right">{row.sent}</td>
+                          <td className="px-4 py-2.5 text-xs text-right text-green-600">{row.delivered}</td>
+                          <td className="px-4 py-2.5 text-xs text-right text-red-500">{row.failed}</td>
+                          <td className="px-4 py-2.5 text-xs text-right hidden md:table-cell">Rs.{(row.estimatedCostPKR ?? 0).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Campaign performance */}
+              {(costStats.campaignPerformance ?? []).length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b bg-muted/30"><h3 className="font-semibold text-sm">Campaign Performance</h3></div>
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b bg-muted/20">
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Campaign</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Sent</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Delivered</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Failed</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Rate</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-border">
+                      {(costStats.campaignPerformance as any[]).map((row: any) => (
+                        <tr key={row.campaignId} className="hover:bg-muted/20">
+                          <td className="px-4 py-2.5 text-xs font-medium">{row.name}</td>
+                          <td className="px-4 py-2.5 text-xs text-right">{row.sent}</td>
+                          <td className="px-4 py-2.5 text-xs text-right text-green-600">{row.delivered}</td>
+                          <td className="px-4 py-2.5 text-xs text-right text-red-500">{row.failed}</td>
+                          <td className="px-4 py-2.5 text-xs text-right font-semibold">{row.deliveryRate}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── SMART RULES TAB ── */}
+      {tab === "rules" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2"><Zap className="w-5 h-5 text-amber-500" />Smart Automation Rules</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">IF/THEN triggers — automatically send WhatsApp messages based on customer behavior</p>
+            </div>
+            <Button onClick={() => setShowRuleForm(v => !v)} style={{ backgroundColor: "#5FA800" }} className="text-white gap-1.5">
+              <Plus className="w-4 h-4" /> New Rule
+            </Button>
+          </div>
+
+          {/* Stats bar */}
+          {autoStats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Active Rules", value: autoStats.activeRules ?? 0, color: "#5FA800" },
+                { label: "Fired (24h)", value: autoStats.firedToday ?? 0, color: "#6366f1" },
+                { label: "Fired (7d)", value: autoStats.firedWeek ?? 0, color: "#0ea5e9" },
+                { label: "Total Fired", value: autoStats.totalFired ?? 0, color: "#25D366" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-card border border-border rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Create Rule form */}
+          {showRuleForm && (
+            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <h3 className="font-semibold flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" />Create Automation Rule</h3>
+              <div className="space-y-1.5">
+                <Label>Trigger Type</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {RULE_TEMPLATES.map(tpl => (
+                    <button key={tpl.id} onClick={() => setNewRule((r: any) => ({ ...r, triggerType: tpl.id, name: tpl.label, triggerConfig: { delayMinutes: tpl.defaultDelay * 60, couponCode: tpl.defaultCoupon } }))}
+                      className={`text-left p-3 rounded-lg border-2 transition-all ${newRule.triggerType === tpl.id ? "border-[#5FA800] bg-[#5FA800]/5" : "border-border hover:border-muted-foreground/40"}`}>
+                      <p className="font-medium text-sm">{tpl.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{tpl.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Rule Name</Label>
+                  <Input value={newRule.name} onChange={e => setNewRule((r: any) => ({ ...r, name: e.target.value }))} placeholder="e.g. 1h Cart Recovery" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Delay (minutes after trigger)</Label>
+                  <Input type="number" min={1} value={newRule.triggerConfig?.delayMinutes ?? 60} onChange={e => setNewRule((r: any) => ({ ...r, triggerConfig: { ...r.triggerConfig, delayMinutes: parseInt(e.target.value) || 60 } }))} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Coupon Code (optional)</Label>
+                <Input value={newRule.triggerConfig?.couponCode ?? ""} onChange={e => setNewRule((r: any) => ({ ...r, triggerConfig: { ...r.triggerConfig, couponCode: e.target.value } }))} placeholder="e.g. SAVE10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Custom Message Template (optional)</Label>
+                <textarea value={newRule.messageTemplate} onChange={e => setNewRule((r: any) => ({ ...r, messageTemplate: e.target.value }))} rows={3} placeholder="Leave blank to use default template. Use {{name}}, {{coupon}}, {{product}} placeholders." className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={newRule.isActive} onCheckedChange={v => setNewRule((r: any) => ({ ...r, isActive: v }))} />
+                <Label>Active immediately</Label>
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={() => createRule.mutate(newRule)} disabled={createRule.isPending || !newRule.name || !newRule.triggerType} style={{ backgroundColor: "#5FA800" }} className="text-white">
+                  {createRule.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : "Create Rule"}
+                </Button>
+                <Button variant="outline" onClick={() => setShowRuleForm(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Rules list */}
+          {(autoRules as any[]).length === 0 ? (
+            <div className="border-2 border-dashed border-border rounded-xl py-12 text-center">
+              <Zap className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground font-medium">No automation rules yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Create your first rule to automate WhatsApp messages based on customer events</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(autoRules as any[]).map((rule: any) => (
+                <div key={rule.id} className={`bg-card border rounded-xl p-4 ${rule.isActive ? "border-border" : "border-dashed border-muted-foreground/30 opacity-60"}`}>
+                  {editingRule?.id === rule.id ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1"><Label className="text-xs">Name</Label><Input value={editingRule.name} onChange={e => setEditingRule((r: any) => ({ ...r, name: e.target.value }))} /></div>
+                        <div className="space-y-1"><Label className="text-xs">Delay (min)</Label><Input type="number" value={editingRule.triggerConfig?.delayMinutes ?? 60} onChange={e => setEditingRule((r: any) => ({ ...r, triggerConfig: { ...r.triggerConfig, delayMinutes: parseInt(e.target.value) || 60 } }))} /></div>
+                      </div>
+                      <div className="space-y-1"><Label className="text-xs">Coupon Code</Label><Input value={editingRule.triggerConfig?.couponCode ?? ""} onChange={e => setEditingRule((r: any) => ({ ...r, triggerConfig: { ...r.triggerConfig, couponCode: e.target.value } }))} /></div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => updateRule.mutate(editingRule)} disabled={updateRule.isPending} style={{ backgroundColor: "#5FA800" }} className="text-white">
+                          {updateRule.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingRule(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm">{rule.name}</span>
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{(rule.triggerType ?? "").replace(/_/g, " ")}</span>
+                          {rule.isActive
+                            ? <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                            : <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Paused</span>}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                          <span className="flex items-center gap-1"><TimerIcon className="w-3 h-3" />Delay: {Math.round((rule.triggerConfig?.delayMinutes ?? 60) / 60)}h</span>
+                          {rule.triggerConfig?.couponCode && <span className="flex items-center gap-1"><Tag className="w-3 h-3" />Coupon: <span className="font-mono font-semibold text-[#5FA800]">{rule.triggerConfig.couponCode}</span></span>}
+                          <span className="flex items-center gap-1"><CheckSquare className="w-3 h-3" />Fired: {rule.firedCount ?? 0}</span>
+                          {rule.lastFiredAt && <span>Last: {new Date(rule.lastFiredAt).toLocaleDateString("en-PK")}</span>}
+                        </div>
+                        {rule.messageTemplate && <p className="text-xs text-muted-foreground mt-1.5 italic line-clamp-2">"{rule.messageTemplate}"</p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Switch checked={rule.isActive} onCheckedChange={() => toggleRule.mutate(rule.id)} />
+                        <Button size="sm" variant="ghost" onClick={() => setEditingRule(rule)} className="text-muted-foreground hover:text-foreground"><Settings className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this rule?")) deleteRule.mutate(rule.id); }} className="text-red-500 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Automation Logs */}
+          {(autoLogs as any[]).length > 0 && (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b bg-muted/30 flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2"><Phone className="w-4 h-4" />Recent Automation Logs</h3>
+                <span className="text-xs text-muted-foreground">{(autoLogs as any[]).length} entries</span>
+              </div>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b bg-muted/20">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Rule</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">Trigger</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Phone</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Time</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border">
+                  {(autoLogs as any[]).map((log: any) => (
+                    <tr key={log.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-2.5 text-xs font-medium">{log.ruleName ?? `Rule #${log.ruleId}`}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell font-mono">{log.triggerType}</td>
+                      <td className="px-4 py-2.5 text-xs font-mono">{log.phone}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full ${log.status === "sent" ? "bg-green-100 text-green-700" : log.status === "failed" ? "bg-red-100 text-red-700" : log.status === "skipped" ? "bg-gray-100 text-gray-500" : "bg-blue-100 text-blue-700"}`}>{log.status}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{new Date(log.createdAt).toLocaleString("en-PK")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── LOGS TAB ── */}
       {tab === "qr" && <WhatsAppQRTab />}

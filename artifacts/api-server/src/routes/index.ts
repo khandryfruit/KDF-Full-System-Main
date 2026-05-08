@@ -52,6 +52,7 @@ import branchStockRouter from "./branch-stock";
 import blogAdsRouter from "./blogAds";
 import videoBannersRouter from "./videoBanners";
 import mobileReelsRouter from "./mobileReels";
+import waAutomationRouter from "./waAutomation";
 
 const router: IRouter = Router();
 
@@ -106,6 +107,7 @@ router.use(branchInvoiceRouter);
 router.use(blogAdsRouter);
 router.use(videoBannersRouter);
 router.use(mobileReelsRouter);
+router.use(waAutomationRouter);
 router.use("/admin/erp-settings",  erpSettingsRouter);
 router.use("/admin/stock",          branchStockRouter);
 router.use("/branch/stock",         branchStockRouter);

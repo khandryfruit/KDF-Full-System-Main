@@ -1718,6 +1718,32 @@ router.post("/admin/whatsapp/campaigns/:id/send", adminMiddleware as any, async 
     (async () => {
       let sent = 0; let failed = 0; let skipped = 0;
       for (const recipient of phones) {
+        // ── Pause/cancel check: re-read status from DB every recipient ──
+        const [currentCampaign] = await db.select({ status: whatsappCampaignsTable.status })
+          .from(whatsappCampaignsTable).where(eq(whatsappCampaignsTable.id, campaignId)).limit(1);
+        if (currentCampaign?.status === "paused") {
+          // Wait until resumed or cancelled
+          let waited = 0;
+          while (waited < 7200) { // max 2 hours wait
+            await new Promise(r => setTimeout(r, 10000)); waited += 10;
+            const [check] = await db.select({ status: whatsappCampaignsTable.status })
+              .from(whatsappCampaignsTable).where(eq(whatsappCampaignsTable.id, campaignId)).limit(1);
+            if (check?.status === "sending") break;
+            if (check?.status === "cancelled") {
+              await db.update(whatsappCampaignsTable)
+                .set({ sentCount: sent, failedCount: failed, skippedCount: skipped })
+                .where(eq(whatsappCampaignsTable.id, campaignId)).catch(() => {});
+              return;
+            }
+          }
+        }
+        if (currentCampaign?.status === "cancelled") {
+          await db.update(whatsappCampaignsTable)
+            .set({ sentCount: sent, failedCount: failed, skippedCount: skipped })
+            .where(eq(whatsappCampaignsTable.id, campaignId)).catch(() => {});
+          return;
+        }
+
         try {
           const normalizedPhone = recipient.phone.startsWith("92")
             ? recipient.phone

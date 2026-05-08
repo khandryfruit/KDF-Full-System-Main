@@ -437,6 +437,149 @@ export async function sendOrderStatusUpdate(opts: {
   return sendWhatsAppMessage({ phone: opts.phone, message, templateName: triggerEvent, userId: opts.userId });
 }
 
+/* ─── Failed Delivery Notification ───────────────────── */
+export async function sendFailedDeliveryNotification(opts: {
+  phone: string;
+  userId?: number;
+  orderNumber: string;
+  customerName?: string;
+}): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+
+  const name = opts.customerName ?? "Valued Customer";
+  const tpl = await getApprovedTemplate("order_failed_delivery");
+  if (tpl) {
+    const result = await sendWhatsAppTemplate({
+      phone: opts.phone,
+      templateName: tpl.name,
+      languageCode: tpl.language,
+      components: buildBodyComponents([name, opts.orderNumber].slice(0, tpl.paramCount)),
+      userId: opts.userId,
+    });
+    return result.success;
+  }
+
+  const message =
+    `⚠️ Hi ${name}, we tried to deliver your order *#${opts.orderNumber}* but couldn't reach you.\n\n` +
+    `📦 Please reply with your preferred delivery time or call us so we can redeliver.\n\n` +
+    `We'll try again soon! Thank you for your patience 🙏`;
+
+  return sendWhatsAppMessage({ phone: opts.phone, message, templateName: "order_failed_delivery", userId: opts.userId });
+}
+
+/* ─── Return/Refund Notification ─────────────────────── */
+export async function sendReturnRefundNotification(opts: {
+  phone: string;
+  userId?: number;
+  orderNumber: string;
+  customerName?: string;
+  type: "return" | "refund" | "exchange";
+  amount?: string;
+}): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+
+  const name = opts.customerName ?? "Valued Customer";
+  const triggerEvent = `order_${opts.type}`;
+  const tpl = await getApprovedTemplate(triggerEvent);
+  if (tpl) {
+    const params = [name, opts.orderNumber, opts.amount ?? ""].filter(Boolean).slice(0, tpl.paramCount);
+    const result = await sendWhatsAppTemplate({
+      phone: opts.phone,
+      templateName: tpl.name,
+      languageCode: tpl.language,
+      components: buildBodyComponents(params),
+      userId: opts.userId,
+    });
+    return result.success;
+  }
+
+  const msgs: Record<string, string> = {
+    return:   `🔄 Hi ${name}, your return request for order *#${opts.orderNumber}* has been received.\n\nOur team will arrange a pickup within 1-2 business days. Thank you!`,
+    refund:   `💰 Hi ${name}, your refund of *Rs. ${opts.amount ?? ""}* for order *#${opts.orderNumber}* has been processed.\n\nIt will reflect in your account within 3-5 business days. Thank you for your patience!`,
+    exchange: `🔁 Hi ${name}, your exchange request for order *#${opts.orderNumber}* has been accepted.\n\nYour replacement order will be dispatched within 1-2 business days. Thank you!`,
+  };
+
+  const message = msgs[opts.type] ?? msgs["return"]!;
+  return sendWhatsAppMessage({ phone: opts.phone, message, templateName: triggerEvent, userId: opts.userId });
+}
+
+/* ─── Post-delivery Review Request ───────────────────── */
+export async function sendReviewRequest(opts: {
+  phone: string;
+  userId?: number;
+  orderNumber: string;
+  customerName?: string;
+  couponCode?: string;
+}): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+
+  const name = opts.customerName ?? "Valued Customer";
+  const tpl = await getApprovedTemplate("review_request");
+  if (tpl) {
+    const params = [name, opts.orderNumber, opts.couponCode ?? ""].filter(Boolean).slice(0, tpl.paramCount);
+    const result = await sendWhatsAppTemplate({
+      phone: opts.phone,
+      templateName: tpl.name,
+      languageCode: tpl.language,
+      components: buildBodyComponents(params),
+      userId: opts.userId,
+    });
+    return result.success;
+  }
+
+  const couponLine = opts.couponCode
+    ? `\n\n🎁 As a thank-you, here's a *10% discount code* for your next order: *${opts.couponCode}*`
+    : "";
+
+  const message =
+    `⭐ Hi ${name}! We hope you're enjoying your KDF NUTS order *#${opts.orderNumber}*!\n\n` +
+    `Your feedback means the world to us. Could you share a quick review?` +
+    couponLine +
+    `\n\nThank you for choosing KDF NUTS 🥜❤️`;
+
+  return sendWhatsAppMessage({ phone: opts.phone, message, templateName: "review_request", userId: opts.userId });
+}
+
+/* ─── Rider Assignment Notification ──────────────────── */
+export async function sendRiderAssignedNotification(opts: {
+  phone: string;
+  userId?: number;
+  orderNumber: string;
+  customerName?: string;
+  riderName?: string;
+  riderPhone?: string;
+}): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+
+  const name = opts.customerName ?? "Valued Customer";
+  const tpl = await getApprovedTemplate("rider_assigned");
+  if (tpl) {
+    const params = [name, opts.orderNumber, opts.riderName ?? "our rider"].slice(0, tpl.paramCount);
+    const result = await sendWhatsAppTemplate({
+      phone: opts.phone,
+      templateName: tpl.name,
+      languageCode: tpl.language,
+      components: buildBodyComponents(params),
+      userId: opts.userId,
+    });
+    return result.success;
+  }
+
+  const riderLine = opts.riderName ? `\n🧑 *Rider:* ${opts.riderName}` : "";
+  const phoneLine = opts.riderPhone ? `\n📞 *Rider Contact:* ${opts.riderPhone}` : "";
+
+  const message =
+    `🛵 Hi ${name}! Your order *#${opts.orderNumber}* is out for delivery!` +
+    riderLine + phoneLine +
+    `\n\nPlease be available to receive your order. Thank you! 🥜`;
+
+  return sendWhatsAppMessage({ phone: opts.phone, message, templateName: "rider_assigned", userId: opts.userId });
+}
+
 export async function getChatButtonConfig() {
   try {
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);

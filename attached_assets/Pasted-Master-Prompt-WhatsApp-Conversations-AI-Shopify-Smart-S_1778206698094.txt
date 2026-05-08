@@ -1,0 +1,655 @@
+Master Prompt — WhatsApp Conversations AI + Shopify Smart Selling System
+
+WhatsApp Conversations Section — Complete AI Commerce Upgrade
+
+You need to fully upgrade the WhatsApp Conversations/Chat Section into a professional AI-powered sales + support system integrated deeply with Shopify and our custom website products.
+
+The current conversation UI already exists.
+Now implement the following advanced features professionally with clean UI/UX and scalable backend architecture.
+
+
+---
+
+1. Shopify Full Product Sync Inside Chat
+
+Inside the conversation/chat area where we start chatting with customers:
+
+Add Full Product Integration:
+
+Sync all Shopify products automatically
+
+Sync:
+
+Product title
+
+Price
+
+Compare price
+
+Discount
+
+Variant
+
+Product image
+
+Inventory
+
+Product URL
+
+Category
+
+Tags
+
+Collections
+
+Product status
+
+Product reviews/rating
+
+Coupon applicability
+
+
+
+Also Sync:
+
+Manual website products
+
+Custom products from admin panel
+
+Promotional products
+
+Flash sale items
+
+Featured products
+
+Grocery products
+
+Dry fruits products
+
+Peshawari chappal products
+
+Shoes/rings/accessories products
+
+
+
+---
+
+2. Smart Product Sharing From Chat
+
+Inside the conversation window:
+
+Add a “Share Product” Button
+
+When clicked:
+
+Open product selector modal
+
+Search products instantly
+
+Filter by:
+
+Category
+
+Collection
+
+Discount
+
+Best seller
+
+New arrivals
+
+Stock availability
+
+
+
+Allow:
+
+Single product sharing
+
+Multiple product sharing
+
+Bundle offers
+
+Combo offers
+
+Custom offers
+
+
+
+---
+
+3. AI Generated Offer Builder
+
+Inside chat section add:
+
+“Create AI Offer”
+
+Admin can:
+
+Select products
+
+Select target customer
+
+Select discount
+
+Add coupon code
+
+Add free shipping
+
+Add urgency timer
+
+Add custom message
+
+
+Then AI should automatically generate:
+
+Professional sales message
+
+Emoji optimized message
+
+Human-like WhatsApp message
+
+Urdu + English support
+
+Personalized customer name
+
+Dynamic pricing text
+
+AI upsell recommendation
+
+
+
+---
+
+4. AI Smart Recommendation Engine
+
+Integrate ChatGPT AI properly.
+
+AI should automatically:
+
+Analyze customer chat
+
+Analyze purchase history
+
+Analyze abandoned cart
+
+Analyze viewed products
+
+Analyze order frequency
+
+Analyze average order value
+
+Analyze category interest
+
+
+Then AI should:
+
+Recommend products automatically
+
+Recommend coupons
+
+Recommend bundles
+
+Recommend seasonal products
+
+Recommend trending products
+
+
+
+---
+
+5. Automatic AI Follow-Up System
+
+Add automation system.
+
+Example:
+
+If customer inactive:
+
+Send product after 12 hours
+
+Send offer after 24 hours
+
+Send coupon after 48 hours
+
+Send reminder after 72 hours
+
+
+AI should dynamically decide:
+
+Which product to recommend
+
+Which coupon to send
+
+Which message style to use
+
+Which language customer prefers
+
+
+
+---
+
+6. Input + Output Both Must Work Properly
+
+This is VERY IMPORTANT.
+
+Current system must become full duplex conversational system.
+
+Input:
+
+Customer messages from WhatsApp must appear instantly in conversation panel.
+
+Output:
+
+Messages sent from dashboard must instantly deliver to WhatsApp.
+
+Support:
+
+Text
+
+Images
+
+Product cards
+
+Buttons
+
+CTA buttons
+
+Coupon cards
+
+PDF invoices
+
+Voice notes
+
+Videos
+
+Templates
+
+Interactive messages
+
+
+
+---
+
+7. AI Auto Reply System
+
+Add proper AI chatbot support.
+
+AI should:
+
+Reply naturally
+
+Understand Urdu + English + Roman Urdu
+
+Detect intent
+
+Detect product interest
+
+Detect order status queries
+
+Detect complaints
+
+Detect greetings
+
+Detect COD/payment questions
+
+
+
+---
+
+8. Smart AI Sales Agent Mode
+
+AI should act like human sales representative.
+
+Example:
+
+Customer:
+
+> Almonds ka best offer kya hai?
+
+
+
+AI:
+
+Recommend best almond products
+
+Share image
+
+Share price
+
+Share discount
+
+Share coupon
+
+Share checkout button
+
+
+
+---
+
+9. Conversation-Based Product Triggering
+
+Inside conversation panel:
+
+If customer says:
+
+“Dry fruits”
+
+“Badam”
+
+“Shoes”
+
+“Chappal”
+
+“Discount”
+
+“Offer”
+
+“Delivery”
+
+
+Then AI automatically:
+
+Suggest related products
+
+Suggest best offers
+
+Suggest checkout links
+
+Suggest coupon codes
+
+
+
+---
+
+10. Smart Coupon Engine
+
+Integrate coupon system.
+
+AI should:
+
+Generate dynamic coupon recommendations
+
+Auto apply coupons
+
+Detect inactive customers
+
+Send retention offers
+
+Send festival offers
+
+Send personalized discounts
+
+
+
+---
+
+11. Shopify Order Actions Integration
+
+Inside chat:
+
+Confirm order
+
+Cancel order
+
+Track order
+
+Assign courier
+
+Resend invoice
+
+Send tracking ID
+
+Send payment link
+
+COD verification
+
+Return/refund updates
+
+
+Everything should sync with Shopify automatically.
+
+
+---
+
+12. Product Card UI Inside Chat
+
+Create beautiful WhatsApp-like product cards.
+
+Each card should include:
+
+Product image
+
+Price
+
+Discount
+
+Rating
+
+Add to cart button
+
+Buy now button
+
+Coupon badge
+
+Delivery badge
+
+
+Mobile responsive and ultra clean UI.
+
+
+---
+
+13. AI Broadcast Campaign System
+
+Allow admin to:
+
+Select audience
+
+Select category
+
+Select customer type
+
+Select inactive users
+
+Select repeat buyers
+
+
+Then AI generates:
+
+Campaign message
+
+Personalized greeting
+
+Product recommendation
+
+Coupon recommendation
+
+
+
+---
+
+14. AI Analytics Dashboard
+
+Track:
+
+Open rate
+
+Reply rate
+
+Conversion rate
+
+Most clicked product
+
+Best performing coupon
+
+Customer engagement
+
+AI response performance
+
+
+
+---
+
+15. AI Conversation Memory
+
+AI should remember:
+
+Customer interests
+
+Previous chats
+
+Previous orders
+
+Favorite products
+
+Preferred language
+
+Preferred timing
+
+
+
+---
+
+16. Required Technical Architecture
+
+Backend:
+
+Node.js / Laravel optimized APIs
+
+WebSocket real-time messaging
+
+Queue system for automation
+
+Cron jobs for delayed campaigns
+
+Shopify Webhooks
+
+Meta WhatsApp Official API
+
+
+Database:
+
+Create proper scalable tables:
+
+conversations
+
+messages
+
+ai_logs
+
+product_recommendations
+
+campaigns
+
+coupons
+
+customer_preferences
+
+abandoned_carts
+
+automation_rules
+
+
+
+---
+
+17. Real-Time Sync Requirements
+
+Everything must sync instantly:
+
+Shopify orders
+
+Shopify products
+
+WhatsApp messages
+
+Coupons
+
+Inventory
+
+Tracking status
+
+
+
+---
+
+18. AI Message Generator
+
+Add quick AI buttons:
+
+Generate Offer
+
+Generate Upsell
+
+Generate Recovery Message
+
+Generate Festival Message
+
+Generate Urdu Message
+
+Generate Roman Urdu Message
+
+
+
+---
+
+19. Professional UI/UX Requirements
+
+Conversation area should look:
+
+Modern
+
+Fast
+
+Clean
+
+Mobile responsive
+
+Desktop optimized
+
+WhatsApp-like
+
+AI powered
+
+
+Add:
+
+Smooth animations
+
+Product preview drawer
+
+AI suggestion chips
+
+Smart quick replies
+
+Floating action buttons
+
+
+
+---
+
+20. Critical Final Requirement
+
+The AI system must behave like a real intelligent sales employee.
+
+It should:
+
+Continuously recommend products
+
+Bring customers back
+
+Increase repeat orders
+
+Recover abandoned carts
+
+Improve conversion rate
+
+Use smart timing
+
+Use personalized offers
+
+Understand customer behavior
+
+
+Everything should work dynamically, professionally, and automatically without manual effort.

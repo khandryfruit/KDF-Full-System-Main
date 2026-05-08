@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startAbandonedRecoveryScheduler } from "./lib/whatsappRecovery";
 import { startCampaignQueueProcessor } from "./lib/campaignQueue";
 import { startShopifyAutoSync, autoRegisterWebhooksOnStartup } from "./lib/shopifyAutoSync";
+import { startWaAutomationEngine } from "./lib/waAutomationEngine";
 
 const rawPort = process.env["PORT"];
 
@@ -29,4 +30,5 @@ app.listen(port, (err) => {
   startCampaignQueueProcessor();
   startShopifyAutoSync(15); /* incremental sync every 15 minutes */
   autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
+  startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
 });
