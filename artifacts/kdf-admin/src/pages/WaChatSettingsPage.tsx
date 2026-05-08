@@ -5,7 +5,6 @@ import {
   Smartphone, Building2, QrCode, Loader2, Save, AlertTriangle, Upload,
   DollarSign, ChevronDown, ChevronRight, Settings, Shield,
 } from "lucide-react";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -335,7 +334,7 @@ export default function WaChatSettingsPage() {
   ] as const;
 
   return (
-    <Layout>
+    <>
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -557,6 +556,6 @@ export default function WaChatSettingsPage() {
           onClose={() => { setShowForm(false); setEditing(undefined); }}
         />
       )}
-    </Layout>
+    </>
   );
 }

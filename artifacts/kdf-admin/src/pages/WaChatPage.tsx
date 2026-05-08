@@ -9,7 +9,6 @@ import {
   AlertTriangle, TrendingUp, MessageSquare, Archive, Bell, Eye,
   ChevronRight, ExternalLink, Wifi, WifiOff, Activity,
 } from "lucide-react";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -717,8 +716,7 @@ export default function WaChatPage() {
   const [showRight, setShowRight] = useState(true);
 
   return (
-    <Layout>
-      <div className="flex flex-col h-[calc(100vh-6rem)]">
+    <div className="flex flex-col h-[calc(100vh-6rem)]">
         {/* Page header */}
         <div className="flex items-center justify-between mb-3 shrink-0">
           <div>
@@ -766,7 +764,6 @@ export default function WaChatPage() {
             </div>
           )}
         </div>
-      </div>
-    </Layout>
+    </div>
   );
 }
