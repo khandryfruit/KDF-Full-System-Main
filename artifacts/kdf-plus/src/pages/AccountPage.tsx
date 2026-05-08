@@ -238,7 +238,7 @@ export default function AccountPage() {
         <link rel="canonical" href="/kdf-plus/account" />
       </Helmet>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-24 sm:pb-6">
         {/* Profile Header */}
         <div className="bg-white border border-border rounded-2xl p-5 mb-5 flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">

@@ -175,7 +175,7 @@ function ScrollToTop() {
   return (
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-24 right-4 z-40 w-10 h-10 rounded-full shadow-lg flex items-center justify-center text-white transition-all duration-300 hover:scale-110 active:scale-95"
+      className="fixed bottom-36 sm:bottom-24 right-4 z-[450] w-10 h-10 rounded-full shadow-lg flex items-center justify-center text-white transition-all duration-300 hover:scale-110 active:scale-95"
       style={{ background: `linear-gradient(135deg, ${GREEN}, #3d7000)` }}
       aria-label="Scroll to top"
     >

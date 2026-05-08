@@ -75,7 +75,7 @@ export default function CartPage() {
         <title>{`Cart (${items.length}) — KDF Plus`}</title>
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold" data-testid="text-cart-title">
             Shopping Cart <span className="text-muted-foreground font-normal text-lg">({items.length} {items.length === 1 ? "item" : "items"})</span>
