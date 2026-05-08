@@ -1,0 +1,308 @@
+اپنے ڈیویلپر / Replit / Lovable / Cursor AI کو یہ ماسٹر پرامپٹ دیں 👇
+
+
+---
+
+WhatsApp Business Direct Embedded Signup Integration Prompt
+
+We need to implement a professional Meta Official WhatsApp Cloud API Embedded Signup flow exactly like the attached screenshots.
+
+Required Flow
+
+The current integration is incorrect because it shows:
+
+“Create WhatsApp Business Account”
+
+Manual setup flow
+
+Separate onboarding steps
+
+
+We want a DIRECT EMBEDDED SIGNUP FLOW like Meta official onboarding where:
+
+1. User selects a Facebook Business Portfolio
+
+
+2. Existing WhatsApp Business App automatically connects
+
+
+3. WhatsApp number auto-detects
+
+
+4. Business selection auto-fills related phone number
+
+
+5. QR-based WhatsApp Business linking appears
+
+
+6. Existing WhatsApp chats & contacts import option appears
+
+
+7. User does NOT manually create WABA every time
+
+
+8. Existing connected WhatsApp Business App should be reused
+
+
+
+
+---
+
+Expected UX/UI
+
+The onboarding must work exactly like Meta Embedded Signup screenshots:
+
+Step 1
+
+Select Business Portfolio
+
+Step 2
+
+Select Existing WhatsApp Business Account
+
+NOT: ❌ Create WhatsApp Business Account
+
+YES: ✅ Connect Existing WhatsApp Business App
+
+
+---
+
+Step 3
+
+When user selects business:
+
+Fetch linked WhatsApp numbers automatically
+
+Auto-fill WhatsApp number field
+
+Show existing verified business phone
+
+
+
+---
+
+Step 4
+
+Show official Meta QR connection screen
+
+User scans QR from: WhatsApp Business App → Settings → Linked Devices / Accounts
+
+
+---
+
+Step 5
+
+Import:
+
+Contacts
+
+Chat history
+
+Business profile
+
+
+
+---
+
+Technical Requirements
+
+Use Meta Embedded Signup
+
+Must use:
+
+Meta Embedded Signup
+
+Facebook Login for Business
+
+WhatsApp Cloud API
+
+Existing WABA detection
+
+
+
+---
+
+Required Permissions
+
+Use these scopes:
+
+whatsapp_business_management
+
+whatsapp_business_messaging
+
+business_management
+
+
+
+---
+
+Important Requirement
+
+If business already has:
+
+WhatsApp Business App
+
+Verified Business Portfolio
+
+Existing phone number
+
+
+Then: ✅ Auto-connect existing account ✅ Auto-detect number ✅ Skip WABA creation flow
+
+
+---
+
+Auto Fetch Logic
+
+When user selects Business Portfolio:
+
+System should:
+
+1. Fetch owned WABA IDs
+
+
+2. Fetch linked phone numbers
+
+
+3. Auto-fill number
+
+
+4. Show verified status
+
+
+5. Continue onboarding automatically
+
+
+
+Use Graph API:
+
+GET /{business-id}/owned_whatsapp_business_accounts
+
+GET /{waba-id}/phone_numbers
+
+
+---
+
+Required Backend Logic
+
+Implement secure backend APIs for:
+
+Facebook access token handling
+
+WABA retrieval
+
+Phone number retrieval
+
+Embedded signup callback
+
+Token exchange
+
+Permanent token storage
+
+
+
+---
+
+Frontend Requirements
+
+Professional UI:
+
+Mobile responsive
+
+Shopify-style onboarding UI
+
+Meta-like clean design
+
+Loading states
+
+Error handling
+
+Success states
+
+
+
+---
+
+Important
+
+Current issue: System is forcing “Create Business Account”.
+
+Fix required: If existing WhatsApp Business App exists: → Directly connect it → Auto fetch number → Continue instantly
+
+
+---
+
+Expected Final Result
+
+User flow should be:
+
+Select Business → Existing WhatsApp auto-detected → Number auto-filled → QR shown → Connect → Done
+
+Exactly like official Meta onboarding screenshots.
+
+
+---
+
+Additional Requirement
+
+After successful connection:
+
+Automatically save:
+
+WABA ID
+
+Phone Number ID
+
+Business ID
+
+Access Token
+
+Webhook status
+
+Verification status
+
+
+inside admin database.
+
+
+---
+
+Tech Stack
+
+Frontend:
+
+React / Next.js
+
+
+Backend:
+
+Node.js / Express
+
+
+Meta APIs:
+
+Graph API
+
+Embedded Signup
+
+Cloud API
+
+
+
+---
+
+Deliver Production Ready Integration
+
+Need:
+
+Clean architecture
+
+Scalable multi-client support
+
+Multi-business support
+
+Proper token refresh handling
+
+Secure webhook verification
+
+Professional UX/UI

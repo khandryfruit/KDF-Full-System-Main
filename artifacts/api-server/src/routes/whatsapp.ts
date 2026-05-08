@@ -2103,6 +2103,57 @@ router.get("/admin/whatsapp/meta-config", adminMiddleware as any, (req, res) => 
   return res.json({ appId, configId, isConfigured: !!(appId && configId) });
 });
 
+/* ─── Helper: auto-discover WABA + phone via Graph API chain ── */
+async function discoverWabaAndPhone(token: string): Promise<{
+  wabaId: string | null;
+  wabaName: string | null;
+  phoneId: string | null;
+  phoneDetails: Record<string, any>;
+  allWabas: Array<{ id: string; name: string; phones: any[] }>;
+}> {
+  const GV = "v20.0";
+  const gFetch = (url: string) => fetch(url).then(r => r.json()) as Promise<any>;
+
+  /* Step A: get user ID */
+  const meData = await gFetch(`https://graph.facebook.com/${GV}/me?fields=id,name&access_token=${token}`);
+  const userId: string = meData.id ?? "me";
+
+  /* Step B: get all business portfolios this user has access to */
+  const bizData = await gFetch(
+    `https://graph.facebook.com/${GV}/${userId}/businesses?fields=id,name&limit=10&access_token=${token}`
+  );
+  const businesses: any[] = bizData.data ?? [];
+
+  /* Step C: for each business, fetch owned WhatsApp Business Accounts */
+  const allWabas: Array<{ id: string; name: string; phones: any[] }> = [];
+  for (const biz of businesses) {
+    const wabaData = await gFetch(
+      `https://graph.facebook.com/${GV}/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,currency,timezone_id&access_token=${token}`
+    );
+    const wabas: any[] = wabaData.data ?? [];
+    for (const waba of wabas) {
+      /* Step D: fetch phone numbers for each WABA */
+      const phonesData = await gFetch(
+        `https://graph.facebook.com/${GV}/${waba.id}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status&access_token=${token}`
+      );
+      allWabas.push({ id: waba.id, name: waba.name ?? biz.name, phones: phonesData.data ?? [] });
+    }
+  }
+
+  /* Pick first WABA with phones; fall back to first WABA */
+  const chosen = allWabas.find(w => w.phones.length > 0) ?? allWabas[0] ?? null;
+  if (!chosen) return { wabaId: null, wabaName: null, phoneId: null, phoneDetails: {}, allWabas };
+
+  const phone = chosen.phones[0] ?? {};
+  return {
+    wabaId: chosen.id,
+    wabaName: chosen.name,
+    phoneId: phone.id ?? null,
+    phoneDetails: phone,
+    allWabas,
+  };
+}
+
 /* ─── Admin: Meta OAuth Token Exchange (Embedded Signup) ── */
 router.post("/admin/whatsapp/meta-exchange-token", adminMiddleware as any, async (req, res) => {
   try {
@@ -2114,9 +2165,11 @@ router.post("/admin/whatsapp/meta-exchange-token", adminMiddleware as any, async
     }
     if (!code) return res.status(400).json({ success: false, error: "code is required" });
 
-    /* 1. Exchange auth code for short-lived user access token */
+    const GV = "v20.0";
+
+    /* 1. Exchange auth code → short-lived user token */
     const tokenRes = await fetch(
-      `https://graph.facebook.com/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`
+      `https://graph.facebook.com/${GV}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`
     );
     const tokenData = await tokenRes.json() as any;
     if (!tokenData.access_token) {
@@ -2125,56 +2178,70 @@ router.post("/admin/whatsapp/meta-exchange-token", adminMiddleware as any, async
     }
     const userToken: string = tokenData.access_token;
 
-    /* 2. Extend to long-lived user token (~60 days) */
+    /* 2. Extend → long-lived user token (~60 days) */
     const llRes = await fetch(
-      `https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${encodeURIComponent(userToken)}`
+      `https://graph.facebook.com/${GV}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${encodeURIComponent(userToken)}`
     );
     const llData = await llRes.json() as any;
     const longLivedToken: string = llData.access_token ?? userToken;
 
-    /* 3. Resolve WABA ID */
-    let resolvedWabaId: string | undefined = wabaId;
-    if (!resolvedWabaId) {
-      const wabaListRes = await fetch(`https://graph.facebook.com/v18.0/me/businesses?access_token=${longLivedToken}`);
-      const wabaListData = await wabaListRes.json() as any;
-      resolvedWabaId = wabaListData.data?.[0]?.id;
-    }
+    /* 3. Resolve WABA + phone using correct Graph API chain */
+    let resolvedWabaId: string | undefined | null = wabaId ?? null;
+    let resolvedPhoneId: string | undefined | null = phoneNumberId ?? null;
+    let phoneDetails: Record<string, any> = {};
+    let businessName: string | null = null;
 
-    /* 4. Fetch phone number details */
-    let phoneDetails: any = {};
-    let resolvedPhoneId: string | undefined = phoneNumberId;
+    /* If embedded signup provided IDs, fetch their details directly */
     if (resolvedPhoneId) {
       const phoneRes = await fetch(
-        `https://graph.facebook.com/v18.0/${resolvedPhoneId}?fields=verified_name,display_phone_number,quality_rating,status&access_token=${longLivedToken}`
+        `https://graph.facebook.com/${GV}/${resolvedPhoneId}?fields=id,verified_name,display_phone_number,quality_rating,status&access_token=${longLivedToken}`
       );
       phoneDetails = await phoneRes.json() as any;
-    } else if (resolvedWabaId) {
-      const phonesRes = await fetch(
-        `https://graph.facebook.com/v18.0/${resolvedWabaId}/phone_numbers?access_token=${longLivedToken}&fields=verified_name,display_phone_number,quality_rating,status`
-      );
-      const phonesData = await phonesRes.json() as any;
-      phoneDetails = phonesData.data?.[0] ?? {};
-      resolvedPhoneId = phoneDetails.id;
     }
 
-    /* 5. Fetch WABA name */
-    let businessName: string | null = null;
     if (resolvedWabaId) {
-      const wabaRes = await fetch(`https://graph.facebook.com/v18.0/${resolvedWabaId}?fields=name&access_token=${longLivedToken}`);
+      const wabaRes = await fetch(
+        `https://graph.facebook.com/${GV}/${resolvedWabaId}?fields=id,name&access_token=${longLivedToken}`
+      );
       const wabaData = await wabaRes.json() as any;
       businessName = wabaData.name ?? null;
+      /* Also get phone if not provided */
+      if (!resolvedPhoneId) {
+        const phonesRes = await fetch(
+          `https://graph.facebook.com/${GV}/${resolvedWabaId}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status&access_token=${longLivedToken}`
+        );
+        const phonesData = await phonesRes.json() as any;
+        phoneDetails = phonesData.data?.[0] ?? {};
+        resolvedPhoneId = phoneDetails.id ?? null;
+      }
     }
 
-    /* 6. Persist to DB */
+    /* 4. If still not resolved — auto-discover via businesses → owned_whatsapp_business_accounts chain */
+    if (!resolvedWabaId || !resolvedPhoneId) {
+      req.log?.info("Embedded signup did not provide IDs — running auto-discovery");
+      const discovered = await discoverWabaAndPhone(longLivedToken);
+      req.log?.info({ discovered: { wabaCount: discovered.allWabas.length, wabaId: discovered.wabaId, phoneId: discovered.phoneId } }, "Auto-discovery result");
+
+      if (!resolvedWabaId && discovered.wabaId) {
+        resolvedWabaId = discovered.wabaId;
+        businessName = discovered.wabaName;
+      }
+      if (!resolvedPhoneId && discovered.phoneId) {
+        resolvedPhoneId = discovered.phoneId;
+        phoneDetails = discovered.phoneDetails;
+      }
+    }
+
+    /* 5. Persist to DB */
     const [existing] = await db.select({ id: whatsappSettingsTable.id }).from(whatsappSettingsTable).limit(1);
     const savePayload = {
       accessToken: longLivedToken,
       phoneNumberId: resolvedPhoneId ?? null,
       businessAccountId: resolvedWabaId ?? null,
       isActive: true,
-      verifiedName: phoneDetails.verified_name ?? null,
-      qualityRating: phoneDetails.quality_rating ?? null,
-      metaStatus: phoneDetails.status ?? null,
+      verifiedName: (phoneDetails as any).verified_name ?? null,
+      qualityRating: (phoneDetails as any).quality_rating ?? null,
+      metaStatus: (phoneDetails as any).status ?? null,
       connectedAt: new Date(),
       connectionMethod: "embedded_signup",
       updatedAt: new Date(),
@@ -2184,16 +2251,17 @@ router.post("/admin/whatsapp/meta-exchange-token", adminMiddleware as any, async
     } else {
       await db.insert(whatsappSettingsTable).values(savePayload as any);
     }
-    req.log?.info({ wabaId: resolvedWabaId, phoneId: resolvedPhoneId }, "WhatsApp Embedded Signup connected");
+
+    req.log?.info({ wabaId: resolvedWabaId, phoneId: resolvedPhoneId }, "WhatsApp Embedded Signup connected successfully");
     return res.json({
       success: true,
       wabaId: resolvedWabaId,
       phoneNumberId: resolvedPhoneId,
-      displayPhone: phoneDetails.display_phone_number ?? null,
-      verifiedName: phoneDetails.verified_name ?? null,
+      displayPhone: (phoneDetails as any).display_phone_number ?? null,
+      verifiedName: (phoneDetails as any).verified_name ?? null,
       businessName,
-      qualityRating: phoneDetails.quality_rating ?? null,
-      status: phoneDetails.status ?? null,
+      qualityRating: (phoneDetails as any).quality_rating ?? null,
+      status: (phoneDetails as any).status ?? null,
     });
   } catch (e: any) {
     req.log?.error(e, "Meta token exchange error");
