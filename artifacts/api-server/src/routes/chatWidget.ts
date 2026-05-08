@@ -50,7 +50,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .hdr-btn svg{pointer-events:none;}
 
   /* ── Messages ────────────────────────────────── */
-  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;-webkit-overflow-scrolling:touch;}
+  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;overscroll-behavior:contain;}
   #msgs::-webkit-scrollbar{width:3px;}
   #msgs::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
 
@@ -72,13 +72,13 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
 
   /* ── Lead form ───────────────────────────────── */
-  #lead-form{background:#fff;margin:10px;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,0.1);}
+  #lead-form{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:#fff;border-radius:20px 20px 0 0;padding:20px 18px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 24px rgba(0,0,0,0.15);}
   #lead-form h3{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
   #lead-form p{font-size:12px;color:#666;margin-bottom:14px;line-height:1.5;}
   .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:9px;font-family:inherit;}
   .lf-input:focus{border-color:#2ecc71;}
-  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;}
-  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:9px;cursor:pointer;text-decoration:underline;}
+  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;position:relative;z-index:1;}
+  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;}
 
   /* ── Chips ───────────────────────────────────── */
   #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;}

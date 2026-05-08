@@ -1,0 +1,126 @@
+یہ screen overlay / z-index issue لگ رہا ہے ✅
+یعنی اوپر کا کوئی invisible layer یا container button کے اوپر آ رہا ہے، اسی وجہ سے:
+
+❌ “Start Chat” click نہیں ہو رہا
+❌ screen stack/freeze لگ رہی ہے
+
+Developer کو یہ prompt بھیج دیں 👇
+
+URGENT MOBILE UI FIX REQUIRED
+
+Issue:
+On mobile devices, the live chat welcome screen is getting stacked/frozen.
+
+Problem:
+✅ Welcome popup opens
+❌ “Start Chat” button is not clickable
+❌ Screen appears blocked
+❌ Touch events are not working properly
+
+Most likely causes:
+
+* z-index conflict
+* overlay blocking clicks
+* fixed container issue
+* pointer-events issue
+* viewport height issue on mobile Safari/Chrome
+* body scroll lock conflict
+
+⸻
+
+REQUIRED FIXES
+
+1. FIX Z-INDEX STACKING
+    Ensure:
+    ✅ Chat modal is above all elements
+    ✅ No invisible overlay blocks buttons
+    ✅ Start Chat button remains clickable
+
+Recommended:
+z-index should be very high.
+
+Example:
+z-index: 999999;
+
+⸻
+
+2. FIX POINTER EVENTS
+    Check:
+    ✅ overlay containers
+    ✅ parent wrappers
+    ✅ floating layers
+
+Ensure:
+pointer-events are not blocking buttons.
+
+⸻
+
+3. FIX MOBILE HEIGHT ISSUE
+    Use proper mobile viewport handling.
+
+Recommended:
+height: 100dvh;
+
+instead of:
+height: 100vh;
+
+⸻
+
+4. FIX BODY SCROLL LOCK
+    Ensure:
+    opening chat does not freeze page interaction.
+
+Check:
+overflow hidden
+touch-action
+position fixed conflicts
+
+⸻
+
+5. FIX SAFARI + CHROME MOBILE SUPPORT
+    Need:
+    ✅ Android support
+    ✅ iPhone Safari support
+    ✅ Responsive behavior
+    ✅ Touch-safe UI
+
+⸻
+
+6. FIX CHAT CONTAINER
+    Ensure:
+    ✅ Popup fully visible
+    ✅ No hidden layer above button
+    ✅ Inputs clickable
+    ✅ Keyboard safe spacing
+    ✅ Bottom safe area handling
+
+⸻
+
+7. BUTTON FIX
+    “Start Chat” button must:
+    ✅ Always remain clickable
+    ✅ Stay above overlays
+    ✅ Work instantly on tap
+
+⸻
+
+8. DEBUG REQUIRED
+    Please inspect:
+    ✅ overlapping divs
+    ✅ fixed layers
+    ✅ backdrop elements
+    ✅ transform properties
+    ✅ overflow hidden containers
+
+⸻
+
+FINAL EXPECTED RESULT
+
+On mobile:
+✅ Chat opens smoothly
+✅ No stacked screen
+✅ Start Chat works properly
+✅ Inputs work correctly
+✅ Fullscreen layout works
+✅ No frozen UI
+✅ Smooth user experience
