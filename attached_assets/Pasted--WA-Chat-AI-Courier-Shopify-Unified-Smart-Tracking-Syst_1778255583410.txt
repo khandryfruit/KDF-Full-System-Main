@@ -1,0 +1,436 @@
+# WA Chat AI + Courier + Shopify Unified Smart Tracking System Prompt
+
+## IMPORTANT
+
+Existing:
+
+* Shopify integration
+* Courier integrations
+* WhatsApp APIs
+* AI chatbot
+* Order systems
+* Tracking systems
+* Customer database
+* Payment systems
+
+کو break یا replace نہیں کرنا۔
+
+صرف:
+
+# Unified AI Data Intelligence + Smart Tracking System
+
+professional انداز میں build کرنا ہے۔
+
+---
+
+# MAIN GOAL
+
+WA Chat کے اندر ایسا:
+
+# AI Unified Assistant
+
+بنائیں جو:
+
+✅ Shopify
+✅ Courier APIs
+✅ Orders
+✅ Customers
+✅ Tracking
+✅ WhatsApp Chats
+✅ Website Chats
+✅ AI Conversations
+
+سب data کو ایک جگہ merge کرے۔
+
+---
+
+# REQUIRED SYSTEM BEHAVIOR
+
+## Customer Chat Example
+
+Customer لکھے:
+
+# "Mera order kahan hai?"
+
+یا:
+
+# "Tracking bata dein"
+
+یا:
+
+# "Mera parcel dispatch hua?"
+
+---
+
+# AI SHOULD AUTOMATICALLY
+
+System سے search کرے:
+
+* Shopify Orders
+* Synced Customers
+* Courier Tracking
+* WhatsApp history
+* Website chats
+* Existing chatbot records
+
+---
+
+# CUSTOMER IDENTIFICATION FLOW
+
+## AI Match کرے
+
+Customer کے ذریعے:
+
+* Phone Number
+* Email
+* Order ID
+* Name
+* WhatsApp Number
+
+---
+
+# Example
+
+Customer:
+
+```bash id="n8k4rp"
+Name: Ali Khan
+Phone: 03049996000
+```
+
+↓
+
+AI search کرے:
+
+* Shopify customer
+* Courier shipment
+* Existing order
+* Tracking record
+* WhatsApp history
+
+↓
+
+Matching order detect کرے۔
+
+---
+
+# REQUIRED AI RESPONSE
+
+## AI Automatically Send کرے
+
+# 📦 Order Status Update
+
+━━━━━━━━━━━━━━
+
+## 👤 Customer
+
+Ali Khan
+
+## 🛒 Order ID
+
+#KDF-2045
+
+## 📦 Status
+
+Shipped
+
+## 🚚 Courier
+
+Leopards Courier
+
+## 🔍 Tracking Number
+
+LK123456789PK
+
+## 📅 Dispatch Date
+
+08 May 2026
+
+## 📍 Current Status
+
+In Transit — Lahore Facility
+
+## 🕒 Estimated Delivery
+
+2–3 Working Days
+
+━━━━━━━━━━━━━━
+
+# 🔗 Live Tracking
+
+[Track Your Parcel]
+
+━━━━━━━━━━━━━━
+
+# 📞 Support
+
+03049996000
+
+---
+
+# IMPORTANT
+
+## Tracking MUST BE
+
+✅ Real-time
+✅ Dynamic
+✅ Live synced
+✅ Courier connected
+
+---
+
+# REQUIRED COURIER INTEGRATION
+
+AI directly access کرے:
+
+* Leopards Courier
+* TCS
+* CallCourier
+* PostEx
+* Trax
+* M&P
+* Rider APIs
+
+---
+
+# LIVE TRACKING SYSTEM
+
+Tracking number static نہ ہو۔
+
+System:
+
+# Courier API
+
+سے live data fetch کرے۔
+
+---
+
+# REQUIRED SEARCH ENGINE
+
+## Build Unified Search Layer
+
+AI search کر سکے:
+
+```bash id="j4w7ql"
+- Shopify Orders
+- Shopify Customers
+- Courier Records
+- WhatsApp Messages
+- Website Chats
+- AI Memory
+- Order History
+- Payment Records
+```
+
+---
+
+# IMPORTANT AI REQUIREMENT
+
+## Merge ALL Existing Bots
+
+Current:
+
+❌ multiple separate bots
+
+---
+
+# Required
+
+# One Unified AI Brain
+
+بنائیں۔
+
+---
+
+# AI SHOULD UNDERSTAND
+
+Customer اگر لکھے:
+
+* "mera order"
+* "parcel"
+* "tracking"
+* "cod"
+* "bank transfer"
+* "akhrot"
+* "badam"
+
+تو AI contextually سمجھ سکے۔
+
+---
+
+# REQUIRED AI ARCHITECTURE
+
+## Centralized AI Context Engine
+
+```bash id="w5p2xt"
+/ai-core/
+├── shopify-data
+├── courier-data
+├── whatsapp-history
+├── website-chat
+├── payments
+├── orders
+├── tracking
+└── ai-memory
+```
+
+---
+
+# REQUIRED FEATURES
+
+## 1. Smart Order Lookup
+
+AI automatically detect کرے:
+
+* latest order
+* active shipment
+* unpaid invoice
+* pending COD
+
+---
+
+# 2. Live Tracking Button
+
+Chat میں:
+
+# Track Parcel
+
+button آئے۔
+
+---
+
+# 3. Auto Shipment Messages
+
+Courier status change ہو:
+
+* dispatched
+* in transit
+* delivered
+* failed attempt
+
+↓
+
+WhatsApp auto message جائے۔
+
+---
+
+# 4. AI Context Awareness
+
+اگر customer پہلے chat کر چکا ہو تو:
+
+AI previous chats بھی سمجھے۔
+
+---
+
+# 5. Unified Conversation History
+
+Website chat + WhatsApp + AI chats:
+
+# one timeline
+
+میں merge ہوں۔
+
+---
+
+# REQUIRED ADMIN FEATURES
+
+# WA Chat → AI Intelligence
+
+Admin دیکھ سکے:
+
+* linked orders
+* customer history
+* shipment history
+* payment history
+* AI recommendations
+
+---
+
+# REQUIRED SEARCH EXPERIENCE
+
+Admin اگر search کرے:
+
+# “Ali Khan”
+
+تو آئے:
+
+✅ Orders
+✅ Courier tracking
+✅ WhatsApp chats
+✅ Website sessions
+✅ Payments
+✅ Notes
+✅ AI summaries
+
+---
+
+# IMPORTANT PERFORMANCE RULE
+
+Use:
+
+✅ indexed search
+✅ cached lookups
+✅ async courier fetch
+✅ optimized queries
+
+---
+
+# DO NOT DO
+
+❌ duplicate APIs
+❌ repeated database calls
+❌ full sync every request
+❌ blocking requests
+
+---
+
+# REQUIRED FINAL EXPERIENCE
+
+Customer:
+
+# “Mera order?”
+
+↓
+
+AI instantly detects:
+
+* customer
+* order
+* courier
+* payment
+* shipment
+
+↓
+
+Automatically sends:
+
+✅ tracking number
+✅ live status
+✅ courier info
+✅ ETA
+✅ order summary
+
+---
+
+# FINAL GOAL
+
+Create:
+
+# Enterprise-Level Unified AI Commerce Support System
+
+جہاں:
+
+✅ Shopify
+✅ Courier APIs
+✅ WhatsApp
+✅ Website Chat
+✅ AI Chatbot
+✅ Orders
+✅ Tracking
+✅ Payments
+
+سب کچھ:
+
+# One Smart AI System
+
+کے اندر connected ہو۔

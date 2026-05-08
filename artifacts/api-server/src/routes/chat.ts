@@ -11,10 +11,14 @@ import {
   aiSettingsTable,
   sameDayDeliverySettingsTable,
   shopifyProductsTable,
+  shopifyOrdersTable,
+  shipmentsTable,
+  couriersTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, desc, sql, asc } from "drizzle-orm";
 import { expandQuery } from "./search";
 import { adminMiddleware } from "../lib/auth";
+import { trackWithCourierApiForShopify } from "./couriers";
 import OpenAI from "openai";
 
 const router = Router();
@@ -105,6 +109,7 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 8. When customer mentions ANY product(s) with weight/quantity in one message → call auto_add_to_cart IMMEDIATELY with ALL products in the items array. CRITICAL: If multiple products are mentioned (e.g. "1kg almonds aur 500g pista", "badam aur kaju chahiye"), include ALL of them: items:[{query:"almonds",variantHint:"1kg",qty:1},{query:"pista",variantHint:"500g",qty:1}]. Never omit any mentioned product. Word map: badam=almonds, pista=pistachios, akhrot=walnuts, kaju=cashews, kishmish=raisins, mungphali=peanuts, anjeer=figs, khajoor=dates, chilgoza=pine nuts, moongphali=peanuts.
 9. When customer says "human", "banda", "manager", "real person", "complaint", "nahi samajh raha", or repeats the same problem more than once → call escalate_to_human.
 10. When customer asks for recommendations, best sellers, popular products, viral products, or seems undecided → call get_recommendations IMMEDIATELY. Never list products as text.
+11. TRACKING/ORDER STATUS — CRITICAL: When customer asks about their order, parcel, tracking, delivery status, "mera order", "kahan hai", "dispatch hua", "delivered", "tracking number", "courier", "parcel", "shipment" → call track_order IMMEDIATELY. Pass any phone/order number they mention. If no details provided, ask ONCE for their phone number (03xx format), then call track_order with the phone.
 
 CRITICAL PRODUCT SEARCH RULES:
 - Pass the EXACT product name/keyword to search_products. If customer says "اخروٹ", pass query="اخروٹ". If they say "walnuts", pass query="walnuts". If they say "akhrot", pass query="akhrot".
@@ -203,6 +208,22 @@ function buildTools(orderingEnabled: boolean) {
         description: "Show human agent contact options when customer asks for a real person, manager, human, or when AI has failed to resolve the issue after 2+ turns.",
         parameters: { type: "object", properties: {}, required: [] },
       },
+    },
+    {
+      type: "function",
+      function: {
+        name: "track_order",
+        description: "Look up a customer's order and live courier tracking status. MUST call immediately when customer asks about: order status, tracking, parcel, delivery, dispatch, 'mera order', 'kahan hai', 'mila nahi', 'tracking number', 'courier', 'shipment', 'parcel', 'delivered', 'COD', 'order confirm'. Pass phone/order_number/name if customer mentioned them.",
+        parameters: {
+          type: "object",
+          properties: {
+            phone:        { type: "string", description: "Customer phone number (03xx-xxxxxxx format or +92xxx)" },
+            order_number: { type: "string", description: "Order number if customer mentioned it (e.g. #1234 or 1234 or KDF-1234)" },
+            name:         { type: "string", description: "Customer name if mentioned" },
+          },
+          required: [],
+        },
+      },
     }
   );
 
@@ -281,17 +302,22 @@ router.post("/chat/message", async (req, res) => {
     let placedOrder: { id: number; orderNumber: string } | null = null;
     let foundAutoCart: any[] = [];
     let shouldEscalate = false;
+    let foundOrderStatus: any = null;
 
     // Detect intent from user message to force the right tool on the first turn
     function detectForcedTool(msg: string): { type: "function"; function: { name: string } } | "auto" {
       const m = msg.toLowerCase();
+      /* Tracking FIRST — highest priority to prevent product search hijack */
+      if (/(mera order|meri parcel|tracking|track|kahan hai|parcel|shipment|dispatch hua|delivered|deliver|courier|tracking number|order status|order confirm|cod|mila nahi|nahi mila|order kahan|parcel kahan|mujhe nahi mila|order update|delivery status|status batao|parcel status)/i.test(msg)) {
+        return { type: "function", function: { name: "track_order" } };
+      }
       if (/(categor|browse|types of|kya types|show all|sab products|sab categor|all categor)/i.test(msg)) {
         return { type: "function", function: { name: "search_categories" } };
       }
-        if (/(human|banda|manager|real person|complaint|nahi samajh|escalate|agent chahiye|support agent|live support)/i.test(msg)) {
+      if (/(human|banda|manager|real person|complaint|nahi samajh|escalate|agent chahiye|support agent|live support)/i.test(msg)) {
         return { type: "function", function: { name: "escalate_to_human" } };
       }
-      if (/(order karna|place order|mujhe lena|mujhe chahiye|order chahiye|i want to (buy|order|purchase)|buy now|khareedna|order please|order dena)/i.test(msg)) {
+      if (/(order karna|place order|mujhe lena|order chahiye|i want to (buy|order|purchase)|buy now|khareedna|order please|order dena)/i.test(msg)) {
         return { type: "function", function: { name: "trigger_order_form" } };
       }
       if (/(\d+\s*(kilo|kg|gram|g|pound)|(ek|do|teen|char|panch|1|2|3|4|5)\s*(kilo|kg|gram|g)|(badam|pista|kaju|akhrot|kishmish|mungphali|anjeer|khajoor|chilgoza|moongphali).{0,20}\d|(almond|cashew|pistachio|walnut|raisin|peanut|fig|date).{0,20}\d|\d.{0,20}(badam|pista|kaju|akhrot))/i.test(msg)) {
@@ -327,6 +353,7 @@ router.post("/chat/message", async (req, res) => {
         if (foundProducts.length > 0) historyEntry.products = foundProducts;
         if (foundCategories.length > 0) historyEntry.categories = foundCategories;
         if (shouldShowOrderForm) historyEntry.type = "order_form";
+        if (foundOrderStatus) historyEntry.orderStatus = foundOrderStatus;
         const finalHistory = [...updatedHistory, historyEntry];
         await db.update(chatSessionsTable).set({ messages: finalHistory, updatedAt: new Date() }).where(eq(chatSessionsTable.id, session.id));
         return res.json({
@@ -338,6 +365,7 @@ router.post("/chat/message", async (req, res) => {
           ...(placedOrder && { orderPlaced: placedOrder }),
           ...(foundAutoCart.length > 0 && { autoCart: foundAutoCart }),
           ...(shouldEscalate && { escalateToHuman: true }),
+          ...(foundOrderStatus && { orderStatus: foundOrderStatus }),
         });
       }
 
@@ -629,6 +657,182 @@ router.post("/chat/message", async (req, res) => {
         } else if (fn === "escalate_to_human") {
           shouldEscalate = true;
           toolResult = "Human support escalation card will be shown to customer.";
+        } else if (fn === "track_order") {
+          /* ── Unified Smart Order Tracker ─────────────────────────────────
+             Search: shopify_orders → shipments → live courier API
+             Priority: order_number > phone > name (session lead phone fallback)
+          ─────────────────────────────────────────────────────────────── */
+          try {
+            const rawPhone   = (args.phone ?? "") as string;
+            const rawOrderNo = (args.order_number ?? "") as string;
+            const rawName    = (args.name ?? "") as string;
+
+            /* Normalize phone: 03xx → +923xx and vice versa for search */
+            function normPhone(p: string) {
+              const d = p.replace(/\D/g, "");
+              if (d.startsWith("92") && d.length >= 12) return `+${d}`;
+              if (d.startsWith("0") && d.length === 11) return `+92${d.slice(1)}`;
+              return p.trim();
+            }
+            const phone03   = rawPhone ? rawPhone.replace(/\D/g, "").replace(/^92/, "0").slice(0, 11) : "";
+            const phone92   = rawPhone ? normPhone(rawPhone) : "";
+            const orderNo   = rawOrderNo.replace(/^#/, "").replace(/^KDF-/i, "").trim();
+
+            /* Also check session lead for phone (customer already provided it) */
+            let sessionPhone03 = "";
+            let sessionPhone92 = "";
+            if (!rawPhone && session?.sessionId) {
+              const lead = (await db.select({ phone: chatLeadsTable.phone }).from(chatLeadsTable)
+                .where(eq(chatLeadsTable.sessionId, session.sessionId)).limit(1))[0];
+              if (lead?.phone) {
+                sessionPhone03 = lead.phone.replace(/\D/g, "").replace(/^92/, "0").slice(0, 11);
+                sessionPhone92 = normPhone(lead.phone);
+              }
+            }
+
+            const searchPhone03 = phone03 || sessionPhone03;
+            const searchPhone92 = phone92 || sessionPhone92;
+
+            /* Build OR conditions for shopify_orders search */
+            const orConds: any[] = [];
+            if (orderNo) {
+              orConds.push(
+                eq(shopifyOrdersTable.orderNumber, orderNo),
+                ilike(shopifyOrdersTable.orderNumber, `%${orderNo}%`),
+              );
+            }
+            if (searchPhone03 || searchPhone92) {
+              if (searchPhone03) orConds.push(ilike(shopifyOrdersTable.customerPhone, `%${searchPhone03}%`));
+              if (searchPhone92) orConds.push(ilike(shopifyOrdersTable.customerPhone, `%${searchPhone92}%`));
+              if (searchPhone03) orConds.push(sql`${shopifyOrdersTable.shippingAddress}->>'phone' ILIKE ${'%' + searchPhone03 + '%'}`);
+            }
+            if (rawName) {
+              orConds.push(ilike(shopifyOrdersTable.customerName, `%${rawName}%`));
+            }
+
+            if (orConds.length === 0) {
+              /* No search criteria — ask customer for phone */
+              foundOrderStatus = { notFound: true, askPhone: true };
+              toolResult = "NO_CRITERIA: Ask customer for their phone number (03xx format) to look up their order.";
+            } else {
+              const shopifyOrders = await db.select({
+                id:                shopifyOrdersTable.id,
+                shopifyOrderId:    shopifyOrdersTable.shopifyOrderId,
+                orderNumber:       shopifyOrdersTable.orderNumber,
+                customerName:      shopifyOrdersTable.customerName,
+                customerPhone:     shopifyOrdersTable.customerPhone,
+                status:            shopifyOrdersTable.status,
+                fulfillmentStatus: shopifyOrdersTable.fulfillmentStatus,
+                financialStatus:   shopifyOrdersTable.financialStatus,
+                totalPrice:        shopifyOrdersTable.totalPrice,
+                trackingNumber:    shopifyOrdersTable.trackingNumber,
+                trackingUrl:       shopifyOrdersTable.trackingUrl,
+                lineItems:         shopifyOrdersTable.lineItems,
+                shippingAddress:   shopifyOrdersTable.shippingAddress,
+                shopifyCreatedAt:  shopifyOrdersTable.shopifyCreatedAt,
+              }).from(shopifyOrdersTable)
+                .where(or(...orConds))
+                .orderBy(desc(shopifyOrdersTable.shopifyCreatedAt))
+                .limit(1);
+
+              if (shopifyOrders.length === 0) {
+                foundOrderStatus = { notFound: true };
+                toolResult = "No order found for the given details. Inform customer politely. Ask them to check phone number or provide order number.";
+              } else {
+                const ord = shopifyOrders[0];
+
+                /* Get shipment record */
+                const shipmentConds: any[] = [eq(shipmentsTable.shopifyOrderId, ord.shopifyOrderId)];
+                if (ord.customerPhone) shipmentConds.push(ilike(shipmentsTable.customerPhone, `%${(ord.customerPhone ?? "").replace(/\D/g,"").slice(-10)}%`));
+                const shipments = await db.select().from(shipmentsTable)
+                  .where(or(...shipmentConds))
+                  .orderBy(desc(shipmentsTable.createdAt))
+                  .limit(1);
+                const ship = shipments[0] ?? null;
+
+                /* Live courier tracking (async, 8s timeout) */
+                let liveStatus: string | null = null;
+                let liveStatusLabel = "";
+                if (ship?.trackingId && ship?.courierId) {
+                  try {
+                    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.id, ship.courierId)).limit(1);
+                    if (courierRow) {
+                      const tracked = await Promise.race([
+                        trackWithCourierApiForShopify(courierRow, ship.trackingId),
+                        new Promise<null>(r => setTimeout(() => r(null), 8000)),
+                      ]);
+                      if (tracked) {
+                        liveStatus = (tracked as any).status ?? ship.status;
+                        /* Update shipment in DB with fresh status */
+                        if (liveStatus !== ship.status) {
+                          await db.update(shipmentsTable).set({ status: liveStatus as any, lastTrackedAt: new Date() }).where(eq(shipmentsTable.id, ship.id)).catch(() => {});
+                        }
+                      }
+                    }
+                  } catch { /* non-blocking */ }
+                }
+
+                const statusMap: Record<string, string> = {
+                  pending: "Order Received", processing: "Processing", shipped: "Shipped",
+                  in_transit: "In Transit", out_for_delivery: "Out for Delivery",
+                  delivered: "Delivered", failed: "Delivery Failed", returned: "Returned",
+                  unfulfilled: "Processing", partial: "Partially Fulfilled", fulfilled: "Fulfilled",
+                };
+                const courierNames: Record<string, string> = {
+                  leopards: "Leopards Courier", tcs: "TCS Couriers", postex: "PostEx",
+                  trax: "Trax", callcourier: "CallCourier", mp: "M&P Couriers",
+                };
+                const trackingStatus = liveStatus ?? ship?.status ?? ord.fulfillmentStatus ?? ord.status ?? "pending";
+                liveStatusLabel = statusMap[trackingStatus] ?? trackingStatus;
+                const courierName = ship?.courierSlug ? (courierNames[ship.courierSlug] ?? ship.courierSlug) : (ord.trackingNumber ? "Courier" : null);
+                const trackingId  = ship?.trackingId ?? ord.trackingNumber ?? null;
+
+                /* Build tracking URL */
+                const trackingUrlMap: Record<string, string> = {
+                  leopards: `https://leopardscourier.com/tracking?tracking_number=${trackingId}`,
+                  tcs:      `https://www.tcsexpress.com/tracking/${trackingId}`,
+                  postex:   `https://postex.pk/tracking/${trackingId}`,
+                  trax:     `https://trax.pk/track/${trackingId}`,
+                };
+                const trackingUrl = ship?.courierSlug ? (trackingUrlMap[ship.courierSlug] ?? ord.trackingUrl) : ord.trackingUrl;
+
+                const items = (ord.lineItems ?? []) as Array<{ title: string; quantity: number; price: string; variantTitle?: string }>;
+                const addr  = ord.shippingAddress as { name?: string; city?: string; address1?: string } | null;
+
+                foundOrderStatus = {
+                  found:             true,
+                  orderNumber:       ord.orderNumber,
+                  customerName:      ord.customerName ?? addr?.name ?? "Customer",
+                  phone:             ord.customerPhone,
+                  status:            statusMap[ord.status] ?? ord.status,
+                  fulfillmentStatus: liveStatusLabel,
+                  financialStatus:   ord.financialStatus,
+                  totalPrice:        ord.totalPrice,
+                  courierName,
+                  trackingId,
+                  trackingUrl: trackingUrl ?? null,
+                  dispatchedAt:  ship?.createdAt ? new Date(ship.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" }) : null,
+                  city:          addr?.city ?? null,
+                  items:         items.slice(0, 5).map(it => ({ name: it.title + (it.variantTitle ? ` (${it.variantTitle})` : ""), qty: it.quantity, price: it.price })),
+                };
+
+                toolResult = [
+                  `ORDER FOUND — ${ord.orderNumber}`,
+                  `Customer: ${ord.customerName}`,
+                  `Status: ${liveStatusLabel}`,
+                  `Courier: ${courierName ?? "Pending booking"}`,
+                  `Tracking: ${trackingId ?? "Not assigned yet"}`,
+                  `Total: Rs.${ord.totalPrice}`,
+                  `Payment: ${ord.financialStatus}`,
+                  items.length > 0 ? `Items: ${items.map(i => i.title + " x" + i.quantity).join(", ")}` : "",
+                  trackingUrl ? `Track: ${trackingUrl}` : "",
+                ].filter(Boolean).join("\n");
+              }
+            }
+          } catch (trackErr: any) {
+            foundOrderStatus = { error: true };
+            toolResult = `Tracking lookup failed: ${trackErr.message}. Ask customer to contact support on WhatsApp.`;
+          }
         } else {
           toolResult = "Unknown function.";
         }

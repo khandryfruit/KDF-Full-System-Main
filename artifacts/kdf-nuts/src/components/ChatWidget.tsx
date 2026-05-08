@@ -44,6 +44,15 @@ interface TemplateMetadata {
 interface AutoCartItem {
   productId: number; name: string; variant?: string | null; variantId?: string | null; price: number; qty: number; image?: string | null;
 }
+interface OrderStatusData {
+  found?: boolean; notFound?: boolean; askPhone?: boolean; error?: boolean;
+  orderNumber?: string; customerName?: string; phone?: string;
+  status?: string; fulfillmentStatus?: string; financialStatus?: string;
+  totalPrice?: string | null; courierName?: string | null;
+  trackingId?: string | null; trackingUrl?: string | null;
+  dispatchedAt?: string | null; city?: string | null;
+  items?: { name: string; qty: number; price: string }[];
+}
 interface ChatMessage {
   role: "user" | "assistant" | "admin"; content: string; timestamp: Date;
   products?: Product[];
@@ -52,6 +61,7 @@ interface ChatMessage {
   type?: "product" | "category" | "coupon" | "offer" | "order_form" | "multi_product" | "payment_link" | "tracking_link" | "escalate_human";
   metadata?: TemplateMetadata;
   autoCartAdded?: AutoCartItem[];
+  orderStatus?: OrderStatusData;
 }
 interface OrderForm {
   product: string; qty: number; name: string; phone: string; city: string; cityCustom: string; address: string; notes: string;
@@ -332,6 +342,117 @@ function OrderSuccessBanner({ orderNumber }: { orderNumber: string }) {
   );
 }
 
+function OrderStatusCard({ data }: { data: OrderStatusData }) {
+  if (data.notFound) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 max-w-[92%] shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <Package className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <p className="text-sm font-bold text-amber-800">Order Not Found</p>
+        </div>
+        <p className="text-xs text-amber-700">We couldn't find an order with those details. Please double-check your phone number or order ID.</p>
+      </div>
+    );
+  }
+  if (!data.found || !data.orderNumber) return null;
+
+  const statusColors: Record<string, string> = {
+    "Delivered":           "bg-green-100 text-green-800 border-green-300",
+    "Out for Delivery":    "bg-blue-100 text-blue-800 border-blue-300",
+    "In Transit":          "bg-indigo-100 text-indigo-800 border-indigo-300",
+    "Shipped":             "bg-purple-100 text-purple-800 border-purple-300",
+    "Processing":          "bg-yellow-100 text-yellow-800 border-yellow-300",
+    "Order Received":      "bg-gray-100 text-gray-800 border-gray-300",
+    "Delivery Failed":     "bg-red-100 text-red-800 border-red-300",
+    "Returned":            "bg-red-100 text-red-800 border-red-300",
+  };
+  const statusClass = statusColors[data.fulfillmentStatus ?? ""] ?? "bg-gray-100 text-gray-800 border-gray-300";
+  const isDelivered  = (data.fulfillmentStatus ?? "").toLowerCase().includes("delivered");
+  const isInTransit  = (data.fulfillmentStatus ?? "").toLowerCase().includes("transit") || (data.fulfillmentStatus ?? "").toLowerCase().includes("out for");
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white max-w-[92%] shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#1a1a2e] to-[#16213e] px-4 py-3 flex items-center gap-2">
+        <Package className="w-4 h-4 text-[#5FA800] flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-400">Order</p>
+          <p className="text-sm font-bold text-white font-mono">#{data.orderNumber}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusClass}`}>
+          {isDelivered ? "✓ " : isInTransit ? "⟳ " : ""}{data.fulfillmentStatus}
+        </span>
+      </div>
+
+      <div className="px-4 py-3 space-y-2.5">
+        {/* Customer */}
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">👤</div>
+          <div>
+            <p className="text-[10px] text-gray-400">Customer</p>
+            <p className="text-xs font-semibold text-gray-800">{data.customerName}</p>
+          </div>
+        </div>
+
+        {/* Courier + Tracking */}
+        {(data.courierName || data.trackingId) && (
+          <div className="bg-gray-50 rounded-xl p-2.5 flex items-start gap-2">
+            <Truck className="w-4 h-4 text-[#5FA800] mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              {data.courierName && <p className="text-[10px] text-gray-500">{data.courierName}</p>}
+              {data.trackingId && (
+                <p className="text-xs font-mono font-bold text-gray-800 truncate">{data.trackingId}</p>
+              )}
+            </div>
+            {data.trackingUrl && (
+              <a href={data.trackingUrl} target="_blank" rel="noopener noreferrer"
+                className="flex-shrink-0 text-[10px] font-bold text-[#5FA800] flex items-center gap-0.5">
+                Track <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Items */}
+        {data.items && data.items.length > 0 && (
+          <div className="space-y-1">
+            {data.items.map((it, i) => (
+              <div key={i} className="flex items-center justify-between text-xs text-gray-700">
+                <span className="truncate flex-1 mr-2">{it.name} × {it.qty}</span>
+                <span className="font-semibold text-gray-900 flex-shrink-0">Rs.{it.price}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Total + payment */}
+        <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+          <div>
+            {data.dispatchedAt && <p className="text-[10px] text-gray-400">Dispatched {data.dispatchedAt}</p>}
+            {data.financialStatus && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${data.financialStatus === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                {data.financialStatus === "paid" ? "✓ Paid" : "COD Pending"}
+              </span>
+            )}
+          </div>
+          {data.totalPrice && (
+            <p className="text-sm font-bold text-gray-900">Rs.{Number(data.totalPrice).toLocaleString()}</p>
+          )}
+        </div>
+
+        {/* Track button */}
+        {data.trackingUrl && (
+          <a href={data.trackingUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold text-white"
+            style={{ background: "linear-gradient(135deg,#5FA800,#3d7000)" }}>
+            <Truck className="w-3.5 h-3.5" /> Track Live Parcel
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HumanEscalationCard({ waPhone }: { waPhone?: string }) {
   const waUrl = waPhone
     ? `https://wa.me/${waPhone.replace(/\D/g, "")}?text=${encodeURIComponent("Hello! I need help with my KDF Nuts order.")}`
@@ -433,6 +554,11 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
               <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isAdmin ? "text-blue-900" : "text-gray-800"}`}>{msg.content}</p>
             </div>
           ) : null)}
+          {msg.orderStatus && (msg.orderStatus.found || msg.orderStatus.notFound) && (
+            <div className="mt-2">
+              <OrderStatusCard data={msg.orderStatus} />
+            </div>
+          )}
         </div>
       </div>
       {hasProducts && (
@@ -1052,6 +1178,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
         products: data.products, categories: data.categories, orderPlaced: data.orderPlaced,
         type: data.escalateToHuman ? "escalate_human" : (data.showOrderForm ? "order_form" : undefined),
         autoCartAdded: data.autoCart?.length > 0 ? data.autoCart : undefined,
+        orderStatus: data.orderStatus ?? undefined,
       }]);
       if (data.showOrderForm && !data.escalateToHuman) { setDefaultOrderProduct(""); setShowOrderForm(true); }
     } catch {
