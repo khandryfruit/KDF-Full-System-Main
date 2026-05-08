@@ -18,7 +18,8 @@ function authFetch(url: string, opts: RequestInit = {}) {
 }
 
 interface ChatMsg { role: "user" | "assistant" | "admin"; content: string; timestamp: string; type?: string; metadata?: any; }
-interface Session { id: number; sessionId: string; messages: ChatMsg[]; updatedAt: string; }
+interface SessionLead { name: string; phone: string; source?: string | null; }
+interface Session { id: number; sessionId: string; messages: ChatMsg[]; updatedAt: string; lead?: SessionLead | null; }
 interface ProductOption { id: number; name: string; price: number; originalPrice?: number | null; images?: string[]; image?: string | null; source?: "website" | "shopify"; stock?: number; variants?: any[]; }
 interface CategoryOption { id: number; name: string; slug: string; image?: string | null; }
 
@@ -634,14 +635,19 @@ export default function ChatConversationsPage() {
                   const msgs = s.messages ?? [];
                   const last = msgs[msgs.length - 1];
                   const active = isActive(s.updatedAt);
+                  const lead = s.lead;
+                  const sourceLabel = lead?.source === "shopify_widget" ? "Shopify" : lead?.source === "kdfplus_widget" ? "KDF Plus" : lead?.source ? "Website" : null;
                   return (
                     <button key={s.id} onClick={() => { setSelectedSession(s); setActiveTemplate(null); }}
                       className={`w-full text-left px-4 py-3.5 border-b border-border/50 hover:bg-muted/40 transition-colors ${selectedSession?.id === s.id ? "bg-[#5FA800]/5 border-l-2 border-l-[#5FA800]" : ""}`}>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-0.5">
                         <Circle className={`w-2 h-2 flex-shrink-0 ${active ? "fill-green-500 text-green-500" : "fill-gray-300 text-gray-300"}`} />
-                        <span className="text-xs font-mono text-muted-foreground truncate flex-1">{s.sessionId.slice(0, 18)}…</span>
+                        <span className="text-xs font-semibold text-foreground truncate flex-1">
+                          {lead?.name ?? <span className="font-mono text-muted-foreground">{s.sessionId.slice(0, 14)}…</span>}
+                        </span>
                         <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{timeAgo(s.updatedAt)}</span>
                       </div>
+                      {lead?.phone && <p className="text-[11px] text-muted-foreground mb-0.5">{lead.phone}{sourceLabel ? <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded bg-blue-50 text-blue-600">{sourceLabel}</span> : null}</p>}
                       {last && <p className={`text-xs truncate ${last.role === "user" ? "font-medium text-foreground" : "text-muted-foreground"}`}>{last.role === "admin" ? "You: " : last.role === "user" ? "" : "Bot: "}{last.type ? `[${last.type.replace(/_/g, " ")}]` : last.content.slice(0, 50)}</p>}
                       <p className="text-[10px] text-muted-foreground mt-1">{msgs.length} messages</p>
                     </button>
@@ -663,10 +669,19 @@ export default function ChatConversationsPage() {
               <>
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-card flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <Circle className={`w-2.5 h-2.5 ${isActive(selectedSession.updatedAt) ? "fill-green-500 text-green-500" : "fill-gray-300 text-gray-300"}`} />
+                    <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${isActive(selectedSession.updatedAt) ? "fill-green-500 text-green-500" : "fill-gray-300 text-gray-300"}`} />
                     <div>
-                      <p className="font-mono text-sm font-medium">{selectedSession.sessionId.slice(0, 24)}…</p>
-                      <p className="text-xs text-muted-foreground">{isActive(selectedSession.updatedAt) ? "Active now" : `Last active ${timeAgo(selectedSession.updatedAt)}`} · {(selectedSession.messages ?? []).length} messages</p>
+                      {selectedSession.lead ? (
+                        <>
+                          <p className="text-sm font-semibold text-foreground">{selectedSession.lead.name} · <span className="font-mono text-xs text-muted-foreground">{selectedSession.lead.phone}</span></p>
+                          <p className="text-xs text-muted-foreground">{isActive(selectedSession.updatedAt) ? "Active now" : `Last active ${timeAgo(selectedSession.updatedAt)}`} · {(selectedSession.messages ?? []).length} msgs{selectedSession.lead.source ? ` · ${selectedSession.lead.source === "shopify_widget" ? "Shopify" : selectedSession.lead.source === "kdfplus_widget" ? "KDF Plus" : "Website"}` : ""}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-mono text-sm font-medium">{selectedSession.sessionId.slice(0, 24)}…</p>
+                          <p className="text-xs text-muted-foreground">{isActive(selectedSession.updatedAt) ? "Active now" : `Last active ${timeAgo(selectedSession.updatedAt)}`} · {(selectedSession.messages ?? []).length} messages</p>
+                        </>
+                      )}
                     </div>
                   </div>
                   <button onClick={() => { if (confirm("Delete this session?")) deleteMut.mutate(selectedSession.id); }} className="p-2 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>

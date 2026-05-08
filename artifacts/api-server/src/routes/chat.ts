@@ -922,7 +922,17 @@ router.get("/chat/session/:sessionId", async (req, res) => {
 router.get("/admin/chat/sessions", adminMiddleware as any, async (req, res) => {
   try {
     const sessions = await db.select().from(chatSessionsTable).orderBy(desc(chatSessionsTable.updatedAt)).limit(100);
-    return res.json(sessions);
+    /* Enrich each session with lead data (name, phone, source) by sessionId */
+    const sessionIds = sessions.map(s => s.sessionId).filter(Boolean);
+    let leadsMap: Record<string, { name: string; phone: string; source?: string | null }> = {};
+    if (sessionIds.length) {
+      const leads = await db.select({ sessionId: chatLeadsTable.sessionId, name: chatLeadsTable.name, phone: chatLeadsTable.phone, source: chatLeadsTable.source })
+        .from(chatLeadsTable)
+        .where(sql`${chatLeadsTable.sessionId} = ANY(${sessionIds})`);
+      for (const l of leads) { if (l.sessionId) leadsMap[l.sessionId] = { name: l.name, phone: l.phone, source: l.source }; }
+    }
+    const enriched = sessions.map(s => ({ ...s, lead: leadsMap[s.sessionId] ?? null }));
+    return res.json(enriched);
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }

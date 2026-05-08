@@ -1,0 +1,358 @@
+MASTER DEBUG & REBUILD TASK — SHOPIFY LIVE CHAT SYSTEM
+
+First of all, thank you for the hard work on the project. Many modules are looking good and several systems are already working properly. However, there is still one MAJOR unfinished and unstable area in the entire platform:
+
+SHOPIFY LIVE CHAT + WEBSITE CHAT + ADMIN SYNC SYSTEM
+
+This module is still broken, unstable, incomplete, and not production-ready.
+
+I need you to STOP doing partial fixes and temporary UI patches and instead deeply debug the entire architecture properly like a senior production engineer.
+
+═══════════════════════════════
+MAIN PROBLEM SUMMARY
+═══════════════════════════════
+
+Initially, the Shopify live chat implementation was actually working MUCH BETTER.
+
+Earlier:
+✅ Chat opened properly
+✅ Buttons worked
+✅ Popup was responsive
+✅ Screen did not freeze
+✅ Widget opened smoothly
+✅ Mobile experience was better
+
+But after multiple redesigns and modifications:
+❌ The widget became unstable
+❌ Start Chat freezes
+❌ Mobile screen jams
+❌ Desktop freezes
+❌ Chat does not continue
+❌ Overlay breaks scrolling
+❌ Admin inbox not syncing
+❌ Leads not saving
+❌ Website chat missing
+❌ Product cards not syncing
+❌ AI workflow broken
+❌ Shopify chat no longer behaves like React website chat
+
+Now the entire Shopify chat experience feels incomplete and unprofessional.
+
+This MUST be rebuilt/debugged properly.
+
+═══════════════════════════════
+CRITICAL ISSUE #1
+START CHAT BUTTON FREEZES
+═══════════════════════════════
+
+Current issue:
+- Customer enters:
+  • Name
+  • Phone
+  • Email
+- Clicks “Start Chat”
+- Button freezes
+- Screen becomes stuck
+- Chat never starts
+- Popup cannot close
+- Entire mobile UI jams
+- User cannot continue
+- User cannot go back
+- Overlay blocks everything
+
+This issue happens on:
+❌ Shopify mobile
+❌ Shopify desktop
+❌ Safari
+❌ Chrome mobile
+
+This is NOT a small CSS issue.
+This requires FULL DEBUGGING.
+
+You MUST deeply inspect:
+- widget.js
+- async API calls
+- fetch requests
+- session creation
+- promise handling
+- loading states
+- event listeners
+- touch events
+- pointer-events
+- overflow:hidden handling
+- z-index conflicts
+- iframe injection
+- Shopify app embeds
+- theme JS conflicts
+- mobile Safari rendering
+- body scroll locking
+- popup mounting/unmounting
+- state management
+- memory leaks
+- render loops
+- websocket/session initialization
+- API timeout handling
+
+Most likely:
+- API request failing silently
+- frontend stuck in loading state
+- modal overlay not releasing
+- event propagation conflict
+- JS exception stopping render
+- promise unresolved
+- invalid async state update
+
+You MUST debug deeply instead of redesigning repeatedly.
+
+═══════════════════════════════
+CRITICAL ISSUE #2
+SHOPIFY WEBSITE CHAT NOT SAVING TO ADMIN
+═══════════════════════════════
+
+BIGGEST BUSINESS PROBLEM:
+
+The customer chats coming from Shopify website are NOT syncing correctly inside admin.
+
+Currently:
+❌ Website chats missing
+❌ Leads not saving
+❌ Lead forms missing
+❌ Sessions missing
+❌ Visitor inbox empty
+❌ Conversations not appearing
+❌ AI replies not tracked
+❌ Customer history not stored
+
+This completely breaks the purpose of unified support.
+
+Expected behavior:
+✅ Every website visitor chat MUST save
+✅ Every lead MUST save
+✅ Every form MUST save
+✅ Every message MUST sync
+✅ Every customer session MUST appear
+✅ Admin should see live website chats instantly
+✅ AI replies must be logged
+✅ Customer profile should auto-create
+
+═══════════════════════════════
+CRITICAL ISSUE #3
+SHOPIFY CHAT ≠ REACT WEBSITE CHAT
+═══════════════════════════════
+
+Our React website chat system is MUCH better and more complete.
+
+React Website Chat already supports:
+✅ Product cards
+✅ Catalog cards
+✅ Product buttons
+✅ Quantity selection
+✅ Add to cart
+✅ Order forms
+✅ Tracking forms
+✅ Voice input
+✅ AI replies
+✅ Product suggestions
+✅ Dynamic flows
+✅ Order tracking
+✅ Lead save
+✅ Admin sync
+
+BUT Shopify widget DOES NOT behave the same way.
+
+Inside Shopify:
+❌ Product cards inconsistent
+❌ Catalog missing
+❌ Voice features missing
+❌ Order forms incomplete
+❌ Tracking forms unstable
+❌ AI workflow incomplete
+❌ Session state broken
+❌ CRM sync missing
+❌ Admin visibility broken
+
+I specifically requested:
+SHOPIFY CHAT SHOULD MATCH REACT WEBSITE CHAT EXACTLY.
+
+Same:
+- UI
+- UX
+- Product flow
+- Cards
+- Behavior
+- Speed
+- Features
+- Tracking
+- AI
+- Admin sync
+
+Currently it feels like two separate unfinished systems.
+
+═══════════════════════════════
+CRITICAL ISSUE #4
+UNPROFESSIONAL MOBILE EXPERIENCE
+═══════════════════════════════
+
+Current Shopify widget has serious mobile problems:
+
+❌ Full screen freezes
+❌ Scroll breaks
+❌ Chat stuck
+❌ Overlay blocks page
+❌ Popup not responsive
+❌ Buttons unclickable
+❌ Close button unreliable
+❌ Layout shifts
+❌ Input focus broken
+❌ Keyboard overlaps UI
+❌ Widget positioning unstable
+
+Need:
+✅ Smooth mobile UX
+✅ Lightweight rendering
+✅ Stable popup
+✅ Fast open/close
+✅ No lag
+✅ No freezing
+✅ No body lock issues
+✅ Proper touch handling
+✅ Professional animations
+✅ Optimized for heavy traffic
+
+═══════════════════════════════
+CRITICAL ISSUE #5
+DOUBLE SIDEBAR ISSUE
+═══════════════════════════════
+
+Inside admin:
+❌ Double sidebars appear
+❌ Layout becomes cluttered
+❌ Dashboard UX breaks
+❌ Chat area shrinks
+❌ Navigation duplicates
+
+Need:
+✅ Single clean sidebar
+✅ Responsive dashboard
+✅ Proper spacing
+✅ Professional layout
+✅ Clean unified inbox experience
+
+═══════════════════════════════
+CRITICAL ISSUE #6
+WEB / WA / AI TABS NOT FUNCTIONAL
+═══════════════════════════════
+
+Inside Unified Inbox:
+- Website Chat
+- WhatsApp
+- AI Bot
+
+These tabs are mostly visual only and not functioning properly.
+
+Problems:
+❌ Filters broken
+❌ Messages missing
+❌ AI replies inconsistent
+❌ Website sessions not showing
+❌ Channel switching unreliable
+❌ Real-time sync broken
+
+Need:
+✅ Proper filtering
+✅ Real-time updates
+✅ Channel separation
+✅ AI conversation tracking
+✅ Website session support
+✅ WhatsApp sync
+✅ Functional inbox architecture
+
+═══════════════════════════════
+CRITICAL ISSUE #7
+WHATSAPP CHAT SYNC ISSUES
+═══════════════════════════════
+
+WhatsApp messages are also inconsistent.
+
+Need:
+✅ Real-time WhatsApp sync
+✅ Proper inbox updates
+✅ Admin notifications
+✅ Media support
+✅ Voice notes
+✅ Human/AI switching
+✅ Order lookup
+✅ Product sharing
+✅ Payment requests
+✅ Tracking updates
+
+═══════════════════════════════
+EXPECTED FINAL SYSTEM
+═══════════════════════════════
+
+I want ONE PROFESSIONAL UNIFIED SYSTEM:
+
+Customer can:
+✅ Chat from Shopify
+✅ Chat from React website
+✅ Chat from WhatsApp
+✅ Track order
+✅ View products
+✅ Receive AI replies
+✅ Send voice
+✅ Fill order form
+✅ Receive payment details
+✅ Get tracking updates
+
+Admin should:
+✅ See ALL chats in one inbox
+✅ See ALL leads
+✅ See ALL sessions
+✅ See ALL tracking requests
+✅ See customer history
+✅ See AI logs
+✅ Manage conversations smoothly
+
+AI should:
+✅ Access Shopify products
+✅ Access tracking APIs
+✅ Access customer sessions
+✅ Access order history
+✅ Access courier tracking
+✅ Access CRM
+✅ Respond dynamically
+
+═══════════════════════════════
+VERY IMPORTANT
+═══════════════════════════════
+
+Please STOP redesigning randomly.
+
+This task now requires:
+✔ Proper debugging
+✔ Proper architecture review
+✔ Proper testing
+✔ Production-level engineering
+✔ Mobile testing
+✔ Desktop testing
+✔ Shopify compatibility testing
+✔ API testing
+✔ Session testing
+✔ Admin sync testing
+
+Please assign this task to a STRONG frontend + backend debugging engineer.
+
+I do NOT want temporary patches anymore.
+
+I want:
+✅ Stable
+✅ Fast
+✅ Professional
+✅ Production-ready
+✅ Fully synced
+✅ Fully tested
+✅ Properly debugged
+
+This is the final major pending issue in the entire platform.
+
+Please completely fix it professionally.

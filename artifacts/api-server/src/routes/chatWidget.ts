@@ -81,6 +81,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;position:relative;z-index:1;box-shadow:0 4px 14px rgba(46,204,113,0.35);transition:opacity .15s,transform .15s;letter-spacing:.2px;}
   #btn-lead:hover{opacity:.92;}
   #btn-lead:active{opacity:.8;transform:scale(0.98);}
+  #btn-lead:disabled{opacity:.65;cursor:not-allowed;transform:none;}
   #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;}
 
   /* ── Chips ───────────────────────────────────── */
@@ -610,12 +611,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     btnSend.disabled = true;
     addBubble(text, 'user');
     showTyping(true);
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 28000);
     try {
       var res = await fetch(API + '/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: sessionId, message: text })
+        body: JSON.stringify({ sessionId: sessionId, message: text }),
+        signal: controller.signal
       });
+      clearTimeout(timeout);
       var data = await res.json();
       showTyping(false);
 
@@ -650,15 +655,18 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       try { window.parent.postMessage({ type: 'KDF_UNREAD', count: 1 }, '*'); } catch(e) {}
 
     } catch(e) {
+      clearTimeout(timeout);
       showTyping(false);
-      addBubble('⚠️ Connection error. Tap below to reach us on WhatsApp.', 'bot');
-      var waFallback = document.createElement('div');
-      waFallback.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
-      waFallback.innerHTML = '<a href="' + WA_URL + '" target="_blank" rel="noopener" style="background:#25D366;color:#fff;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;text-decoration:none;">💬 Open WhatsApp</a>';
-      appendToMsgs(waFallback);
+      var errMsg = (e && e.name === 'AbortError') ? '⏱️ Request timed out. Please try again.' : '⚠️ Connection error. Tap below to reach us on WhatsApp.';
+      addBubble(errMsg, 'bot');
+      if (!e || e.name !== 'AbortError') {
+        var waFallback = document.createElement('div');
+        waFallback.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
+        waFallback.innerHTML = '<a href="' + WA_URL + '" target="_blank" rel="noopener" style="background:#25D366;color:#fff;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;text-decoration:none;">💬 Open WhatsApp</a>';
+        appendToMsgs(waFallback);
+      }
     }
     btnSend.disabled = false;
-    input.focus();
   }
 
   /* ── Voice input (Web Speech API) ── */
@@ -736,10 +744,12 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     leadForm.style.display = 'none';
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
-    input.focus();
+    /* Do NOT call input.focus() here — inside a cross-origin iframe on iOS Safari
+       calling focus() immediately triggers the virtual keyboard and causes the
+       touch-event system to freeze (blank/unresponsive screen). Let user tap to type. */
     setTimeout(function() {
       addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
-    }, 300);
+    }, 200);
   }
 
   function submitLead() {
@@ -751,12 +761,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       document.getElementById('lf-phone').style.borderColor = phone ? '#e5e7eb' : '#ef4444';
       return;
     }
+    var btnLead = document.getElementById('btn-lead');
+    btnLead.disabled = true;
+    btnLead.textContent = 'Starting…';
     localStorage.setItem('kdf_embed_lead', '1');
     fetch(API + '/chat/lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
     }).catch(function(){});
+    /* Transition immediately — lead save is fire-and-forget */
     showChatInterface();
   }
 
@@ -791,8 +805,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   var orderCart = [];
 
   function showOrderForm() {
-    /* Use current cart items */
-    orderCart = cartItems.slice();
+    /* Use current cart items (cart is the global array, cartItems was a bug) */
+    orderCart = cart.slice();
     if (orderFormEl) { orderFormEl.remove(); orderFormEl = null; }
 
     var overlay = document.createElement('div');
@@ -879,7 +893,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         var d2 = await res2.json();
         if (!res2.ok) throw new Error(d2.error || 'Order failed');
         /* Clear cart and close */
-        cartItems = [];
+        cart = [];
         updateCartBar();
         overlay.remove(); orderFormEl = null;
         addBubble('✅ Order placed! Order ID: ' + d2.orderNumber + '. Hamare team se confirm message aayega jald hi. Shukriya!', 'bot');
@@ -951,7 +965,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
     #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
     @media(max-width:480px){
       #kdf-w{bottom:16px;right:16px;}
-      #kdf-popup{bottom:0;right:0;width:100%;height:85vh;border-radius:22px 22px 0 0;}
+      #kdf-popup{bottom:0;right:0;width:100%;height:90svh;height:90vh;border-radius:22px 22px 0 0;}
     }
     @keyframes kdfP{0%,100%{box-shadow:0 4px 24px rgba(95,168,0,0.48)}50%{box-shadow:0 4px 40px rgba(95,168,0,0.78)}}
     #kdf-fab:not([data-open]).kdf-pulse{animation:kdfP 2.2s ease-in-out 3}
