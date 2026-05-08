@@ -48,7 +48,7 @@ const queryClient = new QueryClient({
 function ScrollToTop() {
   const [path] = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    try { window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior }); } catch { window.scrollTo(0, 0); }
   }, [path]);
   return null;
 }

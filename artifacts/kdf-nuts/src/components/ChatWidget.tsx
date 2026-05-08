@@ -230,7 +230,18 @@ function TrackingLinkCard({ meta }: { meta: TemplateMetadata }) {
 
 function CouponCard({ meta }: { meta: TemplateMetadata }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => { navigator.clipboard.writeText(meta.code ?? "").then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
+  const copy = () => {
+    const text = meta.code ?? "";
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {
+          const el = document.createElement("textarea"); el.value = text; el.style.position = "fixed"; el.style.opacity = "0"; document.body.appendChild(el); el.select(); try { document.execCommand("copy"); } catch {} document.body.removeChild(el); setCopied(true); setTimeout(() => setCopied(false), 2000);
+        });
+      } else {
+        const el = document.createElement("textarea"); el.value = text; el.style.position = "fixed"; el.style.opacity = "0"; document.body.appendChild(el); el.select(); try { document.execCommand("copy"); } catch {} document.body.removeChild(el); setCopied(true); setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {}
+  };
   return (
     <div className="border-2 border-dashed border-[#5FA800] rounded-xl overflow-hidden bg-green-50 mb-2">
       <div className="px-3 py-2 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)" }}>

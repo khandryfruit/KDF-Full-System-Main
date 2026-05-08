@@ -23,8 +23,8 @@ export function SplashPage() {
   return (
     <div className="w-full max-w-[430px] mx-auto min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden" style={{ backgroundColor: '#0D2B00' }}>
       {/* Background decoration */}
-      <div className="absolute top-1/4 left-0 w-64 h-64 bg-[#5FA800] rounded-full mix-blend-screen filter blur-[120px] opacity-20 animate-pulse"></div>
-      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-[#5FA800] rounded-full mix-blend-screen filter blur-[120px] opacity-20 animate-pulse" style={{ animationDelay: '1s' }}></div>
+      <div className="absolute top-1/4 left-0 w-64 h-64 bg-[#5FA800] rounded-full opacity-10" style={{ filter: "blur(80px)" }}></div>
+      <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-[#5FA800] rounded-full opacity-10" style={{ filter: "blur(80px)" }}></div>
 
       <div className="z-10 flex flex-col items-center">
         <div className="w-28 h-28 rounded-3xl overflow-hidden mb-6 shadow-2xl shadow-black/40 ring-1 ring-white/10">
