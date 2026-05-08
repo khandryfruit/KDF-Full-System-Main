@@ -71,17 +71,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .dot:nth-child(3){animation-delay:.4s;}
   @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
 
-  /* ── Lead form — normal flex flow (NOT fixed, avoids iOS iframe keyboard bug) ── */
-  #lead-form{flex-shrink:0;background:#fff;border-top:1px solid #f0f0f0;padding:16px 18px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+  /* ── Lead form ───────────────────────────────── */
+  #lead-form{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:#fff;border-radius:20px 20px 0 0;padding:20px 18px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 24px rgba(0,0,0,0.15);}
   #lead-form h3{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
-  #lead-form p{font-size:12px;color:#666;margin-bottom:12px;line-height:1.5;}
-  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:14px;outline:none;transition:border-color .2s;margin-bottom:8px;font-family:inherit;-webkit-appearance:none;}
+  #lead-form p{font-size:12px;color:#666;margin-bottom:14px;line-height:1.5;}
+  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:9px;font-family:inherit;}
   .lf-input:focus{border-color:#2ecc71;}
-  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:block;margin-top:4px;position:relative;z-index:10;pointer-events:auto;-webkit-appearance:none;outline:none;}
-  #btn-lead:active{opacity:0.82;transform:scale(0.98);}
-  #btn-lead.shaking{animation:kdfShake .35s ease;}
-  @keyframes kdfShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
-  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;padding:4px;}
+  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;position:relative;z-index:1;box-shadow:0 4px 14px rgba(46,204,113,0.35);transition:opacity .15s,transform .15s;letter-spacing:.2px;}
+  #btn-lead:hover{opacity:.92;}
+  #btn-lead:active{opacity:.8;transform:scale(0.98);}
+  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;}
 
   /* ── Chips ───────────────────────────────────── */
   #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;}
@@ -90,7 +89,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .chip:hover,.chip:active{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-color:transparent;}
 
   /* ── Input area ──────────────────────────────── */
-  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;}
+  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;position:sticky;bottom:0;}
   #btn-mic{width:36px;height:36px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:color .2s,background .2s;}
   #btn-mic:hover{background:#f5f5f5;color:#2ecc71;}
   #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
@@ -269,16 +268,10 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 (function() {
   var API       = ${JSON.stringify(apiUrl)};
   var WA_URL    = 'https://wa.me/923049996000?text=' + encodeURIComponent('Hello! I need help with my KDF Nuts order.');
+  var sessionId = localStorage.getItem('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
+  var leadSaved = localStorage.getItem('kdf_embed_lead') === '1';
 
-  /* ── Safe localStorage wrapper (cross-origin iframes can block it) ── */
-  var _store = {};
-  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return _store[k]||null; } }
-  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ _store[k]=v; } }
-
-  var sessionId = lsGet('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
-  var leadSaved = lsGet('kdf_embed_lead') === '1';
-
-  lsSet('kdf_embed_session', sessionId);
+  localStorage.setItem('kdf_embed_session', sessionId);
 
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('msg-input');
@@ -288,7 +281,6 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   var chips     = document.getElementById('chips');
   var inputArea = document.getElementById('input-area');
   var leadForm  = document.getElementById('lead-form');
-  var chatStarted = false; /* set true once lead form is dismissed */
 
   /* ── Header buttons ── */
   document.getElementById('btn-close').addEventListener('click', function() {
@@ -740,42 +732,25 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Lead form ── */
   function showChatInterface() {
-    chatStarted = true;
     leadForm.style.display = 'none';
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
-    /* Restore full body height now that lead form is gone */
-    document.body.style.height = (window.visualViewport ? window.visualViewport.height : window.innerHeight) + 'px';
+    input.focus();
     setTimeout(function() {
-      input.focus();
       addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
-    }, 100);
+    }, 300);
   }
 
   function submitLead() {
-    var nameEl  = document.getElementById('lf-name');
-    var phoneEl = document.getElementById('lf-phone');
-    var emailEl = document.getElementById('lf-email');
-    var name  = nameEl.value.trim();
-    var phone = phoneEl.value.trim();
-    var email = emailEl.value.trim();
+    var name  = document.getElementById('lf-name').value.trim();
+    var phone = document.getElementById('lf-phone').value.trim();
+    var email = document.getElementById('lf-email').value.trim();
     if (!name || !phone) {
-      nameEl.style.borderColor  = name  ? '#e5e7eb' : '#ef4444';
-      phoneEl.style.borderColor = phone ? '#e5e7eb' : '#ef4444';
-      /* Shake button to signal validation error — reset _leadFired immediately */
-      _leadFired = false;
-      btnLead.style.opacity = '';
-      btnLead.classList.remove('shaking');
-      void btnLead.offsetWidth; /* force reflow to restart animation */
-      btnLead.classList.add('shaking');
-      setTimeout(function(){ btnLead.classList.remove('shaking'); }, 400);
-      /* Focus first empty field */
-      if (!name) { nameEl.focus(); } else { phoneEl.focus(); }
+      document.getElementById('lf-name').style.borderColor = name ? '#e5e7eb' : '#ef4444';
+      document.getElementById('lf-phone').style.borderColor = phone ? '#e5e7eb' : '#ef4444';
       return;
     }
-    /* Reset border colours on success */
-    nameEl.style.borderColor = phoneEl.style.borderColor = '#e5e7eb';
-    lsSet('kdf_embed_lead', '1');
+    localStorage.setItem('kdf_embed_lead', '1');
     fetch(API + '/chat/lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -784,37 +759,21 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     showChatInterface();
   }
 
-  /* ── Button events — touchend + click fallback for max mobile compat ── */
-  var btnLead = document.getElementById('btn-lead');
-  var _leadFired = false;
-  function onLeadTap(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (_leadFired) return;
-    _leadFired = true;
-    btnLead.style.opacity = '0.75';
-    setTimeout(function(){ btnLead.style.opacity = ''; _leadFired = false; }, 800);
-    submitLead();
-  }
-  btnLead.addEventListener('touchend', onLeadTap, { passive: false });
-  btnLead.addEventListener('click', onLeadTap);
-
+  document.getElementById('btn-lead').addEventListener('click', submitLead);
   document.getElementById('lf-phone').addEventListener('keydown', function(e){ if(e.key==='Enter') submitLead(); });
   document.getElementById('lead-skip').addEventListener('click', function() {
-    lsSet('kdf_embed_lead', '1');
+    localStorage.setItem('kdf_embed_lead', '1');
     showChatInterface();
   });
 
   /* ── Auto-show chat if lead already captured ── */
   if (leadSaved) { showChatInterface(); }
 
-  /* ── Keyboard / visualViewport fix (iOS + Android) ──
-     Only adjust height AFTER lead form is gone — prevents body resize
-     from pushing the lead form off-screen while user fills inputs ── */
+  /* ── Keyboard / visualViewport fix (iOS + Android) ── */
   function fixViewportHeight() {
-    if (!chatStarted) return; /* Don't touch layout while lead form is visible */
     var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     document.body.style.height = h + 'px';
+    /* Scroll messages to bottom when keyboard appears */
     setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 80);
   }
   if (window.visualViewport) {
@@ -823,7 +782,6 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
   window.addEventListener('resize', fixViewportHeight);
   input.addEventListener('focus', function() {
-    if (!chatStarted) return;
     setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 350);
   });
 
@@ -962,7 +920,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v4.1 — Matches React Website Design */
+  const js = `/* KDF NUTS Chat Widget v3.2 — Floating Action Stack + Order Tracking */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -971,207 +929,124 @@ router.get("/widget.js", (req: Request, res: Response) => {
   var cfg       = window.KDFChatConfig || {};
   var EMBED_URL = cfg.embedUrl  || ${JSON.stringify(embedUrl)};
   var WA_HREF   = cfg.whatsapp  || ${JSON.stringify(WA_URL)};
-  var REOPEN_DELAY = cfg.reopenDelay || 90000;
+  var REOPEN_DELAY = cfg.reopenDelay || 90000; /* 90s auto-reopen after close */
 
-  /* ── Styles — matches kdf-nuts React ChatWidget exactly ─ */
+  /* ── Styles ─────────────────────────────────────────── */
   var s = document.createElement('style');
   s.textContent = \`
-    #kdf-w *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-    /* Container: fixed bottom-20 right-4, flex col items-end gap-2.5 */
-    #kdf-w{position:fixed;bottom:80px;right:16px;z-index:2147483640;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
-
-    /* Stack rows (label + icon button) — hidden by default */
-    .kdf-row{display:none;align-items:center;gap:8px;}
-    .kdf-row.kdf-vis{display:flex;animation:kdfFadeUp .2s ease;}
-    /* Label pill — white bg, shadow-md, text-xs font-semibold */
-    .kdf-lbl{background:#fff;color:#1f2937;font-size:12px;font-weight:600;padding:5px 10px;border-radius:9999px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -1px rgba(0,0,0,0.06);white-space:nowrap;pointer-events:none;}
-    /* Sub-icon buttons: w-12 h-12, rounded-full, shadow-xl */
-    .kdf-ic{width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1),0 10px 10px -5px rgba(0,0,0,0.04);transition:transform .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;flex-shrink:0;}
-    .kdf-ic:active{transform:scale(0.95);}
-
-    /* FAB wrapper (relative for dismiss badge) */
-    #kdf-fab-wrap{position:relative;}
-    /* Dismiss × — absolute -top-1 -left-1, bg-gray-600 */
-    #kdf-dismiss{position:absolute;top:-4px;left:-4px;width:20px;height:20px;border-radius:50%;background:#4b5563;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
-    #kdf-dismiss svg{pointer-events:none;}
-    /* Main FAB: w-14 h-14 (56px), shadow-2xl */
-    #kdf-fab{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);transition:all .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;position:relative;}
+    #kdf-w *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483640;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+    #kdf-fab{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5FA800,#4a8500);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(95,168,0,0.48);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;}
+    #kdf-fab:hover{transform:scale(1.08);box-shadow:0 6px 30px rgba(95,168,0,0.6);}
     #kdf-fab:active{transform:scale(0.95);}
-    /* Unread badge */
     #kdf-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff;}
-
-    /* Popup iframe */
-    #kdf-popup{position:fixed;bottom:90px;right:16px;width:370px;height:580px;border:none;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);z-index:2147483641;opacity:0;pointer-events:none;transform:translateY(10px) scale(0.97);transition:opacity .22s ease,transform .22s ease;background:#f0f2f5;}
-    #kdf-popup.kdf-open{opacity:1;pointer-events:auto;transform:none;}
-
-    /* Loading spinner */
-    #kdf-loading{position:fixed;bottom:90px;right:16px;width:370px;height:580px;border-radius:20px;background:#fff;z-index:2147483642;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);}
-    #kdf-loading.kdf-vis{display:flex;}
-    #kdf-spinner{width:34px;height:34px;border:3px solid #e5e7eb;border-top-color:#5FA800;border-radius:50%;animation:kdf-spin .7s linear infinite;}
-    #kdf-loading p{font-size:13px;color:#9ca3af;margin:0;}
-
+    .kdf-ab{display:flex;align-items:center;gap:9px;background:#fff;border:none;border-radius:28px;padding:9px 18px 9px 9px;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.18);white-space:nowrap;font-size:13.5px;font-weight:600;color:#1a1a2e;transition:transform .18s,box-shadow .18s;-webkit-tap-highlight-color:transparent;}
+    .kdf-ab:hover{transform:translateX(-4px);box-shadow:0 6px 24px rgba(0,0,0,0.22);}
+    .kdf-ab:active{transform:scale(0.97);}
+    .kdf-ai{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .22s,transform .22s;opacity:0;transform:translateY(10px) scale(0.94);pointer-events:none;}
+    #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:580px;border:none;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483641;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;}
+    #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
     @media(max-width:480px){
-      #kdf-w{bottom:72px;right:12px;}
-      #kdf-popup{bottom:0;right:0;width:100%;height:88vh;border-radius:20px 20px 0 0;}
-      #kdf-loading{bottom:0;right:0;width:100%;height:88vh;border-radius:20px 20px 0 0;}
+      #kdf-w{bottom:16px;right:16px;}
+      #kdf-popup{bottom:0;right:0;width:100%;height:85vh;border-radius:22px 22px 0 0;}
     }
-    @keyframes kdf-spin{to{transform:rotate(360deg)}}
-    @keyframes kdfFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-    @keyframes kdfPulse{0%,100%{box-shadow:0 25px 50px -12px rgba(0,0,0,0.25)}50%{box-shadow:0 0 0 8px rgba(95,168,0,0.18),0 25px 50px -12px rgba(0,0,0,0.25)}}
-    #kdf-fab.kdf-pulse{animation:kdfPulse 2s ease-in-out 3;}
+    @keyframes kdfP{0%,100%{box-shadow:0 4px 24px rgba(95,168,0,0.48)}50%{box-shadow:0 4px 40px rgba(95,168,0,0.78)}}
+    #kdf-fab:not([data-open]).kdf-pulse{animation:kdfP 2.2s ease-in-out 3}
   \`;
   document.head.appendChild(s);
 
-  /* ── SVG Icons ───────────────────────────────────────── */
-  var I_CHAT  = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  /* ── Icons ──────────────────────────────────────────── */
+  var I_CHAT  = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
   var I_CLOSE = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  var I_X_SM  = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  var I_WA    = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.963 2C6.466 2 2 6.466 2 11.963c0 1.82.49 3.524 1.345 4.989L2 22l5.217-1.319A9.925 9.925 0 0 0 11.963 22C17.46 22 22 17.534 22 12.037 22 6.54 17.46 2 11.963 2zm0 18.12a8.168 8.168 0 0 1-4.152-1.132l-.297-.177-3.095.782.812-3.006-.198-.31A8.12 8.12 0 0 1 3.88 12.037c0-4.46 3.624-8.085 8.083-8.085 4.46 0 8.084 3.624 8.084 8.085 0 4.46-3.624 8.083-8.084 8.083z"/></svg>';
+  var I_WA    = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.963 2C6.466 2 2 6.466 2 11.963c0 1.82.49 3.524 1.345 4.989L2 22l5.217-1.319A9.925 9.925 0 0 0 11.963 22C17.46 22 22 17.534 22 12.037 22 6.54 17.46 2 11.963 2zm0 18.12a8.168 8.168 0 0 1-4.152-1.132l-.297-.177-3.095.782.812-3.006-.198-.31A8.12 8.12 0 0 1 3.88 12.037c0-4.46 3.624-8.085 8.083-8.085 4.46 0 8.084 3.624 8.084 8.085 0 4.46-3.624 8.083-8.084 8.083z"/></svg>';
 
-  /* ── Build DOM ───────────────────────────────────────── */
-  var wrap = document.createElement('div'); wrap.id = 'kdf-w';
+  /* ── DOM ────────────────────────────────────────────── */
+  var wrap  = document.createElement('div'); wrap.id = 'kdf-w';
+  var stack = document.createElement('div'); stack.id = 'kdf-stack';
 
-  /* Row 1: "Chat with Us" label + green chat button */
-  var rowChat = document.createElement('div'); rowChat.className = 'kdf-row';
-  var lblChat = document.createElement('span'); lblChat.className = 'kdf-lbl'; lblChat.textContent = 'Chat with Us';
-  var btnChat = document.createElement('button'); btnChat.className = 'kdf-ic'; btnChat.setAttribute('aria-label','Chat with Us');
-  btnChat.style.background = '#5FA800';
-  btnChat.innerHTML = I_CHAT;
-  rowChat.appendChild(lblChat); rowChat.appendChild(btnChat);
+  var bWA = document.createElement('button'); bWA.className = 'kdf-ab'; bWA.setAttribute('aria-label','WhatsApp');
+  bWA.innerHTML = '<span class="kdf-ai" style="background:#25D366">' + I_WA + '</span><span style="color:#1a7a3f;font-weight:700;">WhatsApp</span>';
 
-  /* Row 2: "WhatsApp" label + WA green button */
-  var rowWA = document.createElement('div'); rowWA.className = 'kdf-row';
-  var lblWA = document.createElement('span'); lblWA.className = 'kdf-lbl'; lblWA.textContent = 'WhatsApp';
-  var btnWA = document.createElement('button'); btnWA.className = 'kdf-ic'; btnWA.setAttribute('aria-label','WhatsApp');
-  btnWA.style.background = '#25D366';
-  btnWA.innerHTML = I_WA;
-  rowWA.appendChild(lblWA); rowWA.appendChild(btnWA);
+  var bChat = document.createElement('button'); bChat.className = 'kdf-ab'; bChat.setAttribute('aria-label','Chat with Us');
+  bChat.innerHTML = '<span class="kdf-ai" style="background:linear-gradient(135deg,#5FA800,#4a8500)">' + I_CHAT + '</span><span>Chat with Us</span>';
 
-  /* FAB wrapper */
-  var fabWrap = document.createElement('div'); fabWrap.id = 'kdf-fab-wrap';
-  var dismissBtn = document.createElement('button'); dismissBtn.id = 'kdf-dismiss'; dismissBtn.setAttribute('aria-label','Hide chat');
-  dismissBtn.innerHTML = I_X_SM;
-  var fab = document.createElement('button'); fab.id = 'kdf-fab'; fab.setAttribute('aria-label','Open Chat');
-  fab.style.background = '#5FA800';
+  stack.appendChild(bWA);
+  stack.appendChild(bChat);
+
+  var fab   = document.createElement('button'); fab.id = 'kdf-fab'; fab.setAttribute('aria-label','Open Chat');
   fab.innerHTML = I_CHAT;
   var badge = document.createElement('span'); badge.id = 'kdf-badge'; fab.appendChild(badge);
-  fabWrap.appendChild(dismissBtn); fabWrap.appendChild(fab);
 
-  wrap.appendChild(rowChat);
-  wrap.appendChild(rowWA);
-  wrap.appendChild(fabWrap);
-
-  /* Popup iframe */
   var popup = document.createElement('iframe'); popup.id = 'kdf-popup'; popup.allow = 'microphone';
-  popup.setAttribute('aria-label','KDF NUTS Live Chat');
-  /* Loading overlay */
-  var loading = document.createElement('div'); loading.id = 'kdf-loading';
-  loading.innerHTML = '<div id="kdf-spinner"></div><p>Connecting…</p>';
+  popup.setAttribute('aria-label','KDF NUTS Chat');
 
-  document.body.appendChild(loading);
-  document.body.appendChild(popup);
-  document.body.appendChild(wrap);
+  wrap.appendChild(stack); wrap.appendChild(fab);
+  document.body.appendChild(popup); document.body.appendChild(wrap);
 
-  /* ── State ───────────────────────────────────────────── */
-  var expanded = false, chatOpen = false, dismissed = false, iframeReady = false, reopenTimer = null;
+  /* ── State ──────────────────────────────────────────── */
+  var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null;
 
-  /* ── Helpers ─────────────────────────────────────────── */
-  function showStack() {
-    expanded = true;
-    rowChat.classList.add('kdf-vis');
-    rowWA.classList.add('kdf-vis');
-    fab.style.background = '#333';
+  /* ── Functions ──────────────────────────────────────── */
+  function openStack() {
+    stackOpen = true;
+    stack.classList.add('kdf-vis');
+    fab.setAttribute('data-open', '1');
     fab.innerHTML = I_CLOSE; fab.appendChild(badge);
-    dismissBtn.style.display = 'none';
   }
-  function hideStack() {
-    expanded = false;
-    rowChat.classList.remove('kdf-vis');
-    rowWA.classList.remove('kdf-vis');
-    fab.style.background = '#5FA800';
+  function closeStack() {
+    stackOpen = false;
+    stack.classList.remove('kdf-vis');
+    fab.removeAttribute('data-open');
     fab.innerHTML = I_CHAT; fab.appendChild(badge);
-    dismissBtn.style.display = '';
-  }
-  function loadIframe() {
-    if (iframeReady) return;
-    loading.classList.add('kdf-vis');
-    popup.src = EMBED_URL;
-    popup.onload = function() {
-      iframeReady = true;
-      loading.classList.remove('kdf-vis');
-      try { popup.contentWindow.postMessage({ type: 'KDF_INIT', customer: cfg.customer || null, store: cfg.store || 'shopify' }, '*'); } catch(e){}
-    };
-    setTimeout(function(){ loading.classList.remove('kdf-vis'); }, 6000);
   }
   function openChat() {
-    loadIframe();
+    if (!iframeLoaded) {
+      popup.src = EMBED_URL;
+      iframeLoaded = true;
+    }
     chatOpen = true;
-    hideStack();
-    fab.style.background = '#333';
-    fab.innerHTML = I_CLOSE; fab.appendChild(badge);
     popup.classList.add('kdf-open');
-    if (reopenTimer) { clearTimeout(reopenTimer); reopenTimer = null; }
   }
   function closeChat() {
     chatOpen = false;
     popup.classList.remove('kdf-open');
-    fab.style.background = '#5FA800';
-    fab.innerHTML = I_CHAT; fab.appendChild(badge);
-    dismissBtn.style.display = '';
+    /* Auto-reopen after delay */
     if (reopenTimer) clearTimeout(reopenTimer);
     reopenTimer = setTimeout(function() {
       fab.classList.add('kdf-pulse');
-      setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 7000);
+      setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 8000);
     }, REOPEN_DELAY);
   }
 
-  /* ── Events ──────────────────────────────────────────── */
-
-  /* Desktop hover: mouse enters wrap → expand; leaves → collapse after delay */
-  var hoverTimer = null;
-  var isTouchDevice = false;
-  wrap.addEventListener('mouseenter', function() {
-    if (isTouchDevice || chatOpen || dismissed) return;
-    if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
-    if (!expanded) showStack();
-  });
-  wrap.addEventListener('mouseleave', function() {
-    if (isTouchDevice || chatOpen) return;
-    hoverTimer = setTimeout(function() {
-      if (!chatOpen) hideStack();
-    }, 350);
-  });
-
-  /* Touch device detection — disable hover on touch */
-  window.addEventListener('touchstart', function() { isTouchDevice = true; }, { once: true, passive: true });
-
-  /* FAB click: on touch devices toggle expand; on desktop (already expanded via hover) → close if chat open */
+  /* ── Events ─────────────────────────────────────────── */
   fab.addEventListener('click', function(e) {
     e.stopPropagation();
-    if (chatOpen) { closeChat(); return; }
-    expanded ? hideStack() : showStack();
+    if (chatOpen) { closeChat(); closeStack(); return; }
+    stackOpen ? closeStack() : openStack();
   });
 
-  /* Sub-buttons */
-  btnChat.addEventListener('click', function(e) { e.stopPropagation(); openChat(); });
-  btnWA.addEventListener('click',   function(e) { e.stopPropagation(); hideStack(); window.open(WA_HREF, '_blank', 'noopener,noreferrer'); });
-
-  dismissBtn.addEventListener('click', function(e) {
+  bChat.addEventListener('click', function(e) {
     e.stopPropagation();
-    dismissed = true;
-    wrap.style.display = 'none';
+    closeStack();
+    chatOpen ? closeChat() : openChat();
   });
 
-  /* Click outside collapses stack */
+  bWA.addEventListener('click', function(e) {
+    e.stopPropagation();
+    closeStack();
+    window.open(WA_HREF, '_blank', 'noopener,noreferrer');
+  });
+
   document.addEventListener('click', function(e) {
-    if (expanded && !chatOpen && !wrap.contains(e.target)) hideStack();
+    if (stackOpen && !wrap.contains(e.target) && !popup.contains(e.target)) closeStack();
   });
 
-  /* postMessage from iframe */
+  /* Close from iframe message */
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
-    if (e.data.type === 'KDF_CLOSE')  { closeChat(); }
-    if (e.data.type === 'KDF_READY')  { iframeReady = true; loading.classList.remove('kdf-vis'); }
+    if (e.data.type === 'KDF_CLOSE') { closeChat(); closeStack(); fab.innerHTML = I_CHAT; fab.appendChild(badge); fab.removeAttribute('data-open'); }
     if (e.data.type === 'KDF_UNREAD') {
       var c = parseInt(e.data.count, 10) || 0;
       badge.textContent = c > 99 ? '99+' : String(c);
@@ -1179,21 +1054,15 @@ router.get("/widget.js", (req: Request, res: Response) => {
     }
   });
 
-  /* Pulse after 2.5s to attract attention */
-  setTimeout(function() {
-    if (!chatOpen && !expanded) {
-      fab.classList.add('kdf-pulse');
-      setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 7000);
-    }
-  }, 2500);
+  /* Pulse after 3s to attract attention */
+  setTimeout(function() { fab.classList.add('kdf-pulse'); setTimeout(function(){ fab.classList.remove('kdf-pulse'); }, 8000); }, 3000);
 
   /* Public API */
   window.KDFChat = {
-    open:     function() { showStack(); },
-    openChat: openChat,
-    close:    function() { chatOpen ? closeChat() : hideStack(); },
-    toggle:   function() { chatOpen ? closeChat() : (expanded ? hideStack() : showStack()); },
-    init:     function(c) { cfg = Object.assign({}, cfg, c); },
+    open: openStack,
+    openChat: function() { openStack(); openChat(); },
+    close: function() { closeStack(); closeChat(); },
+    init: function(c) { cfg = Object.assign({}, cfg, c); },
   };
 
 })();
@@ -1217,21 +1086,23 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat Widget v4.1 — paste before </body> {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat Widget v3.1 — paste before </body> {%- endcomment -%}
+
+{%- if customer -%}
 <script>
-  /* Always initialize — widget works for guests AND logged-in customers */
   window.KDFChatConfig = {
-    customer: {%- if customer -%}{
+    customer: {
       id:    "{{ customer.id }}",
       name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
       email: "{{ customer.email | escape }}",
       phone: "{{ customer.phone | escape }}"
-    }{%- else -%}null{%- endif -%},
-    cart:  {{ cart | json }},
+    },
+    cart: {{ cart | json }},
     store: "shopify"
   };
 </script>
-<script src="${widgetUrl}"></script>`,
+{%- endif -%}
+<script src="${widgetUrl}" defer></script>`,
 
     steps: [
       "1. Shopify Admin → Online Store → Themes → Edit Code",
