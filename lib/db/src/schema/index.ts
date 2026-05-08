@@ -29,6 +29,7 @@ export * from "./bids";
 export * from "./restockRequests";
 export * from "./shopify";
 export * from "./waInbox";
+export * from "./waAutomation";
 export * from "./social";
 export * from "./meezan";
 export * from "./branches";

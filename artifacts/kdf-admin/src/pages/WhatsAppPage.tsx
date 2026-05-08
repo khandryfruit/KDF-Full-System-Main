@@ -10,6 +10,7 @@ import {
   ChevronRight, User, Sparkles, Info, ShoppingBag, Zap, RotateCw,
   Megaphone, Bug, Play, Users, Filter, TimerIcon, TrendingUp,
   CheckSquare, Globe, QrCode, Download, MessageSquare, Tag,
+  ArrowUp, ArrowDown, Edit2, GitBranch, CalendarClock,
 } from "lucide-react";
 import { WhatsAppTemplatesTab } from "./WhatsAppTemplatesTab";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,16 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 
-type Tab = "settings" | "recovery" | "chatbot" | "conversations" | "templates" | "logs" | "automations" | "campaigns" | "debug" | "qr" | "analytics" | "rules";
+type Tab = "settings" | "recovery" | "chatbot" | "conversations" | "templates" | "logs" | "automations" | "campaigns" | "debug" | "qr" | "analytics" | "rules" | "flows";
+
+interface WaMenuItem {
+  id: string;
+  emoji: string;
+  label: string;
+  description: string;
+  sectionTitle?: string;
+  isDefault?: boolean;
+}
 
 const AI_MODELS = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast, Recommended)" },
@@ -581,6 +591,15 @@ export default function WhatsAppPage() {
     queryFn: () => apiFetch("/api/admin/whatsapp/chatbot-settings").catch(() => null),
     enabled: tab === "chatbot",
   });
+  const DEFAULT_MENU_ITEMS: WaMenuItem[] = [
+    { id: "shop_products", emoji: "🛒", label: "Shop Products", description: "Browse our premium nuts & dry fruits", sectionTitle: "KDF NUTS Menu", isDefault: true },
+    { id: "hot_deals", emoji: "🔥", label: "Hot Deals", description: "Today's special offers and discounts", isDefault: true },
+    { id: "get_discount", emoji: "🎁", label: "Get Discount", description: "Claim your exclusive discount code", isDefault: true },
+    { id: "track_order", emoji: "📦", label: "Track Order", description: "Check your order status and tracking", isDefault: true },
+    { id: "talk_support", emoji: "💬", label: "Talk to Support", description: "Chat with our customer support team", isDefault: true },
+    { id: "visit_website", emoji: "🌐", label: "Visit Website", description: "Browse our full product catalog online", isDefault: true },
+  ];
+
   const [chatbotForm, setChatbotForm] = useState({
     isEnabled: false,
     orderingEnabled: false,
@@ -592,6 +611,8 @@ export default function WhatsAppPage() {
     maxDailyReplies: 100,
     menuEnabled: false,
     menuGreetingKeywords: "hi,hello,hey,salam,salaam,asslam,start,menu,help,shop,helo,hii",
+    menuItems: null as WaMenuItem[] | null,
+    greetingMessage: "",
     catalogEnabled: false,
     catalogMaxProducts: 3,
     websiteUrl: "https://kdfnuts.com",
@@ -611,6 +632,8 @@ export default function WhatsAppPage() {
       maxDailyReplies: chatbotSettings.maxDailyReplies ?? 100,
       menuEnabled: chatbotSettings.menuEnabled ?? false,
       menuGreetingKeywords: chatbotSettings.menuGreetingKeywords ?? "hi,hello,hey,salam,salaam,asslam,start,menu,help,shop,helo,hii",
+      menuItems: chatbotSettings.menuItems ?? null,
+      greetingMessage: chatbotSettings.greetingMessage ?? "",
       catalogEnabled: chatbotSettings.catalogEnabled ?? false,
       catalogMaxProducts: chatbotSettings.catalogMaxProducts ?? 3,
       websiteUrl: chatbotSettings.websiteUrl ?? "https://kdfnuts.com",
@@ -806,8 +829,50 @@ export default function WhatsAppPage() {
     refetchInterval: tab === "chatbot" ? 30000 : false,
   });
 
+  /* ── WA Flows (Phase 4 — AI Flow Builder) ── */
+  const FLOW_ACTIONS = [
+    { value: "ai_reply", label: "🤖 AI Reply", desc: "Let AI handle the conversation" },
+    { value: "send_menu", label: "📋 Show Menu", desc: "Display the interactive welcome menu" },
+    { value: "send_message", label: "💬 Send Message", desc: "Send a custom fixed message" },
+    { value: "send_url", label: "🌐 Send URL", desc: "Share a link with optional button" },
+    { value: "send_discount", label: "🎁 Send Discount", desc: "Send a discount code" },
+    { value: "track_order", label: "📦 Track Order", desc: "Prompt for order ID and look it up" },
+    { value: "human_support", label: "👤 Human Support", desc: "Hand off to human agent" },
+  ];
+  const EMPTY_FLOW = { name: "", description: "", triggerType: "keyword", keywords: [] as string[], action: "ai_reply", actionData: {} as any, isEnabled: true, priority: 0 };
+  const [showFlowForm, setShowFlowForm] = useState(false);
+  const [editingFlow, setEditingFlow] = useState<any>(null);
+  const [newFlow, setNewFlow] = useState<any>(EMPTY_FLOW);
+  const [newFlowKeyword, setNewFlowKeyword] = useState("");
+
+  const { data: waFlows = [], refetch: refetchFlows } = useQuery<any[]>({
+    queryKey: ["/api/admin/wa/flows"],
+    queryFn: () => apiFetch("/api/admin/wa/flows"),
+    enabled: tab === "flows",
+  });
+  const createFlow = useMutation({
+    mutationFn: (data: any) => apiFetch("/api/admin/wa/flows", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { refetchFlows(); setShowFlowForm(false); setNewFlow(EMPTY_FLOW); toast({ title: "Flow created!" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const updateFlow = useMutation({
+    mutationFn: ({ id, ...data }: any) => apiFetch(`/api/admin/wa/flows/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => { refetchFlows(); setEditingFlow(null); toast({ title: "Flow updated" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const toggleFlow = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/flows/${id}/toggle`, { method: "PATCH" }),
+    onSuccess: () => refetchFlows(),
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const deleteFlow = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/wa/flows/${id}`, { method: "DELETE" }),
+    onSuccess: () => { refetchFlows(); toast({ title: "Flow deleted" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   /* ── Campaigns ── */
-  const EMPTY_CAMPAIGN = { name: "", type: "custom", messageBody: "", templateId: "", templateParams: [] as string[], useTemplate: false, audience: "all_customers", audienceFilter: "", customPhones: "", rateLimitDelay: 2, maxDelay: 5, frequencyCapHours: 24 };
+  const EMPTY_CAMPAIGN = { name: "", type: "custom", messageBody: "", templateId: "", templateParams: [] as string[], useTemplate: false, audience: "all_customers", audienceFilter: "", customPhones: "", rateLimitDelay: 2, maxDelay: 5, frequencyCapHours: 24, scheduledAt: "" };
   const [newCampaign, setNewCampaign] = useState(EMPTY_CAMPAIGN);
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const { data: campaigns = [], refetch: refetchCampaigns } = useQuery<any[]>({
@@ -1087,6 +1152,7 @@ export default function WhatsAppPage() {
     { id: "settings",      label: "API Settings",    icon: Settings },
     { id: "analytics",     label: "Analytics",       icon: TrendingUp },
     { id: "rules",         label: "Smart Rules",     icon: Zap },
+    { id: "flows",         label: "AI Flows",        icon: GitBranch },
     { id: "automations",   label: "Automations",     icon: CheckSquare },
     { id: "campaigns",     label: "Campaigns",       icon: Megaphone },
     { id: "recovery",      label: "Auto Recovery",   icon: RotateCcw },
@@ -2291,6 +2357,19 @@ export default function WhatsAppPage() {
                 </div>
               </div>
 
+              {/* Schedule (optional) */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-sm"><CalendarClock className="w-3.5 h-3.5 text-indigo-500" />Schedule Send (optional)</Label>
+                <Input
+                  type="datetime-local"
+                  value={newCampaign.scheduledAt}
+                  onChange={e => setNewCampaign(f => ({ ...f, scheduledAt: e.target.value }))}
+                  className="text-sm"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <p className="text-xs text-muted-foreground">Leave blank to send immediately when you click "Launch". Set a date/time to schedule for later.</p>
+              </div>
+
               <div className="flex gap-3">
                 <Button
                   onClick={() => createCampaign.mutate({
@@ -2298,10 +2377,11 @@ export default function WhatsAppPage() {
                     templateId: newCampaign.useTemplate ? newCampaign.templateId : null,
                     templateParams: newCampaign.useTemplate ? newCampaign.templateParams : null,
                     messageBody: newCampaign.useTemplate ? "" : newCampaign.messageBody,
+                    scheduledAt: newCampaign.scheduledAt || null,
                   })}
                   disabled={createCampaign.isPending || !newCampaign.name || (newCampaign.useTemplate ? !newCampaign.templateId : !newCampaign.messageBody)}
                   style={{ backgroundColor: "#5FA800" }} className="text-white">
-                  {createCampaign.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : "Create Campaign"}
+                  {createCampaign.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : newCampaign.scheduledAt ? "Schedule Campaign" : "Create Campaign"}
                 </Button>
                 <Button variant="outline" onClick={() => setShowCampaignForm(false)}>Cancel</Button>
               </div>
@@ -2894,122 +2974,199 @@ export default function WhatsAppPage() {
             </div>
           </div>
 
-          {/* ── Welcome Menu Configuration ── */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-green-50">
-                  <MessageSquare className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-base flex items-center gap-2">
-                    Interactive Welcome Menu
-                    {chatbotForm.menuEnabled
-                      ? <span className="text-[11px] font-normal text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Active</span>
-                      : <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Disabled</span>}
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Send a tappable menu when customers say "Hi" — shop, deals, track order, support &amp; more</p>
-                </div>
-              </div>
-              <Switch checked={chatbotForm.menuEnabled} onCheckedChange={(v) => setChatbotForm(f => ({ ...f, menuEnabled: v }))} />
-            </div>
+          {/* ── Welcome Menu Builder (Phase 1) ── */}
+          {(() => {
+            const liveItems: WaMenuItem[] = chatbotForm.menuItems && (chatbotForm.menuItems as WaMenuItem[]).length > 0
+              ? (chatbotForm.menuItems as WaMenuItem[])
+              : DEFAULT_MENU_ITEMS;
+            const greeting = chatbotForm.greetingMessage || "Hello! 👋 Welcome to *KDF NUTS* 🥜\nHow can we help you today?\n\nReply anytime — we're here to help 💚";
 
-            <div className="px-5 py-5 space-y-5">
-              {/* How it works */}
-              <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3 text-xs text-green-800 leading-relaxed space-y-1">
-                <p className="font-semibold mb-1">How the Welcome Menu works:</p>
-                <p>1. Customer sends a greeting (Hi, Hello, Salam, etc.) to your WhatsApp</p>
-                <p>2. System sends them an interactive list menu with 6 options</p>
-                <p>3. Customer taps an option → system responds instantly (no AI needed)</p>
-                <p>4. Track Order: asks for order ID and looks it up in real time 🔍</p>
-                <p>5. Talk to Support: switches to AI chat mode for that conversation</p>
-              </div>
+            const moveItem = (idx: number, dir: -1 | 1) => {
+              const items = [...liveItems];
+              const swapIdx = idx + dir;
+              if (swapIdx < 0 || swapIdx >= items.length) return;
+              [items[idx], items[swapIdx]] = [items[swapIdx], items[idx]];
+              setChatbotForm(f => ({ ...f, menuItems: items }));
+            };
+            const updateItem = (idx: number, patch: Partial<WaMenuItem>) => {
+              const items = liveItems.map((it, i) => i === idx ? { ...it, ...patch } : it);
+              setChatbotForm(f => ({ ...f, menuItems: items }));
+            };
+            const deleteItem = (idx: number) => {
+              setChatbotForm(f => ({ ...f, menuItems: liveItems.filter((_, i) => i !== idx) }));
+            };
+            const addItem = () => {
+              const newItem: WaMenuItem = { id: `custom_${Date.now()}`, emoji: "⭐", label: "New Option", description: "Description here", sectionTitle: "" };
+              setChatbotForm(f => ({ ...f, menuItems: [...liveItems, newItem] }));
+            };
+            const resetToDefaults = () => setChatbotForm(f => ({ ...f, menuItems: DEFAULT_MENU_ITEMS }));
 
-              {/* Menu Preview */}
-              <div>
-                <p className="text-sm font-medium mb-3 flex items-center gap-2"><Globe className="w-4 h-4" />Menu Preview</p>
-                <div className="bg-[#e5ddd5] rounded-xl p-3 max-w-xs space-y-2">
-                  <div className="bg-white rounded-xl px-3 py-2.5 text-xs shadow-sm">
-                    <p className="font-semibold text-[11px] text-[#25D366] mb-1">KDF NUTS 🥜</p>
-                    <p className="text-gray-800 leading-relaxed">Hello! 👋 Welcome to <strong>KDF NUTS</strong> 🥜<br />How can we help you today?</p>
-                    <p className="text-gray-400 text-[10px] mt-1">Reply anytime — we're here to help 💚</p>
+            return (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-green-50">
+                      <MessageSquare className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-base flex items-center gap-2">
+                        Interactive Menu Builder
+                        {chatbotForm.menuEnabled
+                          ? <span className="text-[11px] font-normal text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Active</span>
+                          : <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Disabled</span>}
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-0.5">Fully editable tappable menu — add, remove, reorder and customise every item</p>
+                    </div>
                   </div>
-                  <div className="border border-[#25D366] bg-white rounded-xl text-xs text-center py-1.5 text-[#25D366] font-medium">View Options ▾</div>
-                  <div className="bg-white rounded-xl shadow-sm text-xs divide-y divide-gray-100">
-                    {[
-                      { emoji: "🛒", label: "Shop Products" },
-                      { emoji: "🔥", label: "Hot Deals" },
-                      { emoji: "🎁", label: "Get Discount" },
-                      { emoji: "📦", label: "Track Order" },
-                      { emoji: "💬", label: "Talk to Support" },
-                      { emoji: "🌐", label: "Visit Website" },
-                    ].map(item => (
-                      <div key={item.label} className="flex items-center gap-2 px-3 py-1.5 text-gray-700">
-                        <span>{item.emoji}</span><span>{item.label}</span>
+                  <Switch checked={chatbotForm.menuEnabled} onCheckedChange={(v) => setChatbotForm(f => ({ ...f, menuEnabled: v }))} />
+                </div>
+
+                <div className="px-5 py-5 space-y-5">
+                  {/* Two-column: editor + live preview */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                    {/* Left: editor */}
+                    <div className="space-y-4">
+                      {/* Greeting message */}
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-semibold">Greeting Message</Label>
+                        <Textarea
+                          value={chatbotForm.greetingMessage}
+                          onChange={e => setChatbotForm(f => ({ ...f, greetingMessage: e.target.value }))}
+                          rows={3}
+                          className="text-sm resize-y font-mono"
+                          placeholder="Hello! 👋 Welcome to *KDF NUTS* 🥜&#10;How can we help you today?"
+                        />
+                        <p className="text-xs text-muted-foreground">Supports WhatsApp formatting: *bold*, _italic_. Leave blank for default.</p>
                       </div>
-                    ))}
+
+                      {/* Menu items list */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-semibold">Menu Items ({liveItems.length}/10)</Label>
+                          <div className="flex gap-2">
+                            <button onClick={resetToDefaults} className="text-[10px] text-muted-foreground hover:text-foreground underline">Reset defaults</button>
+                            <button onClick={addItem} disabled={liveItems.length >= 10} className="flex items-center gap-1 text-xs font-medium text-[#5FA800] hover:text-[#4a8800] disabled:opacity-40">
+                              <Plus className="w-3.5 h-3.5" />Add Item
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          {liveItems.map((item, idx) => (
+                            <div key={item.id} className="border border-border rounded-lg bg-muted/20 p-3 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <button onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowUp className="w-3 h-3" /></button>
+                                  <button onClick={() => moveItem(idx, 1)} disabled={idx === liveItems.length - 1} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowDown className="w-3 h-3" /></button>
+                                </div>
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <input value={item.emoji} onChange={e => updateItem(idx, { emoji: e.target.value })}
+                                    className="w-10 border border-input rounded px-1.5 py-1 text-center text-sm bg-background" maxLength={4} />
+                                  <input value={item.label} onChange={e => updateItem(idx, { label: e.target.value })}
+                                    className="flex-1 border border-input rounded px-2 py-1 text-sm bg-background min-w-0" placeholder="Label" maxLength={24} />
+                                </div>
+                                <button onClick={() => deleteItem(idx)} disabled={liveItems.length <= 1}
+                                  className="text-red-400 hover:text-red-600 disabled:opacity-20 p-1">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <input value={item.description} onChange={e => updateItem(idx, { description: e.target.value })}
+                                className="w-full border border-input rounded px-2 py-1 text-xs bg-background text-muted-foreground" placeholder="Description (shown under label)" maxLength={72} />
+                              {idx === 0 && (
+                                <input value={item.sectionTitle ?? ""} onChange={e => updateItem(idx, { sectionTitle: e.target.value })}
+                                  className="w-full border border-input rounded px-2 py-1 text-xs bg-background" placeholder="Section title (optional, shown above menu)" maxLength={24} />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: live WA preview */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-muted-foreground" />Live WhatsApp Preview</p>
+                      <div className="bg-[#e5ddd5] rounded-xl p-3 space-y-2 max-w-xs">
+                        <div className="bg-white rounded-xl px-3 py-2.5 text-xs shadow-sm">
+                          <p className="font-semibold text-[11px] text-[#25D366] mb-1">KDF NUTS 🥜</p>
+                          <p className="text-gray-800 leading-relaxed whitespace-pre-line">{greeting}</p>
+                        </div>
+                        <div className="border border-[#25D366] bg-white rounded-xl text-xs text-center py-1.5 text-[#25D366] font-medium">View Options ▾</div>
+                        <div className="bg-white rounded-xl shadow-sm text-xs divide-y divide-gray-100">
+                          {liveItems.map((item, i) => (
+                            <div key={item.id} className="px-3 py-2">
+                              <div className="flex items-center gap-2 text-gray-800">
+                                <span>{item.emoji}</span>
+                                <span className="font-medium">{item.label || "…"}</span>
+                              </div>
+                              {item.description && <p className="text-gray-400 text-[10px] mt-0.5 ml-5">{item.description}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Live preview updates as you edit</p>
+                    </div>
+                  </div>
+
+                  {/* Greeting Keywords */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Greeting Keywords (comma separated)</Label>
+                    <Input
+                      value={chatbotForm.menuGreetingKeywords}
+                      onChange={e => setChatbotForm(f => ({ ...f, menuGreetingKeywords: e.target.value }))}
+                      placeholder="hi,hello,hey,salam,start,menu,help,shop"
+                    />
+                    <p className="text-xs text-muted-foreground">When a customer sends any of these words, they'll receive the interactive menu.</p>
+                  </div>
+
+                  {/* Website URL */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Website URL (for "Shop Products" &amp; "Visit Website")</Label>
+                    <Input
+                      value={chatbotForm.websiteUrl}
+                      onChange={e => setChatbotForm(f => ({ ...f, websiteUrl: e.target.value }))}
+                      placeholder="https://kdfnuts.com"
+                    />
+                  </div>
+
+                  {/* Discount Code + Message */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Discount Code</Label>
+                      <Input
+                        value={chatbotForm.discountCode}
+                        onChange={e => setChatbotForm(f => ({ ...f, discountCode: e.target.value }))}
+                        placeholder="WELCOME10"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Discount Message</Label>
+                      <Textarea
+                        value={chatbotForm.discountMessage}
+                        onChange={e => setChatbotForm(f => ({ ...f, discountMessage: e.target.value }))}
+                        rows={2}
+                        className="text-sm resize-y"
+                        placeholder="Your exclusive discount code…"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Hot Deals Message */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Hot Deals Message</Label>
+                    <Textarea
+                      value={chatbotForm.hotDealsMessage}
+                      onChange={e => setChatbotForm(f => ({ ...f, hotDealsMessage: e.target.value }))}
+                      rows={3}
+                      className="text-sm resize-y"
+                      placeholder="🔥 Today's Hot Deals…"
+                    />
+                    <p className="text-xs text-muted-foreground">Sent when customer taps the "Hot Deals" menu item.</p>
                   </div>
                 </div>
               </div>
-
-              {/* Greeting Keywords */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Greeting Keywords (comma separated)</Label>
-                <Input
-                  value={chatbotForm.menuGreetingKeywords}
-                  onChange={e => setChatbotForm(f => ({ ...f, menuGreetingKeywords: e.target.value }))}
-                  placeholder="hi,hello,hey,salam,start,menu,help,shop"
-                />
-                <p className="text-xs text-muted-foreground">When a customer sends any of these words, they'll receive the interactive menu.</p>
-              </div>
-
-              {/* Website URL */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Website URL (for "Shop Products" &amp; "Visit Website")</Label>
-                <Input
-                  value={chatbotForm.websiteUrl}
-                  onChange={e => setChatbotForm(f => ({ ...f, websiteUrl: e.target.value }))}
-                  placeholder="https://kdfnuts.com"
-                />
-              </div>
-
-              {/* Discount Code */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Discount Code</Label>
-                <Input
-                  value={chatbotForm.discountCode}
-                  onChange={e => setChatbotForm(f => ({ ...f, discountCode: e.target.value }))}
-                  placeholder="WELCOME10"
-                />
-              </div>
-
-              {/* Discount Message */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Discount Message</Label>
-                <Textarea
-                  value={chatbotForm.discountMessage}
-                  onChange={e => setChatbotForm(f => ({ ...f, discountMessage: e.target.value }))}
-                  rows={4}
-                  className="text-sm resize-y"
-                  placeholder="Your exclusive discount code…"
-                />
-                <p className="text-xs text-muted-foreground">Sent when customer taps "Get Discount" in the menu.</p>
-              </div>
-
-              {/* Hot Deals Message */}
-              <div className="space-y-1.5">
-                <Label className="text-sm">Hot Deals Message</Label>
-                <Textarea
-                  value={chatbotForm.hotDealsMessage}
-                  onChange={e => setChatbotForm(f => ({ ...f, hotDealsMessage: e.target.value }))}
-                  rows={4}
-                  className="text-sm resize-y"
-                  placeholder="🔥 Today's Hot Deals…"
-                />
-                <p className="text-xs text-muted-foreground">Sent when customer taps "Hot Deals" in the menu.</p>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* ── Product Catalog Card ── */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -3770,7 +3927,210 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      {/* ── LOGS TAB ── */}
+      {/* ── AI FLOWS TAB (Phase 4) ── */}
+      {tab === "flows" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2"><GitBranch className="w-5 h-5 text-indigo-500" />AI Flow Builder</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Define keyword triggers → actions. Flows run before the AI chatbot and override it when matched.</p>
+            </div>
+            <Button onClick={() => setShowFlowForm(v => !v)} style={{ backgroundColor: "#5FA800" }} className="text-white gap-1.5">
+              <Plus className="w-4 h-4" /> New Flow
+            </Button>
+          </div>
+
+          {/* Info */}
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-xs text-indigo-800 flex items-start gap-2">
+            <GitBranch className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-indigo-500" />
+            <div>
+              <strong>How AI Flows work:</strong> When a customer sends a message, the system checks all enabled flows in priority order. If a keyword matches, the configured action runs immediately — bypassing the AI chatbot. Great for FAQs, product links, and automated responses.
+            </div>
+          </div>
+
+          {/* Create flow form */}
+          {showFlowForm && (
+            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <h3 className="font-semibold flex items-center gap-2"><GitBranch className="w-4 h-4 text-indigo-500" />Create Flow</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Flow Name *</Label>
+                  <Input value={newFlow.name} onChange={e => setNewFlow((f: any) => ({ ...f, name: e.target.value }))} placeholder="e.g. Product Inquiry" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Priority (higher = checked first)</Label>
+                  <Input type="number" min={0} max={100} value={newFlow.priority} onChange={e => setNewFlow((f: any) => ({ ...f, priority: parseInt(e.target.value) || 0 }))} />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Description (optional)</Label>
+                <Input value={newFlow.description} onChange={e => setNewFlow((f: any) => ({ ...f, description: e.target.value }))} placeholder="Brief description of this flow" />
+              </div>
+
+              {/* Keywords */}
+              <div className="space-y-1.5">
+                <Label>Trigger Keywords</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newFlowKeyword}
+                    onChange={e => setNewFlowKeyword(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && newFlowKeyword.trim()) {
+                        e.preventDefault();
+                        setNewFlow((f: any) => ({ ...f, keywords: [...(f.keywords || []), newFlowKeyword.trim().toLowerCase()] }));
+                        setNewFlowKeyword("");
+                      }
+                    }}
+                    placeholder="Type keyword + Enter to add"
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={() => {
+                    if (newFlowKeyword.trim()) {
+                      setNewFlow((f: any) => ({ ...f, keywords: [...(f.keywords || []), newFlowKeyword.trim().toLowerCase()] }));
+                      setNewFlowKeyword("");
+                    }
+                  }}>Add</Button>
+                </div>
+                {(newFlow.keywords || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {(newFlow.keywords as string[]).map((kw: string, i: number) => (
+                      <span key={i} className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {kw}
+                        <button onClick={() => setNewFlow((f: any) => ({ ...f, keywords: f.keywords.filter((_: string, j: number) => j !== i) }))} className="hover:text-red-500">✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Add keywords that trigger this flow. Leave empty to match all messages (use with high priority carefully).</p>
+              </div>
+
+              {/* Action */}
+              <div className="space-y-2">
+                <Label>Action</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {FLOW_ACTIONS.map(act => (
+                    <button key={act.value} onClick={() => setNewFlow((f: any) => ({ ...f, action: act.value, actionData: {} }))}
+                      className={`text-left p-3 rounded-lg border-2 transition-all ${newFlow.action === act.value ? "border-indigo-500 bg-indigo-50" : "border-border hover:border-muted-foreground/40"}`}>
+                      <p className="font-medium text-sm">{act.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{act.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action data */}
+              {newFlow.action === "send_message" && (
+                <div className="space-y-1.5">
+                  <Label>Message to Send</Label>
+                  <textarea value={newFlow.actionData?.message ?? ""} onChange={e => setNewFlow((f: any) => ({ ...f, actionData: { ...f.actionData, message: e.target.value } }))}
+                    rows={3} placeholder="The message sent to the customer when this flow matches" className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+                </div>
+              )}
+              {newFlow.action === "send_url" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>URL</Label>
+                    <Input value={newFlow.actionData?.url ?? ""} onChange={e => setNewFlow((f: any) => ({ ...f, actionData: { ...f.actionData, url: e.target.value } }))} placeholder="https://kdfnuts.com/products" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Button Text</Label>
+                    <Input value={newFlow.actionData?.buttonText ?? ""} onChange={e => setNewFlow((f: any) => ({ ...f, actionData: { ...f.actionData, buttonText: e.target.value } }))} placeholder="Shop Now" />
+                  </div>
+                </div>
+              )}
+              {newFlow.action === "send_discount" && (
+                <div className="space-y-1.5">
+                  <Label>Discount Code</Label>
+                  <Input value={newFlow.actionData?.discountCode ?? ""} onChange={e => setNewFlow((f: any) => ({ ...f, actionData: { ...f.actionData, discountCode: e.target.value } }))} placeholder="SAVE20" />
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <Switch checked={newFlow.isEnabled} onCheckedChange={v => setNewFlow((f: any) => ({ ...f, isEnabled: v }))} />
+                <Label>Enable immediately</Label>
+              </div>
+
+              <div className="flex gap-3">
+                <Button onClick={() => createFlow.mutate(newFlow)} disabled={createFlow.isPending || !newFlow.name} style={{ backgroundColor: "#5FA800" }} className="text-white">
+                  {createFlow.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : "Create Flow"}
+                </Button>
+                <Button variant="outline" onClick={() => { setShowFlowForm(false); setNewFlow(EMPTY_FLOW); }}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Flows list */}
+          {(waFlows as any[]).length === 0 ? (
+            <div className="border-2 border-dashed border-border rounded-xl py-14 text-center">
+              <GitBranch className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground font-medium">No flows yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Create your first flow to intercept keywords and trigger instant responses</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(waFlows as any[]).map((flow: any) => (
+                <div key={flow.id} className={`bg-card border rounded-xl p-4 ${flow.isEnabled ? "border-border" : "border-dashed border-muted-foreground/30 opacity-60"}`}>
+                  {editingFlow?.id === flow.id ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1"><Label className="text-xs">Name</Label><Input value={editingFlow.name} onChange={e => setEditingFlow((f: any) => ({ ...f, name: e.target.value }))} /></div>
+                        <div className="space-y-1"><Label className="text-xs">Priority</Label><Input type="number" value={editingFlow.priority ?? 0} onChange={e => setEditingFlow((f: any) => ({ ...f, priority: parseInt(e.target.value) || 0 }))} /></div>
+                      </div>
+                      <div className="space-y-1"><Label className="text-xs">Description</Label><Input value={editingFlow.description ?? ""} onChange={e => setEditingFlow((f: any) => ({ ...f, description: e.target.value }))} /></div>
+                      {editingFlow.action === "send_message" && (
+                        <div className="space-y-1"><Label className="text-xs">Message</Label>
+                          <textarea value={editingFlow.actionData?.message ?? ""} onChange={e => setEditingFlow((f: any) => ({ ...f, actionData: { ...f.actionData, message: e.target.value } }))} rows={2} className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background resize-none" />
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => updateFlow.mutate(editingFlow)} disabled={updateFlow.isPending} style={{ backgroundColor: "#5FA800" }} className="text-white">
+                          {updateFlow.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingFlow(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm">{flow.name}</span>
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                            {FLOW_ACTIONS.find(a => a.value === flow.action)?.label ?? flow.action}
+                          </span>
+                          {flow.priority > 0 && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">P{flow.priority}</span>}
+                          {flow.isEnabled
+                            ? <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                            : <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Off</span>}
+                        </div>
+                        {flow.description && <p className="text-xs text-muted-foreground mt-1">{flow.description}</p>}
+                        {(flow.keywords ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {(flow.keywords as string[]).map((kw: string, i: number) => (
+                              <span key={i} className="text-[10px] bg-muted text-muted-foreground font-mono px-1.5 py-0.5 rounded">{kw}</span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Zap className="w-3 h-3" />Fired: {flow.firedCount ?? 0}</span>
+                          {flow.updatedAt && <span>Updated: {new Date(flow.updatedAt).toLocaleDateString("en-PK")}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Switch checked={flow.isEnabled} onCheckedChange={() => toggleFlow.mutate(flow.id)} />
+                        <Button size="sm" variant="ghost" onClick={() => setEditingFlow(flow)} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this flow?")) deleteFlow.mutate(flow.id); }} className="text-red-500 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "qr" && <WhatsAppQRTab />}
 
       {tab === "logs" && (

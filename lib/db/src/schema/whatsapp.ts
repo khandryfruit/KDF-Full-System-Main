@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const whatsappSettingsTable = pgTable("whatsapp_settings", {
@@ -20,18 +20,16 @@ export const whatsappSettingsTable = pgTable("whatsapp_settings", {
   notifyOrderShipped: boolean("notify_order_shipped").notNull().default(true),
   notifyOrderOutForDelivery: boolean("notify_order_out_for_delivery").notNull().default(true),
   notifyOrderDelivered: boolean("notify_order_delivered").notNull().default(true),
-  notifyOrderCancelled: boolean("notify_order_cancelled").notNull().default(true),
+  notifyOrderCancelled: boolean("notify_order_cancelled").notNull().default(false),
   notifyRestock: boolean("notify_restock").notNull().default(true),
   notifyBiddingWinner: boolean("notify_bidding_winner").notNull().default(true),
   qrMessage: text("qr_message").default("Hello! I want to place an order 🥜"),
   qrScanCount: integer("qr_scan_count").notNull().default(0),
   qrVersion: integer("qr_version").notNull().default(1),
   qrLastScanned: timestamp("qr_last_scanned"),
-  /* ── Official Meta API advanced credentials ── */
   appSecret: text("app_secret"),
   apiVersion: text("api_version").default("v18.0"),
   businessPortfolioId: text("business_portfolio_id"),
-  /* ── Meta connection metadata (populated by Embedded Signup) ── */
   verifiedName: text("verified_name"),
   qualityRating: text("quality_rating"),
   metaStatus: text("meta_status"),
@@ -88,6 +86,8 @@ export const chatbotSettingsTable = pgTable("chatbot_settings", {
   // ── Welcome Menu ──
   menuEnabled:           boolean("menu_enabled").notNull().default(false),
   menuGreetingKeywords:  text("menu_greeting_keywords").default("hi,hello,hey,salam,salaam,asslam,start,menu,help,shop,helo,hii"),
+  menuItems:             jsonb("menu_items"),  // array of MenuItem objects
+  greetingMessage:       text("greeting_message"),  // custom greeting text
   catalogEnabled:        boolean("catalog_enabled").notNull().default(false),
   catalogMaxProducts:    integer("catalog_max_products").notNull().default(3),
   websiteUrl:            text("website_url").default("https://kdfnuts.com"),
@@ -118,6 +118,10 @@ export const whatsappCampaignsTable = pgTable("whatsapp_campaigns", {
   deliveredCount: integer("delivered_count").notNull().default(0),
   readCount: integer("read_count").notNull().default(0),
   skippedCount: integer("skipped_count").notNull().default(0),
+  // ── Phase 5: Scheduling + pause support ──
+  scheduledAt: timestamp("scheduled_at"),
+  pausedAt: timestamp("paused_at"),
+  tags: text("tags"),
   sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -131,6 +135,22 @@ export const whatsappConversationStatesTable = pgTable("whatsapp_conversation_st
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── Phase 4: Editable AI Flow Builder ──
+export const waFlowsTable = pgTable("wa_flows", {
+  id:          serial("id").primaryKey(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  triggerType: text("trigger_type").notNull().default("keyword"),
+  keywords:    jsonb("keywords").default([]),
+  action:      text("action").notNull().default("ai_reply"),
+  actionData:  jsonb("action_data").default({}),
+  isEnabled:   boolean("is_enabled").notNull().default(true),
+  priority:    integer("priority").notNull().default(0),
+  firedCount:  integer("fired_count").notNull().default(0),
+  createdAt:   timestamp("created_at").notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const insertWhatsappSettingsSchema = createInsertSchema(whatsappSettingsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWhatsappTemplateSchema = createInsertSchema(whatsappTemplatesTable).omit({ id: true, createdAt: true });
 export const insertWhatsappLogSchema = createInsertSchema(whatsappLogsTable).omit({ id: true, createdAt: true });
@@ -140,3 +160,4 @@ export type WhatsappTemplate = typeof whatsappTemplatesTable.$inferSelect;
 export type WhatsappLog = typeof whatsappLogsTable.$inferSelect;
 export type WhatsappCampaign = typeof whatsappCampaignsTable.$inferSelect;
 export type WhatsappConversationState = typeof whatsappConversationStatesTable.$inferSelect;
+export type WaFlow = typeof waFlowsTable.$inferSelect;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable } from "@workspace/db";
+import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable } from "@workspace/db";
 import { shopifyProductsTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
@@ -557,11 +557,18 @@ async function handleSendMenu(
       .orderBy(desc(ordersTable.createdAt))
       .limit(1);
     const customerName = (recentOrder?.shipping as any)?.name ?? "";
-    const greeting = customerName
-      ? `Hello ${customerName.split(" ")[0]}! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`
-      : `Hello! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`;
 
-    await sendInteractiveMenu({ phone, greeting, settings: waSettings });
+    /* Use custom greeting from chatbot settings if configured */
+    const customGreeting = (chatbot as any)?.greetingMessage as string | null | undefined;
+    const greeting = customGreeting
+      ? (customerName ? customGreeting.replace(/\{name\}/g, customerName.split(" ")[0]!) : customGreeting)
+      : (customerName
+        ? `Hello ${customerName.split(" ")[0]}! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`
+        : `Hello! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`);
+
+    /* Use custom menu items from chatbot settings if configured */
+    const customItems = (chatbot as any)?.menuItems ?? null;
+    await sendInteractiveMenu({ phone, greeting, settings: waSettings, customItems });
   } catch (err) {
     /* Fallback to text menu if interactive fails */
     await sendWhatsAppMessage({
@@ -1817,8 +1824,9 @@ router.put("/admin/whatsapp/chatbot-settings", adminMiddleware as any, async (re
       menuEnabled, menuGreetingKeywords, websiteUrl,
       discountCode, discountMessage, hotDealsMessage,
       catalogEnabled, catalogMaxProducts,
+      menuItems, greetingMessage,
     } = req.body;
-    const payload = {
+    const payload: Record<string, unknown> = {
       isEnabled:            isEnabled ?? false,
       orderingEnabled:      orderingEnabled ?? false,
       aiModel:              aiModel ?? "gpt-4o-mini",
@@ -1837,9 +1845,11 @@ router.put("/admin/whatsapp/chatbot-settings", adminMiddleware as any, async (re
       hotDealsMessage:      hotDealsMessage ?? "",
       updatedAt:            new Date(),
     };
+    if (menuItems !== undefined) payload.menuItems = menuItems;
+    if (greetingMessage !== undefined) payload.greetingMessage = greetingMessage;
     const existing = await db.select().from(chatbotSettingsTable).limit(1);
     if (existing.length > 0) {
-      const [u] = await db.update(chatbotSettingsTable).set(payload).where(eq(chatbotSettingsTable.id, existing[0]!.id)).returning();
+      const [u] = await db.update(chatbotSettingsTable).set(payload as any).where(eq(chatbotSettingsTable.id, existing[0]!.id)).returning();
       return res.json(u);
     }
     const [c] = await db.insert(chatbotSettingsTable).values(payload as any).returning();
@@ -2830,6 +2840,342 @@ router.post("/admin/whatsapp/qr-settings/regenerate", adminMiddleware as any, as
       .set({ qrVersion: newVersion, updatedAt: new Date() })
       .where(eq(whatsappSettingsTable.id, existing.id));
     return res.json({ success: true, qrVersion: newVersion });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 2: WhatsApp Cost & Analytics Dashboard
+   GET /admin/wa/cost-stats
+   ═══════════════════════════════════════════════════════════════ */
+router.get("/admin/wa/cost-stats", adminMiddleware as any, async (req, res) => {
+  try {
+    const days = Math.min(Number(req.query.days ?? 30), 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const [overall] = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) AS total_messages,
+        COUNT(*) FILTER (WHERE status IN ('delivered','read')) AS delivered,
+        COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+        COUNT(*) FILTER (WHERE template_name LIKE 'campaign:%') AS marketing,
+        COUNT(*) FILTER (WHERE template_name NOT LIKE 'campaign:%' AND template_name != 'incoming') AS utility,
+        COUNT(*) FILTER (WHERE template_name = 'incoming') AS service
+      FROM whatsapp_logs
+      WHERE created_at >= ${since.toISOString()}
+        AND status != 'received'
+    `) as any;
+    const row = (overall.rows ?? overall)[0] ?? {};
+
+    const total = Number(row.total_messages ?? 0);
+    const delivered = Number(row.delivered ?? 0);
+    const failed = Number(row.failed ?? 0);
+    const marketing = Number(row.marketing ?? 0);
+    const utility = Number(row.utility ?? 0);
+    const service = Number(row.service ?? 0);
+    const deliveryRate = total > 0 ? Math.round((delivered / total) * 100) : 0;
+
+    /* Meta WhatsApp pricing (PKR approx): marketing ~Rs.9/msg, utility ~Rs.2.5/msg, service ~Rs.1.5/msg */
+    const estimatedCostPKR = Math.round(marketing * 9 + utility * 2.5 + service * 1.5);
+    const estimatedCostUSD = +(estimatedCostPKR / 279).toFixed(2);
+
+    /* Daily trend */
+    const dailyR = await db.execute(sql`
+      SELECT
+        DATE(created_at) AS date,
+        COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) AS sent,
+        COUNT(*) FILTER (WHERE status IN ('delivered','read')) AS delivered_cnt,
+        COUNT(*) FILTER (WHERE status = 'failed') AS failed_cnt
+      FROM whatsapp_logs
+      WHERE created_at >= ${since.toISOString()} AND status != 'received'
+      GROUP BY DATE(created_at)
+      ORDER BY DATE(created_at) ASC
+    `) as any;
+    const dailyTrend = ((dailyR.rows ?? dailyR) as any[]).map((d: any) => ({
+      date: d.date,
+      sent: Number(d.sent ?? 0),
+      delivered: Number(d.delivered_cnt ?? 0),
+      failed: Number(d.failed_cnt ?? 0),
+      estimatedCostPKR: Math.round(Number(d.sent ?? 0) * 4),
+    }));
+
+    /* By type (template_name prefix) */
+    const typeR = await db.execute(sql`
+      SELECT
+        CASE
+          WHEN template_name = 'incoming' THEN 'Incoming'
+          WHEN template_name LIKE 'campaign:%' THEN 'Campaign'
+          WHEN template_name LIKE 'order_%' THEN 'Order Notification'
+          WHEN template_name = 'ai_reply' THEN 'AI Reply'
+          WHEN template_name LIKE 'menu_%' OR template_name = 'menu_sent' THEN 'Menu'
+          ELSE 'Other'
+        END AS type,
+        COUNT(*) AS cnt
+      FROM whatsapp_logs
+      WHERE created_at >= ${since.toISOString()}
+      GROUP BY 1
+      ORDER BY cnt DESC
+    `) as any;
+    const byType = ((typeR.rows ?? typeR) as any[]).map((r: any) => ({ type: r.type, count: Number(r.cnt) }));
+
+    /* Campaign performance */
+    const campR = await db.execute(sql`
+      SELECT
+        c.id AS campaign_id,
+        c.name,
+        c.sent_count AS sent,
+        c.delivered_count AS delivered,
+        c.failed_count AS failed,
+        c.read_count AS reads
+      FROM whatsapp_campaigns c
+      WHERE c.created_at >= ${since.toISOString()} AND c.status != 'draft'
+      ORDER BY c.created_at DESC
+      LIMIT 10
+    `) as any;
+    const campaignPerformance = ((campR.rows ?? campR) as any[]).map((r: any) => ({
+      campaignId: r.campaign_id,
+      name: r.name,
+      sent: Number(r.sent ?? 0),
+      delivered: Number(r.delivered ?? 0),
+      failed: Number(r.failed ?? 0),
+      readCount: Number(r.reads ?? 0),
+      deliveryRate: Number(r.sent) > 0 ? Math.round((Number(r.delivered) / Number(r.sent)) * 100) : 0,
+    }));
+
+    return res.json({
+      totalMessages: total,
+      delivered,
+      failed,
+      deliveryRate,
+      estimatedCostPKR,
+      estimatedCostUSD,
+      marketingConversations: marketing,
+      utilityConversations: utility,
+      serviceConversations: service,
+      byType,
+      dailyTrend,
+      campaignPerformance,
+      days,
+    });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 4: AI Flow Builder — CRUD for wa_flows
+   ═══════════════════════════════════════════════════════════════ */
+router.get("/admin/wa/flows", adminMiddleware as any, async (req, res) => {
+  try {
+    const flows = await db.select().from(waFlowsTable).orderBy(desc(waFlowsTable.priority), desc(waFlowsTable.createdAt));
+    return res.json(flows);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.post("/admin/wa/flows", adminMiddleware as any, async (req, res) => {
+  try {
+    const { name, description, triggerType, keywords, action, actionData, isEnabled, priority } = req.body;
+    if (!name || !action) return res.status(400).json({ error: "name and action are required" });
+    const [flow] = await db.insert(waFlowsTable).values({
+      name,
+      description: description ?? null,
+      triggerType: triggerType ?? "keyword",
+      keywords: keywords ?? [],
+      action,
+      actionData: actionData ?? {},
+      isEnabled: isEnabled ?? true,
+      priority: priority ?? 0,
+    }).returning();
+    return res.status(201).json(flow);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.put("/admin/wa/flows/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    const { name, description, triggerType, keywords, action, actionData, isEnabled, priority } = req.body;
+    const [flow] = await db.update(waFlowsTable).set({
+      ...(name !== undefined && { name }),
+      ...(description !== undefined && { description }),
+      ...(triggerType !== undefined && { triggerType }),
+      ...(keywords !== undefined && { keywords }),
+      ...(action !== undefined && { action }),
+      ...(actionData !== undefined && { actionData }),
+      ...(isEnabled !== undefined && { isEnabled }),
+      ...(priority !== undefined && { priority }),
+      updatedAt: new Date(),
+    }).where(eq(waFlowsTable.id, Number(req.params.id))).returning();
+    if (!flow) return res.status(404).json({ error: "Flow not found" });
+    return res.json(flow);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/admin/wa/flows/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    await db.delete(waFlowsTable).where(eq(waFlowsTable.id, Number(req.params.id)));
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.patch("/admin/wa/flows/:id/toggle", adminMiddleware as any, async (req, res) => {
+  try {
+    const [current] = await db.select({ isEnabled: waFlowsTable.isEnabled }).from(waFlowsTable).where(eq(waFlowsTable.id, Number(req.params.id))).limit(1);
+    if (!current) return res.status(404).json({ error: "Flow not found" });
+    const [updated] = await db.update(waFlowsTable).set({ isEnabled: !current.isEnabled, updatedAt: new Date() })
+      .where(eq(waFlowsTable.id, Number(req.params.id))).returning();
+    return res.json(updated);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Smart Automation Rules — CRUD for wa_automation_rules
+   ═══════════════════════════════════════════════════════════════ */
+router.get("/admin/wa/automation/stats", adminMiddleware as any, async (req, res) => {
+  try {
+    const [totals] = await db.execute(sql`
+      SELECT
+        COUNT(*) AS total_rules,
+        COUNT(*) FILTER (WHERE is_active = true) AS active_rules,
+        COALESCE(SUM(fired_count), 0) AS total_fired
+      FROM wa_automation_rules
+    `) as any;
+    const row = ((totals.rows ?? totals) as any[])[0] ?? {};
+
+    const [logStats] = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'sent') AS sent_today,
+        COUNT(*) FILTER (WHERE status = 'failed') AS failed_today
+      FROM wa_automation_logs
+      WHERE created_at >= CURRENT_DATE
+    `) as any;
+    const logRow = ((logStats.rows ?? logStats) as any[])[0] ?? {};
+
+    return res.json({
+      totalRules: Number(row.total_rules ?? 0),
+      activeRules: Number(row.active_rules ?? 0),
+      totalFired: Number(row.total_fired ?? 0),
+      sentToday: Number(logRow.sent_today ?? 0),
+      failedToday: Number(logRow.failed_today ?? 0),
+    });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.get("/admin/wa/automation/logs", adminMiddleware as any, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const logs = await db.execute(sql`
+      SELECT l.*, r.name AS rule_name
+      FROM wa_automation_logs l
+      LEFT JOIN wa_automation_rules r ON r.id = l.rule_id
+      ORDER BY l.created_at DESC
+      LIMIT ${limit}
+    `) as any;
+    return res.json(logs.rows ?? logs);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.get("/admin/wa/automation/rules", adminMiddleware as any, async (req, res) => {
+  try {
+    const rules = await db.select().from(waAutomationRulesTable).orderBy(desc(waAutomationRulesTable.createdAt));
+    return res.json(rules);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.post("/admin/wa/automation/rules", adminMiddleware as any, async (req, res) => {
+  try {
+    const { name, triggerType, triggerConfig, messageTemplate, isActive } = req.body;
+    if (!name || !triggerType) return res.status(400).json({ error: "name and triggerType are required" });
+    const [rule] = await db.insert(waAutomationRulesTable).values({
+      name,
+      triggerType,
+      triggerConfig: triggerConfig ?? {},
+      messageTemplate: messageTemplate ?? null,
+      isActive: isActive ?? true,
+    }).returning();
+    return res.status(201).json(rule);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.put("/admin/wa/automation/rules/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    const { name, triggerType, triggerConfig, messageTemplate, isActive } = req.body;
+    const [rule] = await db.update(waAutomationRulesTable).set({
+      ...(name !== undefined && { name }),
+      ...(triggerType !== undefined && { triggerType }),
+      ...(triggerConfig !== undefined && { triggerConfig }),
+      ...(messageTemplate !== undefined && { messageTemplate }),
+      ...(isActive !== undefined && { isActive }),
+      updatedAt: new Date(),
+    }).where(eq(waAutomationRulesTable.id, Number(req.params.id))).returning();
+    if (!rule) return res.status(404).json({ error: "Rule not found" });
+    return res.json(rule);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/admin/wa/automation/rules/:id", adminMiddleware as any, async (req, res) => {
+  try {
+    await db.delete(waAutomationRulesTable).where(eq(waAutomationRulesTable.id, Number(req.params.id)));
+    return res.json({ success: true });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.patch("/admin/wa/automation/rules/:id/toggle", adminMiddleware as any, async (req, res) => {
+  try {
+    const [current] = await db.select({ isActive: waAutomationRulesTable.isActive }).from(waAutomationRulesTable).where(eq(waAutomationRulesTable.id, Number(req.params.id))).limit(1);
+    if (!current) return res.status(404).json({ error: "Rule not found" });
+    const [updated] = await db.update(waAutomationRulesTable).set({ isActive: !current.isActive, updatedAt: new Date() })
+      .where(eq(waAutomationRulesTable.id, Number(req.params.id))).returning();
+    return res.json(updated);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 5: Campaign Pause / Resume / Cancel
+   ═══════════════════════════════════════════════════════════════ */
+router.post("/admin/wa/campaigns/:id/pause", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [camp] = await db.select({ status: whatsappCampaignsTable.status }).from(whatsappCampaignsTable).where(eq(whatsappCampaignsTable.id, id)).limit(1);
+    if (!camp) return res.status(404).json({ error: "Campaign not found" });
+    if (!["sending", "draft", "scheduled"].includes(camp.status)) return res.status(400).json({ error: "Campaign cannot be paused in its current state" });
+    const [updated] = await db.update(whatsappCampaignsTable)
+      .set({ status: "paused", pausedAt: new Date() })
+      .where(eq(whatsappCampaignsTable.id, id)).returning();
+    return res.json({ success: true, campaign: updated });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.post("/admin/wa/campaigns/:id/resume", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [camp] = await db.select({ status: whatsappCampaignsTable.status }).from(whatsappCampaignsTable).where(eq(whatsappCampaignsTable.id, id)).limit(1);
+    if (!camp) return res.status(404).json({ error: "Campaign not found" });
+    if (camp.status !== "paused") return res.status(400).json({ error: "Only paused campaigns can be resumed" });
+    const [updated] = await db.update(whatsappCampaignsTable)
+      .set({ status: "draft", pausedAt: null })
+      .where(eq(whatsappCampaignsTable.id, id)).returning();
+    return res.json({ success: true, campaign: updated });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+router.post("/admin/wa/campaigns/:id/cancel", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [updated] = await db.update(whatsappCampaignsTable)
+      .set({ status: "cancelled" })
+      .where(eq(whatsappCampaignsTable.id, id)).returning();
+    if (!updated) return res.status(404).json({ error: "Campaign not found" });
+    return res.json({ success: true, campaign: updated });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Schedule Campaign ───────────────────────── */
+router.post("/admin/wa/campaigns/:id/schedule", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { scheduledAt } = req.body;
+    if (!scheduledAt) return res.status(400).json({ error: "scheduledAt is required" });
+    const [updated] = await db.update(whatsappCampaignsTable)
+      .set({ status: "scheduled", scheduledAt: new Date(scheduledAt) })
+      .where(eq(whatsappCampaignsTable.id, id)).returning();
+    if (!updated) return res.status(404).json({ error: "Campaign not found" });
+    return res.json({ success: true, campaign: updated });
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
