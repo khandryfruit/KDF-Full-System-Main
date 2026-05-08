@@ -1,0 +1,356 @@
+Need to redesign and upgrade the complete WhatsApp AI Chatbot system into a next-level professional Meta-compliant commerce automation platform.
+
+Current chatbot works, but now we need:
+- Advanced automation
+- Shopify integration
+- WhatsApp catalog system
+- Payment system
+- Smart AI replies
+- Official Meta policy compliance
+- Professional UI/UX
+- High delivery quality
+- Anti-ban protection
+
+This must behave like a premium enterprise WhatsApp commerce platform.
+
+--------------------------------------------------
+MAIN GOAL
+--------------------------------------------------
+
+Transform chatbot into:
+
+✅ Smart AI Sales Agent
+✅ WhatsApp Commerce Assistant
+✅ Shopify Product Assistant
+✅ Automated Order Support System
+✅ Delivery Tracking Assistant
+✅ Payment Collection Assistant
+
+All inside ONE professional WhatsApp inbox.
+
+--------------------------------------------------
+1. WHATSAPP INBOX UI/UX IMPROVEMENT
+--------------------------------------------------
+
+Redesign full inbox professionally.
+
+Need:
+✅ Modern WhatsApp-style UI
+✅ Smooth scrolling
+✅ Fast loading
+✅ Typing indicators
+✅ Seen/delivered states
+✅ Smart reply chips
+✅ Mobile optimized
+✅ Desktop optimized
+✅ Floating action shortcuts
+✅ Beautiful animations
+✅ Better spacing and typography
+
+--------------------------------------------------
+2. SMART AI CHATBOT
+--------------------------------------------------
+
+Need AI-powered smart assistant.
+
+Features:
+✅ Natural replies
+✅ Urdu + English support
+✅ Product recommendation AI
+✅ Smart FAQ replies
+✅ Intent detection
+✅ Human handoff
+✅ Auto language detection
+✅ Smart greeting system
+✅ Personalized customer responses
+
+--------------------------------------------------
+3. SHOPIFY FULL INTEGRATION
+--------------------------------------------------
+
+Integrate all Shopify products dynamically.
+
+Need:
+✅ Auto sync products
+✅ Product images
+✅ Product pricing
+✅ Product stock
+✅ Product variants
+✅ Product descriptions
+✅ Categories
+✅ Offers
+
+Products must update automatically from Shopify.
+
+--------------------------------------------------
+4. WHATSAPP CATALOG SYSTEM
+--------------------------------------------------
+
+Create official WhatsApp-style catalog system.
+
+Need:
+✅ Swipeable product cards
+✅ Carousel product templates
+✅ Interactive catalog
+✅ Product preview cards
+✅ Product buttons
+✅ Buy now buttons
+✅ View details buttons
+✅ Add to cart buttons
+
+Exactly like:
+Official Meta / WhatsApp commerce ads.
+
+--------------------------------------------------
+5. OFFICIAL META TEMPLATE SYSTEM
+--------------------------------------------------
+
+Create professional template manager.
+
+Need:
+✅ Order confirmation templates
+✅ Shipping templates
+✅ COD verification
+✅ Payment reminder
+✅ Order delivered
+✅ Cart abandoned
+✅ Welcome messages
+✅ Support templates
+
+Support:
+- Urdu
+- English
+- Variables
+- Buttons
+- Media headers
+
+--------------------------------------------------
+6. 24-HOUR META POLICY COMPLIANCE
+--------------------------------------------------
+
+System must strictly follow Meta rules.
+
+Need:
+✅ 24-hour conversation window logic
+✅ Auto session detection
+✅ Template-only after 24 hours
+✅ Spam prevention
+✅ Message throttling
+✅ Frequency control
+✅ Safe sending limits
+✅ Quality score monitoring
+
+Prevent:
+❌ Number bans
+❌ Spam flags
+❌ Policy violations
+
+--------------------------------------------------
+7. SMART MESSAGE FILTERS
+--------------------------------------------------
+
+Need advanced filters.
+
+System should:
+✅ Detect spam
+✅ Prevent repeated messages
+✅ Prevent mass spam sending
+✅ Block dangerous content
+✅ Detect duplicate replies
+✅ Auto slow down risky activity
+
+--------------------------------------------------
+8. DELIVERY & COURIER INTEGRATION
+--------------------------------------------------
+
+Integrate:
+✅ PostEx
+✅ TCS
+✅ Leopard
+✅ Rider tracking
+
+Need:
+✅ Real-time shipment tracking
+✅ Tracking ID auto-send
+✅ Delivery status updates
+✅ Rider assignment notifications
+✅ Live tracking links
+
+--------------------------------------------------
+9. PAYMENT GATEWAY SYSTEM
+--------------------------------------------------
+
+Need full payment system.
+
+Integrate:
+✅ Bank Transfer
+✅ Easypaisa
+✅ JazzCash
+✅ Stripe
+✅ Shopify payments
+
+--------------------------------------------------
+10. PAYMENT INVOICE SYSTEM
+--------------------------------------------------
+
+Generate professional payment invoices.
+
+Need:
+✅ Invoice PDF
+✅ Payment links
+✅ Auto-send invoice
+✅ Payment confirmation buttons
+✅ Transaction verification
+✅ Paid/unpaid status
+✅ Auto reminders
+
+--------------------------------------------------
+11. BANK ACCOUNT MANAGEMENT
+--------------------------------------------------
+
+Create admin banking section.
+
+Admin should:
+✅ Add bank accounts
+✅ Add IBAN
+✅ Add account titles
+✅ Add JazzCash/Easypaisa
+✅ Enable/disable accounts
+
+Chatbot should auto-send:
+- Bank details
+- Payment instructions
+- Payment confirmation flow
+
+--------------------------------------------------
+12. PAYMENT CONFIRMATION FLOW
+--------------------------------------------------
+
+Need interactive buttons:
+
+✅ I Have Paid
+✅ Upload Screenshot
+✅ Confirm Payment
+✅ Talk to Human
+
+Admin should:
+✅ Approve payment
+✅ Reject payment
+✅ Mark verified
+
+--------------------------------------------------
+13. SMART PRODUCT SHARING
+--------------------------------------------------
+
+When admin selects product:
+
+Chatbot should send:
+✅ Beautiful product card
+✅ Product image
+✅ Price
+✅ CTA buttons
+✅ Add to cart
+✅ Buy now
+
+NOT plain text messages.
+
+--------------------------------------------------
+14. AUTO ORDER SUPPORT
+--------------------------------------------------
+
+Customer should ask:
+
+“Where is my order?”
+
+AI should:
+✅ Detect order
+✅ Fetch tracking
+✅ Reply automatically
+
+--------------------------------------------------
+15. HUMAN + BOT MODE
+--------------------------------------------------
+
+Need:
+✅ Bot mode
+✅ Human mode
+✅ Hybrid mode
+
+Agent can instantly:
+- take over conversation
+- pause bot
+- resume bot
+
+--------------------------------------------------
+16. INTERNAL NOTES SYSTEM
+--------------------------------------------------
+
+Add:
+✅ Internal staff notes
+✅ Tags
+✅ Priority labels
+✅ Customer labels
+✅ VIP customer tags
+
+--------------------------------------------------
+17. ADMIN ANALYTICS
+--------------------------------------------------
+
+Need professional dashboard.
+
+Show:
+✅ Sales from WhatsApp
+✅ Conversion rate
+✅ Orders from chat
+✅ Agent performance
+✅ Delivery success
+✅ COD stats
+✅ Message analytics
+✅ Response times
+
+--------------------------------------------------
+18. PERFORMANCE OPTIMIZATION
+--------------------------------------------------
+
+Need:
+✅ Fast API responses
+✅ Queue system
+✅ Webhook retry system
+✅ Background jobs
+✅ Redis caching
+✅ Lazy loading
+✅ Image optimization
+
+--------------------------------------------------
+19. SECURITY
+--------------------------------------------------
+
+Need:
+✅ Role permissions
+✅ Secure token storage
+✅ Rate limiting
+✅ Activity logs
+✅ Login protection
+✅ Webhook signature verification
+
+--------------------------------------------------
+20. EXPECTED FINAL RESULT
+--------------------------------------------------
+
+The platform should feel like:
+
+✅ WhatsApp Commerce Cloud
+✅ Meta Official Inbox
+✅ Shopify + WhatsApp Enterprise CRM
+✅ AI Sales Automation Platform
+
+Need:
+- Premium UI/UX
+- Fast performance
+- Mobile-first design
+- Meta-compliant architecture
+- Safe messaging system
+- Enterprise-level stability
+
+System must be scalable for:
+multi-business + multi-agent + SaaS future expansion.
