@@ -66,6 +66,8 @@ import {
   GitBranch,
   Calculator,
   DollarSign,
+  Wifi,
+  MessageSquareDashed,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -124,8 +126,6 @@ const NAV_ITEMS = [
   { href: "/sync-jobs",          label: "Sync Jobs",            icon: RefreshCw      },
   { href: "/location",           label: "Location",             icon: MapPin         },
   { href: "/cities",             label: "Cities",               icon: MapPin         },
-  { href: "/whatsapp",           label: "WhatsApp",             icon: MessageCircle  },
-  { href: "/wa-inbox",           label: "WA Inbox",             icon: MessageCircle  },
   { href: "/intelligence",       label: "Intelligence",         icon: Brain          },
   { href: "/social-ai",          label: "Social AI",            icon: Sparkles       },
   { href: "/bidding",            label: "Auctions / Bidding",   icon: Gavel          },
@@ -140,13 +140,23 @@ const NAV_ITEMS = [
   { href: "/footer",             label: "Footer",               icon: LayoutTemplate },
   { href: "/ai-content",         label: "AI Content",           icon: Sparkles       },
   { href: "/reviews",            label: "Reviews",              icon: Star           },
-  { href: "/chat-conversations", label: "Chat",                 icon: MessageCircle  },
-  { href: "/chat-leads",         label: "Chat Leads CRM",       icon: Users          },
   { href: "/email-settings",     label: "Email Settings",       icon: Mail           },
   { href: "/image-optimization", label: "Image Optimization",   icon: Zap            },
   { href: "/failed-orders",      label: "Failed Orders",        icon: AlertTriangle  },
   { href: "/profile",            label: "My Profile",           icon: User           },
 ];
+
+const WA_CHAT_NAV_ITEMS = [
+  { href: "/wa-chat",              label: "Unified Inbox",      icon: Wifi           },
+  { href: "/wa-inbox",             label: "WhatsApp",           icon: MessageCircle  },
+  { href: "/chat-conversations",   label: "Website Chat",       icon: Globe          },
+  { href: "/chat-leads",           label: "Chat Leads CRM",     icon: Users          },
+  { divider: true,                 label: "Tools"                                    },
+  { href: "/shopify/campaigns",    label: "WA Campaigns",       icon: Megaphone      },
+  { href: "/shopify/widget",       label: "Chat Widget",        icon: MessageSquareDashed },
+  { href: "/whatsapp",             label: "WA Settings",        icon: Settings       },
+  { href: "/wa-chat/settings",     label: "Payment Links",      icon: CreditCard     },
+] as const satisfies ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
 
 const PG_NAV_ITEMS = [
   { href: "/payment-gateway",              label: "Overview",      icon: LayoutDashboard },
@@ -381,11 +391,13 @@ interface SidebarContentProps {
   pgOpen: boolean;
   logisticsOpen: boolean;
   branchesOpen: boolean;
+  waChatOpen: boolean;
   onToggleInvoice: () => void;
   onToggleShopify: () => void;
   onTogglePg: () => void;
   onToggleLogistics: () => void;
   onToggleBranches: () => void;
+  onToggleWaChat: () => void;
   onNavClick: () => void;
   onLogout: () => void;
   onToggleCollapse?: () => void;
@@ -393,8 +405,8 @@ interface SidebarContentProps {
   isMobile?: boolean;
 }
 function SidebarContent({
-  location, expanded, invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen,
-  onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches,
+  location, expanded, invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen, waChatOpen,
+  onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches, onToggleWaChat,
   onNavClick, onLogout, onToggleCollapse, isCollapsed, isMobile,
 }: SidebarContentProps) {
   const isInvoiceActive   = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
@@ -402,6 +414,7 @@ function SidebarContent({
   const isPgActive        = location.startsWith("/payment-gateway");
   const isLogisticsActive = location.startsWith("/logistics");
   const isBranchesActive  = location.startsWith("/branches");
+  const isWaChatActive    = location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp";
   const { waUnread } = useNotifications();
 
   return (
@@ -468,10 +481,42 @@ function SidebarContent({
           <div className="h-px bg-sidebar-border" />
         </div>
 
+        {/* WA Chat Section */}
+        <div className="relative">
+          <SidebarSection
+            label="WA Chat"
+            icon={MessageCircle}
+            accentColor="#25D366"
+            activeBg="bg-[#25D366]/10"
+            activeText="text-[#128C7E]"
+            badgeLetter="W"
+            isActive={isWaChatActive}
+            expanded={expanded}
+            open={waChatOpen}
+            onToggle={onToggleWaChat}
+            items={WA_CHAT_NAV_ITEMS}
+            location={location}
+            onNavClick={onNavClick}
+          />
+          {waUnread > 0 && !waChatOpen && (
+            <span className={`
+              absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full
+              flex items-center justify-center px-0.5 pointer-events-none leading-none
+              ${expanded ? "right-1.5" : "-right-1 -top-0.5"}
+            `}>
+              {waUnread > 99 ? "99+" : waUnread}
+            </span>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
+          <div className="h-px bg-sidebar-border" />
+        </div>
+
         {/* Main nav items */}
         {NAV_ITEMS.map(item => {
           const isActive = location === item.href || location.startsWith(item.href + "/");
-          const isWaInbox = item.href === "/wa-inbox";
           return (
             <div key={item.href} className="relative">
               <NavItem
@@ -482,15 +527,6 @@ function SidebarContent({
                 expanded={expanded}
                 onClick={onNavClick}
               />
-              {isWaInbox && waUnread > 0 && (
-                <span className={`
-                  absolute top-1.5 right-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full
-                  flex items-center justify-center px-0.5 pointer-events-none leading-none
-                  ${expanded ? "right-1.5" : "-right-1 -top-0.5"}
-                `}>
-                  {waUnread > 99 ? "99+" : waUnread}
-                </span>
-              )}
             </div>
           );
         })}
@@ -602,6 +638,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [pgOpen,        setPgOpen]        = useState(() => location.startsWith("/payment-gateway"));
   const [logisticsOpen, setLogisticsOpen] = useState(() => location.startsWith("/logistics"));
   const [branchesOpen,  setBranchesOpen]  = useState(() => location.startsWith("/branches"));
+  const [waChatOpen,    setWaChatOpen]    = useState(() => location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp");
   const [mobileOpen,    setMobileOpen]    = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -617,6 +654,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (location.startsWith("/payment-gateway"))  setPgOpen(true);
     if (location.startsWith("/logistics"))        setLogisticsOpen(true);
     if (location.startsWith("/branches"))         setBranchesOpen(true);
+    if (location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp") setWaChatOpen(true);
   }, [location]);
 
   const handleLogout = () => {
@@ -655,11 +693,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     pgOpen,
     logisticsOpen,
     branchesOpen,
+    waChatOpen,
     onToggleInvoice:    () => setInvoiceOpen(o => !o),
     onToggleShopify:    () => setShopifyOpen(o => !o),
     onTogglePg:         () => setPgOpen(o => !o),
     onToggleLogistics:  () => setLogisticsOpen(o => !o),
     onToggleBranches:   () => setBranchesOpen(o => !o),
+    onToggleWaChat:     () => setWaChatOpen(o => !o),
     onNavClick:         handleNavClick,
     onLogout:           handleLogout,
   };

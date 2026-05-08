@@ -60,6 +60,8 @@ import ShopifyEmailCampaignsPage from "@/pages/ShopifyEmailCampaignsPage";
 import ShopifyMarketingPage from "@/pages/ShopifyMarketingPage";
 import ShopifyWidgetPage from "@/pages/ShopifyWidgetPage";
 import WaInboxPage from "@/pages/WaInboxPage";
+import WaChatPage from "@/pages/WaChatPage";
+import WaChatSettingsPage from "@/pages/WaChatSettingsPage";
 import SocialAIPage from "@/pages/SocialAIPage";
 import IntelligencePage from "@/pages/IntelligencePage";
 import InvoicePage from "@/pages/InvoicePage";
@@ -184,6 +186,8 @@ function Router() {
       <Route path="/shopify/widget"><ProtectedRoute component={ShopifyWidgetPage} /></Route>
       <Route path="/shopify/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
       <Route path="/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
+      <Route path="/wa-chat/settings"><ProtectedRoute component={WaChatSettingsPage} /></Route>
+      <Route path="/wa-chat"><ProtectedRoute component={WaChatPage} /></Route>
       <Route path="/social-ai"><ProtectedRoute component={SocialAIPage} /></Route>
       <Route path="/intelligence"><ProtectedRoute component={IntelligencePage} /></Route>
       <Route path="/payment-gateway"><ProtectedRoute component={PaymentGatewayPage} /></Route>

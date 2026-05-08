@@ -1,0 +1,288 @@
+# WA Chat Floating Button — Final Fix & Behavior Prompt
+
+## CRITICAL FIX REQUIRED
+
+Current floating chat implementation غلط ہے۔
+
+میں نے صرف:
+
+# ✅ Floating Chat Launcher
+
+مانگا تھا۔
+
+لیکن ابھی:
+
+❌ پورا website/app وہاں render ہو رہا ہے
+❌ Shopify storefront دوبارہ load ہو رہی ہے
+❌ Heavy overlay آ رہا ہے
+❌ UX break ہو رہی ہے
+❌ Mobile layout خراب ہو رہا ہے
+
+یہ فوری fix کریں۔
+
+---
+
+# REQUIRED FINAL BEHAVIOR
+
+## Default State
+
+Website پر صرف ایک:
+
+# Small Floating Main Chat Button
+
+show ہو۔
+
+Example:
+
+* Bottom Right
+* Circular
+* Clean shadow
+* Smooth animation
+* Lightweight
+
+---
+
+# On Main Button Click
+
+جب user main floating button click کرے تو:
+
+# Mini Action Stack
+
+open ہو۔
+
+---
+
+# REQUIRED STACK ITEMS
+
+## 1. Chat with Us
+
+یہ:
+
+* AI Assistant
+* Live Support
+* Unified Inbox
+
+کے لیے ہوگا۔
+
+---
+
+## 2. WhatsApp Button
+
+یہ الگ button ہوگا۔
+
+---
+
+# IMPORTANT
+
+## WhatsApp Button Behavior
+
+جب user:
+
+# WhatsApp Button
+
+پر click کرے تو:
+
+❌ پورا website load نہ ہو
+❌ iframe نہ open ہو
+❌ storefront نہ render ہو
+❌ modal app نہ آئے
+
+---
+
+# REQUIRED ACTION
+
+صرف:
+
+# Direct WhatsApp Chat Open
+
+ہونا چاہیے۔
+
+---
+
+# WhatsApp Number
+
+Use this number:
+
+# 03049996000
+
+---
+
+# WhatsApp Click Flow
+
+Click پر:
+
+```bash id="p1o9zm"
+https://wa.me/923049996000
+```
+
+یا prefilled message کے ساتھ:
+
+```bash id="x8m3la"
+https://wa.me/923049996000?text=Hello%20I%20need%20help
+```
+
+---
+
+# IMPORTANT UI REQUIREMENT
+
+## Same Style Required
+
+WhatsApp option:
+
+* اسی style میں ہو
+* same rounded bubble
+* same floating animation
+* same spacing
+* same shadow
+* same UI alignment
+
+exactly جیسے screenshot میں ہے۔
+
+---
+
+# REQUIRED STACK STRUCTURE
+
+## Final Floating Layout
+
+```bash id="n5l2vt"
+(Main Floating Button)
+        ↓
+ ┌─────────────────┐
+ │ Chat with Us    │
+ │ WhatsApp        │
+ └─────────────────┘
+```
+
+---
+
+# REMOVE CURRENT WRONG BEHAVIOR
+
+## REMOVE ALL OF THIS
+
+❌ full-screen overlay
+❌ embedded website
+❌ storefront inside popup
+❌ location popup
+❌ delivery modal
+❌ app remounting
+❌ Shopify reload
+❌ page freeze
+❌ body scroll lock
+
+---
+
+# PERFORMANCE REQUIREMENTS
+
+Floating widget ہونا چاہیے:
+
+✅ lightweight
+✅ isolated
+✅ lazy loaded
+✅ non-blocking
+✅ independent component
+
+---
+
+# TECHNICAL INSTRUCTIONS
+
+## Use Simple Floating Widget Architecture
+
+Only load:
+
+```bash id="f4r8qk"
+/wa-chat-widget/
+├── launcher
+├── popup-menu
+├── whatsapp-action
+└── live-chat-action
+```
+
+---
+
+# DO NOT LOAD
+
+❌ Homepage
+❌ Collections
+❌ Cart
+❌ Delivery system
+❌ Location services
+❌ Shopify shell
+❌ Full frontend app
+
+---
+
+# MOBILE FIXES
+
+## Current Issues
+
+❌ giant close button
+❌ overlap
+❌ popup breaking layout
+
+---
+
+# Required Mobile UI
+
+## Closed State
+
+* 56px floating circle
+* proper margin bottom/right
+* safe area support
+
+---
+
+## Open State
+
+Compact popup only:
+
+* auto height
+* max width 280px
+* smooth animation
+* no fullscreen modal
+
+---
+
+# FINAL RESULT
+
+User website open کرے:
+
+↓
+Small floating WA Chat button نظر آئے
+
+↓
+Click کرے
+
+↓
+Compact menu open ہو:
+
+* Chat with Us
+* WhatsApp
+
+↓
+WhatsApp click کرے
+
+↓
+Direct WhatsApp open ہو:
+
+# 03049996000
+
+↓
+بس۔
+
+---
+
+# FINAL WARNING
+
+یہ صرف:
+
+# Floating Chat Widget
+
+ہے۔
+
+یہ:
+
+❌ mini website نہیں
+❌ embedded app نہیں
+❌ storefront overlay نہیں
+
+Current implementation فوراً replace کریں اور clean lightweight professional floating widget system use کریں۔

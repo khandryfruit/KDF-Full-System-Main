@@ -223,11 +223,30 @@ export default function DashboardPage() {
           <p className="text-2xl font-bold mt-1">{stats.pendingOrders + stats.confirmedOrders + stats.processingOrders}</p>
           <p className="text-xs opacity-70 mt-1">orders need attention</p>
         </div>
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-4 cursor-pointer hover:from-purple-600" onClick={() => nav("/shopify/wa-inbox")}>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-4 cursor-pointer hover:from-purple-600" onClick={() => nav("/wa-chat")}>
           <p className="text-xs font-medium opacity-80">WA Messages</p>
           <p className="text-2xl font-bold mt-1">{stats.whatsapp.received}</p>
-          <p className="text-xs opacity-70 mt-1">received total</p>
+          <p className="text-xs opacity-70 mt-1">tap → Unified Inbox</p>
         </div>
+      </div>
+
+      {/* ── WA Chat Quick Panel ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "WA Sent", value: stats.whatsapp.sent, color: "text-[#25D366]", bg: "bg-[#25D366]/10", href: "/wa-chat" },
+          { label: "WA Received", value: stats.whatsapp.received, color: "text-blue-600", bg: "bg-blue-50", href: "/wa-chat" },
+          { label: "WA Read", value: stats.whatsapp.read, color: "text-violet-600", bg: "bg-violet-50", href: "/wa-chat" },
+          { label: "WA Failed", value: stats.whatsapp.failed, color: "text-red-500", bg: "bg-red-50", href: "/wa-chat" },
+        ].map(s => (
+          <button
+            key={s.label}
+            onClick={() => nav(s.href)}
+            className={`${s.bg} border border-transparent hover:border-gray-200 rounded-xl p-3 text-left transition-all group`}
+          >
+            <p className={`text-xl font-bold ${s.color}`}>{s.value ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+          </button>
+        ))}
       </div>
 
       {/* ── Key Metrics ── */}
@@ -481,7 +500,7 @@ export default function DashboardPage() {
               { label: "New Order", href: "/orders", icon: ShoppingCart, color: "bg-blue-100 text-blue-700" },
               { label: "Products", href: "/products", icon: Package, color: "bg-orange-100 text-orange-700" },
               { label: "Customers", href: "/customers", icon: Users, color: "bg-violet-100 text-violet-700" },
-              { label: "WA Inbox", href: "/shopify/wa-inbox", icon: MessageCircle, color: "bg-[#25D366]/10 text-[#25D366]" },
+              { label: "WA Chat", href: "/wa-chat", icon: MessageCircle, color: "bg-[#25D366]/10 text-[#25D366]" },
               { label: "Campaigns", href: "/shopify/campaigns", icon: Send, color: "bg-teal-100 text-teal-700" },
               { label: "Analytics", href: "/analytics", icon: BarChart2, color: "bg-indigo-100 text-indigo-700" },
               { label: "Abandoned", href: "/abandoned-checkouts", icon: ShoppingBag, color: "bg-amber-100 text-amber-700" },
