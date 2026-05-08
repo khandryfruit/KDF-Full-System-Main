@@ -1,0 +1,230 @@
+WhatsApp Business Official Number + Meta Connection Error Fix
+
+You now need to properly improve and fix the WhatsApp Business Official API connection system.
+
+Currently, when connecting the official WhatsApp Business number with Meta/Facebook integration, an error appears on top and the connection fails.
+
+This must be fixed professionally.
+
+⸻
+
+Current Situation
+
+The WhatsApp Business number is already:
+
+* Official business number
+* Used on website
+* Customers already chat on this number
+* Meta verified account exists
+* Facebook Business exists
+* Domain is live
+
+Domains being used:
+
+* khanbabadryfruits.com
+* admin.khanbabadryfruits.com
+
+But:
+
+* Facebook/Meta connection throws error
+* WhatsApp Business does not fully connect
+* Calls/chats/sync do not appear properly
+* Real-time chat system is incomplete
+
+⸻
+
+Required Fixes
+
+1. Meta Embedded Signup Flow Fix
+
+Properly implement Meta Embedded Signup.
+
+Fix:
+
+* Facebook login popup errors
+* OAuth redirect issues
+* Permission issues
+* Invalid redirect URI
+* Domain mismatch
+* Webhook verification problems
+* Token exchange problems
+
+⸻
+
+2. Domain & Callback Configuration
+
+Configure domains correctly inside Meta App settings.
+
+Add proper settings for:
+
+Allowed Domains
+
+* khanbabadryfruits.com
+* admin.khanbabadryfruits.com
+
+Redirect URLs
+
+* Authentication callback URLs
+* Embedded signup callback
+* OAuth success/failure routes
+
+Webhook URLs
+
+* Live webhook endpoint
+* Verification endpoint
+
+⸻
+
+3. Official WhatsApp Business Connection
+
+Allow connecting:
+
+* Existing WhatsApp Business number
+* Existing verified Meta account
+* Existing Facebook Business Manager
+
+WITHOUT losing current chats/customers.
+
+System should support:
+
+* Official Cloud API
+* Existing production number
+* Existing website live chat number
+
+⸻
+
+4. Full WhatsApp Business Features
+
+After successful connection:
+
+The dashboard must support:
+
+* Incoming chats
+* Outgoing chats
+* Media messages
+* Product sharing
+* AI replies
+* Order notifications
+* Delivery updates
+* Call visibility status
+* Read status
+* Delivery reports
+
+⸻
+
+5. Existing Number Migration Handling
+
+The system must properly handle:
+
+* Existing WhatsApp Business App number
+* Migration to Cloud API
+* Number verification flow
+* OTP verification
+* Embedded signup verification
+
+Prevent:
+
+* Number conflicts
+* Session issues
+* Duplicate connections
+
+⸻
+
+6. Meta Permission Requirements
+
+Ensure proper permissions are requested:
+
+* whatsapp_business_management
+* whatsapp_business_messaging
+* business_management
+
+Also:
+
+* Auto validate permissions
+* Show clear error messages
+* Show fix suggestions if permission missing
+
+⸻
+
+7. Error Handling UI
+
+If Meta connection fails:
+
+* Show exact error
+* Show reason
+* Show fix instructions
+* Save logs
+* Retry connection button
+
+Add professional:
+
+* Debug panel
+* Meta API logs
+* OAuth logs
+* Webhook logs
+* Token validation logs
+
+⸻
+
+8. Real-Time Sync Fix
+
+Currently chats/calls/status are not syncing properly.
+
+Fix:
+
+* WebSocket real-time updates
+* Incoming message sync
+* Outgoing message sync
+* Conversation refresh
+* Delivery status
+* Read receipts
+
+Everything should update live instantly.
+
+⸻
+
+9. AI + Official WhatsApp Integration
+
+Once official number is connected:
+
+AI system should work on official number:
+
+* AI replies
+* Product recommendations
+* Coupon suggestions
+* Auto follow-ups
+* Abandoned cart recovery
+* Smart offers
+
+⸻
+
+10. Security + Production Readiness
+
+Production-level implementation required.
+
+Add:
+
+* Secure token encryption
+* Auto token refresh
+* Session management
+* Role permissions
+* API retry handling
+* Queue system
+* Failure recovery
+
+⸻
+
+11. Final Goal
+
+The final system should allow us to:
+
+* Connect official verified WhatsApp Business number
+* Use Meta verified business properly
+* Use existing customer chat number
+* Sync chats in real time
+* Use AI automation
+* Send products/offers/orders
+* Handle support conversations
+* Fully manage WhatsApp business from dashboard
+
+WITHOUT Meta connection errors.
