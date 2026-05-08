@@ -58,7 +58,7 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 bg-black/50 z-[700] flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
     >
       <div
@@ -175,7 +175,7 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
         </div>
 
         {/* Total & Add */}
-        <div className="px-5 pb-5 space-y-3">
+        <div className="px-5 space-y-3" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}>
           <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
             <span className="text-sm text-gray-600">Total</span>
             <span className="text-base font-bold text-gray-900">

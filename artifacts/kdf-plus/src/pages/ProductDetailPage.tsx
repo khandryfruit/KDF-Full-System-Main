@@ -467,7 +467,7 @@ export default function ProductDetailPage() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-36 sm:pb-28 lg:pb-10">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6 flex-wrap">
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
@@ -765,7 +765,7 @@ export default function ProductDetailPage() {
       </main>
 
       {/* Sticky mobile CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/95 backdrop-blur-md border-t border-border px-4 py-3 flex gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+      <div className="fixed bottom-14 sm:bottom-0 left-0 right-0 z-[500] lg:hidden bg-white/95 backdrop-blur-md border-t border-border px-4 py-3 flex gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
         {product.stock === 0 && !bidData?.isLive ? (
           <Button size="lg" variant="outline" className="flex-1 font-semibold rounded-xl border-2 border-orange-300 text-orange-700" onClick={() => setNotifyOpen(true)} data-testid="button-notify-me-mobile">
             <Bell className="w-4 h-4 mr-2" /> Notify Me When Available
