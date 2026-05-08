@@ -1448,7 +1448,10 @@ export default function WhatsAppPage() {
                           <div className="bg-white border border-orange-100 rounded-lg p-2.5 space-y-1 font-mono text-[11px]">
                             <p className="text-gray-700 select-all">abadryfruits.com</p>
                             <p className="text-gray-700 select-all">khanbabadryfruits.com</p>
-                            <p className="text-gray-500 select-all">{window.location.hostname}</p>
+                            <p className="text-gray-700 select-all">admin.khanbabadryfruits.com</p>
+                            {!["abadryfruits.com","khanbabadryfruits.com","admin.khanbabadryfruits.com"].includes(window.location.hostname) && (
+                              <p className="text-gray-500 select-all">{window.location.hostname}</p>
+                            )}
                           </div>
                           <div className="text-[11px] text-orange-700 leading-relaxed space-y-0.5">
                             <p className="font-semibold">Steps to fix:</p>
