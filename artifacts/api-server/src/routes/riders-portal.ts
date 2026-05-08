@@ -245,18 +245,27 @@ router.get("/rider/stats", riderMiddleware, async (req: any, res) => {
     const riderId = req.rider.id;
     const statsRows = await db.execute(sql`
       SELECT
-        COUNT(*) FILTER (WHERE status NOT IN ('delivered','returned','failed')) AS pending,
+        /* Today's pending = assigned today and still active */
+        COUNT(*) FILTER (WHERE DATE(assigned_at) = CURRENT_DATE AND status NOT IN ('delivered','returned','failed')) AS pending,
         COUNT(*) FILTER (WHERE status = 'delivered') AS total_delivered,
         COUNT(*) FILTER (WHERE status = 'delivered' AND DATE(delivered_at) = CURRENT_DATE) AS delivered_today,
         COUNT(*) FILTER (WHERE DATE(assigned_at) = CURRENT_DATE) AS assigned_today,
+        /* on_route = current live status */
         COUNT(*) FILTER (WHERE status = 'out_for_delivery') AS on_route,
-        COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+        /* Today's failed only */
+        COUNT(*) FILTER (WHERE status = 'failed' AND DATE(assigned_at) = CURRENT_DATE) AS failed,
+        /* All-time failed for history */
+        COUNT(*) FILTER (WHERE status = 'failed') AS total_failed,
         COALESCE(SUM(CASE WHEN status = 'delivered' AND DATE(delivered_at) = CURRENT_DATE
           THEN COALESCE(delivery_charge, 0) ELSE 0 END), 0) AS earnings_today,
         COALESCE(SUM(CASE WHEN status = 'delivered'
           THEN COALESCE(delivery_charge, 0) ELSE 0 END), 0) AS total_earnings,
+        /* COD pending on currently active orders */
         COALESCE(SUM(CASE WHEN status NOT IN ('delivered','returned','failed') AND is_paid = false
-          THEN cod_amount ELSE 0 END), 0) AS cod_pending
+          THEN cod_amount ELSE 0 END), 0) AS cod_pending,
+        /* Today's COD collected on delivered */
+        COALESCE(SUM(CASE WHEN status = 'delivered' AND DATE(delivered_at) = CURRENT_DATE AND is_paid = false
+          THEN cod_amount ELSE 0 END), 0) AS cod_collected_today
       FROM rider_deliveries
       WHERE rider_id = ${riderId}
     `);
@@ -274,17 +283,49 @@ router.get("/rider/stats", riderMiddleware, async (req: any, res) => {
 router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
   try {
     const riderId = req.rider.id;
-    const { status, date } = req.query;
+    const { status, date, period } = req.query;
 
-    let conditions = [`rd.rider_id = ${riderId}`];
-    if (status && status !== "all") {
-      conditions.push(`rd.status = '${String(status).replace(/'/g, "''")}'`);
-    }
-    if (date) {
-      conditions.push(`DATE(rd.assigned_at) = '${String(date).replace(/'/g, "''")}'`);
+    /*
+     * period logic:
+     *   (default / "today") → active statuses (all dates) + today's terminal
+     *   "yesterday"         → DATE(assigned_at) = yesterday
+     *   "week"              → assigned_at >= 7 days ago
+     *   "month"             → assigned_at >= start of current month
+     *   "all"               → all records
+     *   "active"            → only active status records (no date filter)
+     */
+    const ACTIVE_STATUSES = ["'assigned'", "'picked'", "'out_for_delivery'"];
+
+    let dateFilter: string;
+    const p = String(period ?? "today");
+
+    if (p === "active") {
+      dateFilter = `rd.status IN (${ACTIVE_STATUSES.join(",")})`;
+    } else if (p === "yesterday") {
+      dateFilter = `DATE(rd.assigned_at) = CURRENT_DATE - INTERVAL '1 day'`;
+    } else if (p === "week") {
+      dateFilter = `rd.assigned_at >= NOW() - INTERVAL '7 days'`;
+    } else if (p === "month") {
+      dateFilter = `rd.assigned_at >= DATE_TRUNC('month', NOW())`;
+    } else if (p === "all") {
+      dateFilter = "1=1";
+    } else {
+      /* default: "today" — active orders always visible + today's completed/failed */
+      dateFilter = `(
+        rd.status IN (${ACTIVE_STATUSES.join(",")})
+        OR DATE(rd.assigned_at) = CURRENT_DATE
+      )`;
     }
 
-    const whereClause = conditions.join(" AND ");
+    /* optional extra filters */
+    const statusCond = (status && status !== "all")
+      ? `AND rd.status = '${String(status).replace(/'/g, "''")}'`
+      : "";
+    const dateCond = date
+      ? `AND DATE(rd.assigned_at) = '${String(date).replace(/'/g, "''")}'`
+      : "";
+
+    const limitClause = (p === "all" || p === "month") ? 500 : 300;
 
     const rows = await db.execute(sql`
       SELECT
@@ -300,6 +341,9 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
       FROM rider_deliveries rd
       LEFT JOIN shopify_orders o ON o.id = rd.shopify_order_db_id
       WHERE rd.rider_id = ${riderId}
+        AND (${sql.raw(dateFilter)})
+        ${sql.raw(statusCond)}
+        ${sql.raw(dateCond)}
       ORDER BY
         CASE rd.status
           WHEN 'out_for_delivery' THEN 1
@@ -310,23 +354,10 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
           WHEN 'returned' THEN 6
         END ASC,
         rd.assigned_at DESC
-      LIMIT 200
+      LIMIT ${limitClause}
     `);
 
-    let deliveries = rows.rows as any[];
-
-    if (status && status !== "all") {
-      deliveries = deliveries.filter((d: any) => d.status === status);
-    }
-    if (date) {
-      deliveries = deliveries.filter((d: any) => {
-        if (!d.assigned_at) return false;
-        const assigned = new Date(d.assigned_at).toISOString().slice(0, 10);
-        return assigned === date;
-      });
-    }
-
-    res.json({ deliveries });
+    res.json({ deliveries: rows.rows, period: p });
   } catch (err: any) {
     req.log?.error(err);
     res.status(500).json({ error: err.message });

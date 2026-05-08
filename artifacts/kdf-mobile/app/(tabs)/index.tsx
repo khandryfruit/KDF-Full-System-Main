@@ -189,8 +189,9 @@ export default function DashboardScreen() {
   const greeting = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const initials = (rider?.name ?? "R").split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
-  const todayEarnings = Number(s.earnings_today ?? 0);
-  const codPending    = Number(s.cod_pending ?? 0);
+  const todayEarnings   = Number(s.earnings_today ?? 0);
+  const codPending      = Number(s.cod_pending ?? 0);
+  const codCollected    = Number(s.cod_collected_today ?? 0);
 
   return (
     <View style={[styles.root, { paddingBottom: Platform.OS === "web" ? 34 : 0 }]}>
@@ -242,6 +243,17 @@ export default function DashboardScreen() {
                 <Feather name="activity" size={11} color="rgba(255,255,255,0.6)" />
                 <Text style={styles.earningsMetaTxt}>{active.length} active</Text>
               </View>
+              {codCollected > 0 && (
+                <>
+                  <View style={styles.earningsMetaDivider} />
+                  <View style={styles.earningsMetaItem}>
+                    <Feather name="dollar-sign" size={11} color="#4ADE80" />
+                    <Text style={[styles.earningsMetaTxt, { color: "#4ADE80" }]}>
+                      Rs. {codCollected.toLocaleString()} COD
+                    </Text>
+                  </View>
+                </>
+              )}
             </View>
           </View>
           <View style={styles.earningsHeroRight}>
@@ -317,8 +329,8 @@ export default function DashboardScreen() {
               <StatCard label="Pending"   value={s.pending ?? 0}          icon="clock"        accent="#F59E0B" bg="#FFFBEB" />
               <StatCard label="Failed"    value={s.failed ?? 0}           icon="x-circle"     accent="#EF4444" bg="#FEF2F2" />
               <StatCard
-                label="COD"
-                value={`${Math.round(codPending / 1000)}k`}
+                label="COD Due"
+                value={codPending >= 1000 ? `${Math.round(codPending / 1000)}k` : codPending.toString()}
                 icon="dollar-sign"
                 accent="#F97316"
                 bg="#FFF7ED"

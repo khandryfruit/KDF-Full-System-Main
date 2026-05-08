@@ -1,0 +1,223 @@
+Need to redesign and improve Rider App + Admin Dashboard order management system professionally.
+
+Current issue:
+Old orders and completed historical data are showing on Rider Home Dashboard together with new assigned orders.
+
+This creates confusion for riders and dashboard data becomes inaccurate.
+
+We need a clean professional workflow similar to modern delivery apps.
+
+--------------------------------------------------
+MAIN REQUIREMENT
+--------------------------------------------------
+
+Separate:
+✅ Today's Live Orders
+✅ Old Completed Orders
+✅ Historical Data
+✅ Archived Orders
+
+Old data should NOT appear on Rider Home screen.
+
+Only active daily tasks should appear on dashboard.
+
+--------------------------------------------------
+RIDER APP REQUIREMENTS
+--------------------------------------------------
+
+# 1. Home Dashboard
+
+Rider Home Screen should ONLY show:
+
+✅ Today's Assigned Orders
+✅ On Route Orders
+✅ Delivered Today
+✅ Pending Today
+✅ Failed Today
+✅ Today's COD Collection
+✅ Today's Earnings
+
+DO NOT show:
+❌ Previous days orders
+❌ Historical deliveries
+❌ Old failed orders
+❌ Archived tasks
+
+--------------------------------------------------
+# 2. Auto Daily Reset Logic
+
+Every new day:
+
+System should automatically:
+- reset daily counters
+- refresh today's stats
+- move old orders to history
+
+Dashboard must calculate only:
+CURRENT DATE DATA
+
+--------------------------------------------------
+# 3. Order Segregation System
+
+Create separate sections:
+
+### Active Orders
+- Newly assigned
+- Pending
+- On route
+
+### Completed Today
+- Delivered today only
+
+### Order History
+- Previous days deliveries
+
+### Failed Orders
+- Failed/cancelled
+
+### Archived Orders
+- Old historical records
+
+--------------------------------------------------
+# 4. Smart Filtering
+
+Add filters:
+
+✅ Today
+✅ Yesterday
+✅ Last 7 Days
+✅ This Month
+✅ Custom Date Range
+
+--------------------------------------------------
+# 5. Professional Mobile UI
+
+Improve Rider Dashboard UI professionally.
+
+Need:
+- Modern delivery app design
+- Smooth cards
+- Better spacing
+- Animated counters
+- Real-time updates
+- Clean typography
+- Fast loading
+
+--------------------------------------------------
+# 6. Real-Time Dashboard Counters
+
+Dashboard should update instantly when rider:
+
+✅ Delivers order
+✅ Marks failed
+✅ Starts route
+✅ Receives COD
+
+Counters must sync in real-time.
+
+--------------------------------------------------
+# 7. Earnings Logic
+
+Today's Earnings should calculate ONLY:
+
+Delivered orders for current day.
+
+Exclude:
+❌ Previous days COD
+❌ Old deliveries
+❌ Historical payments
+
+--------------------------------------------------
+# 8. Admin Panel Improvements
+
+Admin dashboard should also have:
+
+### Live Operations
+- Active riders
+- Today's deliveries
+- Today's pending
+- Today's COD
+- Today's failed
+
+### Historical Reports
+- Weekly reports
+- Monthly reports
+- Archived deliveries
+
+Separate live data from historical data.
+
+--------------------------------------------------
+# 9. Database Improvements
+
+Add proper order status timestamps:
+
+- assigned_at
+- picked_at
+- delivered_at
+- failed_at
+- archived_at
+
+Add:
+- order_date
+- delivery_date
+- dashboard_date
+
+--------------------------------------------------
+# 10. Automatic Archive System
+
+After:
+- order completed
+- or day finished
+
+Move orders automatically to:
+History / Archive section.
+
+Do NOT keep old orders on home dashboard.
+
+--------------------------------------------------
+# 11. Notifications
+
+Rider should receive:
+
+✅ New Order Assigned
+✅ Route Started
+✅ Delivery Completed
+✅ COD Updated
+
+with real-time refresh.
+
+--------------------------------------------------
+# 12. Performance Optimization
+
+Dashboard must:
+- load fast
+- use pagination
+- lazy load history
+- cache today's stats
+
+--------------------------------------------------
+# 13. Admin Analytics
+
+Need professional analytics:
+
+✅ Daily
+✅ Weekly
+✅ Monthly
+✅ Rider Performance
+✅ COD Summary
+✅ Delivery Success Rate
+
+--------------------------------------------------
+# 14. Expected Final Result
+
+Rider App should behave like:
+Uber Eats / Foodpanda / Bykea style delivery dashboard.
+
+Only today's work visible on home screen.
+
+Old data automatically separated into:
+History + Archive.
+
+Dashboard stats must remain accurate and clean.
+
+Need full mobile optimization and professional UI/UX.
