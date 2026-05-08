@@ -37,26 +37,34 @@ function getImageUrl(path: string): string {
 
 function useCategoryImageUpload() {
   const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   const upload = useCallback(async (file: File): Promise<string | null> => {
     setIsUploading(true);
+    setProgress(10);
     try {
       const token = localStorage.getItem("kdf_admin_token");
-      const res = await fetch("/api/storage/uploads/request-url", {
+      const formData = new FormData();
+      formData.append("file", file);
+      setProgress(30);
+      const res = await fetch("/api/storage/uploads/image", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "image/jpeg" }),
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: formData,
       });
-      if (!res.ok) throw new Error("Failed to get upload URL");
-      const { uploadURL, objectPath } = await res.json();
-      const put = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type || "image/jpeg" } });
-      if (!put.ok) throw new Error("Upload failed");
-      return objectPath;
-    } catch { return null; } finally { setIsUploading(false); }
+      setProgress(80);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || "Upload failed");
+      }
+      const data = await res.json();
+      setProgress(100);
+      return (data as any).objectPath ?? null;
+    } catch { return null; }
+    finally { setIsUploading(false); setTimeout(() => setProgress(0), 600); }
   }, []);
-  return { upload, isUploading };
+
+  return { upload, isUploading, progress };
 }
 
 function CategoryImageUploader({ value, altText, onImageChange, onAltChange }: {
@@ -65,73 +73,137 @@ function CategoryImageUploader({ value, altText, onImageChange, onAltChange }: {
   onImageChange: (v: string) => void;
   onAltChange: (v: string) => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const { upload, isUploading } = useCategoryImageUpload();
+  const fileInputRef   = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const { upload, isUploading, progress } = useCategoryImageUpload();
   const { toast } = useToast();
+  const [isDragging, setIsDragging] = useState(false);
+
+  const MAX_MB = 2;
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) { toast({ variant: "destructive", title: "Not an image file" }); return; }
-    if (file.size > 5 * 1024 * 1024) { toast({ variant: "destructive", title: "Image exceeds 5 MB" }); return; }
+    if (!["image/jpeg","image/jpg","image/png","image/webp"].includes(file.type)) {
+      toast({ variant: "destructive", title: "Format not supported", description: "Use JPG, PNG or WEBP" }); return;
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      toast({ variant: "destructive", title: `Image exceeds ${MAX_MB} MB`, description: "Please compress the image first" }); return;
+    }
     const path = await upload(file);
-    if (path) onImageChange(path);
-    else toast({ variant: "destructive", title: "Upload failed" });
+    if (path) { onImageChange(path); toast({ title: "Image uploaded", description: "Converted to WebP and saved" }); }
+    else toast({ variant: "destructive", title: "Upload failed", description: "Please try again" });
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    handleFile(e.dataTransfer.files?.[0] ?? null);
   };
 
   return (
-    <div className="space-y-3">
-      <Label className="text-sm font-medium">Category Image</Label>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Category Image</Label>
+        <span className="text-[11px] text-muted-foreground">Recommended: 512×512 px · JPG/PNG/WEBP · Max {MAX_MB} MB</span>
+      </div>
 
       {value ? (
-        <div className="relative group rounded-xl overflow-hidden border bg-muted" style={{ aspectRatio: "16/9" }}>
-          <img src={getImageUrl(value)} alt={altText || "Category"} className="w-full h-full object-cover" loading="lazy" />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="bg-white text-gray-900 text-xs px-3 py-1.5 rounded-full font-medium hover:bg-gray-100 transition-colors flex items-center gap-1.5"
-            >
-              <Upload className="w-3 h-3" /> Replace
+        /* ── Preview card ── */
+        <div className="relative group rounded-2xl overflow-hidden border-2 border-border bg-muted shadow-sm"
+          style={{ aspectRatio: "1 / 1", maxWidth: 200 }}>
+          <img
+            src={getImageUrl(value)}
+            alt={altText || "Category"}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+          {/* Hover overlay */}
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col items-center justify-center gap-2">
+            <button type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-white/90 backdrop-blur text-gray-900 text-xs px-4 py-2 rounded-full font-semibold hover:bg-white transition-colors flex items-center gap-1.5 shadow">
+              <Upload className="w-3.5 h-3.5" /> Replace
             </button>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => onImageChange("")}
-              className="bg-red-500 text-white text-xs px-3 py-1.5 rounded-full font-medium hover:bg-red-600 transition-colors flex items-center gap-1.5"
-            >
-              <X className="w-3 h-3" /> Remove
+              className="bg-red-500/90 backdrop-blur text-white text-xs px-4 py-2 rounded-full font-semibold hover:bg-red-500 transition-colors flex items-center gap-1.5 shadow">
+              <X className="w-3.5 h-3.5" /> Remove
             </button>
           </div>
+          {/* WebP badge */}
+          <span className="absolute top-2 left-2 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">WebP</span>
         </div>
       ) : (
+        /* ── Drop zone ── */
         <div
-          className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-          onClick={() => !isUploading && fileRef.current?.click()}
-          onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0] ?? null); }}
+          className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer
+            ${isDragging ? "border-primary bg-primary/5 scale-[1.01]" : "border-border hover:border-primary/50 hover:bg-muted/30"}
+            ${isUploading ? "pointer-events-none" : ""}`}
+          style={{ aspectRatio: "1 / 1", maxWidth: 200 }}
+          onClick={() => !isUploading && fileInputRef.current?.click()}
+          onDragEnter={() => setIsDragging(true)}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
         >
-          {isUploading
-            ? <div className="flex flex-col items-center gap-2 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /><span className="text-sm">Uploading…</span></div>
-            : <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                <ImageIcon className="w-8 h-8 opacity-40" />
-                <span className="text-sm font-medium">Click or drag image here</span>
-                <span className="text-xs">PNG, JPG, WEBP · Max 5 MB</span>
-              </div>
-          }
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
+            {isUploading ? (
+              <>
+                <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                <span className="text-xs font-medium text-primary">Processing…</span>
+                {progress > 0 && (
+                  <div className="w-full max-w-[120px] bg-muted rounded-full h-1.5">
+                    <div className="bg-primary h-1.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors
+                  ${isDragging ? "bg-primary/20" : "bg-muted"}`}>
+                  <ImageIcon className={`w-6 h-6 ${isDragging ? "text-primary" : "text-muted-foreground/50"}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Drop image here</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">or click to browse</p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" className="hidden"
+      {/* Upload buttons for mobile */}
+      {!value && !isUploading && (
+        <div className="flex gap-2">
+          <button type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+            <Upload className="w-3.5 h-3.5" /> Gallery
+          </button>
+          <button type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+            <ImageIcon className="w-3.5 h-3.5" /> Camera
+          </button>
+        </div>
+      )}
+
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
         onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
 
+      {/* Alt text */}
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Alt Text <span className="text-destructive">*</span></Label>
+        <Label className="text-xs text-muted-foreground">Image Alt Text (SEO)</Label>
         <Input
           value={altText}
-          placeholder='e.g. "Premium Cashews Category"'
+          placeholder='e.g. "Premium Cashews — KDF NUTS"'
           onChange={(e) => onAltChange(e.target.value)}
           className="text-sm"
         />
-        <p className="text-[11px] text-muted-foreground">Describe the image for SEO and accessibility</p>
+        <p className="text-[11px] text-muted-foreground">Describe the image for Google image search</p>
       </div>
     </div>
   );
@@ -360,6 +432,31 @@ export default function CategoriesPage() {
                     <div className="flex items-center gap-2.5">
                       <Switch checked={form.active} onCheckedChange={(c) => setForm(f => ({ ...f, active: c }))} />
                       <Label>Active</Label>
+                    </div>
+
+                    {/* ── Image quick preview / shortcut ── */}
+                    <div
+                      className="flex items-center gap-3 p-3 rounded-xl border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setTab("seo")}
+                    >
+                      {form.imageUrl ? (
+                        <div className="w-12 h-12 rounded-lg overflow-hidden border bg-muted flex-shrink-0">
+                          <img src={getImageUrl(form.imageUrl)} alt={form.altText || form.name} className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg border-2 border-dashed bg-muted flex items-center justify-center flex-shrink-0">
+                          <ImageIcon className="w-5 h-5 text-muted-foreground/40" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground">
+                          {form.imageUrl ? "Category image added" : "No image yet"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {form.imageUrl ? "Click to view or replace in Image & SEO tab" : "Click to upload in Image & SEO tab"}
+                        </p>
+                      </div>
+                      <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     </div>
                   </TabsContent>
 
