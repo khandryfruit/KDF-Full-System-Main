@@ -1,0 +1,285 @@
+CRITICAL HOTFIX PROMPT — Shopify Final Form + Chat Sync + Lead Capture Broken
+
+URGENT — LAST UPDATE BROKE CORE FEATURES
+
+Last pushed update کے بعد:
+
+❌ Shopify Final Form stuck ہو گیا
+
+❌ Chat click properly work نہیں کر رہا
+
+❌ Website chat admin میں نہیں آ رہی
+
+❌ Leads generate نہیں ہو رہیں
+
+❌ Forms save نہیں ہو رہے
+
+❌ Customer data backend میں نہیں جا رہا
+
+❌ WhatsApp/Website sync broken ہے
+
+یہ critical production issue ہے۔
+
+---
+
+PRIORITY #1 — FIX SHOPIFY FINAL FORM
+
+Current Problem
+
+Customer جب:
+
+- product select کرتا ہے
+- order form open کرتا ہے
+- checkout flow use کرتا ہے
+
+تو:
+
+❌ form stuck ہو جاتا ہے
+❌ loading state ختم نہیں ہوتی
+❌ submit نہیں ہو رہا
+❌ add to cart broken ہے
+
+---
+
+REQUIRED FIX
+
+Debug Entire Flow
+
+Check:
+
+- form submit handlers
+- API requests
+- Shopify cart APIs
+- event listeners
+- async state updates
+- checkout redirects
+- loading overlays
+
+---
+
+REQUIRED RESULT
+
+Customer:
+
+✅ product select کرے
+✅ form fill کرے
+✅ order submit ہو
+✅ Shopify cart update ہو
+✅ checkout smoothly open ہو
+
+---
+
+PRIORITY #2 — WEBSITE CHAT NOT REACHING ADMIN
+
+Current Problem
+
+Website visitors chat کر رہے ہیں لیکن:
+
+❌ admin inbox میں نہیں آ رہی
+❌ WA Chat میں show نہیں ہو رہی
+❌ database میں save نہیں ہو رہی
+❌ lead create نہیں ہو رہی
+
+---
+
+REQUIRED FIX
+
+Every website message MUST:
+
+✅ save in database
+✅ generate lead
+✅ appear in admin instantly
+✅ sync with customer session
+
+---
+
+REQUIRED FLOW
+
+Customer website پر chat کرے
+
+↓
+
+Message save ہو:
+
+chat_messages
+website_leads
+customer_sessions
+conversation_history
+
+↓
+
+Admin WA Chat inbox میں instantly show ہو۔
+
+---
+
+REQUIRED REALTIME FIX
+
+Use:
+
+✅ websocket
+یا
+✅ realtime polling
+
+for instant sync۔
+
+---
+
+PRIORITY #3 — CHAT CLICK / OPEN BUG
+
+Current Problem
+
+Chat click کرنے پر:
+
+❌ freeze ہو رہا ہے
+❌ popup stuck ہے
+❌ open نہیں ہو رہا properly
+❌ overlay issue ہے
+
+---
+
+REQUIRED FIX
+
+Floating Widget Must
+
+✅ open instantly
+✅ smooth animation use کرے
+✅ isolated render ہو
+✅ independent state رکھے
+
+---
+
+IMPORTANT
+
+DO NOT LOAD
+
+❌ full storefront
+❌ homepage
+❌ embedded website
+❌ mobile preview
+
+inside widget۔
+
+---
+
+ONLY LOAD
+
+- chat window
+- messages
+- product cards
+- tracking cards
+- AI replies
+
+---
+
+PRIORITY #4 — LEAD CAPTURE SYSTEM
+
+Required
+
+Every customer interaction create کرے:
+
+Lead Profile
+
+with:
+
+✅ name
+✅ phone
+✅ email
+✅ source
+✅ products viewed
+✅ conversation history
+
+---
+
+REQUIRED ADMIN PANEL
+
+WA Chat → Leads
+
+show کرے:
+
+- live visitors
+- active chats
+- customer details
+- Shopify history
+- tracking history
+
+---
+
+REQUIRED AI SYNC
+
+AI access کرے:
+
+- Shopify customers
+- Shopify orders
+- Website chats
+- WhatsApp chats
+- Tracking systems
+- Lead records
+
+---
+
+REQUIRED DEBUGGING
+
+Please inspect:
+
+- console errors
+- network failures
+- websocket disconnects
+- failed API responses
+- event propagation issues
+- React state conflicts
+
+---
+
+REQUIRED PERFORMANCE FIXES
+
+System ہونا چاہیے:
+
+✅ fast
+✅ realtime
+✅ mobile optimized
+✅ lightweight
+✅ stable
+✅ non-blocking
+
+---
+
+FINAL REQUIRED RESULT
+
+Customer Side
+
+✅ working chat
+✅ working forms
+✅ working products
+✅ working checkout
+✅ working voice
+✅ fast replies
+
+---
+
+Admin Side
+
+✅ live chats
+✅ synced conversations
+✅ captured leads
+✅ customer history
+✅ Shopify sync
+
+---
+
+FINAL GOAL
+
+Restore and stabilize:
+
+Unified WA Chat Commerce System
+
+where:
+
+✅ Shopify
+✅ Website Chat
+✅ WhatsApp
+✅ Leads
+✅ Orders
+✅ Tracking
+✅ AI
+
+سب perfectly synced اور production-ready ہوں۔
