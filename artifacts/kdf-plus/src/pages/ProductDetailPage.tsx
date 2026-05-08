@@ -764,21 +764,42 @@ export default function ProductDetailPage() {
         <RelatedProducts currentId={productId} />
       </main>
 
-      {/* Sticky mobile CTA */}
-      <div className="fixed bottom-14 sm:bottom-0 left-0 right-0 z-[500] lg:hidden bg-white/95 backdrop-blur-md border-t border-border px-4 py-3 flex gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+      {/* Sticky mobile CTA — compact premium */}
+      <div className="fixed bottom-14 sm:bottom-0 left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+        {/* Price + name strip */}
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
+          <p className="text-[11px] text-gray-400 truncate max-w-[55%]">{product.name}</p>
+          <p className="text-sm font-extrabold" style={{ color: "#5FA800" }}>Rs. {price.toLocaleString()}</p>
+        </div>
+        {/* Buttons */}
         {product.stock === 0 && !bidData?.isLive ? (
-          <Button size="lg" variant="outline" className="flex-1 font-semibold rounded-xl border-2 border-orange-300 text-orange-700" onClick={() => setNotifyOpen(true)} data-testid="button-notify-me-mobile">
-            <Bell className="w-4 h-4 mr-2" /> Notify Me When Available
-          </Button>
+          <button
+            onClick={() => setNotifyOpen(true)}
+            data-testid="button-notify-me-mobile"
+            className="w-full h-9 rounded-xl text-xs font-semibold border-2 border-orange-300 text-orange-600 flex items-center justify-center gap-1.5 bg-orange-50 transition-all active:scale-[0.98]"
+          >
+            <Bell className="w-3.5 h-3.5" /> Notify Me When Available
+          </button>
         ) : (
-          <>
-            <Button size="lg" variant="outline" className="flex-1 font-semibold rounded-xl border-2" onClick={handleAddToCart} disabled={product.stock === 0} data-testid="button-add-to-cart-mobile">
-              <ShoppingCart className="w-4 h-4 mr-2" /> Add to Cart
-            </Button>
-            <Button size="lg" className="flex-1 font-semibold rounded-xl" onClick={handleBuyNow} disabled={product.stock === 0} style={{ backgroundColor: "#5FA800" }} data-testid="button-buy-now-mobile">
-              <Zap className="w-4 h-4 mr-2" /> Buy Now
-            </Button>
-          </>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddToCart}
+              disabled={product.stock === 0}
+              data-testid="button-add-to-cart-mobile"
+              className="flex-1 h-9 rounded-xl text-xs font-semibold border-2 border-gray-200 text-gray-700 flex items-center justify-center gap-1.5 bg-white transition-all active:scale-[0.98] hover:border-gray-400 disabled:opacity-40"
+            >
+              <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
+            </button>
+            <button
+              onClick={handleBuyNow}
+              disabled={product.stock === 0}
+              data-testid="button-buy-now-mobile"
+              className="flex-[1.4] h-9 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-40"
+              style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
+            >
+              <Zap className="w-3.5 h-3.5" /> Buy Now
+            </button>
+          </div>
         )}
       </div>
 
