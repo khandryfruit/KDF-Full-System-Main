@@ -1296,17 +1296,23 @@ export default function WhatsAppPage() {
               <div className="flex flex-wrap gap-3 items-center">
                 {/* Connect / Reconnect via Meta */}
                 {metaConfig?.isConfigured && (
-                  <button
-                    onClick={handleEmbeddedSignup}
-                    disabled={isConnectingMeta || exchangeMetaToken.isPending}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
-                  >
-                    {isConnectingMeta || exchangeMetaToken.isPending
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                    }
-                    {form.isActive && (connStatus?.success || settings?.accessToken) ? "Reconnect with Meta" : "Connect with Meta"}
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={handleEmbeddedSignup}
+                      disabled={isConnectingMeta || exchangeMetaToken.isPending}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
+                    >
+                      {isConnectingMeta || exchangeMetaToken.isPending
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                      }
+                      {form.isActive && (connStatus?.success || settings?.accessToken) ? "Reconnect with Meta" : "Connect with Meta"}
+                    </button>
+                    <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      Error aa raha hai? Scroll down karein — domain fix instructions hain
+                    </p>
+                  </div>
                 )}
                 {/* Disconnect */}
                 {form.isActive && (
@@ -1428,6 +1434,31 @@ export default function WhatsAppPage() {
                             </div>
                           ))}
                         </div>
+                        {/* ── Domain Whitelist Warning ── */}
+                        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-orange-800">Meta App Domain Whitelist Required</p>
+                              <p className="text-[11px] text-orange-700 mt-0.5 leading-relaxed">
+                                Agar <strong>"JSSDK Unknown Host domain"</strong> error aa raha hai, toh apne Meta App Dashboard mein yeh domains add karein:
+                              </p>
+                            </div>
+                          </div>
+                          <div className="bg-white border border-orange-100 rounded-lg p-2.5 space-y-1 font-mono text-[11px]">
+                            <p className="text-gray-700 select-all">abadryfruits.com</p>
+                            <p className="text-gray-700 select-all">khanbabadryfruits.com</p>
+                            <p className="text-gray-500 select-all">{window.location.hostname}</p>
+                          </div>
+                          <div className="text-[11px] text-orange-700 leading-relaxed space-y-0.5">
+                            <p className="font-semibold">Steps to fix:</p>
+                            <p>1. <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener" className="underline font-medium">developers.facebook.com/apps</a> → Apna App open karein</p>
+                            <p>2. Left sidebar → <strong>Facebook Login for Business</strong> → <strong>Settings</strong></p>
+                            <p>3. <strong>"Allowed Domains for the JavaScript SDK"</strong> mein upar wale domains add karein</p>
+                            <p>4. Changes save karein, phir dobara "Connect with Meta" click karein</p>
+                          </div>
+                        </div>
+
                         <div className="flex flex-wrap items-center gap-3">
                           <button
                             onClick={handleEmbeddedSignup}
