@@ -167,9 +167,9 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
           </button>
           {isInStock ? (
             <button onClick={() => onAddToCart(product, selectedVariant, currentPrice)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-white text-xs font-black active:opacity-80 transition-opacity"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-white text-xs font-black active:opacity-80 transition-opacity whitespace-nowrap"
               style={{ backgroundColor: "#5FA800" }}>
-              <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
+              <ShoppingCart className="w-3.5 h-3.5" /> Add
             </button>
           ) : (
             <div className="flex-1 flex items-center justify-center py-2.5 rounded-xl bg-muted text-xs font-bold text-muted-foreground">
