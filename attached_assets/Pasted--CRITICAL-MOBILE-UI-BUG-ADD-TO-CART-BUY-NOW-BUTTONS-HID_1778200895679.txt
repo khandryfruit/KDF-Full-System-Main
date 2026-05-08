@@ -1,0 +1,169 @@
+========================
+CRITICAL MOBILE UI BUG — ADD TO CART / BUY NOW BUTTONS HIDDEN
+
+There are serious mobile responsive issues on both:
+
+1. Product Details Page
+2. Home Page Product Popup / Quick Add Modal
+
+The main action buttons are becoming hidden behind the mobile bottom navigation bar.
+
+========================
+CURRENT ISSUES
+
+1. PRODUCT PAGE ISSUE
+
+---
+
+On mobile product page:
+
+❌ Add to Cart button is missing
+❌ Buy Now button is not visible
+❌ CTA section disappears
+❌ Buttons go below the mobile bottom navigation
+❌ Customer cannot place order easily
+
+========================
+2. HOME PAGE QUICK ADD MODAL ISSUE
+
+When customer clicks:
+✅ Add button
+✅ Quick Add
+✅ Choose Options
+
+The popup opens correctly,
+BUT:
+
+❌ Bottom Add to Cart button goes behind bottom navigation
+❌ CTA buttons are partially hidden
+❌ Modal height is broken
+❌ Customer cannot scroll properly
+❌ Important actions are cut off
+
+========================
+ROOT CAUSE
+
+The mobile bottom navigation:
+
+✅ Home
+✅ Categories
+✅ Search
+✅ Cart
+✅ Account
+
+is overlapping the popup and product CTA sections.
+
+The responsive height calculations are incorrect.
+
+========================
+REQUIRED FIXES
+
+1. FIX PRODUCT PAGE CTA
+   ========================
+
+Product page must ALWAYS show:
+
+✅ Add to Cart button
+✅ Buy Now button
+✅ Sticky mobile CTA bar
+✅ Proper bottom spacing
+
+Buttons should NEVER disappear.
+
+========================
+2. FIX QUICK ADD MODAL
+
+Popup/modal must:
+
+✅ Respect mobile bottom navbar height
+✅ Use proper safe-area spacing
+✅ Add bottom padding
+✅ Keep CTA section visible
+
+Use:
+✅ env(safe-area-inset-bottom)
+
+========================
+3. STICKY ACTION BAR
+
+Create professional sticky action area:
+
+Always visible:
+✅ Add to Cart
+✅ Buy Now
+✅ Total price
+✅ Quantity controls
+
+Like:
+✅ Daraz
+✅ Shopify mobile
+✅ Foodpanda
+✅ Noon
+
+========================
+4. INTERNAL MODAL SCROLL
+
+Popup content should scroll internally.
+
+NOT behind the navbar.
+
+Customer should:
+✅ Scroll smoothly
+✅ Always see buttons
+✅ Easily select variations
+
+========================
+5. MOBILE-FIRST RESPONSIVE DESIGN
+
+Optimize for:
+
+✅ Android devices
+✅ Samsung phones
+✅ Small screens
+✅ Chrome mobile
+✅ Safari mobile
+
+Test:
+✅ 320px
+✅ 360px
+✅ 390px
+✅ 412px widths
+
+========================
+6. PRODUCT PAGE UI IMPROVEMENT
+
+Improve mobile product detail page:
+
+✅ Better spacing
+✅ Better button sizes
+✅ Sticky buy section
+✅ Better variation UI
+✅ Better quantity controls
+✅ Better responsive layout
+
+========================
+7. PREVENT OVERLAP
+
+Bottom navigation should NEVER overlap:
+
+❌ Product CTA
+❌ Modal CTA
+❌ Checkout buttons
+❌ Cart actions
+
+========================
+8. FINAL GOAL
+
+We need a premium mobile ordering experience.
+
+Customer should:
+✅ Always see order buttons
+✅ Easily add products
+✅ Easily checkout
+✅ Never face hidden CTA buttons
+
+The entire mobile shopping flow must feel:
+✅ Smooth
+✅ Professional
+✅ Fast
+✅ Production-quality

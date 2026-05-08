@@ -672,7 +672,7 @@ export function ProductDetailPage() {
   };
 
   return (
-    <div className="w-full max-w-[430px] mx-auto min-h-[100dvh] bg-[#F8F9FB] flex flex-col font-sans relative pb-20">
+    <div className="w-full max-w-[430px] mx-auto min-h-[100dvh] bg-[#F8F9FB] flex flex-col font-sans relative pb-[140px]">
 
       {/* Top Navigation */}
       <div className="sticky top-0 z-50 bg-white/90 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-100">
@@ -993,7 +993,8 @@ export function ProductDetailPage() {
       </div>
 
       {/* ── Fixed Bottom Action Bar ── */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-md border-t border-gray-100 px-4 pt-2 pb-3 z-50 shadow-[0_-6px_20px_rgba(0,0,0,0.07)]">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white/95 backdrop-blur-md border-t border-gray-100 px-4 pt-2 z-[200] shadow-[0_-6px_20px_rgba(0,0,0,0.07)]"
+        style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
         {/* WhatsApp Order Row */}
         <button
           onClick={() => {
