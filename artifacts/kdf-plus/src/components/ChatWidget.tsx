@@ -102,65 +102,85 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
   onView: (id: number) => void;
   onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
 }) {
-  const hasVariants = product.variants.length > 0;
-  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(hasVariants ? product.variants[0] : null);
+  const realVariants = product.variants.filter(v => v.value && v.value.toLowerCase() !== "default title");
+  const hasVariants = realVariants.length > 1;
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
+    realVariants.length > 0 ? realVariants[0] : (product.variants[0] ?? null)
+  );
   const currentPrice = selectedVariant?.price ?? product.price;
   const isInStock = selectedVariant ? selectedVariant.stock > 0 : product.stock > 0;
   return (
-    <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm mb-2">
-      <div className="relative h-36 bg-gradient-to-br from-green-50 to-emerald-100">
-        <ProductImg src={product.image} alt={product.name} />
+    <div className="bg-background rounded-2xl overflow-hidden border border-border flex flex-col"
+      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+      {/* Product Image */}
+      <div className="relative w-full" style={{ paddingBottom: "75%" }}>
+        <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-emerald-50">
+          <ProductImg src={product.image} alt={product.name} />
+        </div>
         {product.discount && product.discount > 0 && (
-          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{product.discount}% OFF</span>
+          <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+            {product.discount}% OFF
+          </span>
         )}
         {product.badge && !product.discount && (
-          <span className={`absolute top-2 left-2 text-[9px] font-bold px-2 py-0.5 rounded-full text-white shadow-sm ${product.badge === "Best Seller" ? "bg-orange-500" : product.badge === "Most Popular" || product.badge === "Popular" ? "bg-blue-500" : "bg-purple-500"}`}>
-            {product.badge === "Best Seller" ? "🔥 Best Seller" : product.badge === "Most Popular" || product.badge === "Popular" ? "⭐ Popular" : "📈 Trending"}
+          <span className={`absolute top-2 left-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white shadow ${product.badge === "Best Seller" ? "bg-orange-500" : product.badge === "Popular" ? "bg-blue-500" : "bg-purple-500"}`}>
+            {product.badge === "Best Seller" ? "🔥 Top" : product.badge === "Popular" ? "⭐ Hot" : "📈 Trend"}
           </span>
         )}
         {!isInStock && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="text-white text-xs font-bold bg-black/60 px-2 py-1 rounded">Out of Stock</span>
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-t-2xl">
+            <span className="text-white text-[11px] font-bold bg-black/70 px-2.5 py-1 rounded-full">Out of Stock</span>
           </div>
         )}
       </div>
-      <div className="p-2.5">
-        <p className="font-semibold text-foreground text-sm leading-tight mb-1 truncate">{product.name}</p>
+      {/* Card Body */}
+      <div className="p-2.5 flex flex-col flex-1">
+        <p className="font-bold text-foreground text-[12px] leading-tight mb-2 line-clamp-2 min-h-[32px]">{product.name}</p>
+        {/* Variant Pills */}
         {hasVariants && (
-          <div className="flex flex-wrap gap-1.5 mb-1.5">
-            {product.variants.map(v => {
-              const vPrice = v.price ?? product.price;
+          <div className="flex flex-wrap gap-1 mb-2">
+            {realVariants.map(v => {
               const isSelected = selectedVariant?.id === v.id;
               return (
                 <button key={v.id} onClick={() => setSelectedVariant(v)}
-                  className={`flex flex-col items-center px-2.5 py-1.5 rounded-xl border-2 font-semibold transition-all active:scale-95 min-w-[52px] ${isSelected ? "text-white border-transparent shadow-sm" : "bg-background border-border text-muted-foreground"}`}
+                  className={`flex flex-col items-center px-2 py-1 rounded-lg border-2 transition-all active:scale-95 ${isSelected ? "text-white border-transparent shadow-sm" : "bg-background border-border text-foreground"}`}
                   style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : undefined}>
-                  <span className="text-[11px] font-bold">{v.value}</span>
-                  {v.price != null && <span className={`text-[9px] mt-0.5 font-medium ${isSelected ? "text-green-100" : "text-muted-foreground"}`}>Rs.{vPrice.toLocaleString()}</span>}
+                  <span className="text-[10px] font-bold leading-none">{v.value}</span>
+                  {v.price != null && <span className={`text-[8px] mt-0.5 font-semibold leading-none ${isSelected ? "text-green-100" : "text-muted-foreground"}`}>Rs.{v.price.toLocaleString()}</span>}
                 </button>
               );
             })}
           </div>
         )}
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className="font-bold text-[#5FA800] text-sm">Rs. {currentPrice.toLocaleString()}</span>
+        {/* Price */}
+        <div className="flex items-baseline gap-1.5 mb-2.5 mt-auto">
+          <span className="font-black text-[#5FA800] text-sm">Rs.{currentPrice.toLocaleString()}</span>
           {product.originalPrice && product.originalPrice > currentPrice && (
-            <span className="text-muted-foreground text-xs line-through">Rs. {product.originalPrice.toLocaleString()}</span>
+            <span className="text-muted-foreground text-[10px] line-through font-medium">Rs.{product.originalPrice.toLocaleString()}</span>
           )}
-          {!isInStock && <span className="text-[10px] text-red-500 font-semibold ml-auto">Out of stock</span>}
         </div>
+        {/* Action Buttons */}
         <div className="flex gap-1.5">
-          <button onClick={() => onView(product.id)} className="flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-muted transition-colors">
+          <button onClick={() => onView(product.id)}
+            className="flex items-center justify-center gap-1 py-2 px-2.5 rounded-xl border border-border bg-muted text-[11px] font-bold text-foreground active:opacity-70 transition-opacity shrink-0">
             <Eye className="w-3 h-3" /> View
           </button>
-          {isInStock && (
-            <button onClick={() => onAddToCart(product, selectedVariant, currentPrice)} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors" style={{ backgroundColor: "#5FA800" }}>
+          {isInStock ? (
+            <button onClick={() => onAddToCart(product, selectedVariant, currentPrice)}
+              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-white text-[11px] font-black active:opacity-80 transition-opacity"
+              style={{ backgroundColor: "#5FA800" }}>
               <ShoppingCart className="w-3 h-3" /> Add
             </button>
+          ) : (
+            <div className="flex-1 flex items-center justify-center py-2 rounded-xl bg-muted text-[11px] font-bold text-muted-foreground">
+              Sold Out
+            </div>
           )}
         </div>
         {isInStock && onBuyNow && (
-          <button onClick={() => onBuyNow(product, selectedVariant, currentPrice)} className="w-full mt-1.5 flex items-center justify-center gap-1 py-1.5 rounded-lg text-white text-xs font-bold transition-colors hover:opacity-90" style={{ backgroundColor: "#F58300" }}>
+          <button onClick={() => onBuyNow(product, selectedVariant, currentPrice)}
+            className="w-full mt-1.5 flex items-center justify-center gap-1 py-2 rounded-xl text-white text-[11px] font-black active:opacity-80 transition-opacity"
+            style={{ backgroundColor: "#F58300" }}>
             <Zap className="w-3 h-3" /> Buy Now
           </button>
         )}
@@ -169,19 +189,24 @@ function ProductCard({ product, onAddToCart, onView, onBuyNow }: {
   );
 }
 
-/* ── Multi-Product Carousel ── */
+/* ── Multi-Product Grid ── */
 function MultiProductCarousel({ products, onAddToCart, onView, onBuyNow }: {
   products: Product[];
   onAddToCart: (p: Product, variant: ProductVariant | null, price: number) => void;
   onView: (id: number) => void;
   onBuyNow?: (p: Product, variant: ProductVariant | null, price: number) => void;
 }) {
+  if (products.length === 1) {
+    return (
+      <div className="w-[82%]">
+        <ProductCard product={products[0]} onAddToCart={onAddToCart} onView={onView} onBuyNow={onBuyNow} />
+      </div>
+    );
+  }
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 max-w-[92%]" style={{ scrollbarWidth: "none" }}>
+    <div className="grid grid-cols-2 gap-2 w-[96%]">
       {products.map(p => (
-        <div key={p.id} className="flex-shrink-0 w-44">
-          <ProductCard product={p} onAddToCart={onAddToCart} onView={onView} onBuyNow={onBuyNow} />
-        </div>
+        <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onView} onBuyNow={onBuyNow} />
       ))}
     </div>
   );
@@ -479,12 +504,12 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
           <AutoCartBanner items={msg.autoCartAdded} onCheckout={onOpenForm} />
         )}
         {msg.products && msg.products.length > 0 && (
-          <div className="mt-2 max-w-[90%] grid grid-cols-2 gap-1.5">
+          <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
             {msg.products.map(p => <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onViewProduct} />)}
           </div>
         )}
         {msg.categories && msg.categories.length > 0 && (
-          <div className="mt-2 max-w-[90%] grid grid-cols-2 gap-1.5">
+          <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
             {msg.categories.map(c => <CategoryCard key={c.id} meta={{ id: c.id, name: c.name, slug: c.slug, image: c.image ?? undefined }} onView={onViewCategory} />)}
           </div>
         )}
