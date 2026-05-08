@@ -1109,13 +1109,34 @@ router.get("/widget.js", (req: Request, res: Response) => {
   }
 
   /* ── Events ──────────────────────────────────────────── */
+
+  /* Desktop hover: mouse enters wrap → expand; leaves → collapse after delay */
+  var hoverTimer = null;
+  var isTouchDevice = false;
+  wrap.addEventListener('mouseenter', function() {
+    if (isTouchDevice || chatOpen || dismissed) return;
+    if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+    if (!expanded) showStack();
+  });
+  wrap.addEventListener('mouseleave', function() {
+    if (isTouchDevice || chatOpen) return;
+    hoverTimer = setTimeout(function() {
+      if (!chatOpen) hideStack();
+    }, 350);
+  });
+
+  /* Touch device detection — disable hover on touch */
+  window.addEventListener('touchstart', function() { isTouchDevice = true; }, { once: true, passive: true });
+
+  /* FAB click: on touch devices toggle expand; on desktop (already expanded via hover) → close if chat open */
   fab.addEventListener('click', function(e) {
     e.stopPropagation();
     if (chatOpen) { closeChat(); return; }
     expanded ? hideStack() : showStack();
   });
 
-  btnChat.addEventListener('click', function(e) { e.stopPropagation(); hideStack(); openChat(); });
+  /* Sub-buttons */
+  btnChat.addEventListener('click', function(e) { e.stopPropagation(); openChat(); });
   btnWA.addEventListener('click',   function(e) { e.stopPropagation(); hideStack(); window.open(WA_HREF, '_blank', 'noopener,noreferrer'); });
 
   dismissBtn.addEventListener('click', function(e) {
@@ -1126,7 +1147,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
 
   /* Click outside collapses stack */
   document.addEventListener('click', function(e) {
-    if (expanded && !wrap.contains(e.target)) hideStack();
+    if (expanded && !chatOpen && !wrap.contains(e.target)) hideStack();
   });
 
   /* postMessage from iframe */
