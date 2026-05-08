@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable } from "@workspace/db";
-import { eq, desc, sql, ilike, or } from "drizzle-orm";
+import { shopifyProductsTable } from "@workspace/db";
+import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
 import { broadcastSSE } from "../lib/sse";
@@ -444,9 +445,27 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               }
 
               default: {
-                /* Unknown interaction — show menu */
-                await handleSendMenu(phone, waSettings, chatbot);
-                await setConversationState(phone, "menu_shown");
+                /* wa_order_PRODUCTNAME_IDX — from AI product card "Order Now" button */
+                if (interactionId.startsWith("wa_order_")) {
+                  try {
+                    const parts = interactionId.split("_");
+                    const productNameEncoded = parts.slice(2, parts.length - 1).join("_");
+                    const productName = decodeURIComponent(productNameEncoded.replace(/_/g, " "));
+                    /* Try to find price from DB */
+                    const [prod] = await db.select({ price: productsTable.price })
+                      .from(productsTable).where(ilike(productsTable.name, `%${productName.slice(0, 20)}%`)).limit(1);
+                    const price = prod ? parseFloat(String(prod.price)) : 0;
+                    await setConversationState(phone, "order_await_qty", { productName, price });
+                    await sendWaText(phone, `🛒 *Order: ${productName}*\n💰 Price: Rs. ${price > 0 ? price.toLocaleString("en-PK") : "TBD"}\n\n📦 Kitni quantity chahiye? (e.g. 1, 2, 3)`, waSettings);
+                  } catch {
+                    await handleSendMenu(phone, waSettings, chatbot);
+                    await setConversationState(phone, "menu_shown");
+                  }
+                } else {
+                  /* Truly unknown — show menu */
+                  await handleSendMenu(phone, waSettings, chatbot);
+                  await setConversationState(phone, "menu_shown");
+                }
               }
             }
             continue; /* Skip AI processing for interactive messages */
@@ -459,6 +478,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             const inputText = msg.text.body.trim();
             await handleTrackOrder(phone, inputText, waSettings);
             await setConversationState(phone, "idle");
+            continue;
+          }
+
+          /* ═══════════════════════════════════════════════
+             BRANCH 2b: Order placement flow states
+             ═══════════════════════════════════════════════ */
+          if (["order_await_qty", "order_await_name", "order_await_address", "order_await_city", "order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
+            await handleOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
             continue;
           }
 
@@ -754,7 +781,217 @@ async function handleProductCatalog(opts: {
 /* ─── Interactive handler: catalog button taps ─────── */
 /* catalog_view_N and catalog_buy_N are handled by generic default in switch → show menu */
 
-/* ─── Helper: AI auto-reply ─────────────────────────── */
+/* ─── Helper: send a WhatsApp text via Graph API ────── */
+async function sendWaText(phone: string, message: string, waSettings: any): Promise<string | null> {
+  if (!waSettings?.isActive || !waSettings.accessToken || !waSettings.phoneNumberId) return null;
+  const normPhone = normalizePhone(phone);
+  const apiVersion = waSettings.apiVersion ?? "v18.0";
+  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
+    body: JSON.stringify({
+      messaging_product: "whatsapp", recipient_type: "individual", to: normPhone,
+      type: "text", text: { preview_url: false, body: message },
+    }),
+  });
+  const data = await res.json() as any;
+  return data?.messages?.[0]?.id ?? null;
+}
+
+/* ─── Helper: search products (DB + Shopify) ────────── */
+async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
+  name: string; price: string; compareAt: string | null;
+  description: string | null; imageUrl: string | null;
+  productUrl: string; variants: string; inStock: boolean;
+}>> {
+  const websiteUrl = "https://khanbabadryfruits.com";
+  const results: Array<any> = [];
+
+  /* Search custom DB products */
+  const dbProds = await db.select({
+    id: productsTable.id, name: productsTable.name, price: productsTable.price,
+    description: productsTable.description, images: productsTable.images,
+    slug: productsTable.slug, stock: productsTable.stock, featured: productsTable.featured,
+  }).from(productsTable)
+    .where(query.length > 1
+      ? or(ilike(productsTable.name, `%${query}%`), ilike(productsTable.description, `%${query}%`))
+      : sql`active = true AND stock > 0`
+    )
+    .orderBy(desc(productsTable.featured))
+    .limit(limit * 2);
+
+  for (const p of dbProds.slice(0, limit)) {
+    results.push({
+      name: p.name,
+      price: `Rs. ${parseFloat(String(p.price)).toLocaleString("en-PK")}`,
+      compareAt: null,
+      description: p.description?.slice(0, 100) ?? null,
+      imageUrl: (p.images as string[])?.[0] ?? null,
+      productUrl: `${websiteUrl}/products/${p.slug}`,
+      variants: "",
+      inStock: p.stock > 0,
+    });
+  }
+
+  /* If not enough, also search Shopify products */
+  if (results.length < limit) {
+    try {
+      const shopProds = await db.select({
+        title: shopifyProductsTable.title,
+        price: shopifyProductsTable.price,
+        compareAtPrice: shopifyProductsTable.compareAtPrice,
+        imageUrl: shopifyProductsTable.imageUrl,
+        variants: shopifyProductsTable.variants,
+        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+        shopifyProductId: shopifyProductsTable.shopifyProductId,
+      }).from(shopifyProductsTable)
+        .where(and(
+          eq(shopifyProductsTable.status, "active"),
+          query.length > 1 ? ilike(shopifyProductsTable.title, `%${query}%`) : sql`true`,
+        ))
+        .orderBy(desc(shopifyProductsTable.inventoryQuantity))
+        .limit(limit - results.length);
+
+      for (const sp of shopProds) {
+        const variantTitles = (sp.variants as any[])
+          ?.filter(v => (v.inventoryQuantity ?? 0) > 0)
+          .slice(0, 3)
+          .map(v => `${v.title}: Rs.${parseFloat(v.price).toLocaleString("en-PK")}`)
+          .join(", ") ?? "";
+        const handle = sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() ?? "product";
+        results.push({
+          name: sp.title,
+          price: `Rs. ${parseFloat(String(sp.price ?? "0")).toLocaleString("en-PK")}`,
+          compareAt: sp.compareAtPrice ? `Rs. ${parseFloat(String(sp.compareAtPrice)).toLocaleString("en-PK")}` : null,
+          description: null,
+          imageUrl: sp.imageUrl ?? null,
+          productUrl: `${websiteUrl}/products/${handle}`,
+          variants: variantTitles,
+          inStock: (sp.inventoryQuantity ?? 0) > 0,
+        });
+      }
+    } catch { /* Shopify table may be empty */ }
+  }
+
+  return results;
+}
+
+/* ─── Helper: format product card as WA text ────────── */
+function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Promise<Array<infer T>> ? T : never, idx: number): string {
+  let card = `*${idx + 1}. ${p.name}*\n`;
+  card += `💰 *Price:* ${p.price}`;
+  if (p.compareAt) card += ` ~~${p.compareAt}~~ 🔥`;
+  card += "\n";
+  if (p.variants) card += `📦 *Options:* ${p.variants}\n`;
+  if (p.description) card += `📝 ${p.description}\n`;
+  card += `${p.inStock ? "✅ In Stock" : "❌ Out of Stock"}\n`;
+  card += `🔗 ${p.productUrl}`;
+  return card;
+}
+
+/* ─── Helper: WA Order placement flow ───────────────── */
+async function handleOrderFlow(
+  phone: string,
+  text: string,
+  state: string,
+  waSettings: any,
+  log?: any,
+): Promise<void> {
+  try {
+    const convState = await getConversationState(phone);
+    const stateData: Record<string, any> = JSON.parse((convState as any)?.stateData ?? "{}");
+
+    if (state === "order_await_qty") {
+      /* Parse quantity */
+      const qty = parseInt(text.replace(/[^0-9]/g, "")) || 1;
+      const productName = stateData.productName ?? "Product";
+      const price = stateData.price ?? 0;
+      stateData.qty = qty;
+      stateData.subtotal = qty * price;
+      await setConversationState(phone, "order_await_name", stateData);
+      await sendWaText(phone, `✅ *${qty}x ${productName}* selected\n💰 Subtotal: Rs. ${stateData.subtotal.toLocaleString("en-PK")}\n\n📝 Please enter your *full name* for delivery:`, waSettings);
+      return;
+    }
+
+    if (state === "order_await_name") {
+      stateData.customerName = text.trim();
+      await setConversationState(phone, "order_await_address", stateData);
+      await sendWaText(phone, `👤 Name: *${stateData.customerName}*\n\n🏠 Please enter your *full delivery address* (street, area):`, waSettings);
+      return;
+    }
+
+    if (state === "order_await_address") {
+      stateData.address = text.trim();
+      await setConversationState(phone, "order_await_city", stateData);
+      await sendWaText(phone, `📍 Address saved!\n\n🏙️ Please enter your *city*:`, waSettings);
+      return;
+    }
+
+    if (state === "order_await_city") {
+      stateData.city = text.trim();
+      await setConversationState(phone, "order_await_confirm", stateData);
+      const summary =
+        `📋 *Order Summary*\n\n` +
+        `🛍️ *Product:* ${stateData.productName ?? "Item"}\n` +
+        `📦 *Qty:* ${stateData.qty ?? 1}\n` +
+        `💰 *Total:* Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}\n` +
+        `👤 *Name:* ${stateData.customerName}\n` +
+        `🏠 *Address:* ${stateData.address}, ${stateData.city}\n` +
+        `💳 *Payment:* Cash on Delivery (COD)\n\n` +
+        `Reply *CONFIRM* to place order or *CANCEL* to cancel.`;
+      await sendWaText(phone, summary, waSettings);
+      return;
+    }
+
+    if (state === "order_await_confirm") {
+      const lower = text.toLowerCase().trim();
+      const isConfirm = ["confirm", "yes", "ok", "han", "haan", "ji", "theek", "bilkul", "zaroor"].some(k => lower.includes(k));
+      const isCancel = ["cancel", "nahi", "no", "band", "nai"].some(k => lower.includes(k));
+
+      if (isConfirm) {
+        /* Create order in DB */
+        const orderNumber = `WA-${Date.now().toString(36).toUpperCase()}`;
+        await db.insert(ordersTable).values({
+          orderNumber,
+          status: "pending",
+          total: String(stateData.subtotal ?? 0),
+          shippingAddress: {
+            name: stateData.customerName,
+            address: stateData.address,
+            city: stateData.city,
+            phone,
+          },
+          items: [{ name: stateData.productName, qty: stateData.qty ?? 1, price: stateData.price ?? 0 }],
+          paymentMethod: "cod",
+          source: "whatsapp",
+        } as any).catch(() => {});
+
+        await setConversationState(phone, "idle", {});
+        await sendInteractiveButtons({
+          phone,
+          text: `🎉 *Order Placed Successfully!*\n\n📋 *Order ID:* ${orderNumber}\n💰 *Total:* Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}\n\nHamara team aapko confirm karega. Shukriya! 🙏`,
+          buttons: [
+            { id: `track_order`, title: "📦 Track Order" },
+            { id: "main_menu", title: "🏠 Main Menu" },
+          ],
+          settings: waSettings,
+          templateName: "wa_order_placed",
+        });
+      } else if (isCancel) {
+        await setConversationState(phone, "idle", {});
+        await sendWaText(phone, `❌ Order cancelled. Koi baat nahi! 😊\n\nAgar dobara order karna chahein toh batayein.`, waSettings);
+      } else {
+        await sendWaText(phone, `Please reply *CONFIRM* to place order or *CANCEL* to cancel.`, waSettings);
+      }
+      return;
+    }
+  } catch (err) {
+    log?.warn(err, "handleOrderFlow error");
+    await setConversationState(phone, "idle", {}).catch(() => {});
+  }
+}
+
+/* ─── Helper: AI auto-reply (with full tool support) ── */
 async function handleAiReply(opts: {
   phone: string;
   textBody: string;
@@ -791,8 +1028,9 @@ async function handleAiReply(opts: {
       return;
     }
 
-    /* Order context */
+    /* Order context + customer name */
     let orderContextBlock = "";
+    let customerName = "";
     if (chatbot.orderContextEnabled !== false) {
       try {
         const normalizedLookup = normalizePhone(phone);
@@ -807,29 +1045,87 @@ async function handleAiReply(opts: {
         }).from(ordersTable)
           .where(sql`(shipping_address->>'phone' = ${normalizedLookup} OR shipping_address->>'phone' = ${altPhone} OR shipping_address->>'phone' = ${phone})`)
           .orderBy(desc(ordersTable.createdAt))
-          .limit(3);
+          .limit(5);
 
         if (recentOrders.length > 0) {
-          const customerName = (recentOrders[0]?.shipping as any)?.name ?? "Customer";
+          customerName = (recentOrders[0]?.shipping as any)?.name ?? "";
           const lines = recentOrders.map(o =>
             `  • Order #${o.orderNumber}: Status=${o.status}, Total=Rs.${o.total}${o.trackingId ? `, Tracking=${o.trackingId}` : ""}, Placed=${new Date(o.createdAt).toLocaleDateString("en-PK")}`
           );
-          orderContextBlock = `\n\n[CUSTOMER CONTEXT — use this to answer their questions]\nCustomer Name: ${customerName}\nPhone: ${phone}\nRecent Orders:\n${lines.join("\n")}\n[END CONTEXT]`;
+          orderContextBlock = `\n\n[CUSTOMER CONTEXT]\nCustomer Name: ${customerName || "Unknown"}\nPhone: ${phone}\nRecent Orders:\n${lines.join("\n")}\n[END CONTEXT]`;
         }
       } catch (ctxErr) {
         log?.warn(ctxErr, "Failed to fetch order context");
       }
     }
 
-    /* Conversation history */
+    /* Conversation history from wa_messages */
     const history = await db.select()
       .from(whatsappLogsTable)
       .where(eq(whatsappLogsTable.phone, phone))
       .orderBy(desc(whatsappLogsTable.createdAt))
       .limit(16);
 
-    const systemContent = chatbot.systemPrompt + orderContextBlock;
-    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    /* Build AI tools */
+    const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+      {
+        type: "function",
+        function: {
+          name: "search_products",
+          description: "Search KDF NUTS products by name/keyword. Use when customer asks about any product, price, availability, badam, pista, akhrot, kaju, dry fruits, etc.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "Product search term e.g. almonds, badam, 500g, cashews" },
+              limit: { type: "number", description: "Max products to return (1-5)", default: 3 },
+            },
+            required: ["query"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "track_order",
+          description: "Look up order status/tracking by order number or phone number. Use when customer asks 'where is my order', 'track', 'status', etc.",
+          parameters: {
+            type: "object",
+            properties: {
+              input: { type: "string", description: "Order number or customer phone number" },
+            },
+            required: ["input"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "start_order",
+          description: "Start a WhatsApp order placement flow for a specific product. Use when customer explicitly wants to buy/order a product.",
+          parameters: {
+            type: "object",
+            properties: {
+              productName: { type: "string", description: "Product name" },
+              price: { type: "number", description: "Price per unit in PKR" },
+              variantTitle: { type: "string", description: "Selected variant e.g. 500g, 1kg" },
+            },
+            required: ["productName", "price"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "escalate_to_human",
+          description: "Transfer to human agent when customer is frustrated, has complex complaint, or explicitly asks for human/real person.",
+          parameters: { type: "object", properties: {}, required: [] },
+        },
+      },
+    ];
+
+    const systemContent = (chatbot.systemPrompt ?? `You are KDF NUTS AI assistant — Pakistan's premium dry fruits store. Reply in the same language as the customer (Urdu/English/Roman Urdu). Be friendly, concise, and helpful. Always use tools to show real products and order info. Never make up prices.`) + orderContextBlock;
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemContent },
     ];
     for (const h of [...history].reverse()) {
@@ -846,26 +1142,139 @@ async function handleAiReply(opts: {
     }
 
     const aiClient = await getOpenAIClient();
-    const completion = await aiClient.chat.completions.create({
-      model: chatbot.aiModel ?? "gpt-4o-mini",
-      messages,
-      max_completion_tokens: 500,
-    });
 
-    const reply = completion.choices[0]?.message?.content?.trim();
+    /* ── Tool-use loop (max 2 rounds) ── */
+    let reply = "";
+    let toolRound = 0;
+    let currentMessages = [...messages];
+
+    while (toolRound < 2) {
+      const completion = await aiClient.chat.completions.create({
+        model: chatbot.aiModel ?? "gpt-4o-mini",
+        messages: currentMessages,
+        tools,
+        tool_choice: "auto",
+        max_completion_tokens: 600,
+      });
+
+      const choice = completion.choices[0];
+      if (!choice) break;
+
+      /* No tool call → plain text reply */
+      if (!choice.message.tool_calls?.length) {
+        reply = choice.message.content?.trim() ?? "";
+        break;
+      }
+
+      /* Process tool calls */
+      currentMessages.push(choice.message);
+      const toolResults: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+      for (const tc of choice.message.tool_calls) {
+        const tcFn = (tc as any).function as { name: string; arguments: string };
+        const args = JSON.parse(tcFn.arguments ?? "{}");
+        let toolResult = "";
+
+        if (tcFn.name === "search_products") {
+          const products = await searchProductsForWa(args.query ?? "", Math.min(args.limit ?? 3, 5));
+          if (products.length === 0) {
+            toolResult = "No products found for this query.";
+          } else {
+            /* Send product cards immediately via WA */
+            const intro = customerName
+              ? `🛍️ *${customerName}*, yahan hain matching products:`
+              : `🛍️ *KDF NUTS Products* — ap k liye:`;
+            await sendWaText(phone, intro, waSettings);
+            await new Promise(r => setTimeout(r, 600));
+            for (let i = 0; i < products.length; i++) {
+              const p = products[i]!;
+              const card = formatProductCard(p, i);
+              await sendInteractiveButtons({
+                phone,
+                text: card,
+                buttons: [
+                  { id: `wa_order_${encodeURIComponent(p.name)}_${i}`, title: "🛒 Order Now" },
+                  { id: "main_menu", title: "🏠 Main Menu" },
+                ],
+                footer: "KDF NUTS — Premium Dry Fruits Pakistan",
+                settings: waSettings,
+                templateName: "ai_product_card",
+              });
+              if (i < products.length - 1) await new Promise(r => setTimeout(r, 500));
+            }
+            toolResult = `Showed ${products.length} products: ${products.map(p => p.name).join(", ")}`;
+            await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Products shown: ${products.map(p => p.name).join(", ")}]`, status: "sent" }).catch(() => {});
+            return; /* Products already sent */
+          }
+        } else if (tcFn.name === "track_order") {
+          const normalizedLookup = normalizePhone(phone);
+          const altPhone = normalizedLookup.startsWith("92") ? "0" + normalizedLookup.slice(2) : phone;
+          const cleanInput = (args.input ?? "").replace(/^kdf[-\s]?/i, "").toUpperCase().trim();
+          const [order] = await db.select({
+            orderNumber: ordersTable.orderNumber, status: ordersTable.status,
+            total: ordersTable.total, trackingId: ordersTable.trackingId,
+            createdAt: ordersTable.createdAt,
+          }).from(ordersTable)
+            .where(sql`(UPPER(order_number) LIKE ${"%" + cleanInput + "%"} OR UPPER(order_number) LIKE ${"KDF-" + cleanInput + "%"} OR shipping_address->>'phone' = ${normalizedLookup} OR shipping_address->>'phone' = ${altPhone} OR shipping_address->>'phone' = ${phone})`)
+            .orderBy(desc(ordersTable.createdAt))
+            .limit(1);
+          if (order) {
+            const STATUS_LABEL: Record<string, string> = {
+              pending: "⏳ Pending", processing: "🔧 Processing", shipped: "🚚 Shipped",
+              out_for_delivery: "🛵 Out for Delivery", delivered: "✅ Delivered", cancelled: "❌ Cancelled",
+            };
+            toolResult = `Order #${order.orderNumber}: ${STATUS_LABEL[order.status ?? ""] ?? order.status}, Total: Rs.${order.total}${order.trackingId ? `, Tracking: ${order.trackingId}` : ""}, Placed: ${new Date(order.createdAt).toLocaleDateString("en-PK")}`;
+          } else {
+            toolResult = "No order found for this number/ID.";
+          }
+        } else if (tcFn.name === "start_order") {
+          const pName = args.productName ?? "Product";
+          const pPrice = args.price ?? 0;
+          const variant = args.variantTitle ? ` (${args.variantTitle})` : "";
+          await setConversationState(phone, "order_await_qty", {
+            productName: pName + variant,
+            price: pPrice,
+            variant: args.variantTitle ?? "",
+          });
+          const msg = `🛒 *Order: ${pName}${variant}*\n💰 Price: Rs. ${pPrice.toLocaleString("en-PK")} per unit\n\n📦 Kitni quantity chahiye? (Enter number e.g. 1, 2, 3)`;
+          await sendWaText(phone, msg, waSettings);
+          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Order flow started: ${pName}]`, status: "sent" }).catch(() => {});
+          return;
+        } else if (tcFn.name === "escalate_to_human") {
+          await sendInteractiveButtons({
+            phone,
+            text: `👤 *Hamara Support Agent*\n\nAapko human agent se connect kar raha hoon. Please wait karo — agent jald reply karega.\n\nYa WhatsApp pe directly message kar sakte hain:\n📞 +92-XXX-XXXXXXX`,
+            buttons: [{ id: "main_menu", title: "🏠 Main Menu" }],
+            settings: waSettings,
+            templateName: "ai_escalate",
+          });
+          await db.execute(sql`UPDATE wa_conversations SET bot_mode = 'human' WHERE contact_phone = ${phone}`).catch(() => {});
+          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: "[Escalated to human]", status: "sent" }).catch(() => {});
+          return;
+        }
+
+        toolResults.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: toolResult,
+        });
+      }
+
+      currentMessages.push(...toolResults);
+      toolRound++;
+    }
+
     if (!reply) return;
 
+    /* Log + send final text reply */
     const [replyRow] = await db.insert(whatsappLogsTable).values({
-      phone,
-      templateName: "ai_reply",
-      message: reply,
-      status: "pending",
-      response: null,
+      phone, templateName: "ai_reply", message: reply, status: "pending", response: null,
     }).returning();
 
     if (waSettings?.isActive && waSettings.accessToken && waSettings.phoneNumberId) {
       const normPhone = normalizePhone(phone);
-      const waRes = await fetch(`https://graph.facebook.com/v18.0/${waSettings.phoneNumberId}/messages`, {
+      const apiVersion = waSettings.apiVersion ?? "v18.0";
+      const waRes = await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
         body: JSON.stringify({
@@ -886,7 +1295,8 @@ async function handleAiReply(opts: {
     try {
       if (chatbot?.fallbackMessage && waSettings?.isActive && waSettings.accessToken && waSettings.phoneNumberId) {
         const normPhone = normalizePhone(phone);
-        await fetch(`https://graph.facebook.com/v18.0/${waSettings.phoneNumberId}/messages`, {
+        const apiVersion = waSettings.apiVersion ?? "v18.0";
+        await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
           body: JSON.stringify({
@@ -1475,7 +1885,8 @@ router.get("/admin/whatsapp/conversations/:phone", adminMiddleware as any, async
   try {
     const phone = req.params.phone;
     /* Try wa_messages first (rich data), fall back to whatsapp_logs */
-    const [conv] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${phone} LIMIT 1`);
+    const convResult = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${phone} LIMIT 1`);
+    const conv = (convResult.rows ?? convResult as any)[0];
     const convId = (conv as any)?.id;
     if (convId) {
       const msgs = await db.execute(sql`
@@ -1501,9 +1912,10 @@ router.get("/admin/whatsapp/conversations/:phone", adminMiddleware as any, async
 /* ─── Admin: Conversation detail (meta + notes) ────────── */
 router.get("/admin/whatsapp/conversations/:phone/detail", adminMiddleware as any, async (req, res) => {
   try {
-    const [conv] = await db.execute(sql`SELECT * FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
-    const notes  = await db.execute(sql`SELECT * FROM wa_agent_notes WHERE phone = ${req.params.phone} ORDER BY created_at DESC LIMIT 50`);
-    return res.json({ conversation: conv, notes: notes.rows ?? notes });
+    const convR = await db.execute(sql`SELECT * FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+    const conv = (convR.rows ?? convR as any)[0];
+    const notesR = await db.execute(sql`SELECT * FROM wa_agent_notes WHERE phone = ${req.params.phone} ORDER BY created_at DESC LIMIT 50`);
+    return res.json({ conversation: conv, notes: notesR.rows ?? notesR });
   } catch { return res.status(500).json({ error: "Failed" }); }
 });
 
@@ -1515,8 +1927,8 @@ router.post("/admin/whatsapp/conversations/:phone/reply", adminMiddleware as any
     const ok = await sendWhatsAppMessage({ phone: req.params.phone, message, templateName: "admin_reply" });
     if (ok) {
       /* Log to wa_messages */
-      const [conv] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
-      const convId = (conv as any)?.id;
+      const convR2 = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+      const convId = ((convR2.rows ?? convR2 as any)[0] as any)?.id;
       if (convId) {
         await db.execute(sql`
           INSERT INTO wa_messages (conversation_id, direction, type, content, status, is_bot, agent_name, created_at)
@@ -1577,8 +1989,8 @@ router.post("/admin/whatsapp/conversations/:phone/note", adminMiddleware as any,
   try {
     const { note, agentName } = req.body;
     if (!note?.trim()) return res.status(400).json({ error: "note required" });
-    const [convRow] = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
-    const convId = (convRow as any)?.id ?? 0;
+    const convR3 = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${req.params.phone} LIMIT 1`);
+    const convId = ((convR3.rows ?? convR3 as any)[0] as any)?.id ?? 0;
     await db.execute(sql`
       INSERT INTO wa_agent_notes (conversation_id, phone, agent_name, note, created_at)
       VALUES (${convId}, ${req.params.phone}, ${agentName ?? 'Admin'}, ${note.trim()}, NOW())
