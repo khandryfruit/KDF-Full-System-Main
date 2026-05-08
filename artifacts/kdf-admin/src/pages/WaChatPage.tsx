@@ -374,8 +374,8 @@ function ConvThread({ conv }: { conv: UnifiedConv | null }) {
   ];
 
   const isWa = conv?.channel === "whatsapp";
-  const waId = isWa ? parseInt(conv!.id.split("-")[1]) : null;
-  const webId = !isWa ? parseInt(conv!.id.split("-")[1]) : null;
+  const waId = (isWa && conv) ? parseInt(conv.id.split("-")[1]) : null;
+  const webId = (!isWa && conv) ? parseInt(conv.id.split("-")[1]) : null;
 
   const { data: waMsgs = [], isLoading: waLoading } = useQuery({
     queryKey: ["wa-msgs-unified", waId],
