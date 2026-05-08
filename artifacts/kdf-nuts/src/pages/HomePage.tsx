@@ -20,6 +20,138 @@ import {
 const BG = '#F4F6F8';
 const GREEN = '#5FA800';
 
+/* ── Mid-page AI Promo Card Defaults ── */
+const AI_PROMO_BANNERS = [
+  {
+    label: '🚚 FREE DELIVERY',
+    title: 'Order Rs. 1,500+\nGet Free Shipping',
+    subtitle: 'Delivered in 60–72 hrs across Pakistan · Same-day in Karachi',
+    cta: 'Shop Now',
+    linkUrl: '/products',
+    icon: '🚚',
+    g1: '#0d3200', g2: '#245a00', g3: '#3d8a00',
+    orb1: '#5aaa00', orb2: '#8fcc44', orb3: '#1a5000',
+  },
+  {
+    label: '🎁 GIFT PACKS',
+    title: 'Perfect for Every\nOccasion',
+    subtitle: 'Eid, birthdays, corporate gifting — curated with love.',
+    cta: 'Explore Gifts',
+    linkUrl: '/products',
+    icon: '🎁',
+    g1: '#220040', g2: '#5e0055', g3: '#9e1e7a',
+    orb1: '#d63da8', orb2: '#e870c4', orb3: '#6b0e90',
+  },
+  {
+    label: '📦 BULK ORDERS',
+    title: 'Wholesale Prices\nfor Bulk Buyers',
+    subtitle: 'Special rates on orders above 5kg. Contact us today.',
+    cta: 'Contact Now',
+    linkUrl: '/products',
+    icon: '📦',
+    g1: '#002838', g2: '#004d68', g3: '#006d7a',
+    orb1: '#00a8b4', orb2: '#4fd8e0', orb3: '#00586a',
+  },
+];
+
+/* ── Promo Banner Card Component ── */
+function PromoBannerCard({
+  banner, idx, onClick,
+}: {
+  banner: typeof AI_PROMO_BANNERS[0] & { imageUrl?: string | null };
+  idx: number;
+  onClick?: () => void;
+}) {
+  const PARTICLES = [
+    { top: '14%', left: '64%', sz: 5, dl: '0s' },
+    { top: '52%', left: '76%', sz: 3, dl: '1.3s' },
+    { top: '28%', left: '84%', sz: 6, dl: '0.6s' },
+  ];
+  return (
+    <div
+      className="relative w-full overflow-hidden select-none active:scale-[0.982] transition-transform duration-200 cursor-pointer"
+      style={{
+        height: '190px',
+        borderRadius: '26px',
+        background: banner.imageUrl
+          ? undefined
+          : `linear-gradient(145deg, ${banner.g1} 0%, ${banner.g2} 55%, ${banner.g3} 100%)`,
+        boxShadow: `0 12px 36px ${banner.g3}60, 0 4px 14px rgba(0,0,0,0.35)`,
+      }}
+      onClick={onClick}
+    >
+      {/* Real image */}
+      {banner.imageUrl && (
+        <img src={getProductImageSrc(banner.imageUrl)} alt={banner.title}
+          className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+      )}
+      {banner.imageUrl && <div className="absolute inset-0 bg-black/38" />}
+
+      {/* Animated orbs */}
+      <div className="banner-orb-1 absolute -top-8 -right-8 w-32 h-32 rounded-full pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${banner.orb1}50 0%, transparent 70%)`, filter: 'blur(20px)' }} />
+      <div className="banner-orb-2 absolute -bottom-6 left-2 w-24 h-24 rounded-full pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${banner.orb2}44 0%, transparent 70%)`, filter: 'blur(18px)' }} />
+      <div className="banner-orb-3 absolute top-3 left-[45%] w-16 h-16 rounded-full pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${banner.orb3}30 0%, transparent 70%)`, filter: 'blur(24px)' }} />
+
+      {/* Floating particles */}
+      {PARTICLES.map((p, i) => (
+        <div key={i} className="banner-particle absolute rounded-full pointer-events-none"
+          style={{ top: p.top, left: p.left, width: p.sz, height: p.sz, background: 'rgba(255,255,255,0.5)', animationDelay: p.dl }} />
+      ))}
+
+      {/* Diagonal shimmer */}
+      <div className="banner-shine-anim absolute inset-y-0 w-16 pointer-events-none"
+        style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.14) 50%, transparent 70%)' }} />
+
+      {/* Content */}
+      <div className="absolute inset-0 flex flex-col justify-center px-5 pb-3 pt-3">
+        {banner.label && (
+          <span
+            className="w-max text-[10px] font-black px-3 py-1 rounded-full mb-2.5 tracking-wider"
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.28)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+            }}
+          >
+            {banner.label}
+          </span>
+        )}
+        <h2
+          className="font-black text-white leading-[1.18] mb-1.5"
+          style={{ fontSize: '21px', textShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
+        >
+          {banner.title.split('\n').map((line, i, arr) => (
+            <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
+          ))}
+        </h2>
+        {banner.subtitle && (
+          <p className="text-white/72 text-[11.5px] font-medium leading-snug mb-3">{banner.subtitle}</p>
+        )}
+        <button
+          className="banner-cta-glow w-max flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-[13px] active:scale-95 transition-transform"
+          style={{ background: 'rgba(255,255,255,0.93)', color: banner.g2, backdropFilter: 'blur(8px)' }}
+        >
+          {banner.cta || 'Shop Now'}
+          <span style={{ fontSize: '15px', fontWeight: 900 }}>→</span>
+        </button>
+      </div>
+
+      {/* Floating emoji top-right */}
+      <div
+        className="banner-icon-float absolute right-4 top-4 pointer-events-none select-none"
+        style={{ fontSize: '44px', opacity: 0.28, filter: 'drop-shadow(0 4px 14px rgba(0,0,0,0.55))' }}
+      >
+        {banner.icon}
+      </div>
+    </div>
+  );
+}
+
 /* ── Urdu / Roman-Urdu → English word map for voice search ── */
 const URDU_WORD_MAP: Record<string, string> = {
   badam: 'almonds', badaam: 'almonds', baadam: 'almonds',
@@ -745,6 +877,23 @@ export function HomePage() {
           </div>
         </section>
 
+        {/* ── Promo Banner 1 — FREE DELIVERY ── */}
+        {(() => {
+          const src = banners.length > 0 ? banners[0] : null;
+          const b = src
+            ? { ...AI_PROMO_BANNERS[0], ...{ label: src.label ? `🚚 ${src.label}` : AI_PROMO_BANNERS[0].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[0].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[0].cta, imageUrl: (src as any).imageUrl ?? null } }
+            : AI_PROMO_BANNERS[0];
+          return (
+            <section className="px-4">
+              <PromoBannerCard
+                banner={b}
+                idx={0}
+                onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)}
+              />
+            </section>
+          );
+        })()}
+
         {/* ── Flash Deals ── */}
         <section className="px-4">
           <div className="flex items-center justify-between mb-3.5">
@@ -772,6 +921,19 @@ export function HomePage() {
           </div>
         </section>
 
+        {/* ── Promo Banner 2 — GIFT PACKS ── */}
+        {(() => {
+          const src = banners.length > 1 ? banners[1] : null;
+          const b = src
+            ? { ...AI_PROMO_BANNERS[1], ...{ label: src.label ? `🎁 ${src.label}` : AI_PROMO_BANNERS[1].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[1].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[1].cta, imageUrl: (src as any).imageUrl ?? null } }
+            : AI_PROMO_BANNERS[1];
+          return (
+            <section className="px-4">
+              <PromoBannerCard banner={b} idx={1} onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)} />
+            </section>
+          );
+        })()}
+
         {/* ── Top Picks for You ── */}
         <section className="px-4">
           <div className="flex items-center justify-between mb-3.5">
@@ -786,6 +948,19 @@ export function HomePage() {
             ))}
           </div>
         </section>
+
+        {/* ── Promo Banner 3 — BULK ORDERS ── */}
+        {(() => {
+          const src = banners.length > 2 ? banners[2] : null;
+          const b = src
+            ? { ...AI_PROMO_BANNERS[2], ...{ label: src.label ? `📦 ${src.label}` : AI_PROMO_BANNERS[2].label, title: src.title, subtitle: src.subtitle ?? AI_PROMO_BANNERS[2].subtitle, cta: src.cta ?? AI_PROMO_BANNERS[2].cta, imageUrl: (src as any).imageUrl ?? null } }
+            : AI_PROMO_BANNERS[2];
+          return (
+            <section className="px-4">
+              <PromoBannerCard banner={b} idx={2} onClick={() => setLocation((src as any)?.linkUrl ?? b.linkUrl)} />
+            </section>
+          );
+        })()}
 
         {/* ── Trending Now ── */}
         <section className="px-4 mb-2">
