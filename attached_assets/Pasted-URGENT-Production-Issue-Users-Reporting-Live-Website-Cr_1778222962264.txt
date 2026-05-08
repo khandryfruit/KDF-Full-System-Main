@@ -1,0 +1,113 @@
+URGENT Production Issue — Users Reporting Live Website Crash
+
+Our real users are now reporting that the production website is crashing live.
+
+I have also shared screen recording evidence showing the issue.
+
+This is NOT a local/dev issue anymore — this is happening on LIVE production and affecting customers directly.
+
+Domain:
+
+- khanbabadryfruits.com
+
+Current behavior:
+
+- Website opens partially
+- Loader/skeleton appears
+- Then app crashes
+- White screen or “Something went wrong” screen appears
+- Sometimes homepage does not fully load
+- Mobile Safari/iPhone users are heavily affected
+
+This issue is now impacting real customer experience and orders.
+
+---
+
+IMPORTANT
+
+Please stop treating this as a simple frontend refresh issue.
+
+This needs:
+
+- Deep production debugging
+- Root cause analysis
+- Production-safe hotfix
+- Stability testing on real devices
+
+Especially:
+
+- iPhone Safari
+- iOS 16+
+- iPhone Pro Max devices
+
+---
+
+Required Immediate Actions
+
+Please immediately:
+
+- Inspect production logs
+- Check browser console errors
+- Check runtime React crashes
+- Check hydration mismatch
+- Check failing APIs
+- Check memory/render loops
+- Check Safari compatibility issues
+- Check third-party scripts/widgets
+
+---
+
+Strong Possibility
+
+This appears to be:
+
+- Frontend runtime crash
+- React hydration failure
+- Undefined/null API data crash
+- Infinite render loop
+- Safari rendering incompatibility
+- Third-party widget conflict
+- Heavy JS bundle issue
+
+---
+
+Critical Requirement
+
+DO NOT repeatedly full redeploy production unnecessarily because:
+
+- Production rebuilds take too much time
+- Users are already affected
+- Orders/conversions may be dropping
+
+Instead:
+
+- Find exact failing component/service
+- Patch intelligently
+- Deploy targeted fix safely
+
+---
+
+Also Verify
+
+Please test manually yourself on:
+
+- iPhone Safari
+- Real mobile devices
+- Production domain only
+
+Do not rely only on desktop Chrome testing.
+
+---
+
+Required Final Result
+
+The production website must:
+
+- Open reliably
+- Not crash after loading
+- Work smoothly on iOS Safari
+- Handle API failures safely
+- Never show blank/white screen
+- Never show “Something went wrong”
+
+Please deeply investigate the exact production issue and fix it completely.

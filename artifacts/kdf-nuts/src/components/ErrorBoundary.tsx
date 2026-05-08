@@ -17,12 +17,13 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     try {
-      console.error("[KDF] App Error:", error.message, info.componentStack);
+      console.error("[KDF Nuts] Crash:", error.message, info.componentStack);
     } catch {}
   }
 
   render() {
     if (this.state.hasError) {
+      const msg = this.state.error?.message ?? "";
       return (
         <div
           style={{
@@ -37,16 +38,21 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
           }}
         >
           <div style={{ textAlign: "center", maxWidth: 320 }}>
-            <div style={{ fontSize: 64, marginBottom: 16 }}>🌿</div>
-            <h1 style={{ color: "#5FA800", fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🌿</div>
+            <h1 style={{ color: "#5FA800", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
               KDF NUTS
             </h1>
             <p style={{ color: "#ffffff", fontSize: 15, marginBottom: 6, fontWeight: 600 }}>
               Something went wrong
             </p>
-            <p style={{ color: "#a4c982", fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-              Please refresh the page or try again in a moment.
+            <p style={{ color: "#a4c982", fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              Please refresh the page to continue.
             </p>
+            {msg ? (
+              <p style={{ color: "#6b7280", fontSize: 10, marginBottom: 20, fontFamily: "monospace", wordBreak: "break-word" }}>
+                {msg}
+              </p>
+            ) : null}
             <button
               onClick={() => window.location.reload()}
               style={{
@@ -58,6 +64,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
                 fontSize: 15,
                 fontWeight: 700,
                 cursor: "pointer",
+                WebkitAppearance: "none",
               }}
             >
               Refresh Page
