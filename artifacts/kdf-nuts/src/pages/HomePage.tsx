@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Search, ShoppingBag, Bell, ChevronRight, Flame, Clock, MapPin, ChevronDown, ScanLine
+  Search, ShoppingBag, Bell, ChevronRight, Flame, Clock, MapPin, ChevronDown, Mic, Camera, Loader2,
 } from 'lucide-react';
 import { getProductImageSrc } from '../lib/imageUrl';
 import { useLocation } from 'wouter';
@@ -33,7 +33,58 @@ export function HomePage() {
   const [showHints, setShowHints] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
   const BASE_URL = import.meta.env.BASE_URL ?? '/';
+  const [isListening, setIsListening] = useState(false);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [cameraDetected, setCameraDetected] = useState('');
+
+  const handleVoiceSearch = () => {
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return;
+    const rec = new SpeechRec();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = 'ur-PK';
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+    rec.onerror = () => setIsListening(false);
+    rec.onresult = (e: any) => {
+      const t = e.results[0]?.[0]?.transcript ?? '';
+      if (t) { setSearchQuery(t); setTimeout(() => handleSearch(t), 50); }
+    };
+    recognitionRef.current = rec;
+    rec.start();
+  };
+
+  const handleImageSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsCameraLoading(true);
+    setCameraDetected('');
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const r = await fetch(`${BASE_URL}api/chat/image-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: reader.result }),
+        });
+        const d = await r.json();
+        if (d.detected && d.detected !== 'unknown') {
+          setCameraDetected(d.detected);
+          handleSearch(d.detected);
+        }
+      } catch {}
+      finally {
+        setIsCameraLoading(false);
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSearch = (q?: string) => {
     const term = (q ?? searchQuery).trim();
@@ -187,17 +238,22 @@ export function HomePage() {
                 className="bg-transparent text-[14px] text-gray-800 placeholder-gray-400 flex-1 outline-none"
               />
               {searchQuery ? (
-                <button
-                  type="submit"
-                  className="ml-2 w-8 h-8 flex items-center justify-center rounded-xl bg-[#5FA800] shrink-0"
-                >
+                <button type="submit" className="ml-2 w-8 h-8 flex items-center justify-center rounded-xl bg-[#5FA800] shrink-0">
                   <Search size={15} className="text-white" />
                 </button>
               ) : (
-                <div className="ml-2 w-8 h-8 flex items-center justify-center rounded-xl bg-white shadow-sm shrink-0">
-                  <ScanLine size={17} className="text-gray-500" />
+                <div className="ml-2 flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={() => cameraInputRef.current?.click()}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl shadow-sm active:scale-95 transition-all ${isCameraLoading ? 'bg-green-500' : 'bg-white'}`}>
+                    {isCameraLoading ? <Loader2 size={15} className="text-white animate-spin" /> : <Camera size={16} className="text-gray-500" />}
+                  </button>
+                  <button type="button" onClick={handleVoiceSearch}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl shadow-sm active:scale-95 transition-all ${isListening ? 'bg-red-500 animate-pulse' : 'bg-white'}`}>
+                    <Mic size={15} className={isListening ? 'text-white' : 'text-gray-500'} />
+                  </button>
                 </div>
               )}
+              <input ref={cameraInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSearch} />
             </form>
 
             {/* Live suggestions dropdown */}

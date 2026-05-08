@@ -4,7 +4,7 @@ import {
   Search, MapPin, ChevronDown, User, LogOut, Package, Heart,
   ShoppingBag, Truck, Leaf, RefreshCcw, PhoneCall, Flame, Sparkles,
   Star, X, Menu, Home, LayoutGrid, Mic, TrendingUp, ArrowRight,
-  ChevronRight, Shield, Zap, Gift, Phone, Clock, Navigation,
+  ChevronRight, Shield, Zap, Gift, Phone, Clock, Navigation, Camera, Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCart } from "@/context/CartContext";
@@ -389,7 +389,44 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
   const [q, setQ] = useState("");
   const [hints, setHints] = useState<any>({ products: [], categories: [] });
   const [loading, setLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<any>(null);
+
+  const startVoice = () => {
+    if (isListening) { recRef.current?.stop(); return; }
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return;
+    const rec = new SpeechRec();
+    rec.continuous = false; rec.interimResults = false; rec.lang = "ur-PK";
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+    rec.onerror = () => setIsListening(false);
+    rec.onresult = (e: any) => {
+      const t = e.results[0]?.[0]?.transcript ?? "";
+      if (t) { setQ(t); setTimeout(() => onNavigate(`/products?search=${encodeURIComponent(t)}`), 100); onClose(); }
+    };
+    recRef.current = rec;
+    rec.start();
+  };
+
+  const handleCameraImg = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsCameraLoading(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const r = await fetch("/api/chat/image-search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: reader.result }) });
+        const d = await r.json();
+        if (d.detected && d.detected !== "unknown") { onNavigate(`/products?search=${encodeURIComponent(d.detected)}`); onClose(); }
+      } catch {}
+      finally { setIsCameraLoading(false); if (cameraRef.current) cameraRef.current.value = ""; }
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => { if (open) { setQ(""); setTimeout(() => inputRef.current?.focus(), 100); } }, [open]);
 
@@ -420,15 +457,28 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
         <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-2xl">
           <Search className={`w-4 h-4 flex-shrink-0 ${loading ? "text-green-500 animate-pulse" : "text-gray-400"}`} />
           <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Search nuts, dry fruits…"
+            placeholder={isListening ? "🎤 Listening…" : isCameraLoading ? "🔍 Analyzing image…" : "Search nuts, dry fruits…"}
             className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 outline-none"
             onKeyDown={e => { if (e.key === "Enter" && q.trim()) go(`/products?search=${encodeURIComponent(q.trim())}`); }}
           />
-          {q && <button onClick={() => setQ("")}><X className="w-4 h-4 text-gray-400" /></button>}
+          {q
+            ? <button onClick={() => setQ("")}><X className="w-4 h-4 text-gray-400" /></button>
+            : <div className="flex items-center gap-2 flex-shrink-0">
+                <button type="button" onClick={() => cameraRef.current?.click()}
+                  className={`p-1 rounded-lg active:scale-95 transition-all ${isCameraLoading ? "text-green-500" : "text-gray-400"}`}>
+                  {isCameraLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                </button>
+                <button type="button" onClick={startVoice}
+                  className={`p-1 rounded-lg active:scale-95 transition-all ${isListening ? "text-red-500 animate-pulse" : "text-gray-400"}`}>
+                  <Mic className="w-4 h-4" />
+                </button>
+              </div>
+          }
         </div>
         <button onClick={() => { setQ(""); onClose(); }}
           className="text-sm font-semibold" style={{ color: GREEN }}>Cancel</button>
       </div>
+      <input ref={cameraRef} type="file" accept="image/*" className="hidden" onChange={handleCameraImg} />
 
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
@@ -495,9 +545,46 @@ export function Header() {
   const { user, logout }               = useAuth();
   const { city, setCity, cities, detectLocation, isDetecting } = useUserLocation();
   const { data: siteSettings }         = useSiteSettings();
-  const prevTotalRef = useRef(totalItems);
-  const searchRef    = useRef<HTMLDivElement>(null);
-  const placeholder  = useTypingPlaceholder();
+  const prevTotalRef    = useRef(totalItems);
+  const searchRef       = useRef<HTMLDivElement>(null);
+  const placeholder     = useTypingPlaceholder();
+  const headerCameraRef = useRef<HTMLInputElement>(null);
+  const headerRecRef    = useRef<any>(null);
+  const [headerListening, setHeaderListening]   = useState(false);
+  const [headerCamLoad, setHeaderCamLoad]       = useState(false);
+
+  const startHeaderVoice = () => {
+    if (headerListening) { headerRecRef.current?.stop(); return; }
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return;
+    const rec = new SpeechRec();
+    rec.continuous = false; rec.interimResults = false; rec.lang = "ur-PK";
+    rec.onstart = () => setHeaderListening(true);
+    rec.onend   = () => setHeaderListening(false);
+    rec.onerror = () => setHeaderListening(false);
+    rec.onresult = (e: any) => {
+      const t = e.results[0]?.[0]?.transcript ?? "";
+      if (t) { setSearchQuery(t); setShowHints(true); }
+    };
+    headerRecRef.current = rec;
+    rec.start();
+  };
+
+  const handleHeaderCamImg = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHeaderCamLoad(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const r = await fetch("/api/chat/image-search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: reader.result }) });
+        const d = await r.json();
+        if (d.detected && d.detected !== "unknown") { setSearchQuery(d.detected); setShowHints(true); }
+      } catch {}
+      finally { setHeaderCamLoad(false); if (headerCameraRef.current) headerCameraRef.current.value = ""; }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["announcements"],
@@ -616,7 +703,7 @@ export function Header() {
                       value={searchQuery}
                       onChange={e => { setSearchQuery(e.target.value); setShowHints(true); }}
                       onFocus={() => searchQuery.length > 0 && setShowHints(true)}
-                      className="w-full h-[42px] pl-11 pr-12 rounded-2xl text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all duration-200"
+                      className="w-full h-[42px] pl-11 pr-24 rounded-2xl text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all duration-200"
                       style={{
                         background: showHints || searchQuery ? "#fff" : "#f3f4f6",
                         border: showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid transparent",
@@ -624,11 +711,19 @@ export function Header() {
                       }}
                       data-testid="input-search"
                     />
-                    <button type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl transition-all hover:scale-110"
-                      style={{ background: `${GREEN}12`, color: GREEN }}>
-                      <Mic className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <button type="button" onClick={() => headerCameraRef.current?.click()}
+                        className={`p-1.5 rounded-xl transition-all hover:scale-110 ${headerCamLoad ? "text-green-600" : ""}`}
+                        style={{ background: `${GREEN}12`, color: headerCamLoad ? "#16a34a" : GREEN }}>
+                        {headerCamLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                      </button>
+                      <button type="button" onClick={startHeaderVoice}
+                        className={`p-1.5 rounded-xl transition-all hover:scale-110 ${headerListening ? "animate-pulse" : ""}`}
+                        style={{ background: headerListening ? "#ef4444" : `${GREEN}12`, color: headerListening ? "#fff" : GREEN }}>
+                        <Mic className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <input ref={headerCameraRef} type="file" accept="image/*" className="hidden" onChange={handleHeaderCamImg} />
                   </div>
                 </form>
 
@@ -843,12 +938,22 @@ export function Header() {
 
             {/* ── Mobile search row ── */}
             <div className="sm:hidden pb-2.5">
-              <button onClick={() => setSearchOverlay(true)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm text-gray-400 text-left">
-                <Search className="w-4 h-4 flex-shrink-0" />
-                <span className="flex-1 truncate">Search nuts, dry fruits…</span>
-                <Mic className="w-4 h-4 flex-shrink-0" />
-              </button>
+              <div className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm text-gray-400">
+                <button className="flex-1 flex items-center gap-2 text-left" onClick={() => setSearchOverlay(true)}>
+                  <Search className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1 truncate">
+                    {headerListening ? "🎤 Listening…" : headerCamLoad ? "🔍 Analyzing…" : "Search nuts, dry fruits…"}
+                  </span>
+                </button>
+                <button type="button" onClick={() => headerCameraRef.current?.click()}
+                  className={`flex-shrink-0 p-0.5 transition-all active:scale-90 ${headerCamLoad ? "text-green-500" : "text-gray-400"}`}>
+                  {headerCamLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                </button>
+                <button type="button" onClick={startHeaderVoice}
+                  className={`flex-shrink-0 p-0.5 transition-all active:scale-90 ${headerListening ? "text-red-500 animate-pulse" : "text-gray-400"}`}>
+                  <Mic className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </header>
