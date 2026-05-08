@@ -1,0 +1,139 @@
+یہ مسئلہ اس لیے آ رہا ہے کیونکہ mobile bottom navigation (Home / Categories / Cart / Account) popup modal کے اوپر آ رہی ہے، اور popup کی height properly calculate نہیں ہو رہی۔
+
+نتیجہ یہ ہو رہا ہے:
+
+❌ “Add to Cart” button mobile bottom menu کے نیچے hide ہو رہا ہے
+❌ Popup scroll properly نہیں کر رہا
+❌ Safe area / bottom padding missing ہے
+
+ڈیویلپر کو یہ پرامپٹ بھیجیں:
+
+========================
+MOBILE POPUP UI ISSUE — ADD TO CART BUTTON HIDDEN
+
+There is a serious mobile UI/UX issue in the product variation popup/modal.
+
+Current problem:
+
+When customer clicks:
+✅ Add to Cart
+✅ Choose Options
+
+The popup opens correctly,
+BUT:
+
+❌ Bottom CTA buttons become hidden behind the mobile bottom navigation
+❌ “Add to Cart” button is partially invisible
+❌ Popup content overlaps with bottom mobile menu
+❌ Customer cannot clearly see or tap the final action button
+
+This issue is happening mainly on:
+✅ Android mobile
+✅ Small screen devices
+✅ Mobile Chrome
+
+========================
+REQUIRED FIX
+
+The popup/modal must become fully mobile optimized.
+
+========================
+
+1. FIX MODAL HEIGHT
+   ========================
+
+Popup should use:
+
+✅ Dynamic viewport height
+✅ Proper mobile safe-area spacing
+✅ Responsive max-height
+✅ Internal scrolling
+
+Do NOT allow:
+❌ Content cutoff
+❌ Button overlap
+❌ Footer collision
+
+========================
+2. FIX BOTTOM CTA VISIBILITY
+
+The final CTA buttons:
+
+✅ Add to Cart
+✅ Continue
+✅ Checkout
+
+must ALWAYS remain visible.
+
+Add:
+
+✅ Sticky bottom action bar
+OR
+✅ Bottom safe padding
+
+so mobile navbar never covers the buttons.
+
+========================
+3. SAFE AREA SUPPORT
+
+Add proper support for:
+
+✅ Android navigation bars
+✅ iPhone safe area
+✅ Browser bottom UI
+
+Use:
+✅ env(safe-area-inset-bottom)
+✅ proper bottom spacing
+
+========================
+4. INTERNAL SCROLL
+
+Popup body should scroll internally.
+
+NOT the whole page.
+
+Customer should:
+✅ Scroll popup smoothly
+✅ Always see CTA area
+✅ Easily select variations
+
+========================
+5. MOBILE-FIRST UI/UX
+
+Improve popup design professionally:
+
+✅ Better spacing
+✅ Better typography
+✅ Cleaner quantity controls
+✅ Better variation buttons
+✅ Sticky total section
+✅ Sticky checkout button
+
+========================
+6. RESPONSIVE PRODUCT MODAL
+
+Optimize for:
+
+✅ 320px width
+✅ 360px width
+✅ 390px width
+✅ 412px width
+
+No overflow or hidden buttons.
+
+========================
+7. FINAL GOAL
+
+We need a premium mobile ordering experience similar to:
+
+✅ Foodpanda
+✅ Daraz
+✅ Noon
+✅ Shopify mobile apps
+
+The customer must:
+✅ Always see action buttons
+✅ Easily add products
+✅ Easily select variations
+✅ Complete order without UI issues
