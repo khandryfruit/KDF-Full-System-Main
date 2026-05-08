@@ -36,7 +36,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 <title>KDF NUTS Chat</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;height:100dvh;height:-webkit-fill-available;display:flex;flex-direction:column;overflow:hidden;}
 
   /* ── Header ─────────────────────────────────── */
   #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;}
@@ -50,7 +50,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .hdr-btn svg{pointer-events:none;}
 
   /* ── Messages ────────────────────────────────── */
-  #msgs{flex:1;overflow-y:auto;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;}
+  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;-webkit-overflow-scrolling:touch;}
   #msgs::-webkit-scrollbar{width:3px;}
   #msgs::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
 
@@ -87,7 +87,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .chip:hover,.chip:active{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-color:transparent;}
 
   /* ── Input area ──────────────────────────────── */
-  #input-area{background:#fff;padding:8px 10px;display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;}
+  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;position:sticky;bottom:0;}
   #btn-mic{width:36px;height:36px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:color .2s,background .2s;}
   #btn-mic:hover{background:#f5f5f5;color:#2ecc71;}
   #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
@@ -139,6 +139,15 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .oc-btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;margin-top:8px;padding:9px;border-radius:10px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#2ecc71,#128C7E);text-decoration:none;border:none;cursor:pointer;}
   .order-notfound{background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:10px 12px;max-width:88%;margin-top:4px;display:flex;gap:8px;align-items:flex-start;}
   .order-notfound p{font-size:12px;color:#92400e;margin:0;}
+  /* Tracking screenshot preview */
+  .oc-preview{margin-top:8px;border-radius:10px;overflow:hidden;border:1px solid #e8e8e8;background:#f8f8f8;}
+  .oc-preview-hdr{font-size:10px;font-weight:700;color:#555;padding:5px 9px;background:#f2f2f2;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;gap:5px;}
+  .oc-preview-img{width:100%;display:block;max-height:130px;object-fit:cover;object-position:top;}
+  /* Hexon mini widget */
+  .oc-hexon-toggle{width:100%;margin-top:6px;padding:8px 12px;border-radius:10px;border:1.5px solid #d1fae5;background:#f0fdf4;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s;}
+  .oc-hexon-toggle:hover{background:#dcfce7;}
+  .oc-hexon-frame{margin-top:6px;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0;display:none;}
+  .oc-hexon-frame iframe{width:100%;height:280px;border:none;display:block;}
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   @keyframes micPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
@@ -339,15 +348,19 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       sendMessage(msg);
     });
 
-    /* View → open product page */
+    /* View → open product page (slug: convert name to URL-safe, fallback to /products) */
     card.querySelector('.prod-btn-view').addEventListener('click', function() {
-      window.open('https://kdfnuts.com/products/' + (p.slug || p.id), '_blank', 'noopener');
+      var slug = p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : null);
+      var url = slug ? ('https://kdfnuts.com/products/' + slug) : 'https://kdfnuts.com/products';
+      window.open(url, '_blank', 'noopener');
     });
 
     return card;
   }
 
   /* ── Order tracking card builder ── */
+  var HEXON_URL = 'https://ucp-app.hexon.app/track/track.php?hxs_shop=khandryfruit-5155.myshopify.com';
+
   function buildOrderCard(os) {
     if (os.notFound) {
       var nf = document.createElement('div');
@@ -365,27 +378,34 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       'Order Received':   { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' },
       'Delivery Failed':  { bg:'#fee2e2', color:'#991b1b', border:'#fecaca' },
     };
-    var sc = statusMap[os.fulfillmentStatus] || { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' };
+    var sc         = statusMap[os.fulfillmentStatus] || { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' };
     var isDelivered = os.fulfillmentStatus && os.fulfillmentStatus.toLowerCase().includes('delivered');
     var isTransit   = os.fulfillmentStatus && (os.fulfillmentStatus.toLowerCase().includes('transit') || os.fulfillmentStatus.toLowerCase().includes('out for'));
     var hdrPrefix   = isDelivered ? '✓ ' : isTransit ? '⟳ ' : '';
+    var liveUrl     = os.trackingUrl || HEXON_URL;
+    var screenshotUrl = os.trackingUrl
+      ? ('https://image.thum.io/get/width/400/crop/220/' + encodeURIComponent(os.trackingUrl))
+      : null;
+
     var card = document.createElement('div');
     card.className = 'order-card';
+
     card.innerHTML =
       '<div class="oc-hdr">' +
-        '<div class="oc-hdr-left"><div class="oc-hdr-label">Order</div><div class="oc-hdr-num">#' + (os.orderNumber||'') + '</div></div>' +
+        '<div class="oc-hdr-left"><div class="oc-hdr-label">📦 Order</div><div class="oc-hdr-num">#' + (os.orderNumber||'') + '</div></div>' +
         '<span class="oc-badge" style="background:' + sc.bg + ';color:' + sc.color + ';border-color:' + sc.border + '">' + hdrPrefix + (os.fulfillmentStatus||'') + '</span>' +
       '</div>' +
       '<div class="oc-body">' +
-        (os.customerName ? '<div class="oc-row"><div><div class="oc-row-label">Customer</div><div class="oc-row-val">' + os.customerName + '</div></div></div>' : '') +
-        (os.city ? '<div class="oc-row"><div><div class="oc-row-label">City</div><div class="oc-row-val">' + os.city + '</div></div></div>' : '') +
+        (os.customerName ? '<div class="oc-row"><div><div class="oc-row-label">👤 Customer</div><div class="oc-row-val">' + os.customerName + '</div></div></div>' : '') +
+        (os.city ? '<div class="oc-row"><div><div class="oc-row-label">📍 City</div><div class="oc-row-val">' + os.city + '</div></div></div>' : '') +
+        (os.dispatchedAt ? '<div class="oc-row"><div><div class="oc-row-label">📅 Dispatched</div><div class="oc-row-val">' + os.dispatchedAt + '</div></div></div>' : '') +
         (os.courierName || os.trackingId ?
           '<div class="oc-courier">' +
             '<div style="flex:1;min-width:0;">' +
-              (os.courierName ? '<div style="font-size:10px;color:#999;">' + os.courierName + '</div>' : '') +
+              (os.courierName ? '<div style="font-size:10px;color:#999;font-weight:600;">🚚 ' + os.courierName + '</div>' : '') +
               (os.trackingId ? '<div class="oc-track-id">' + os.trackingId + '</div>' : '') +
             '</div>' +
-            (os.trackingUrl ? '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-track-link">Track ↗</a>' : '') +
+            '<a href="' + liveUrl + '" target="_blank" rel="noopener" class="oc-track-link">Track ↗</a>' +
           '</div>'
         : '') +
         (os.items && os.items.length ? '<div class="oc-items">' + os.items.map(function(it){ return '<div class="oc-item"><span>' + it.name + ' × ' + it.qty + '</span><span>Rs.' + it.price + '</span></div>'; }).join('') + '</div>' : '') +
@@ -393,8 +413,37 @@ router.get("/chat-embed", (req: Request, res: Response) => {
           (os.financialStatus ? '<span class="oc-pay" style="background:' + (os.financialStatus==='paid'?'#dcfce7':'#fff7ed') + ';color:' + (os.financialStatus==='paid'?'#166534':'#9a3412') + '">' + (os.financialStatus==='paid'?'✓ Paid':'COD Pending') + '</span>' : '<span></span>') +
           (os.totalPrice ? '<span class="oc-total">Rs.' + Number(os.totalPrice).toLocaleString() + '</span>' : '<span></span>') +
         '</div>' +
-        (os.trackingUrl ? '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-btn">🚚 Track Live Parcel</a>' : '') +
+        /* Screenshot preview strip */
+        (screenshotUrl ?
+          '<div class="oc-preview">' +
+            '<div class="oc-preview-hdr">📸 Live Tracking Preview</div>' +
+            '<img class="oc-preview-img" src="' + screenshotUrl + '" alt="Tracking preview" loading="lazy" onerror="this.closest(\'.oc-preview\').style.display=\'none\'">' +
+          '</div>'
+        : '') +
+        /* Primary Track Live button */
+        '<a href="' + liveUrl + '" target="_blank" rel="noopener" class="oc-btn">🔗 Track Live</a>' +
+        /* Hexon mini widget toggle */
+        '<button class="oc-hexon-toggle" id="oc-hx-btn">🔍 Open Tracking Widget</button>' +
+        '<div class="oc-hexon-frame" id="oc-hx-frame">' +
+          '<iframe src="about:blank" data-src="' + HEXON_URL + '" loading="lazy" title="Live Tracking Widget" allow="same-origin"></iframe>' +
+        '</div>' +
       '</div>';
+
+    /* Hexon toggle logic — lazy-load iframe src on first open */
+    var hxBtn   = card.querySelector('#oc-hx-btn');
+    var hxFrame = card.querySelector('#oc-hx-frame');
+    var iframe  = hxFrame.querySelector('iframe');
+    var opened  = false;
+    hxBtn.addEventListener('click', function() {
+      var isOpen = hxFrame.style.display === 'block';
+      hxFrame.style.display = isOpen ? 'none' : 'block';
+      hxBtn.textContent = isOpen ? '🔍 Open Tracking Widget' : '✕ Close Widget';
+      if (!opened && !isOpen) {
+        iframe.src = iframe.dataset.src;
+        opened = true;
+      }
+    });
+
     return card;
   }
 

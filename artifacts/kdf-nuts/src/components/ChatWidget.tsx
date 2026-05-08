@@ -440,15 +440,57 @@ function OrderStatusCard({ data }: { data: OrderStatusData }) {
           )}
         </div>
 
-        {/* Track button */}
+        {/* Screenshot preview */}
         {data.trackingUrl && (
-          <a href={data.trackingUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold text-white"
-            style={{ background: "linear-gradient(135deg,#5FA800,#3d7000)" }}>
-            <Truck className="w-3.5 h-3.5" /> Track Live Parcel
-          </a>
+          <div className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+            <p className="text-[9px] font-bold text-gray-400 px-2 pt-1.5 pb-0.5 tracking-wider">📸 LIVE TRACKING PREVIEW</p>
+            <img
+              src={`https://image.thum.io/get/width/400/crop/220/${encodeURIComponent(data.trackingUrl)}`}
+              alt="Tracking preview"
+              className="w-full object-cover"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLElement).closest('.rounded-xl')?.remove(); }}
+            />
+          </div>
         )}
+
+        {/* Track button */}
+        <a href={data.trackingUrl || HEXON_URL} target="_blank" rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold text-white"
+          style={{ background: "linear-gradient(135deg,#5FA800,#3d7000)" }}>
+          <Truck className="w-3.5 h-3.5" /> 🔗 Track Live
+        </a>
+
+        {/* Hexon mini widget toggle */}
+        <HexonTrackingWidget />
       </div>
+    </div>
+  );
+}
+
+const HEXON_URL = "https://ucp-app.hexon.app/track/track.php?hxs_shop=khandryfruit-5155.myshopify.com";
+
+function HexonTrackingWidget() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg border transition-all"
+        style={{ borderColor: "#5FA800", color: "#5FA800", background: open ? "rgba(95,168,0,0.08)" : "transparent" }}
+      >
+        {open ? "✕ Close Widget" : "🔍 Open Tracking Widget"}
+      </button>
+      {open && (
+        <div className="mt-1.5 rounded-xl overflow-hidden border border-gray-200" style={{ height: 220 }}>
+          <iframe
+            src={HEXON_URL}
+            title="Live Tracking Widget"
+            className="w-full h-full border-0"
+            loading="lazy"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1289,7 +1331,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
 
   /* In embed mode the container is the full iframe viewport, not fixed/overlay */
   const chatContainerClass = embedMode
-    ? "flex flex-col bg-[#F0F2F5] w-full h-screen"
+    ? "flex flex-col bg-[#F0F2F5] w-full"
     : "fixed inset-0 z-[9999] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300";
 
   const ChatPanel = isChatOpen && !showOrderForm ? (
@@ -1307,7 +1349,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
         {!embedMode && <button onClick={closeChat} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center active:bg-white/30 flex-shrink-0"><X className="w-4 h-4 text-white" /></button>}
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4" style={{ minHeight: 0, WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} onAddToCart={handleAddToCart} onViewProduct={handleViewProduct} onOpenForm={handleOpenForm} onViewCategory={(slug) => { closeChat(); setLocation(`/products?category=${slug}`); }} onBuyNow={handleBuyNow} waPhone={waConfig?.phone} />
         ))}

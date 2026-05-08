@@ -1,0 +1,409 @@
+# MASTER CRITICAL FIX PROMPT — WA Chat + Shopify + React + Lead Sync Issues
+
+## IMPORTANT
+
+Existing:
+
+* Shopify integrations
+* WhatsApp APIs
+* AI chatbot
+* Website chat
+* Courier integrations
+* Tracking systems
+* Admin dashboard
+* Product systems
+
+کو break یا replace نہیں کرنا۔
+
+صرف:
+
+# Critical Bug Fixes + Unified Sync System
+
+implement کرنا ہے۔
+
+---
+
+# ISSUE #1 — CHAT SCREEN SCROLL / INPUT BUG
+
+## Current Problem
+
+WhatsApp/WA Chat کے اندر:
+
+❌ chat screen نیچے move ہو رہی ہے
+❌ input area jump کر رہا ہے
+❌ messages container unstable ہے
+❌ keyboard open ہونے پر layout break ہو رہا ہے
+❌ scrolling broken ہے
+
+---
+
+# REQUIRED FIX
+
+## Chat Layout MUST BE FIXED
+
+Use proper structure:
+
+```bash
+┌────────────────────┐
+│ Header             │
+├────────────────────┤
+│ Scrollable Messages│
+│                    │
+│                    │
+├────────────────────┤
+│ Fixed Input Area   │
+└────────────────────┘
+```
+
+---
+
+# REQUIRED BEHAVIOR
+
+## Header
+
+Header ہمیشہ fixed رہے۔
+
+---
+
+## Message Area
+
+صرف:
+
+# messages container
+
+scroll ہو۔
+
+---
+
+## Input Area
+
+Input ہمیشہ:
+
+✅ bottom پر fixed رہے
+✅ keyboard کے ساتھ adjust ہو
+✅ jump نہ کرے
+✅ hidden نہ ہو
+
+---
+
+# REQUIRED CSS FIX
+
+Use:
+
+```css
+.chat-layout{
+  display:flex;
+  flex-direction:column;
+  height:100%;
+}
+
+.messages-area{
+  flex:1;
+  overflow-y:auto;
+  min-height:0;
+}
+
+.chat-input{
+  position:sticky;
+  bottom:0;
+}
+```
+
+---
+
+# REQUIRED MOBILE FIX
+
+On mobile:
+
+✅ smooth scrolling
+✅ safe-area support
+✅ keyboard handling
+✅ no layout jumping
+
+---
+
+# ISSUE #2 — SHOPIFY PRODUCTS NOT SHOWING
+
+## Current Problem
+
+Shopify website chat میں:
+
+❌ Shopify products نہیں آ رہے
+❌ product cards render نہیں ہو رہے
+❌ variants نہیں آ رہے
+❌ pricing نہیں آ رہی
+
+---
+
+# REQUIRED FIX
+
+## Connect Chat Directly With Shopify Product APIs
+
+Use:
+
+* Shopify Storefront API
+* Product search APIs
+* Variant APIs
+
+---
+
+# REQUIRED PRODUCT CARD
+
+Inside chat show:
+
+✅ image
+✅ title
+✅ price
+✅ variant options
+✅ Add to Cart
+✅ Quick Buy
+
+---
+
+# REQUIRED PRODUCT FLOW
+
+Customer لکھے:
+
+# “Pista”
+
+↓
+
+AI fetch کرے:
+
+* Pistachio products
+* variants
+* pricing
+* stock
+
+↓
+
+Professional product cards send ہوں۔
+
+---
+
+# REQUIRED UNIVERSAL PRODUCT SYSTEM
+
+## BOTH
+
+✅ Shopify Website
+AND
+✅ Custom React Website
+
+میں SAME product rendering system ہو۔
+
+---
+
+# ISSUE #3 — WEBSITE CHAT NOT REACHING ADMIN
+
+## Current Problem
+
+Website customer chats:
+
+❌ admin dashboard میں نہیں آ رہیں
+❌ leads generate نہیں ہو رہیں
+❌ unified inbox میں نہیں آ رہیں
+❌ backend database میں save نہیں ہو رہیں
+
+یہ بہت بڑا issue ہے۔
+
+---
+
+# REQUIRED FIX
+
+## ALL WEBSITE CHATS MUST SYNC
+
+Every website message MUST:
+
+✅ save in database
+✅ appear in WA Chat admin
+✅ generate lead
+✅ connect customer profile
+✅ sync with AI memory
+
+---
+
+# REQUIRED FLOW
+
+Customer website پر chat کرے
+
+↓
+
+Message save ہو:
+
+```bash
+chat_messages
+customer_sessions
+website_leads
+conversation_history
+```
+
+↓
+
+Admin dashboard میں instantly show ہو۔
+
+---
+
+# REQUIRED REALTIME SYSTEM
+
+Use:
+
+✅ websocket
+یا
+✅ realtime polling
+
+تاکہ admin کو live chats نظر آئیں۔
+
+---
+
+# REQUIRED LEAD SYSTEM
+
+Every visitor chat create کرے:
+
+# Lead Profile
+
+with:
+
+* name
+* phone
+* email
+* session ID
+* source
+* chat history
+* visited products
+
+---
+
+# REQUIRED UNIFIED INBOX
+
+All chats merge ہوں:
+
+✅ Website Chat
+✅ WhatsApp
+✅ AI Chat
+✅ Shopify Chat
+
+---
+
+# REQUIRED ADMIN FEATURES
+
+Admin دیکھ سکے:
+
+* live visitor
+* active chat
+* customer source
+* viewed products
+* tracking history
+* order history
+
+---
+
+# REQUIRED AI DATA MERGE
+
+AI access کرے:
+
+```bash
+- Shopify Orders
+- Shopify Products
+- Website Chats
+- WhatsApp Chats
+- Courier Tracking
+- Customer History
+- Lead Data
+```
+
+---
+
+# REQUIRED ARCHITECTURE
+
+Create:
+
+```bash
+/wa-chat-unified/
+│
+├── frontend-widget/
+├── admin-inbox/
+├── realtime-sync/
+├── lead-engine/
+├── ai-core/
+├── product-engine/
+├── tracking-engine/
+└── customer-memory/
+```
+
+---
+
+# REQUIRED SPEED OPTIMIZATION
+
+System ہونا چاہیے:
+
+✅ lightweight
+✅ realtime
+✅ mobile optimized
+✅ lazy loaded
+✅ fast response
+✅ non-blocking
+
+---
+
+# IMPORTANT
+
+## DO NOT LOAD
+
+❌ full storefront
+❌ homepage preview
+❌ embedded website
+
+inside chat widget.
+
+Only:
+
+✅ chat
+✅ products
+✅ tracking
+✅ messages
+
+show ہوں۔
+
+---
+
+# REQUIRED FINAL RESULT
+
+## Customer Side
+
+✅ smooth chat
+✅ fixed input
+✅ working voice
+✅ Shopify products
+✅ live tracking
+✅ fast AI replies
+
+---
+
+## Admin Side
+
+✅ live chats visible
+✅ leads generated
+✅ unified inbox
+✅ customer tracking
+✅ synced conversations
+
+---
+
+# FINAL GOAL
+
+Create:
+
+# One Unified Enterprise WA Chat System
+
+جہاں:
+
+✅ Shopify
+✅ React Website
+✅ WhatsApp
+✅ AI
+✅ Leads
+✅ Products
+✅ Tracking
+✅ Admin Inbox
+
+سب کچھ perfectly synced ہو۔
