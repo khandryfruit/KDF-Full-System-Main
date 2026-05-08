@@ -11,6 +11,24 @@ import { LocationProvider, useNutsLocation } from "./context/LocationContext";
 import { ChatWidget } from "./components/ChatWidget";
 import { LocationModal } from "./components/LocationModal";
 
+/* ── Embed mode: Shopify iframe full-screen chat ── */
+function EmbedApp() {
+  /* Extract apiUrl from query params so the widget can call the correct API origin */
+  const apiUrl = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("apiUrl") ?? undefined
+    : undefined;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <div style={{ width: "100vw", height: "100vh", overflow: "hidden", margin: 0, padding: 0 }}>
+          <ChatWidget embedMode={true} apiUrl={apiUrl} />
+        </div>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
 import { SplashPage } from "./pages/SplashPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -140,6 +158,12 @@ function Router() {
 }
 
 function App() {
+  /* Detect embed mode (Shopify iframe) — check URL param or X-Frame parent */
+  const isEmbed = typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("embed");
+
+  if (isEmbed) return <EmbedApp />;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

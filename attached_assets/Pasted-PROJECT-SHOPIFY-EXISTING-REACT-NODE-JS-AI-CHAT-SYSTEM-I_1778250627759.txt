@@ -1,0 +1,357 @@
+PROJECT: SHOPIFY + EXISTING REACT/NODE.JS AI CHAT SYSTEM INTEGRATION
+
+IMPORTANT:
+We already have a COMPLETE working system:
+✅ React frontend
+✅ Node.js backend
+✅ AI chatbot
+✅ Admin dashboard
+✅ Live chat
+✅ WhatsApp integration
+✅ Notifications
+✅ Product cards
+✅ Order placement system
+✅ AI order assistant
+✅ Real-time socket system
+
+We DO NOT want a new chatbot system.
+
+We ONLY want:
+✅ Shopify integration
+✅ Embeddable widget/snippet
+✅ API connectivity
+
+---
+
+SHOPIFY DETAILS
+
+Shopify Store URL:
+https://khandryfruit-5155.myshopify.com
+
+Primary Domain:
+https://khandryfruit.com
+
+---
+
+MAIN GOAL
+
+Need to integrate our EXISTING React + Node.js AI Live Chat System directly into Shopify.
+
+Shopify should ONLY work as:
+✅ Frontend storefront
+✅ Widget container
+
+ALL logic must continue using:
+✅ Existing Node.js backend
+✅ Existing APIs
+✅ Existing database
+✅ Existing AI
+✅ Existing admin dashboard
+
+DO NOT:
+❌ Build separate chatbot
+❌ Build separate admin
+❌ Build separate AI system
+❌ Build separate database
+
+---
+
+EXPECTED CUSTOMER FLOW
+
+Customer opens Shopify website
+↓
+Chat button appears
+↓
+Customer clicks chat
+↓
+Same React chat popup opens
+↓
+Message goes to SAME Node.js backend
+↓
+Message appears in SAME Admin Dashboard
+↓
+AI replies instantly
+↓
+Admin can reply instantly
+↓
+Orders/products/notifications work in real-time
+
+---
+
+SHOPIFY CHAT WIDGET REQUIREMENTS
+
+Need a professional embeddable Shopify widget/snippet.
+
+The widget must support:
+✅ Same existing UI/UX
+✅ Same AI behavior
+✅ Same admin inbox
+✅ Same order flow
+✅ Same notifications
+✅ Same WhatsApp integrations
+✅ Same product cards
+✅ Same socket connection
+✅ Same customer session system
+
+---
+
+MOBILE REQUIREMENTS
+
+On mobile:
+✅ Chat must open fullscreen
+✅ Smooth animations
+✅ Fast loading
+✅ Same current design
+✅ Floating popup button
+✅ Professional WhatsApp-style UX
+
+---
+
+REAL-TIME SYSTEM
+
+Reuse existing:
+✅ Socket.IO
+✅ WebSocket connections
+✅ Notification system
+
+Need:
+✅ Instant message sync
+✅ Typing indicators
+✅ Live admin replies
+✅ Real-time order updates
+✅ Real-time AI responses
+
+---
+
+NOTIFICATIONS
+
+Need proper notifications:
+✅ Admin notification sound
+✅ Message badge counter
+✅ Red unread indicators
+✅ Browser push notifications
+✅ New order notification tone
+✅ Live chat alert sounds
+
+Unread count should show:
+1 message
+2 messages
+3 messages
+etc.
+
+---
+
+AI FEATURES
+
+Reuse existing AI system.
+
+AI should:
+✅ Reply automatically
+✅ Recommend products
+✅ Show product cards
+✅ Show product variants
+✅ Create orders
+✅ Share tracking details
+✅ Share delivery times
+✅ Handle FAQs
+✅ Handle greetings
+✅ Detect intent
+
+---
+
+SHOPIFY PRODUCT INTEGRATION
+
+Need AI to automatically:
+✅ Fetch Shopify products
+✅ Show product cards
+✅ Show variant buttons
+✅ Show pricing
+✅ Show discount badges
+✅ Add-to-cart actions
+✅ Checkout support
+
+Product cards should look modern and premium like WhatsApp catalog cards.
+
+---
+
+ORDER SYSTEM
+
+Need complete order integration.
+
+AI should:
+✅ Create orders
+✅ Track orders
+✅ Fetch order status
+✅ Share tracking number
+✅ Share delivery updates
+
+Integrate with:
+✅ PostEx
+✅ TCS
+✅ Existing courier APIs
+
+---
+
+PAYMENT SYSTEM
+
+Need:
+✅ Payment invoice links
+✅ Payment confirmation buttons
+✅ Bank account settings
+✅ COD support
+✅ Manual payment verification
+
+Admin should be able to:
+✅ Confirm payment
+✅ Send confirmation messages
+✅ Update payment status
+
+---
+
+META / WHATSAPP POLICY COMPLIANCE
+
+IMPORTANT:
+System must follow Meta + WhatsApp policies.
+
+Need:
+✅ 24-hour conversation window handling
+✅ Safe messaging rules
+✅ Anti-spam protections
+✅ Message throttling
+✅ Rate limiting
+✅ Session management
+✅ Human takeover option
+✅ Bot/Human toggle
+✅ Compliance-safe templates
+
+Very important:
+❌ Prevent WhatsApp bans
+❌ Prevent spam behavior
+
+---
+
+SHOPIFY CUSTOMER DETECTION
+
+Automatically detect:
+✅ Customer name
+✅ Email
+✅ Phone
+✅ Cart
+✅ Current product page
+✅ Current URL
+✅ Browser session
+
+Send all data to existing backend.
+
+---
+
+ADMIN DASHBOARD
+
+Reuse SAME existing admin dashboard.
+
+Need:
+✅ Shopify messages inside same inbox
+✅ Same chat UI
+✅ Same notifications
+✅ Same AI controls
+✅ Same order system
+✅ Same analytics
+
+NO separate admin panel.
+
+---
+
+CATEGORY & PRODUCT MEDIA
+
+Need:
+✅ Category image upload support
+✅ Product image optimization
+✅ Variant image handling
+✅ Modern product UI
+✅ Mobile responsive cards
+
+---
+
+TECHNICAL REQUIREMENTS
+
+Need:
+✅ Shopify Liquid snippet
+or
+✅ External widget.js script
+
+Example:
+
+<script src="https://chat.khandryfruit.com/widget.js"></script>OR:
+
+{% render 'kdf-chat-widget' %}
+
+---
+
+SDK REQUIREMENTS
+
+Need embeddable SDK.
+
+Example:
+
+window.KDFChat.init({
+apiUrl: "https://api.khandryfruit.com",
+store: "shopify"
+})
+
+---
+
+SECURITY
+
+Need:
+✅ Secure authentication
+✅ CORS configuration
+✅ Domain whitelist
+✅ Secure sockets
+✅ Token validation
+✅ Session security
+
+---
+
+PERFORMANCE
+
+Widget must:
+✅ Lazy load
+✅ Not slow Shopify
+✅ Small JS bundle
+✅ Fast rendering
+✅ Mobile optimized
+✅ SEO safe
+
+---
+
+WHAT DEVELOPER MUST PROVIDE
+
+Need:
+✅ Shopify snippet code
+✅ widget.js file
+✅ API integration
+✅ Socket integration
+✅ Installation guide
+✅ Shopify setup steps
+✅ Mobile responsive support
+✅ Full testing
+
+---
+
+FINAL EXPECTED RESULT
+
+Shopify website should display:
+the SAME existing React + Node.js AI chat system already running on our custom website.
+
+Everything must continue using:
+✅ Existing backend
+✅ Existing APIs
+✅ Existing AI
+✅ Existing database
+✅ Existing admin dashboard
+
+Shopify should ONLY work as:
+✅ Frontend storefront
+✅ Widget layer
+
+NO separate system should be created.

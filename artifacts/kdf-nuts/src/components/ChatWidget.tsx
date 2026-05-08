@@ -8,10 +8,10 @@ const CHAT_CART_KEY = "kdfnuts_chat_cart";
 const LEAD_KEY = "kdfnuts_lead";
 const CITIES = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Abbottabad", "Bahawalpur", "Sargodha", "Other"];
 
-function getImageUrl(key: string | null | undefined): string | null {
+function getImageUrl(key: string | null | undefined, base = BASE_URL + "api/"): string | null {
   if (!key) return null;
   if (key.startsWith("http")) return key;
-  return `${BASE_URL}api/storage/objects/${key}`;
+  return `${base}storage/objects/${key}`;
 }
 
 const WA_SVG = (
@@ -459,7 +459,7 @@ interface ShopifyProductForForm {
 }
 
 /* ─── Product Search Sheet (slide-in fullscreen search) ─── */
-function ProductSearchSheet({ onSelect, onClose }: { onSelect: (p: ShopifyProductForForm) => void; onClose: () => void }) {
+function ProductSearchSheet({ onSelect, onClose, apiBase }: { onSelect: (p: ShopifyProductForForm) => void; onClose: () => void; apiBase: string }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ShopifyProductForForm[]>([]);
   const [loading, setLoading] = useState(false);
@@ -476,7 +476,7 @@ function ProductSearchSheet({ onSelect, onClose }: { onSelect: (p: ShopifyProduc
     setLoading(true);
     timerRef.current = setTimeout(async () => {
       try {
-        const r = await fetch(`${BASE_URL}api/chat/products/search?q=${encodeURIComponent(query)}&limit=12`);
+        const r = await fetch(`${apiBase}chat/products/search?q=${encodeURIComponent(query)}&limit=12`);
         if (r.ok) { const d = await r.json(); setResults(d.products ?? []); }
       } catch {} finally { setLoading(false); }
     }, 250);
@@ -607,7 +607,7 @@ function VariantPickerSheet({ product, onConfirm, onClose }: {
           </div>
         </div>
         <div className="px-4 pt-1 pb-6">
-          <button onClick={() => onConfirm({ name: product.name, variant: selected?.value ?? "", variantId: selected?.id ?? "", price, qty, image: product.image ?? undefined })}
+          <button onClick={() => onConfirm({ productId: product.id, name: product.name, variant: selected?.value ?? "", variantId: selected?.id ?? "", price, qty, image: product.image ?? undefined })}
             disabled={hasVariants && !selected}
             className="w-full py-4 rounded-2xl text-white font-bold text-[15px] flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-all shadow-[0_4px_14px_rgba(95,168,0,0.3)]"
             style={{ backgroundColor: "#5FA800" }}>
@@ -621,9 +621,9 @@ function VariantPickerSheet({ product, onConfirm, onClose }: {
 }
 
 /* ── Full-Screen Order Form ── */
-function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
+function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess, apiBase }: {
   defaultProduct: string; initialCart?: ChatCartItem[]; sessionId: string | null;
-  onClose: () => void; onSuccess: (orderNumber: string, orderId: number) => void;
+  onClose: () => void; onSuccess: (orderNumber: string, orderId: number) => void; apiBase: string;
 }) {
   const [localCart, setLocalCart] = useState<ChatCartItem[]>(initialCart ?? []);
   const [form, setForm] = useState({ name: "", phone: "", city: "", cityCustom: "", address: "", notes: "" });
@@ -648,7 +648,7 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
         const { latitude: lat, longitude: lng } = pos.coords;
-        const res = await fetch(`${BASE_URL}api/locations/geocode`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lng }) });
+        const res = await fetch(`${apiBase}locations/geocode`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lng }) });
         const d = await res.json();
         if (d.fullAddress) set("address", d.fullAddress);
         if (d.city) {
@@ -679,7 +679,7 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
     try {
       const city = form.city === "Other" ? form.cityCustom : form.city;
       const items = localCart.map(i => ({ name: i.name, variant: i.variant, variantId: i.variantId, price: i.price, qty: i.qty }));
-      const r = await fetch(`${BASE_URL}api/chat/direct-order`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, items, name: form.name.trim(), phone: form.phone.trim(), city, address: form.address.trim(), notes: form.notes.trim() }) });
+      const r = await fetch(`${apiBase}chat/direct-order`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, items, name: form.name.trim(), phone: form.phone.trim(), city, address: form.address.trim(), notes: form.notes.trim() }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Order failed. Please try again.");
       onSuccess(data.orderNumber, data.orderId);
@@ -805,7 +805,7 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
         )}
 
         {/* Overlays */}
-        {showSearch && <ProductSearchSheet onSelect={p => { setPickerProduct(p); setShowSearch(false); }} onClose={() => setShowSearch(false)} />}
+        {showSearch && <ProductSearchSheet onSelect={p => { setPickerProduct(p); setShowSearch(false); }} onClose={() => setShowSearch(false)} apiBase={apiBase} />}
         {pickerProduct && <VariantPickerSheet product={pickerProduct} onConfirm={item => { setLocalCart(c => [...c, item]); setPickerProduct(null); }} onClose={() => setPickerProduct(null)} />}
       </div>
 
@@ -835,11 +835,15 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess }: {
 /* ════════════════════════════════════════════
    Main ChatWidget
 ════════════════════════════════════════════ */
-export function ChatWidget() {
+export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean; apiUrl?: string } = {}) {
   const [, setLocation] = useLocation();
+  /* In embed mode, override the BASE_URL with the absolute API origin.
+     This ensures cross-origin iframe API calls reach the correct server. */
+  const API_BASE = (embedMode && apiUrl) ? `${apiUrl.replace(/\/$/, "")}/` : BASE_URL + "api/";
   const [waConfig, setWaConfig] = useState<{ phone: string; message: string } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  /* In embed mode (Shopify iframe) chat is always visible */
+  const [isChatOpen, setIsChatOpen] = useState(embedMode);
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [defaultOrderProduct, setDefaultOrderProduct] = useState("");
   const [chatCart, setChatCart] = useState<ChatCartItem[]>([]);
@@ -857,6 +861,10 @@ export function ChatWidget() {
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRef = useRef<any>(null);
 
+  /* Use separate localStorage keys for Shopify embed to avoid collisions */
+  const SESSION_STORE = embedMode ? "kdfshopify_chat_session" : SESSION_KEY;
+  const LEAD_STORE    = embedMode ? "kdfshopify_lead"          : LEAD_KEY;
+
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadName, setLeadName] = useState("");
   const [leadPhone, setLeadPhone] = useState("");
@@ -872,7 +880,7 @@ export function ChatWidget() {
   };
 
   const handleChatOpen = () => {
-    const saved = localStorage.getItem(LEAD_KEY);
+    const saved = localStorage.getItem(LEAD_STORE);
     if (saved) {
       setIsExpanded(false);
       setIsChatOpen(true);
@@ -889,7 +897,7 @@ export function ChatWidget() {
     try {
       const newSessionId = sessionId ?? `kdfnuts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       if (!sessionId) setSessionId(newSessionId);
-      await fetch(`${BASE_URL}api/chat/lead`, {
+      await fetch(`${API_BASE}chat/lead`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -897,13 +905,13 @@ export function ChatWidget() {
           phone: leadPhone.trim(),
           email: leadEmail.trim() || undefined,
           city: leadCity || undefined,
-          source: "kdf_nuts",
+          source: embedMode ? "shopify" : "kdf_nuts",
           sessionId: newSessionId,
           visitSource: document.referrer || undefined,
           deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
         }),
       });
-      localStorage.setItem(LEAD_KEY, JSON.stringify({ name: leadName.trim(), phone: leadPhone.trim(), submitted: true }));
+      localStorage.setItem(LEAD_STORE, JSON.stringify({ name: leadName.trim(), phone: leadPhone.trim(), submitted: true }));
     } catch {}
     setLeadSubmitting(false);
     setShowLeadForm(false);
@@ -911,17 +919,66 @@ export function ChatWidget() {
   };
 
   useEffect(() => {
-    fetch(`${BASE_URL}api/whatsapp/chat-config`).then(r => r.json()).then(d => { if (d?.enabled && d.phone) setWaConfig({ phone: d.phone, message: d.message }); }).catch(() => {});
+    fetch(`${API_BASE}whatsapp/chat-config`).then(r => r.json()).then(d => { if (d?.enabled && d.phone) setWaConfig({ phone: d.phone, message: d.message }); }).catch(() => {});
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem(SESSION_KEY);
+    const saved = localStorage.getItem(SESSION_STORE);
     if (saved) { try { const { sessionId: sid, messages: msgs } = JSON.parse(saved); if (sid) setSessionId(sid); if (msgs?.length) setMessages(msgs.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }))); } catch {} }
   }, []);
 
   useEffect(() => {
-    if (sessionId || messages.length > 0) localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, messages }));
+    if (sessionId || messages.length > 0) localStorage.setItem(SESSION_STORE, JSON.stringify({ sessionId, messages }));
   }, [sessionId, messages]);
+
+  /* ── postMessage: Shopify context injection (embed mode only) ── */
+  useEffect(() => {
+    if (!embedMode) return;
+    const handler = (e: MessageEvent) => {
+      if (!e.data || typeof e.data !== "object") return;
+      if (e.data.type === "KDF_SHOPIFY_CONTEXT") {
+        const { customer } = e.data;
+        if (!customer) return;
+        if (customer.name)  setLeadName(customer.name.trim());
+        if (customer.email) setLeadEmail(customer.email.trim());
+        if (customer.phone) setLeadPhone(customer.phone.trim());
+        /* If we have both name + phone, auto-skip lead form */
+        if (customer.name && customer.phone) {
+          const existing = localStorage.getItem(LEAD_STORE);
+          if (!existing) {
+            const sid = `kdfshopify_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            setSessionId(sid);
+            fetch(`${API_BASE}chat/lead`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: customer.name.trim(),
+                phone: customer.phone.trim(),
+                email: customer.email?.trim() || undefined,
+                source: "shopify",
+                sessionId: sid,
+                visitSource: e.data.page || undefined,
+                deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
+              }),
+            }).catch(() => {});
+            localStorage.setItem(LEAD_STORE, JSON.stringify({ name: customer.name.trim(), phone: customer.phone.trim(), submitted: true }));
+          }
+        }
+      }
+      if (e.data.type === "KDF_CLOSE") setIsChatOpen(false);
+    };
+    window.addEventListener("message", handler);
+    /* Tell parent we loaded */
+    window.parent.postMessage({ type: "KDF_READY" }, "*");
+    return () => window.removeEventListener("message", handler);
+  }, [embedMode, BASE_URL, LEAD_STORE]);
+
+  /* ── postMessage: send unread count to Shopify parent ── */
+  useEffect(() => {
+    if (!embedMode) return;
+    const adminMsgs = messages.filter(m => m.role === "admin" || m.role === "assistant").length;
+    window.parent.postMessage({ type: "KDF_UNREAD", count: isChatOpen ? 0 : adminMsgs }, "*");
+  }, [embedMode, messages, isChatOpen]);
 
   useEffect(() => {
     try { const s = localStorage.getItem(CHAT_CART_KEY); if (s) setChatCart(JSON.parse(s)); } catch {}
@@ -948,7 +1005,7 @@ export function ChatWidget() {
       msgCountRef.current = messages.length;
       pollRef.current = setInterval(async () => {
         try {
-          const r = await fetch(`${BASE_URL}api/chat/session/${sessionId}`);
+          const r = await fetch(`${API_BASE}chat/session/${sessionId}`);
           if (!r.ok) return;
           const data = await r.json();
           const serverMsgs: any[] = data.messages ?? [];
@@ -975,7 +1032,7 @@ export function ChatWidget() {
     setMessages(prev => [...prev, { role: "user", content: userText, timestamp: new Date() }]);
     setIsLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}api/chat/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, message: userText }) });
+      const res = await fetch(`${API_BASE}chat/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, message: userText }) });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? `Error ${res.status}`); }
       const data = await res.json();
       if (data.sessionId && !sessionId) setSessionId(data.sessionId);
@@ -1005,7 +1062,7 @@ export function ChatWidget() {
   const trackActivity = useCallback((product: Product, variant: ProductVariant | null, price: number, action: "cart_add" | "buy_now" | "order_placed", qty = 1) => {
     const sid = sessionId;
     if (!sid) return;
-    fetch(`${BASE_URL}api/chat/lead/activity`, {
+    fetch(`${API_BASE}chat/lead/activity`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: sid, productId: product.id, name: product.name, variant: variant?.value, price, qty, action }),
@@ -1066,7 +1123,7 @@ export function ChatWidget() {
   const handleOrderSuccess = (orderNumber: string, orderId: number) => {
     chatCart.forEach(item => {
       if (sessionId) {
-        fetch(`${BASE_URL}api/chat/lead/activity`, {
+        fetch(`${API_BASE}chat/lead/activity`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId, productId: item.productId, name: item.name, variant: item.variant, price: item.price, qty: item.qty, action: "order_placed" }),
@@ -1094,11 +1151,23 @@ export function ChatWidget() {
     { label: "👤 Human Support", action: () => sendMessage("I need to talk to a real person please"), highlight: false },
   ];
 
-  const closeChat = () => setIsChatOpen(false);
+  const closeChat = () => {
+    if (embedMode) {
+      /* Notify Shopify parent to close the iframe panel */
+      window.parent.postMessage({ type: "KDF_CLOSE" }, "*");
+    } else {
+      setIsChatOpen(false);
+    }
+  };
+
+  /* In embed mode the container is the full iframe viewport, not fixed/overlay */
+  const chatContainerClass = embedMode
+    ? "flex flex-col bg-[#F0F2F5] w-full h-screen"
+    : "fixed inset-0 z-[9999] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300";
 
   const ChatPanel = isChatOpen && !showOrderForm ? (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300">
-      <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)", paddingTop: "env(safe-area-inset-top, 12px)", paddingBottom: "12px" }}>
+    <div className={chatContainerClass}>
+      <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ background: "linear-gradient(135deg,#5FA800,#4d8a00)", paddingTop: embedMode ? "12px" : "env(safe-area-inset-top, 12px)", paddingBottom: "12px" }}>
         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center font-black text-[#5FA800] text-sm flex-shrink-0">K</div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-white text-[15px] leading-tight">24/7 Live Support</p>
@@ -1108,7 +1177,7 @@ export function ChatWidget() {
           </div>
         </div>
         <button onClick={clearChat} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center active:bg-white/30 flex-shrink-0 mr-1"><RotateCcw className="w-3.5 h-3.5 text-white" /></button>
-        <button onClick={closeChat} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center active:bg-white/30 flex-shrink-0"><X className="w-4 h-4 text-white" /></button>
+        {!embedMode && <button onClick={closeChat} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center active:bg-white/30 flex-shrink-0"><X className="w-4 h-4 text-white" /></button>}
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
@@ -1191,10 +1260,60 @@ export function ChatWidget() {
     </div>
   ) : null;
 
+  /* ── Embed mode: just the chat UI, no floating button ── */
+  if (embedMode) {
+    return (
+      <>
+        {showOrderForm ? (
+          <OrderFormScreen defaultProduct={defaultOrderProduct} initialCart={chatCart} sessionId={sessionId} onClose={() => setShowOrderForm(false)} onSuccess={handleOrderSuccess} apiBase={API_BASE} />
+        ) : (
+          ChatPanel
+        )}
+        {showLeadForm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40">
+            <div className="w-full max-w-sm animate-in fade-in duration-200">
+              <div className="rounded-2xl shadow-2xl overflow-hidden" style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #0f2010 100%)", border: "1.5px solid #5FA800" }}>
+                <div className="px-5 pt-5 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(95,168,0,0.2)" }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#5FA800" }}>
+                    <MessageCircle className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white text-sm">Start Chat with KDF Nuts</p>
+                    <p className="text-xs" style={{ color: "#7ec832" }}>Quick intro so we can help you better</p>
+                  </div>
+                </div>
+                <form onSubmit={handleLeadSubmit} className="px-5 py-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>Your Name <span className="text-red-400">*</span></label>
+                    <input required value={leadName} onChange={e => setLeadName(e.target.value)} placeholder="e.g. Ali Hassan"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm border text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                      style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(255,255,255,0.06)" }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: "#7ec832" }}>Phone Number <span className="text-red-400">*</span></label>
+                    <input required type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} placeholder="e.g. 03001234567"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm border text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                      style={{ borderColor: "rgba(95,168,0,0.3)", backgroundColor: "rgba(255,255,255,0.06)" }} />
+                  </div>
+                  <button type="submit" disabled={leadSubmitting || !leadName.trim() || !leadPhone.trim()}
+                    className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-95 disabled:opacity-50 mt-1 flex items-center justify-center gap-2"
+                    style={{ background: "#5FA800" }}>
+                    {leadSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                    {leadSubmitting ? "Starting Chat…" : "Start Chat"}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {showOrderForm && (
-        <OrderFormScreen defaultProduct={defaultOrderProduct} initialCart={chatCart} sessionId={sessionId} onClose={() => setShowOrderForm(false)} onSuccess={handleOrderSuccess} />
+        <OrderFormScreen defaultProduct={defaultOrderProduct} initialCart={chatCart} sessionId={sessionId} onClose={() => setShowOrderForm(false)} onSuccess={handleOrderSuccess} apiBase={API_BASE} />
       )}
       {ChatPanel}
 

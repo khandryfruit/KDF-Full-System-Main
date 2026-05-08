@@ -58,6 +58,7 @@ import FeaturedProductsPage from "@/pages/FeaturedProductsPage";
 import ShopifyCampaignsPage from "@/pages/ShopifyCampaignsPage";
 import ShopifyEmailCampaignsPage from "@/pages/ShopifyEmailCampaignsPage";
 import ShopifyMarketingPage from "@/pages/ShopifyMarketingPage";
+import ShopifyWidgetPage from "@/pages/ShopifyWidgetPage";
 import WaInboxPage from "@/pages/WaInboxPage";
 import SocialAIPage from "@/pages/SocialAIPage";
 import IntelligencePage from "@/pages/IntelligencePage";
@@ -180,6 +181,7 @@ function Router() {
       <Route path="/shopify/campaigns"><ProtectedRoute component={ShopifyCampaignsPage} /></Route>
       <Route path="/shopify/email-campaigns"><ProtectedRoute component={ShopifyEmailCampaignsPage} /></Route>
       <Route path="/shopify/marketing"><ProtectedRoute component={ShopifyMarketingPage} /></Route>
+      <Route path="/shopify/widget"><ProtectedRoute component={ShopifyWidgetPage} /></Route>
       <Route path="/shopify/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
       <Route path="/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
       <Route path="/social-ai"><ProtectedRoute component={SocialAIPage} /></Route>

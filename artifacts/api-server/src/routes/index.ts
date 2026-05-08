@@ -53,6 +53,7 @@ import blogAdsRouter from "./blogAds";
 import videoBannersRouter from "./videoBanners";
 import mobileReelsRouter from "./mobileReels";
 import waAutomationRouter from "./waAutomation";
+import chatWidgetRouter from "./chatWidget";
 
 const router: IRouter = Router();
 
@@ -112,5 +113,6 @@ router.use("/admin/erp-settings",  erpSettingsRouter);
 router.use("/admin/stock",          branchStockRouter);
 router.use("/branch/stock",         branchStockRouter);
 router.use("/branch/erp-settings",  erpSettingsRouter);
+router.use(chatWidgetRouter);
 
 export default router;
