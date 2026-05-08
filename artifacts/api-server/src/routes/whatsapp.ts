@@ -2103,6 +2103,56 @@ router.get("/admin/whatsapp/meta-config", adminMiddleware as any, (req, res) => 
   return res.json({ appId, configId, isConfigured: !!(appId && configId) });
 });
 
+/* ─── Admin: Existing WABA pre-check (before opening signup) ── */
+router.get("/admin/whatsapp/meta-existing-waba", adminMiddleware as any, async (req, res) => {
+  try {
+    const [settings] = await db.select({
+      businessAccountId: whatsappSettingsTable.businessAccountId,
+      phoneNumberId:     whatsappSettingsTable.phoneNumberId,
+      verifiedName:      whatsappSettingsTable.verifiedName,
+      accessToken:       whatsappSettingsTable.accessToken,
+      connectionMethod:  whatsappSettingsTable.connectionMethod,
+      metaStatus:        whatsappSettingsTable.metaStatus,
+    }).from(whatsappSettingsTable).limit(1);
+
+    if (!settings?.businessAccountId || !settings?.accessToken) {
+      return res.json({ hasExisting: false });
+    }
+
+    /* Optionally verify WABA is still valid via Graph API */
+    const GV = "v20.0";
+    let wabaName: string | null = null;
+    let phoneDisplay: string | null = null;
+    try {
+      const wabaRes = await fetch(
+        `https://graph.facebook.com/${GV}/${settings.businessAccountId}?fields=id,name&access_token=${settings.accessToken}`
+      );
+      const wabaData = await wabaRes.json() as any;
+      wabaName = wabaData.name ?? null;
+
+      if (settings.phoneNumberId) {
+        const phoneRes = await fetch(
+          `https://graph.facebook.com/${GV}/${settings.phoneNumberId}?fields=display_phone_number,verified_name,status&access_token=${settings.accessToken}`
+        );
+        const phoneData = await phoneRes.json() as any;
+        phoneDisplay = phoneData.display_phone_number ?? null;
+      }
+    } catch { /* non-critical — use DB values */ }
+
+    return res.json({
+      hasExisting: true,
+      wabaId: settings.businessAccountId,
+      wabaName,
+      phoneNumberId: settings.phoneNumberId,
+      phoneDisplay,
+      verifiedName: settings.verifiedName,
+      connectionMethod: settings.connectionMethod,
+    });
+  } catch (e: any) {
+    return res.json({ hasExisting: false });
+  }
+});
+
 /* ─── Helper: auto-discover WABA + phone via Graph API chain ── */
 async function discoverWabaAndPhone(token: string): Promise<{
   wabaId: string | null;

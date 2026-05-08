@@ -962,6 +962,20 @@ export default function WhatsAppPage() {
     staleTime: Infinity,
   });
 
+  const { data: existingWaba } = useQuery<{
+    hasExisting: boolean;
+    wabaId?: string;
+    wabaName?: string | null;
+    phoneNumberId?: string | null;
+    phoneDisplay?: string | null;
+    verifiedName?: string | null;
+    connectionMethod?: string | null;
+  }>({
+    queryKey: ["/api/admin/whatsapp/meta-existing-waba"],
+    queryFn: () => apiFetch("/api/admin/whatsapp/meta-existing-waba"),
+    staleTime: 60_000,
+  });
+
   const exchangeMetaToken = useMutation({
     mutationFn: (payload: { code: string; wabaId?: string; phoneNumberId?: string }) =>
       apiFetch("/api/admin/whatsapp/meta-exchange-token", { method: "POST", body: JSON.stringify(payload) }),
@@ -1017,6 +1031,7 @@ export default function WhatsAppPage() {
     if (!metaConfig?.appId || !metaConfig?.configId) return;
     setIsConnectingMeta(true);
     metaEmbeddedDataRef.current = null;
+
     const messageHandler = (event: MessageEvent) => {
       if (event.origin !== "https://www.facebook.com") return;
       try {
@@ -1025,23 +1040,42 @@ export default function WhatsAppPage() {
       } catch {}
     };
     window.addEventListener("message", messageHandler);
+
     try {
       await loadFbSdk(metaConfig.appId);
+
+      /* If an existing WABA is saved, use phone_zero_step_signup so Meta
+         opens the MIGRATION / QR-linking flow directly instead of "Create new WABA" */
+      const hasExistingWaba = existingWaba?.hasExisting && existingWaba?.wabaId;
+      const loginParams: Record<string, any> = {
+        config_id: metaConfig.configId,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: {
+          version: 2,
+          sessionInfoVersion: 3,
+          ...(hasExistingWaba && {
+            featureType: "phone_zero_step_signup",
+            sessionId: `kdfnuts_${Date.now()}`,
+          }),
+        },
+      };
+
       window.FB.login((response: any) => {
         window.removeEventListener("message", messageHandler);
         if (response?.authResponse?.code) {
           const { phone_number_id, waba_id } = metaEmbeddedDataRef.current ?? {};
-          exchangeMetaToken.mutate({ code: response.authResponse.code, wabaId: waba_id, phoneNumberId: phone_number_id });
+          /* Prefer IDs from signup event; fall back to existing saved ones */
+          exchangeMetaToken.mutate({
+            code: response.authResponse.code,
+            wabaId:        waba_id        ?? existingWaba?.wabaId,
+            phoneNumberId: phone_number_id ?? existingWaba?.phoneNumberId ?? undefined,
+          });
         } else {
           setIsConnectingMeta(false);
           toast({ title: "Cancelled", description: "Meta login was closed or not completed." });
         }
-      }, {
-        config_id: metaConfig.configId,
-        response_type: "code",
-        override_default_response_type: true,
-        extras: { version: 2, sessionInfoVersion: 3 },
-      });
+      }, loginParams);
     } catch (e: any) {
       window.removeEventListener("message", messageHandler);
       setIsConnectingMeta(false);
@@ -1419,12 +1453,35 @@ export default function WhatsAppPage() {
                   <div className="px-5 py-5 space-y-4">
                     {metaConfig?.isConfigured ? (
                       <>
+                        {/* ── Existing WABA detected card ── */}
+                        {existingWaba?.hasExisting && existingWaba.wabaId && (
+                          <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0 text-xs">
+                              <p className="font-semibold text-emerald-800">Existing WhatsApp Business Account Detected</p>
+                              <p className="text-emerald-700 mt-0.5">
+                                Reconnecting will use your existing account — no new WABA will be created.
+                              </p>
+                              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-emerald-700">
+                                {existingWaba.wabaName   && <span><span className="font-medium">Business:</span> {existingWaba.wabaName}</span>}
+                                {existingWaba.phoneDisplay && <span><span className="font-medium">Phone:</span> {existingWaba.phoneDisplay}</span>}
+                                {existingWaba.verifiedName && <span><span className="font-medium">Name:</span> {existingWaba.verifiedName}</span>}
+                                <span className="font-mono opacity-60">WABA: {existingWaba.wabaId.slice(-8)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                          {[
+                          {(existingWaba?.hasExisting ? [
+                            { step: "1", title: "Click Reconnect", desc: "Opens Meta popup in migration mode" },
+                            { step: "2", title: "Select KHAN DRY FRUITS", desc: "Existing number auto-detected" },
+                            { step: "3", title: "Scan QR Code", desc: "WhatsApp shows 'Connect this account'" },
+                          ] : [
                             { step: "1", title: "Click Connect", desc: "Opens secure Meta login popup" },
                             { step: "2", title: "Select Business Account", desc: "Choose your WhatsApp Business Number" },
                             { step: "3", title: "Auto-Connected", desc: "Token + IDs fetched and saved" },
-                          ].map(s => (
+                          ]).map(s => (
                             <div key={s.step} className="flex items-start gap-2.5 p-3 bg-muted/30 rounded-lg border border-border">
                               <span className="w-5 h-5 rounded-full bg-[#1877F2]/10 text-[#1877F2] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
                               <div>
