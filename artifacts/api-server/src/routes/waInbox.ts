@@ -371,6 +371,170 @@ router.post("/admin/wa/conversations/:id/send-product", adminMiddleware, async (
   }
 });
 
+/* ─── Analytics dashboard ────────────────────────────── */
+router.get("/admin/wa/analytics", adminMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const statsRes = await db.execute(sql`
+      SELECT
+        (SELECT COUNT(*) FROM wa_conversations) AS total_conversations,
+        (SELECT COUNT(*) FROM wa_conversations WHERE status = 'open') AS open_conversations,
+        (SELECT COUNT(*) FROM wa_conversations WHERE DATE(last_message_at) = CURRENT_DATE) AS active_today,
+        (SELECT COALESCE(SUM(unread_count),0) FROM wa_conversations) AS total_unread,
+        (SELECT COUNT(*) FROM wa_messages WHERE direction = 'in' AND DATE(created_at) = CURRENT_DATE) AS inbound_today,
+        (SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND DATE(created_at) = CURRENT_DATE) AS outbound_today,
+        (SELECT COUNT(*) FROM wa_messages WHERE direction = 'out' AND is_bot = true AND DATE(created_at) = CURRENT_DATE) AS bot_replies_today,
+        (SELECT COUNT(*) FROM wa_messages WHERE direction = 'in' AND created_at >= NOW() - INTERVAL '24 hours') AS messages_24h,
+        (SELECT COUNT(*) FROM wa_conversations WHERE bot_mode = 'human') AS human_mode_count,
+        (SELECT COUNT(*) FROM wa_conversations WHERE is_starred = true) AS starred_count,
+        (SELECT COUNT(*) FROM wa_conversations WHERE created_at >= NOW() - INTERVAL '7 days') AS new_this_week
+    `) as any;
+
+    /* 7-day message volume */
+    const volumeRes = await db.execute(sql`
+      SELECT
+        DATE(created_at) AS day,
+        COUNT(*) FILTER (WHERE direction = 'in') AS inbound,
+        COUNT(*) FILTER (WHERE direction = 'out') AS outbound,
+        COUNT(*) FILTER (WHERE direction = 'out' AND is_bot = true) AS bot
+      FROM wa_messages
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY DATE(created_at)
+      ORDER BY day ASC
+    `) as any;
+
+    /* Top intents */
+    const intentsRes = await db.execute(sql`
+      SELECT intent, COUNT(*) AS cnt FROM wa_conversations
+      WHERE intent IS NOT NULL GROUP BY intent ORDER BY cnt DESC LIMIT 5
+    `) as any;
+
+    res.json({
+      stats: (statsRes.rows ?? statsRes as any)[0] ?? {},
+      volume: volumeRes.rows ?? (volumeRes as any) ?? [],
+      intents: intentsRes.rows ?? (intentsRes as any) ?? [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ─── 24-hour session check ──────────────────────────── */
+router.get("/admin/wa/conversations/:id/session", adminMiddleware, async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const [conv] = await db.select({
+      lastMessageAt: waConversationsTable.lastMessageAt,
+      contactPhone: waConversationsTable.contactPhone,
+    }).from(waConversationsTable).where(eq(waConversationsTable.id, id)).limit(1);
+
+    if (!conv) { res.status(404).json({ error: "Not found" }); return; }
+
+    /* Last inbound message time */
+    const [lastIn] = await db.select({ createdAt: waMessagesTable.createdAt })
+      .from(waMessagesTable)
+      .where(and(eq(waMessagesTable.conversationId, id), sql`direction = 'in'`))
+      .orderBy(desc(waMessagesTable.createdAt))
+      .limit(1);
+
+    const lastInboundAt = lastIn?.createdAt ?? null;
+    const now = Date.now();
+    const diffMs = lastInboundAt ? now - new Date(lastInboundAt).getTime() : Infinity;
+    const within24h = diffMs < 24 * 60 * 60 * 1000;
+    const hoursRemaining = within24h ? Math.floor((24 * 60 * 60 * 1000 - diffMs) / 3600000) : 0;
+
+    res.json({ within24h, lastInboundAt, hoursRemaining });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ─── Send payment details ───────────────────────────── */
+router.post("/admin/wa/conversations/:id/send-payment", adminMiddleware, async (req: Request, res: Response) => {
+  const id = parseInt(req.params["id"] as string);
+  const { amount, orderRef } = req.body as { amount?: number; orderRef?: string };
+  try {
+    const [conv] = await db.select().from(waConversationsTable).where(eq(waConversationsTable.id, id)).limit(1);
+    if (!conv) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const phone = normalizePhone(conv.contactPhone);
+    const [waSettings] = await db.select().from(whatsappSettingsTable).limit(1);
+
+    const amtStr = amount ? `Rs. ${amount.toLocaleString("en-PK")}` : "";
+    const refStr = orderRef ? `📋 Ref: ${orderRef}\n` : "";
+
+    const paymentMsg =
+      `💳 *Payment Details — KDF NUTS*\n\n` +
+      (amtStr ? `💰 Amount: *${amtStr}*\n` : "") +
+      `${refStr}\n` +
+      `━━━━━━━━━━━━━━━━━\n` +
+      `🏦 *Bank Transfer*\n` +
+      `Bank: Meezan Bank\n` +
+      `Account Title: KDF NUTS\n` +
+      `Account #: 02960105654083\n` +
+      `IBAN: PK02MEZN0002960105654083\n\n` +
+      `📱 *JazzCash*\n` +
+      `Account: 0314-7009134\n` +
+      `Name: Khan Dry Fruits\n\n` +
+      `📱 *Easypaisa*\n` +
+      `Account: 0314-7009134\n` +
+      `Name: Khan Dry Fruits\n\n` +
+      `━━━━━━━━━━━━━━━━━\n` +
+      `✅ After payment, send screenshot for confirmation.\n` +
+      `جزاک اللہ خیر 🙏`;
+
+    await sendInteractiveButtons({
+      phone,
+      text: paymentMsg,
+      buttons: [
+        { id: `payment_done_${id}`, title: "✅ I Have Paid" },
+        { id: "main_menu", title: "🏠 Main Menu" },
+      ],
+      footer: "KDF NUTS — Payment Gateway",
+      settings: waSettings,
+      templateName: "payment_details",
+    });
+
+    const content = `[Payment details sent${amtStr ? ` — ${amtStr}` : ""}]`;
+    await db.insert(waMessagesTable).values({
+      conversationId: id, direction: "out", type: "text", content, status: "sent", isBot: false,
+    });
+    await db.update(waConversationsTable).set({
+      lastMessage: content, lastMessageAt: new Date(), updatedAt: new Date(),
+    }).where(eq(waConversationsTable.id, id));
+
+    broadcastSSE("wa_message", { conversationId: id, direction: "out", content, isBot: false });
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ─── Add/update internal note ───────────────────────── */
+router.post("/admin/wa/conversations/:id/note", adminMiddleware, async (req: Request, res: Response) => {
+  const id = parseInt(req.params["id"] as string);
+  const { note } = req.body as { note: string };
+  if (!note?.trim()) { res.status(400).json({ error: "note required" }); return; }
+  try {
+    await db.update(waConversationsTable).set({
+      internalNote: note.trim(), updatedAt: new Date(),
+    }).where(eq(waConversationsTable.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/* ─── Toggle star ────────────────────────────────────── */
+router.put("/admin/wa/conversations/:id/star", adminMiddleware, async (req: Request, res: Response) => {
+  try {
+    await db.execute(sql`UPDATE wa_conversations SET is_starred = NOT is_starred, updated_at = NOW() WHERE id = ${parseInt(req.params["id"] as string)}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 /* ─── Send order status to conversation ─────────────── */
 router.post("/admin/wa/conversations/:id/send-order-status", adminMiddleware, async (req: Request, res: Response) => {
   const convId = parseInt(req.params["id"] as string);
