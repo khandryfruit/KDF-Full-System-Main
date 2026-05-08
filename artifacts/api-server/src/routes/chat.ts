@@ -110,7 +110,8 @@ CRITICAL PRODUCT SEARCH RULES:
 - Pass the EXACT product name/keyword to search_products. If customer says "اخروٹ", pass query="اخروٹ". If they say "walnuts", pass query="walnuts". If they say "akhrot", pass query="akhrot".
 - NEVER broaden the search. If customer asks for walnuts, search ONLY "walnuts" — not "nuts" or "dry fruits".
 - The search system automatically handles Urdu↔English translation (اخروٹ=walnuts, بادام=almonds, کاجو=cashews, پستہ=pistachios, کشمش=raisins, خشک میوہ=dry fruits).
-- Results are already filtered to show only the most relevant products. Trust the results shown.`;
+- Results are already filtered to show only the most relevant products. Trust the results shown.
+- NEVER list product names, prices, or variants as text in your reply. After calling search_products, write ONLY 1 short sentence (e.g. "Yeh raha badam ka collection!" or "Walnut products mil gaye!"). The product cards appear automatically — do NOT repeat the info in text.`;
 
   const orderInstructions = chatbot.orderingEnabled
     ? `

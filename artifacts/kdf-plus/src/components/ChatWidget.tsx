@@ -504,9 +504,11 @@ function MessageBubble({ msg, onAddToCart, onViewProduct, onOpenForm, onViewCate
           <AutoCartBanner items={msg.autoCartAdded} onCheckout={onOpenForm} />
         )}
         {msg.products && msg.products.length > 0 && (
-          <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
-            {msg.products.map(p => <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onViewProduct} />)}
-          </div>
+          msg.products.length === 1
+            ? <div className="mt-2 w-[85%]"><ProductCard product={msg.products[0]} onAddToCart={onAddToCart} onView={onViewProduct} /></div>
+            : <div className="mt-2 w-[96%] grid grid-cols-2 gap-2">
+                {msg.products.map(p => <ProductCard key={p.id} product={p} onAddToCart={onAddToCart} onView={onViewProduct} />)}
+              </div>
         )}
         {msg.categories && msg.categories.length > 0 && (
           <div className="mt-2 max-w-[92%] grid grid-cols-2 gap-2">
