@@ -476,41 +476,130 @@ export function HomePage() {
           </div>
         </section>
 
-        {/* ── Shop by Category ── */}
-        <section className="px-4">
-          <div className="flex items-center justify-between mb-3.5">
-            <h2 className="text-[17px] font-black text-gray-900">Shop by Category</h2>
-            <button onClick={() => setLocation('/categories')} className="text-xs font-bold flex items-center gap-0.5" style={{ color: GREEN }}>
-              View All <ChevronRight size={14} />
+        {/* ── Shop by Category — Premium Redesign ── */}
+        <section>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xl flex items-center justify-center text-sm" style={{ background: `${GREEN}18` }}>
+                🏷️
+              </div>
+              <h2 className="text-[17px] font-black text-gray-900">Shop by Category</h2>
+              {categories.length > 0 && (
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full text-white" style={{ background: GREEN }}>
+                  {categories.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setLocation('/categories')}
+              className="flex items-center gap-0.5 text-xs font-bold px-3 py-1.5 rounded-full"
+              style={{ color: GREEN, background: `${GREEN}12` }}
+            >
+              View All <ChevronRight size={13} />
             </button>
           </div>
-          <div className="overflow-hidden -mx-4">
-          <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1 px-4">
-            {(categories.length > 0 ? categories : ['Dry Fruits', 'Nuts', 'Seeds', 'Spices', 'Herbal', 'Gifts'].map((n, i) => ({ id: i, name: n, slug: '', icon: ['🫘','🥜','🌰','🌿','🍃','🎁'][i], color: null }))).map((cat: any) => (
+
+          {/* Cards — horizontal scroll */}
+          <div className="overflow-hidden -mx-0">
+            <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 px-4">
+              {(() => {
+                const GRADIENTS = [
+                  ['#1B4A00','#5FA800'], ['#7C2D12','#C2410C'], ['#312E81','#6D28D9'],
+                  ['#0C4A6E','#0284C7'], ['#78350F','#D97706'], ['#064E3B','#059669'],
+                  ['#4A1942','#9D174D'], ['#1E3A5F','#1D4ED8'],
+                ];
+                const BADGES = [
+                  { label: '🔥 Hot',       bg: '#FF4500' },
+                  { label: '⭐ Top Pick',   bg: '#E8A800' },
+                  { label: '💎 Premium',    bg: '#7C3AED' },
+                  { label: '⚡ Fresh',      bg: '#0284C7' },
+                  { label: '🛍 Popular',    bg: '#C2410C' },
+                  { label: '🎁 New',        bg: '#059669' },
+                  { label: '✨ Trending',   bg: '#9D174D' },
+                  { label: '🌟 Best',       bg: '#5FA800' },
+                ];
+                const ICONS = ['🫘','🥜','🌰','🌿','🍃','🎁','🍯','🧂'];
+
+                const catList = categories.length > 0
+                  ? categories
+                  : ['Dry Fruits','Nuts','Seeds','Spices','Herbal','Gifts'].map((n,i) => ({ id:i, name:n, slug:'', icon:ICONS[i], imageUrl:null }));
+
+                return catList.map((cat: any, idx: number) => {
+                  const [g1, g2] = GRADIENTS[idx % GRADIENTS.length];
+                  const badge = BADGES[idx % BADGES.length];
+                  const floatClass = idx % 2 === 0 ? 'cat-float-even' : 'cat-float-odd';
+
+                  return (
+                    <div
+                      key={cat.id}
+                      onClick={() => setLocation(cat.slug ? `/products?category=${cat.slug}` : '/categories')}
+                      className={`relative flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden active:scale-[0.93] transition-transform duration-150 ${floatClass}`}
+                      style={{
+                        width: '112px',
+                        height: '118px',
+                        background: `linear-gradient(155deg, ${g1} 0%, ${g2} 100%)`,
+                        boxShadow: `0 6px 20px ${g2}55`,
+                      }}
+                    >
+                      {/* Shimmer overlay */}
+                      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                        <div
+                          className="absolute inset-y-0 w-12 bg-white/10"
+                          style={{ animation: 'shimmer-slide 3.5s ease-in-out infinite', left: '-3rem' }}
+                        />
+                      </div>
+
+                      {/* Category image */}
+                      {cat.imageUrl ? (
+                        <img
+                          src={getProductImageSrc(cat.imageUrl)}
+                          alt={cat.name}
+                          className="absolute inset-0 w-full h-full object-cover opacity-35 mix-blend-luminosity"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-4xl opacity-60" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))' }}>
+                            {cat.icon || ICONS[idx % ICONS.length]}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Badge */}
+                      <div
+                        className="badge-pulse-anim absolute top-2 left-2 px-1.5 py-[3px] rounded-full text-white flex items-center"
+                        style={{ fontSize: '8px', fontWeight: 900, background: badge.bg, letterSpacing: '0.02em' }}
+                      >
+                        {badge.label}
+                      </div>
+
+                      {/* Bottom gradient + name */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 px-2.5 pt-5 pb-2.5"
+                        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%)' }}
+                      >
+                        <p className="text-white text-[11.5px] font-black leading-tight drop-shadow">
+                          {cat.name}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+
+              {/* "More" card */}
               <div
-                key={cat.id}
-                onClick={() => setLocation(cat.slug ? `/products?category=${cat.slug}` : '/categories')}
-                className="flex flex-col items-center gap-2 flex-shrink-0 cursor-pointer"
+                onClick={() => setLocation('/categories')}
+                className="relative flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden active:scale-[0.93] transition-transform duration-150 flex flex-col items-center justify-center gap-1 border-2 border-dashed"
+                style={{ width: '112px', height: '118px', borderColor: `${GREEN}40`, background: `${GREEN}08` }}
               >
-                <div
-                  className="w-[60px] h-[60px] rounded-[20px] flex items-center justify-center text-2xl shadow-sm"
-                  style={{ backgroundColor: cat.color ? `${cat.color}20` : `${GREEN}18` }}
-                >
-                  {cat.icon || '📦'}
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl" style={{ background: `${GREEN}15` }}>
+                  ⋯
                 </div>
-                <span className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">{cat.name}</span>
+                <span className="text-[11px] font-black" style={{ color: GREEN }}>All Categories</span>
               </div>
-            ))}
-            <div
-              onClick={() => setLocation('/categories')}
-              className="flex flex-col items-center gap-2 flex-shrink-0 cursor-pointer"
-            >
-              <div className="w-[60px] h-[60px] rounded-[20px] flex items-center justify-center text-2xl shadow-sm bg-gray-100">
-                ⋯
-              </div>
-              <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap">More</span>
             </div>
-          </div>
           </div>
         </section>
 

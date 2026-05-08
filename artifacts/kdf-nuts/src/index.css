@@ -410,3 +410,20 @@
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+
+/* ── Premium category card animations ── */
+@keyframes cat-float {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50%       { transform: translateY(-5px) scale(1.01); }
+}
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.06); }
+}
+@keyframes shimmer-slide {
+  0%   { transform: translateX(-100%) skewX(-20deg); }
+  100% { transform: translateX(300%) skewX(-20deg); }
+}
+.cat-float-even  { animation: cat-float 3.2s ease-in-out infinite; }
+.cat-float-odd   { animation: cat-float 3.8s ease-in-out infinite 1.2s; }
+.badge-pulse-anim { animation: badge-pulse 2s ease-in-out infinite; }
