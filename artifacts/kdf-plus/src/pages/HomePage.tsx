@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import {
@@ -181,7 +181,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
             <h1 className="text-2xl sm:text-5xl font-black text-white leading-tight mb-2 sm:mb-3"
               style={{ textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
               {s.headline.split('\n').map((line, i) => (
-                <React.Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</React.Fragment>
+                <Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</Fragment>
               ))}
             </h1>
             <p className="text-white/70 text-xs sm:text-base mb-4 sm:mb-6 max-w-md">{s.sub}</p>

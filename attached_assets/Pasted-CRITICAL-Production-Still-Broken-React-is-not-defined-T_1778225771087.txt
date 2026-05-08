@@ -1,0 +1,200 @@
+CRITICAL — Production Still Broken (“React is not defined”)
+
+The issue is STILL happening on live production.
+
+Error still visible:
+"React is not defined"
+
+This means the root cause has NOT actually been fixed yet.
+
+This issue has been ongoing for a long time now and needs proper deep debugging immediately.
+
+Please stop applying temporary/random fixes and perform FULL frontend + backend + deployment debugging professionally.
+
+---
+
+Current Production Status
+
+Live domain:
+
+- khanbabadryfruits.com
+
+Still showing:
+
+- “Something went wrong”
+- React is not defined
+- Homepage crash
+- White/green crash screen
+- Mobile users affected
+- Production unstable
+
+This is now a serious production-breaking issue affecting real customers.
+
+---
+
+REQUIRED: FULL DEEP DEBUGGING
+
+You MUST now deeply inspect the ENTIRE system:
+
+Frontend
+
+Backend
+
+Build Pipeline
+
+Deployment Pipeline
+
+Production Runtime
+
+CDN/Cache
+
+Mobile Safari Compatibility
+
+Do NOT assume the problem anymore.
+
+Find the EXACT failing source.
+
+---
+
+FRONTEND DEEP DEBUG
+
+Please inspect ALL:
+
+- React imports
+- JSX runtime config
+- Lazy-loaded components
+- Suspense boundaries
+- Dynamic imports
+- Banner components
+- Product sliders
+- AI widgets
+- WhatsApp widgets
+- Layout wrappers
+- Error boundaries
+- Mobile-only components
+
+Look for:
+
+- Missing React imports
+- Undefined window usage
+- SSR/client mismatch
+- Broken chunk loading
+- Production-only runtime failures
+
+---
+
+BUILD SYSTEM DEBUG
+
+Deeply inspect:
+
+- Vite config
+- Babel config
+- TypeScript config
+- JSX transform settings
+- Production optimization
+- Minification
+- Tree shaking
+- Code splitting
+- Dynamic chunk generation
+
+Possible issue:
+Production build is removing/breaking React runtime.
+
+---
+
+DEPLOYMENT DEBUG
+
+Inspect:
+
+- Replit deployment process
+- Production asset serving
+- JS bundle generation
+- Chunk hashes
+- CDN cache
+- Old cached files
+- Service workers
+- Asset invalidation
+
+Very likely:
+Old/broken production chunks are still loading.
+
+---
+
+BACKEND/API DEBUG
+
+Also inspect backend properly.
+
+Check:
+
+- API responses
+- Invalid/null JSON
+- Homepage APIs
+- Shopify sync APIs
+- AI APIs
+- Auth/session APIs
+- WebSocket responses
+
+One broken API response may be crashing frontend rendering.
+
+---
+
+MOBILE SAFARI DEBUG
+
+This issue is heavily affecting mobile browsers.
+
+Test deeply on:
+
+- Android Chrome
+- iPhone Safari
+- iOS 16+
+- Real physical devices
+
+Do NOT rely only on desktop localhost.
+
+---
+
+ENABLE PRODUCTION LOGGING
+
+Immediately add:
+
+- Runtime error logging
+- Stack traces
+- Source maps
+- Component crash tracking
+- API failure logs
+- Chunk loading logs
+
+Need exact visibility into:
+WHICH component/module is crashing production.
+
+---
+
+REQUIRED ACTIONS
+
+Please:
+
+✅ Deep debug frontend
+✅ Deep debug backend
+✅ Deep debug deployment
+✅ Deep debug production bundles
+✅ Deep debug caching
+✅ Deep debug Safari compatibility
+✅ Deep debug runtime errors
+
+This needs REAL debugging now — not guesswork.
+
+---
+
+FINAL REQUIREMENT
+
+The live production website MUST:
+
+- Open correctly
+- Never show “React is not defined”
+- Never crash on homepage
+- Never show green/white error screen
+- Work properly on all mobile devices
+- Behave same as development preview
+- Stay stable after deployment
+
+Please identify the EXACT root cause and permanently fix the production environment properly.
