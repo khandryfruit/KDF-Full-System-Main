@@ -267,10 +267,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 (function() {
   var API       = ${JSON.stringify(apiUrl)};
   var WA_URL    = 'https://wa.me/923049996000?text=' + encodeURIComponent('Hello! I need help with my KDF Nuts order.');
-  var sessionId = localStorage.getItem('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
-  var leadSaved = localStorage.getItem('kdf_embed_lead') === '1';
 
-  localStorage.setItem('kdf_embed_session', sessionId);
+  /* ── Safe localStorage wrapper (cross-origin iframes can block it) ── */
+  var _store = {};
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return _store[k]||null; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ _store[k]=v; } }
+
+  var sessionId = lsGet('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
+  var leadSaved = lsGet('kdf_embed_lead') === '1';
+
+  lsSet('kdf_embed_session', sessionId);
 
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('msg-input');
@@ -753,7 +759,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       document.getElementById('lf-phone').style.borderColor = phone ? '#e5e7eb' : '#ef4444';
       return;
     }
-    localStorage.setItem('kdf_embed_lead', '1');
+    lsSet('kdf_embed_lead', '1');
     fetch(API + '/chat/lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -762,10 +768,23 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     showChatInterface();
   }
 
-  document.getElementById('btn-lead').addEventListener('click', submitLead);
+  /* ── Button events — touchend + click fallback for max mobile compat ── */
+  var btnLead = document.getElementById('btn-lead');
+  var _leadFired = false;
+  function onLeadTap(e) {
+    e.preventDefault();
+    if (_leadFired) return;
+    _leadFired = true;
+    btnLead.style.opacity = '0.75';
+    setTimeout(function(){ btnLead.style.opacity = ''; _leadFired = false; }, 600);
+    submitLead();
+  }
+  btnLead.addEventListener('touchend', onLeadTap, { passive: false });
+  btnLead.addEventListener('click', onLeadTap);
+
   document.getElementById('lf-phone').addEventListener('keydown', function(e){ if(e.key==='Enter') submitLead(); });
   document.getElementById('lead-skip').addEventListener('click', function() {
-    localStorage.setItem('kdf_embed_lead', '1');
+    lsSet('kdf_embed_lead', '1');
     showChatInterface();
   });
 
@@ -1119,23 +1138,21 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat Widget v3.1 — paste before </body> {%- endcomment -%}
-
-{%- if customer -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat Widget v4.1 — paste before </body> {%- endcomment -%}
 <script>
+  /* Always initialize — widget works for guests AND logged-in customers */
   window.KDFChatConfig = {
-    customer: {
+    customer: {%- if customer -%}{
       id:    "{{ customer.id }}",
       name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
       email: "{{ customer.email | escape }}",
       phone: "{{ customer.phone | escape }}"
-    },
-    cart: {{ cart | json }},
+    }{%- else -%}null{%- endif -%},
+    cart:  {{ cart | json }},
     store: "shopify"
   };
 </script>
-{%- endif -%}
-<script src="${widgetUrl}" defer></script>`,
+<script src="${widgetUrl}"></script>`,
 
     steps: [
       "1. Shopify Admin → Online Store → Themes → Edit Code",

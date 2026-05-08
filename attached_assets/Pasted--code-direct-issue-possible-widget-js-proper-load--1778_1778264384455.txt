@@ -1,0 +1,172 @@
+ہاں، اس code میں direct بڑا issue نظر نہیں آ رہا، لیکن یہ possible ہے کہ:
+
+widget.js proper load نہیں ہو رہا
+
+script error دے رہا ہو
+
+defer کی وجہ سے DOM timing issue ہو
+
+widget initialization fail ہو رہی ہو
+
+Shopify app embed کے ساتھ conflict ہو
+
+customer object empty ہونے پر widget crash ہو رہا ہو
+
+یا script mobile Safari میں freeze کر رہا ہو
+
+
+یہ prompt دے دیں تاکہ وہ proper debugging کریں:
+
+DEBUG THIS SHOPIFY CHAT SCRIPT — Widget Not Opening / Chat Frozen
+
+Current Shopify embed code:
+
+{%- if customer -%}
+<script>
+  window.KDFChatConfig = {
+    customer: {
+      id:    "{{ customer.id }}",
+      name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
+      email: "{{ customer.email | escape }}",
+      phone: "{{ customer.phone | escape }}"
+    },
+    cart: {{ cart | json }},
+    store: "shopify"
+  };
+</script>
+{%- endif -%}
+
+<script src="https://khanbabadryfruits.com/api/widget.js" defer></script>
+
+---
+
+CURRENT ISSUE
+
+Chat widget is freezing / not opening
+
+Customer fills form and clicks:
+
+Start Chat
+
+but:
+
+❌ nothing happens
+❌ mobile freezes
+❌ chat does not initialize
+❌ UI gets stuck
+
+---
+
+REQUIRED DEBUGGING
+
+Please inspect deeply:
+
+- widget.js console errors
+- failed network requests
+- Shopify CSP restrictions
+- mobile Safari compatibility
+- defer timing issue
+- DOMContentLoaded timing
+- async initialization deadlock
+- React hydration mismatch
+- event listeners not binding
+- overlay/pointer-events issue
+
+---
+
+IMPORTANT CHECK
+
+Problem may be here:
+
+{%- if customer -%}
+
+When visitor is NOT logged in:
+
+❌ "window.KDFChatConfig" never initializes
+
+and widget.js may crash because config is missing.
+
+---
+
+REQUIRED FIX
+
+Always initialize config safely:
+
+window.KDFChatConfig = {
+  customer: null,
+  cart: {},
+  store: "shopify"
+};
+
+Then merge customer data if available.
+
+---
+
+REQUIRED SAFE VERSION
+
+Use safer initialization:
+
+<script>
+window.KDFChatConfig = {
+  customer: {% if customer %}{
+    id: "{{ customer.id }}",
+    name: "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
+    email: "{{ customer.email | escape }}",
+    phone: "{{ customer.phone | escape }}"
+  }{% else %}null{% endif %},
+  cart: {{ cart | json }},
+  store: "shopify"
+};
+</script>
+
+<script src="https://khanbabadryfruits.com/api/widget.js"></script>
+
+---
+
+IMPORTANT
+
+Temporarily REMOVE:
+
+defer
+
+because widget may be initializing before DOM/hooks are ready.
+
+---
+
+REQUIRED RESULT
+
+Widget MUST:
+
+✅ load properly
+✅ open instantly
+✅ Start Chat button work
+✅ mobile not freeze
+✅ create session
+✅ open live chat
+
+---
+
+ALSO CHECK
+
+- z-index conflicts
+- body overflow hidden
+- fixed overlays
+- touch-action blocking
+- iframe conflicts
+
+---
+
+FINAL GOAL
+
+Stabilize:
+
+Shopify Live Chat Widget
+
+so it works:
+
+✅ on mobile
+✅ on Safari
+✅ on Chrome
+✅ for guest users
+✅ for logged-in customers
+✅ without freezing
