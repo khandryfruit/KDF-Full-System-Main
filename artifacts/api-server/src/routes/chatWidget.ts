@@ -71,14 +71,15 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .dot:nth-child(3){animation-delay:.4s;}
   @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
 
-  /* ── Lead form ───────────────────────────────── */
-  #lead-form{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:#fff;border-radius:20px 20px 0 0;padding:20px 18px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 24px rgba(0,0,0,0.15);}
+  /* ── Lead form — normal flex flow (NOT fixed, avoids iOS iframe keyboard bug) ── */
+  #lead-form{flex-shrink:0;background:#fff;border-top:1px solid #f0f0f0;padding:16px 18px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));}
   #lead-form h3{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
-  #lead-form p{font-size:12px;color:#666;margin-bottom:14px;line-height:1.5;}
-  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:9px;font-family:inherit;}
+  #lead-form p{font-size:12px;color:#666;margin-bottom:12px;line-height:1.5;}
+  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:14px;outline:none;transition:border-color .2s;margin-bottom:8px;font-family:inherit;-webkit-appearance:none;}
   .lf-input:focus{border-color:#2ecc71;}
-  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;position:relative;z-index:1;}
-  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;}
+  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:block;margin-top:4px;}
+  #btn-lead:active{opacity:0.88;}
+  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;padding:4px;}
 
   /* ── Chips ───────────────────────────────────── */
   #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;}
@@ -279,6 +280,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   var chips     = document.getElementById('chips');
   var inputArea = document.getElementById('input-area');
   var leadForm  = document.getElementById('lead-form');
+  var chatStarted = false; /* set true once lead form is dismissed */
 
   /* ── Header buttons ── */
   document.getElementById('btn-close').addEventListener('click', function() {
@@ -730,13 +732,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Lead form ── */
   function showChatInterface() {
+    chatStarted = true;
     leadForm.style.display = 'none';
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
-    input.focus();
+    /* Restore full body height now that lead form is gone */
+    document.body.style.height = (window.visualViewport ? window.visualViewport.height : window.innerHeight) + 'px';
     setTimeout(function() {
+      input.focus();
       addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
-    }, 300);
+    }, 100);
   }
 
   function submitLead() {
@@ -767,11 +772,13 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   /* ── Auto-show chat if lead already captured ── */
   if (leadSaved) { showChatInterface(); }
 
-  /* ── Keyboard / visualViewport fix (iOS + Android) ── */
+  /* ── Keyboard / visualViewport fix (iOS + Android) ──
+     Only adjust height AFTER lead form is gone — prevents body resize
+     from pushing the lead form off-screen while user fills inputs ── */
   function fixViewportHeight() {
+    if (!chatStarted) return; /* Don't touch layout while lead form is visible */
     var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     document.body.style.height = h + 'px';
-    /* Scroll messages to bottom when keyboard appears */
     setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 80);
   }
   if (window.visualViewport) {
@@ -780,6 +787,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
   window.addEventListener('resize', fixViewportHeight);
   input.addEventListener('focus', function() {
+    if (!chatStarted) return;
     setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 350);
   });
 

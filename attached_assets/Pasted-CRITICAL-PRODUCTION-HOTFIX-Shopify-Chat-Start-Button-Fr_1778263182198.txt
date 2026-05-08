@@ -1,0 +1,231 @@
+CRITICAL PRODUCTION HOTFIX — Shopify Chat Start Button Freezing Mobile
+
+URGENT — THIS ISSUE IS STILL BROKEN
+
+Current Shopify live chat implementation is:
+
+❌ FREEZING THE ENTIRE MOBILE SCREEN
+
+Customer:
+
+* name fill کرتا ہے
+* phone fill کرتا ہے
+* email fill کرتا ہے
+
+لیکن:
+
+❌ “Start Chat” button click نہیں ہو رہا
+
+اور:
+
+❌ mobile freeze ہو جاتا ہے
+❌ UI stuck ہو جاتی ہے
+❌ chat initialize نہیں ہوتی
+❌ keyboard/layout issue آ رہا ہے
+❌ form submit نہیں ہو رہا
+
+یہ critical production blocker ہے۔
+
+⸻
+
+ROOT ISSUE LIKELY
+
+Please deeply debug:
+
+- form submit handler
+- z-index overlays
+- pointer-events blocking
+- fixed layers
+- body scroll lock
+- React hydration mismatch
+- async API freeze
+- loading state deadlock
+- event propagation
+- mobile Safari viewport issue
+
+⸻
+
+MOST IMPORTANT FIX
+
+START CHAT BUTTON MUST WORK
+
+When customer clicks:
+
+“Start Chat”
+
+System MUST:
+
+✅ create visitor session
+✅ save lead
+✅ open live chat instantly
+✅ initialize AI
+✅ connect realtime socket
+✅ scroll to messages
+
+⸻
+
+REQUIRED FLOW
+
+Customer fills:
+
+* name
+* phone
+* email
+
+↓
+
+Clicks:
+
+Start Chat
+
+↓
+
+Immediately:
+
+Live Chat Opens
+
+↓
+
+AI greets customer
+
+↓
+
+Products + chat work
+
+⸻
+
+CURRENTLY HAPPENING
+
+❌ button dead
+❌ UI freeze
+❌ overlay stuck
+❌ no session created
+
+⸻
+
+REQUIRED FIXES
+
+1. REMOVE FREEZE
+
+DO NOT:
+
+❌ lock body scroll
+❌ render fullscreen overlay
+❌ block touch events
+❌ freeze viewport
+
+⸻
+
+2. FIX MOBILE SAFE AREA
+
+Use:
+
+height:100dvh;
+overflow:hidden;
+-webkit-overflow-scrolling:touch;
+
+⸻
+
+3. FIX BUTTON CLICK
+
+Ensure:
+
+pointer-events:auto
+z-index correct
+touch events enabled
+
+⸻
+
+4. FIX FORM SUBMIT
+
+Check:
+
+preventDefault()
+async await deadlock
+API timeout
+validation loops
+
+⸻
+
+REQUIRED DEBUGGING
+
+Inspect:
+
+console errors
+network requests
+session creation
+socket init
+Shopify app embed
+
+⸻
+
+IMPORTANT
+
+AFTER CHAT STARTS
+
+System MUST:
+
+✅ save lead in database
+✅ appear in WA Chat admin
+✅ create customer session
+✅ sync with AI memory
+
+⸻
+
+REQUIRED DATABASE FLOW
+
+visitor_leads
+customer_sessions
+chat_messages
+conversation_history
+
+⸻
+
+REQUIRED UI FIX
+
+After chat starts:
+
+❌ blank gray screen نہیں
+❌ frozen viewport نہیں
+
+⸻
+
+REQUIRED RESULT
+
+Show:
+
+✅ messages
+✅ products
+✅ AI replies
+✅ input area
+✅ voice button
+
+⸻
+
+PERFORMANCE REQUIREMENT
+
+Chat MUST:
+
+✅ open under 2 seconds
+✅ work smoothly on mobile
+✅ not freeze Safari/Chrome
+✅ not break scrolling
+✅ not block taps
+
+⸻
+
+FINAL GOAL
+
+Fix and stabilize:
+
+Shopify Live Chat System
+
+so customer can:
+
+✅ fill form
+✅ click Start Chat
+✅ instantly begin chatting
+✅ browse products
+✅ place orders
+
+WITHOUT freezing the mobile screen.
