@@ -202,19 +202,41 @@ async function replyToInstagramDm(opts: {
   message: string;
   accessToken: string;
   igAccountId?: string | null;
-}) {
-  /* IG Business Account ID endpoint with messaging_type RESPONSE (required for within-24h window) */
-  const endpoint = opts.igAccountId
+  fbPageId?: string | null;
+}): Promise<Response> {
+  const body = JSON.stringify({
+    recipient:      { id: opts.recipientId },
+    message:        { text: opts.message },
+    messaging_type: "RESPONSE",
+  });
+
+  /* Strategy 1: Messenger Platform via FB Page — uses pages_messaging (easier permission) */
+  if (opts.fbPageId) {
+    const messengerRes = await fetch(`${META_GRAPH_BASE}/${opts.fbPageId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.accessToken}` },
+      body,
+    });
+    if (messengerRes.ok) return messengerRes;
+    const errText = await messengerRes.text().catch(() => "");
+    const errData = (() => { try { return JSON.parse(errText); } catch { return {}; } })();
+    const errCode = errData?.error?.code;
+    /* Only fall through to IG endpoint if error is capability/permission-related */
+    if (errCode !== 3 && errCode !== 10 && errCode !== 200 && messengerRes.status !== 400) {
+      /* Return the failed response as-is for non-permission errors (wrong ID etc.) */
+      return new Response(errText, { status: messengerRes.status, headers: { "Content-Type": "application/json" } });
+    }
+    logger.warn({ errCode, errText: errText.slice(0, 200), fbPageId: opts.fbPageId }, "IG DM via Messenger failed, trying IG endpoint");
+  }
+
+  /* Strategy 2: Instagram Messaging API — uses instagram_manage_messages */
+  const igEndpoint = opts.igAccountId
     ? `${META_GRAPH_BASE}/${opts.igAccountId}/messages`
     : `${META_GRAPH_BASE}/me/messages`;
-  return fetch(endpoint, {
+  return fetch(igEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.accessToken}` },
-    body: JSON.stringify({
-      recipient:      { id: opts.recipientId },
-      message:        { text: opts.message },
-      messaging_type: "RESPONSE",
-    }),
+    body,
   });
 }
 
@@ -318,7 +340,7 @@ async function processIgWebhookBody(body: any, settings: Awaited<ReturnType<type
       }
       const replyRes = await replyToInstagramDm({
         recipientId: senderId, message: aiReply, accessToken: settings.pageAccessToken,
-        igAccountId: settings.igBusinessAccountId,
+        igAccountId: settings.igBusinessAccountId, fbPageId: settings.fbPageId,
       });
       const status = replyRes.ok ? "sent" : "failed";
       const errText = replyRes.ok ? null : await replyRes.text().catch(() => null);
@@ -370,7 +392,7 @@ async function processIgWebhookBody(body: any, settings: Awaited<ReturnType<type
         const followUpMsg = `شکریہ آپ کے comment کا 😊\n\nDetails آپ کی inbox میں send کر دی ہیں — please check کریں! ہم آپ کی مدد کرنے کے لیے تیار ہیں 💚\n\n— KDF NUTS Team`;
         await replyToInstagramDm({
           recipientId: senderId, message: followUpMsg, accessToken: settings.pageAccessToken,
-          igAccountId: settings.igBusinessAccountId,
+          igAccountId: settings.igBusinessAccountId, fbPageId: settings.fbPageId,
         }).catch(() => {});
       }
     }
@@ -1188,7 +1210,10 @@ router.post("/admin/social/reply", adminMiddleware as any, async (req, res) => {
 
     let ok = false;
     if (platform === "instagram") {
-      const r = await replyToInstagramDm({ recipientId: senderId, message: message.trim(), accessToken: settings.pageAccessToken });
+      const r = await replyToInstagramDm({
+        recipientId: senderId, message: message.trim(), accessToken: settings.pageAccessToken,
+        igAccountId: settings.igBusinessAccountId, fbPageId: settings.fbPageId,
+      });
       ok = r.ok;
     } else if (platform === "facebook" && settings.fbPageId) {
       const r = await sendFbMessengerReply({ recipientId: senderId, message: message.trim(), pageId: settings.fbPageId, accessToken: settings.pageAccessToken });

@@ -91,18 +91,41 @@ router.get("/admin/wa/automation/stats", adminMiddleware as any, async (req, res
   try {
     const totalsResult = await db.execute(sql`
       SELECT
-        COUNT(*) FILTER (WHERE status = 'sent')    AS total_sent,
-        COUNT(*) FILTER (WHERE status = 'failed')  AS total_failed,
-        COUNT(*) FILTER (WHERE status = 'skipped') AS total_skipped,
-        COUNT(DISTINCT rule_id)                     AS active_rules
+        COUNT(*) FILTER (WHERE status = 'sent')                             AS total_sent,
+        COUNT(*) FILTER (WHERE status = 'failed')                          AS total_failed,
+        COUNT(*) FILTER (WHERE status = 'skipped')                         AS total_skipped,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours'
+                           AND status = 'sent')                            AS fired_today,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days'
+                           AND status = 'sent')                            AS fired_week
       FROM wa_automation_logs
-      WHERE created_at >= NOW() - INTERVAL '30 days'
     `);
     const totals = totalsResult.rows[0] as any ?? {};
-    const rules = await db.select({ id: waAutomationRulesTable.id, name: waAutomationRulesTable.name, runCount: waAutomationRulesTable.runCount, lastRunAt: waAutomationRulesTable.lastRunAt, isActive: waAutomationRulesTable.isActive })
+
+    const activeCount = await db.select({ id: waAutomationRulesTable.id })
+      .from(waAutomationRulesTable)
+      .where(eq(waAutomationRulesTable.isActive, true));
+
+    const rules = await db.select({
+      id: waAutomationRulesTable.id,
+      name: waAutomationRulesTable.name,
+      triggerType: waAutomationRulesTable.triggerType,
+      runCount: waAutomationRulesTable.runCount,
+      lastRunAt: waAutomationRulesTable.lastRunAt,
+      isActive: waAutomationRulesTable.isActive,
+    })
       .from(waAutomationRulesTable)
       .orderBy(desc(waAutomationRulesTable.runCount));
-    return res.json({ ...totals, rules });
+
+    return res.json({
+      activeRules:  activeCount.length,
+      firedToday:   Number(totals.fired_today  ?? 0),
+      firedWeek:    Number(totals.fired_week   ?? 0),
+      totalFired:   Number(totals.total_sent   ?? 0),
+      totalFailed:  Number(totals.total_failed ?? 0),
+      totalSkipped: Number(totals.total_skipped ?? 0),
+      rules,
+    });
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 

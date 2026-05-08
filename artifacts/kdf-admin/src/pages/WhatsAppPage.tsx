@@ -1894,12 +1894,16 @@ export default function WhatsAppPage() {
             </div>
             <div className="divide-y divide-border">
               {[
-                { key: "notifyOrderConfirmation", label: "Order Confirmation", desc: "Sent immediately when a new order is placed", emoji: "✅" },
-                { key: "notifyOrderProcessing",   label: "Order Processing",   desc: "Sent when order is packed and ready for dispatch", emoji: "📦" },
-                { key: "notifyOrderShipped",       label: "Order Shipped",      desc: "Sent with tracking number when order ships", emoji: "🚚" },
-                { key: "notifyOrderOutForDelivery", label: "Out for Delivery",  desc: "Sent on the day of delivery", emoji: "🛵" },
-                { key: "notifyOrderDelivered",     label: "Order Delivered",    desc: "Sent when delivery is confirmed", emoji: "🎉" },
-                { key: "notifyOrderCancelled",     label: "Order Cancelled",    desc: "Sent if the order is cancelled", emoji: "❌" },
+                { key: "notifyOrderConfirmation",    label: "Order Confirmation",    desc: "Sent immediately when a new order is placed", emoji: "✅" },
+                { key: "notifyOrderProcessing",      label: "Order Packed",          desc: "Sent when order is packed and ready for dispatch", emoji: "📦" },
+                { key: "notifyOrderShipped",         label: "Order Shipped",         desc: "Sent with tracking number when order ships", emoji: "🚚" },
+                { key: "notifyOrderOutForDelivery",  label: "Out for Delivery",      desc: "Sent on the day of delivery", emoji: "🛵" },
+                { key: "notifyOrderDelivered",       label: "Order Delivered",       desc: "Sent when delivery is confirmed", emoji: "🎉" },
+                { key: "notifyOrderCancelled",       label: "Order Cancelled",       desc: "Sent if the order is cancelled", emoji: "❌" },
+                { key: "notifyOrderFailedDelivery",  label: "Failed Delivery",       desc: "Sent when delivery attempt fails — asks customer to confirm time", emoji: "⚠️" },
+                { key: "notifyOrderReturn",          label: "Return / Exchange",     desc: "Sent when customer initiates a return or exchange", emoji: "🔄" },
+                { key: "notifyOrderRefund",          label: "Refund Processed",      desc: "Sent when a refund is issued to the customer", emoji: "💰" },
+                { key: "notifyReviewRequest",        label: "Review Request + Coupon", desc: "Sent after delivery — ask for review and send coupon code", emoji: "⭐" },
               ].map(({ key, label, desc, emoji }) => (
                 <div key={key} className="flex items-center justify-between px-5 py-4">
                   <div className="flex items-start gap-3">

@@ -446,6 +446,7 @@ export async function sendFailedDeliveryNotification(opts: {
 }): Promise<boolean> {
   const settings = await getSettings();
   if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+  if ((settings as any).notifyOrderFailedDelivery === false) return false;
 
   const name = opts.customerName ?? "Valued Customer";
   const tpl = await getApprovedTemplate("order_failed_delivery");
@@ -479,6 +480,8 @@ export async function sendReturnRefundNotification(opts: {
 }): Promise<boolean> {
   const settings = await getSettings();
   if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+  if (opts.type === "refund" && (settings as any).notifyOrderRefund === false) return false;
+  if ((opts.type === "return" || opts.type === "exchange") && (settings as any).notifyOrderReturn === false) return false;
 
   const name = opts.customerName ?? "Valued Customer";
   const triggerEvent = `order_${opts.type}`;
@@ -515,11 +518,14 @@ export async function sendReviewRequest(opts: {
 }): Promise<boolean> {
   const settings = await getSettings();
   if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+  if ((settings as any).notifyReviewRequest === false) return false;
+  /* Fall back to reviewCouponCode from WA settings if rule config doesn't provide one */
+  const effectiveCoupon = opts.couponCode || (settings as any).reviewCouponCode || undefined;
 
   const name = opts.customerName ?? "Valued Customer";
   const tpl = await getApprovedTemplate("review_request");
   if (tpl) {
-    const params = [name, opts.orderNumber, opts.couponCode ?? ""].filter(Boolean).slice(0, tpl.paramCount);
+    const params = [name, opts.orderNumber, effectiveCoupon ?? ""].filter(Boolean).slice(0, tpl.paramCount);
     const result = await sendWhatsAppTemplate({
       phone: opts.phone,
       templateName: tpl.name,
@@ -530,8 +536,8 @@ export async function sendReviewRequest(opts: {
     return result.success;
   }
 
-  const couponLine = opts.couponCode
-    ? `\n\n🎁 As a thank-you, here's a *10% discount code* for your next order: *${opts.couponCode}*`
+  const couponLine = effectiveCoupon
+    ? `\n\n🎁 As a thank-you, here's a *10% discount code* for your next order: *${effectiveCoupon}*`
     : "";
 
   const message =

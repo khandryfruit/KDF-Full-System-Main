@@ -1,0 +1,238 @@
+URGENT iPhone 16 Pro Max / iOS Safari Production Fix
+
+The live production website is NOT working properly on iPhone 16 Pro Max Safari.
+
+Current issue:
+
+* Website partially loads
+* Skeleton/loading UI appears
+* Then app crashes
+* “Something went wrong” screen appears
+* Some pages become blank/white
+* Production site becomes unstable on iOS Safari
+
+This MUST be deeply debugged and fixed immediately on production.
+
+Domain:
+
+* khanbabadryfruits.com
+
+Device:
+
+* iPhone 16 Pro Max
+* iOS Safari
+
+⸻
+
+Critical Issue Observation
+
+The app initially loads:
+
+* Header loads
+* Search bar loads
+* Skeleton sections load
+* Categories placeholders load
+
+Then:
+
+* Frontend crashes
+* Global error screen appears
+* “Refresh Page” message shows
+
+This strongly indicates:
+
+* Runtime frontend crash
+* API hydration failure
+* React rendering error
+* iOS Safari compatibility issue
+* Memory/render loop issue
+
+⸻
+
+Required Deep Debugging
+
+Do NOT apply random fixes.
+
+Please deeply inspect:
+
+* Production frontend logs
+* Browser console
+* Mobile Safari errors
+* React crash traces
+* Hydration mismatch
+* API response failures
+* Infinite render loops
+
+Identify exact root cause.
+
+⸻
+
+iOS Safari Compatibility Checks
+
+This is VERY IMPORTANT.
+
+Check:
+
+* Unsupported modern JavaScript syntax
+* Safari-specific rendering bugs
+* Optional chaining/polyfill issues
+* Dynamic import failures
+* Lazy loading crashes
+* CSS rendering crashes
+* WebKit compatibility issues
+
+Ensure compatibility with:
+
+* iOS Safari
+* iPhone 16 Pro Max
+* Older iPhones as well
+
+⸻
+
+Skeleton Loading Crash
+
+Current UI shows skeleton loaders then crashes.
+
+Check:
+
+* Skeleton component loops
+* State hydration mismatch
+* Undefined API data
+* Null product arrays
+* Failed async requests
+* Broken suspense/lazy components
+
+One failed section should NEVER crash whole app.
+
+⸻
+
+Error Boundary System
+
+Current fallback screen is triggering:
+“Something went wrong”
+
+This means app-level error boundary is catching fatal errors.
+
+Improve error system:
+
+* Show exact production error logs
+* Capture component stack traces
+* Log failing component names
+* Log failing API routes
+* Send errors to monitoring system
+
+⸻
+
+API & Data Validation
+
+Check:
+
+* Homepage API response
+* Categories API
+* Products API
+* Shopify API sync
+* AI recommendation API
+* WhatsApp widget scripts
+* Banner API
+* User session API
+
+Validate ALL responses before rendering.
+
+Prevent:
+
+* Undefined objects
+* Null crashes
+* Empty state failures
+
+⸻
+
+WhatsApp Floating Widget Check
+
+The floating WhatsApp button appears before crash.
+
+Check:
+
+* Third-party widget conflicts
+* WebView conflicts
+* Script loading failures
+* DOM manipulation crashes
+* Z-index/render issues
+
+Temporarily isolate widget during debugging.
+
+⸻
+
+Performance Optimization Required
+
+Optimize:
+
+* Initial page JS bundle
+* Heavy homepage sections
+* Auto sliders
+* Animations
+* Banner rendering
+* Product carousels
+
+Enable:
+
+* Code splitting
+* Lazy hydration
+* Component-level loading
+* Image optimization
+* Mobile memory optimization
+
+⸻
+
+React Stability Improvements
+
+Add:
+
+* Component error boundaries
+* Safe async handling
+* Request cancellation
+* Defensive rendering
+* Retry fallbacks
+* Offline handling
+
+Ensure:
+
+* One section failure does not crash homepage
+
+⸻
+
+Production Safe Fixing
+
+IMPORTANT:
+Do NOT repeatedly full redeploy production.
+
+Instead:
+
+* Patch issue intelligently
+* Use targeted fixes
+* Debug production safely
+* Reduce downtime
+* Verify fixes before deploy
+
+⸻
+
+Required Final Result
+
+The live production website must:
+
+✅ Open smoothly on iPhone 16 Pro Max
+✅ Work properly on iOS Safari
+✅ Never show white screen
+✅ Never crash after skeleton loading
+✅ Load categories/products correctly
+✅ Handle API failures gracefully
+✅ Keep homepage stable under all conditions
+✅ Work fast and smoothly on mobile devices
+
+WITHOUT showing:
+
+* blank screens
+* refresh errors
+* “Something went wrong”
+* broken loading states
+
+Please deeply debug the exact root cause and fix the production app completely.
