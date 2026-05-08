@@ -68,6 +68,7 @@ import BranchLoginPage from "@/pages/BranchLoginPage";
 import BranchPosPage from "@/pages/BranchPosPage";
 import AdminPOSPage from "@/pages/AdminPOSPage";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import StockOverviewPage from "@/pages/StockOverviewPage";
 import StockProductsPage from "@/pages/StockProductsPage";
 import StockMovementPage from "@/pages/StockMovementPage";
@@ -218,7 +219,9 @@ function App() {
       <TooltipProvider>
         <BranchAuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
+            <NotificationProvider>
+              <Router />
+            </NotificationProvider>
           </WouterRouter>
         </BranchAuthProvider>
         <Toaster />

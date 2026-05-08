@@ -145,11 +145,28 @@ router.post("/admin/wa/conversations/:id/reply", adminMiddleware, async (req: Re
   }
 });
 
+/* ─── Unread count summary ────────────────────────────────── */
+router.get("/admin/wa/unread-count", adminMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await db.execute(sql`SELECT COALESCE(SUM(unread_count), 0)::int AS total FROM wa_conversations`) as any;
+    const total = (result.rows ?? result)[0]?.total ?? 0;
+    res.json({ total });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 /* ─── Mark as read ────────────────────────────────────────── */
 router.put("/admin/wa/conversations/:id/read", adminMiddleware, async (req: Request, res: Response) => {
   try {
     await db.update(waConversationsTable).set({ unreadCount: 0, updatedAt: new Date() })
       .where(eq(waConversationsTable.id, parseInt(req.params["id"] as string)));
+
+    /* Broadcast updated total unread count */
+    const result = await db.execute(sql`SELECT COALESCE(SUM(unread_count), 0)::int AS total FROM wa_conversations`) as any;
+    const total = (result.rows ?? result)[0]?.total ?? 0;
+    broadcastSSE("wa_unread_count", { total });
+
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useNotifications } from "@/context/NotificationContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle, Search, Send, Bot, User, RefreshCw, CheckCheck, Check,
@@ -537,17 +538,31 @@ export default function WaInboxPage() {
     onError: () => showToast("AI suggestion failed", "error"),
   });
 
-  /* SSE real-time */
+  /* ── NotificationContext: sync waUnread when conv opened ── */
+  const { setWaUnread } = useNotifications();
+
+  /* SSE real-time — piggyback on global SSE via query invalidation */
   useEffect(() => {
     const token = localStorage.getItem("kdf_admin_token") ?? "";
     const es = new EventSource(`/api/admin/sse?token=${encodeURIComponent(token)}`);
+
     es.addEventListener("wa_message", (e) => {
       const data = JSON.parse(e.data) as any;
-      refetchConvs();
-      if (data.conversationId === selectedId) refetchMsgs();
+      /* Always refresh conversation list so order + unread badge updates */
+      queryClient.invalidateQueries({ queryKey: ["wa-conversations"] });
+      /* Refresh messages only if this conversation is open */
+      if (data.conversationId === selectedId) {
+        queryClient.invalidateQueries({ queryKey: ["wa-messages", selectedId] });
+      }
     });
+
+    es.addEventListener("wa_unread_count", (e) => {
+      const data = JSON.parse(e.data) as any;
+      setWaUnread(data.total ?? 0);
+    });
+
     return () => es.close();
-  }, [selectedId]);
+  }, [selectedId, setWaUnread, queryClient]);
 
   /* Auto-scroll */
   useEffect(() => {
@@ -576,7 +591,11 @@ export default function WaInboxPage() {
     setShowMobile("chat");
     markReadMutation.mutate(id);
     queryClient.invalidateQueries({ queryKey: ["wa-conversations"] });
-  }, []);
+    /* Sync global WA unread after marking read — fetch fresh count */
+    fetch("/api/admin/wa/unread-count", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` },
+    }).then(r => r.json()).then(d => setWaUnread(d.total ?? 0)).catch(() => {});
+  }, [setWaUnread]);
 
   const handleSend = () => {
     if (!message.trim() || replyMutation.isPending) return;

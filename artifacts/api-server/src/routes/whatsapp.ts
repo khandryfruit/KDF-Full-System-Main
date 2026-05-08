@@ -270,6 +270,13 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               VALUES (${waConvId}, ${msgId ?? null}, 'in', ${msgType}, ${rawText}, ${mediaUrl}, ${mediaCaption}, ${reactionEmoji}, 'received', false, NOW())
             `).catch(() => {});
             broadcastSSE("wa_message", { conversationId: waConvId, direction: "in", content: rawText, phone, msgType, mediaUrl, mediaCaption, reactionEmoji });
+
+            /* Broadcast updated total unread count so header badge updates instantly */
+            db.execute(sql`SELECT COALESCE(SUM(unread_count), 0)::int AS total FROM wa_conversations`)
+              .then((r: any) => {
+                const total = (r.rows ?? r)[0]?.total ?? 0;
+                broadcastSSE("wa_unread_count", { total });
+              }).catch(() => {});
           }
 
           /* ── Intent detection + save in conversation ── */

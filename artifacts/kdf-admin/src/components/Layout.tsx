@@ -71,6 +71,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
+import { useNotifications } from "@/context/NotificationContext";
 
 /* ═══════════════════════════════════════════════
    NAV DATA
@@ -400,6 +401,7 @@ function SidebarContent({
   const isPgActive        = location.startsWith("/payment-gateway");
   const isLogisticsActive = location.startsWith("/logistics");
   const isBranchesActive  = location.startsWith("/branches");
+  const { waUnread } = useNotifications();
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden">
@@ -468,16 +470,27 @@ function SidebarContent({
         {/* Main nav items */}
         {NAV_ITEMS.map(item => {
           const isActive = location === item.href || location.startsWith(item.href + "/");
+          const isWaInbox = item.href === "/wa-inbox";
           return (
-            <NavItem
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={item.icon}
-              isActive={isActive}
-              expanded={expanded}
-              onClick={onNavClick}
-            />
+            <div key={item.href} className="relative">
+              <NavItem
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                isActive={isActive}
+                expanded={expanded}
+                onClick={onNavClick}
+              />
+              {isWaInbox && waUnread > 0 && (
+                <span className={`
+                  absolute top-1.5 right-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full
+                  flex items-center justify-center px-0.5 pointer-events-none leading-none
+                  ${expanded ? "right-1.5" : "-right-1 -top-0.5"}
+                `}>
+                  {waUnread > 99 ? "99+" : waUnread}
+                </span>
+              )}
+            </div>
           );
         })}
 
