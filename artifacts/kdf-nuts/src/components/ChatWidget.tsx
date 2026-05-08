@@ -1331,7 +1331,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
 
   /* In embed mode the container is the full iframe viewport, not fixed/overlay */
   const chatContainerClass = embedMode
-    ? "flex flex-col bg-[#F0F2F5] w-full"
+    ? "flex flex-col bg-[#F0F2F5] w-full h-full overflow-hidden"
     : "fixed inset-0 z-[9999] flex flex-col bg-[#F0F2F5] animate-in slide-in-from-bottom duration-300";
 
   const ChatPanel = isChatOpen && !showOrderForm ? (

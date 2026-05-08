@@ -630,6 +630,11 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         if (card) attachCard(card);
       }
 
+      /* Order form trigger */
+      if (data.showOrderForm && !data.escalateToHuman) {
+        showOrderForm();
+      }
+
       /* Escalate to WhatsApp */
       if (data.escalateToHuman) {
         var waWrap = document.createElement('div');
@@ -761,6 +766,132 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Auto-show chat if lead already captured ── */
   if (leadSaved) { showChatInterface(); }
+
+  /* ── Keyboard / visualViewport fix (iOS + Android) ── */
+  function fixViewportHeight() {
+    var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.body.style.height = h + 'px';
+    /* Scroll messages to bottom when keyboard appears */
+    setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 80);
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fixViewportHeight);
+    window.visualViewport.addEventListener('scroll', fixViewportHeight);
+  }
+  window.addEventListener('resize', fixViewportHeight);
+  input.addEventListener('focus', function() {
+    setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 350);
+  });
+
+  /* ── Order Form (triggered by showOrderForm from API) ── */
+  var orderFormEl = null;
+  var orderCart = [];
+
+  function showOrderForm() {
+    /* Use current cart items */
+    orderCart = cartItems.slice();
+    if (orderFormEl) { orderFormEl.remove(); orderFormEl = null; }
+
+    var overlay = document.createElement('div');
+    overlay.id = 'order-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:999;background:#F0F2F5;display:flex;flex-direction:column;overflow:hidden;';
+    overlay.innerHTML = [
+      /* Header */
+      '<div style="background:linear-gradient(135deg,#5FA800,#4d8a00);padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;">',
+        '<button id="of-back" style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;">',
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>',
+        '</button>',
+        '<div style="flex:1;">',
+          '<p style="font-weight:700;color:#fff;font-size:15px;margin:0;">Place Your Order</p>',
+          '<p style="color:rgba(255,255,255,.75);font-size:11px;margin:2px 0 0;">Fill details below to complete order</p>',
+        '</div>',
+      '</div>',
+      /* Scrollable body */
+      '<div id="of-body" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;">',
+        /* Cart summary */
+        '<div style="background:#fff;border-radius:14px;padding:12px;border:1px solid #e5e7eb;" id="of-cart-summary"></div>',
+        /* Form fields */
+        '<input id="of-name" placeholder="Full Name *" style="' + fieldStyle() + '">',
+        '<input id="of-phone" type="tel" placeholder="Phone Number * (03XXXXXXXXX)" style="' + fieldStyle() + '">',
+        '<select id="of-city" style="' + fieldStyle() + '">',
+          '<option value="">Select City *</option>',
+          ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Other'].map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join(''),
+        '</select>',
+        '<textarea id="of-address" rows="3" placeholder="Complete Address *" style="' + fieldStyle() + 'resize:none;"></textarea>',
+        '<textarea id="of-notes" rows="2" placeholder="Order notes (optional)" style="' + fieldStyle() + 'resize:none;"></textarea>',
+        '<p id="of-error" style="color:#ef4444;font-size:12px;display:none;"></p>',
+      '</div>',
+      /* Sticky footer */
+      '<div style="background:#fff;border-top:1px solid #e5e7eb;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));flex-shrink:0;">',
+        '<button id="of-submit" style="width:100%;padding:14px;border-radius:14px;background:#5FA800;color:#fff;font-weight:700;font-size:15px;border:none;cursor:pointer;">Place Order →</button>',
+      '</div>',
+    ].join('');
+
+    document.body.appendChild(overlay);
+    orderFormEl = overlay;
+
+    /* Fill cart summary */
+    var summaryEl = document.getElementById('of-cart-summary');
+    if (summaryEl) {
+      var total = orderCart.reduce(function(s,i){ return s + i.price * i.qty; }, 0);
+      summaryEl.innerHTML = '<p style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:.5px;margin:0 0 8px;">ORDER SUMMARY</p>' +
+        orderCart.map(function(it){
+          return '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;padding:2px 0;">' +
+            '<span>' + it.name + (it.variant ? ' (' + it.variant + ')' : '') + ' ×' + it.qty + '</span>' +
+            '<span style="font-weight:700;color:#5FA800;">Rs.' + (it.price*it.qty).toLocaleString() + '</span>' +
+          '</div>';
+        }).join('') +
+        '<div style="border-top:1px solid #e5e7eb;margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:13px;">' +
+          '<span>Total</span><span style="color:#5FA800;">Rs.' + total.toLocaleString() + '</span>' +
+        '</div>';
+    }
+
+    document.getElementById('of-back').addEventListener('click', function(){
+      overlay.remove(); orderFormEl = null;
+    });
+
+    document.getElementById('of-submit').addEventListener('click', async function() {
+      var name    = document.getElementById('of-name').value.trim();
+      var phone   = document.getElementById('of-phone').value.trim();
+      var city    = document.getElementById('of-city').value;
+      var address = document.getElementById('of-address').value.trim();
+      var notes   = document.getElementById('of-notes').value.trim();
+      var errEl   = document.getElementById('of-error');
+      if (!name || !phone || !city || !address) {
+        errEl.textContent = 'Please fill all required (*) fields.';
+        errEl.style.display = 'block';
+        return;
+      }
+      errEl.style.display = 'none';
+      var btn = this; btn.disabled = true; btn.textContent = 'Placing order…';
+      try {
+        var orderItems = orderCart.map(function(i){
+          return { productId: i.productId, variantId: i.variantId, name: i.name, variant: i.variant, price: i.price, qty: i.qty, image: i.image };
+        });
+        var res2 = await fetch(API + '/chat/direct-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sessionId, items: orderItems, name: name, phone: phone, city: city, address: address, notes: notes })
+        });
+        var d2 = await res2.json();
+        if (!res2.ok) throw new Error(d2.error || 'Order failed');
+        /* Clear cart and close */
+        cartItems = [];
+        updateCartBar();
+        overlay.remove(); orderFormEl = null;
+        addBubble('✅ Order placed! Order ID: ' + d2.orderNumber + '. Hamare team se confirm message aayega jald hi. Shukriya!', 'bot');
+      } catch(err) {
+        errEl.textContent = err.message || 'Order failed. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Place Order →';
+      }
+    });
+  }
+
+  function fieldStyle() {
+    return 'width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;font-size:14px;background:#fff;box-sizing:border-box;font-family:inherit;outline:none;';
+  }
 
 })();
 </script>
