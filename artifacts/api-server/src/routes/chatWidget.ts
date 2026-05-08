@@ -38,70 +38,86 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
 
-  /* Header */
-  #hdr{background:linear-gradient(135deg,#25D366,#128C7E);padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15);flex-shrink:0;}
-  #hdr-avatar{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
-  #hdr-info{flex:1;}
-  #hdr-name{font-size:15px;font-weight:700;color:#fff;}
-  #hdr-status{font-size:11px;color:rgba(255,255,255,0.85);display:flex;align-items:center;gap:4px;margin-top:1px;}
-  #hdr-dot{width:7px;height:7px;border-radius:50%;background:#a5f3b4;animation:pulse 2s infinite;}
-  #btn-close{background:rgba(255,255,255,0.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
-  #btn-close:hover{background:rgba(255,255,255,0.35);}
+  /* ── Header ─────────────────────────────────── */
+  #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;}
+  #hdr-avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.22);border:2px solid rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:0;}
+  #hdr-info{flex:1;min-width:0;}
+  #hdr-name{font-size:15px;font-weight:700;color:#fff;line-height:1.2;}
+  #hdr-status{font-size:11px;color:rgba(255,255,255,0.88);display:flex;align-items:center;gap:4px;margin-top:2px;}
+  #hdr-dot{width:6px;height:6px;border-radius:50%;background:#a5f3b4;flex-shrink:0;animation:pulse 2s infinite;}
+  .hdr-btn{background:rgba(255,255,255,0.18);border:1.5px solid rgba(255,255,255,0.3);color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;}
+  .hdr-btn:hover{background:rgba(255,255,255,0.32);}
+  .hdr-btn svg{pointer-events:none;}
 
-  /* Messages area */
-  #msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;}
-  #msgs::-webkit-scrollbar{width:4px;}
+  /* ── Messages ────────────────────────────────── */
+  #msgs{flex:1;overflow-y:auto;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;}
+  #msgs::-webkit-scrollbar{width:3px;}
   #msgs::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
 
-  /* Bubbles */
+  /* ── Bubbles ─────────────────────────────────── */
   .bubble-wrap{display:flex;align-items:flex-end;gap:6px;}
   .bubble-wrap.me{flex-direction:row-reverse;}
-  .avatar-sm{width:26px;height:26px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;}
-  .bubble{max-width:82%;padding:9px 12px;border-radius:16px;font-size:13.5px;line-height:1.45;word-break:break-word;position:relative;}
-  .bubble.bot{background:#fff;color:#1a1a1a;border-bottom-left-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
-  .bubble.me{background:#25D366;color:#fff;border-bottom-right-radius:4px;}
-  .bubble-time{font-size:10px;opacity:0.6;margin-top:3px;text-align:right;}
+  .avatar-sm{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#2ecc71,#128C7E);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;}
+  .bubble{max-width:82%;padding:9px 13px;border-radius:18px;font-size:13.5px;line-height:1.5;word-break:break-word;}
+  .bubble.bot{background:#fff;color:#1a1a1a;border-bottom-left-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+  .bubble.me{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-bottom-right-radius:4px;}
+  .bubble-time{font-size:10px;opacity:0.55;margin-top:3px;text-align:right;}
 
-  /* Typing indicator */
+  /* ── Typing ──────────────────────────────────── */
   #typing{display:none;align-items:flex-end;gap:6px;padding:2px 0;}
-  #typing .bubble{background:#fff;padding:10px 14px;}
-  .dot{width:7px;height:7px;border-radius:50%;background:#999;animation:bounce 1.4s infinite;}
+  #typing .bubble{background:#fff;padding:10px 15px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:#aaa;animation:bounce 1.4s infinite;}
   .dot:nth-child(2){animation-delay:.2s;}
   .dot:nth-child(3){animation-delay:.4s;}
-  @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+  @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
 
-  /* Lead form */
-  #lead-form{background:#fff;margin:8px;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
-  #lead-form h3{font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
-  #lead-form p{font-size:12px;color:#666;margin-bottom:12px;}
-  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:8px;}
-  .lf-input:focus{border-color:#25D366;}
-  #btn-lead{width:100%;background:#25D366;color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;}
-  #btn-lead:hover{background:#128C7E;}
-  #lead-skip{display:block;text-align:center;font-size:12px;color:#999;margin-top:8px;cursor:pointer;text-decoration:underline;}
+  /* ── Lead form ───────────────────────────────── */
+  #lead-form{background:#fff;margin:10px;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,0.1);}
+  #lead-form h3{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
+  #lead-form p{font-size:12px;color:#666;margin-bottom:14px;line-height:1.5;}
+  .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:9px;font-family:inherit;}
+  .lf-input:focus{border-color:#2ecc71;}
+  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;}
+  #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:9px;cursor:pointer;text-decoration:underline;}
 
-  /* Input area */
-  #input-area{background:#fff;padding:8px 10px;display:flex;align-items:center;gap:8px;border-top:1px solid #f0f2f5;flex-shrink:0;}
-  #msg-input{flex:1;border:1.5px solid #e5e7eb;border-radius:22px;padding:9px 14px;font-size:13.5px;outline:none;resize:none;max-height:90px;overflow-y:auto;transition:border-color .2s;font-family:inherit;}
-  #msg-input:focus{border-color:#25D366;}
-  #btn-send{width:38px;height:38px;border-radius:50%;background:#25D366;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;}
-  #btn-send:hover{background:#128C7E;}
-  #btn-send:disabled{background:#ccc;cursor:not-allowed;}
-  #btn-wa{background:#fff;border:1.5px solid #25D366;color:#25D366;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .2s;white-space:nowrap;}
-  #btn-wa:hover{background:#25D366;color:#fff;}
-
-  /* Quick chips */
-  #chips{display:flex;gap:6px;padding:0 10px 8px;overflow-x:auto;flex-shrink:0;}
+  /* ── Chips ───────────────────────────────────── */
+  #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;}
   #chips::-webkit-scrollbar{display:none;}
-  .chip{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:5px 11px;font-size:12px;color:#374151;cursor:pointer;white-space:nowrap;transition:all .2s;}
-  .chip:hover{background:#25D366;color:#fff;border-color:#25D366;}
+  .chip{background:#fff;border:1px solid #e0e0e0;border-radius:18px;padding:5px 12px;font-size:12px;color:#444;cursor:pointer;white-space:nowrap;transition:all .2s;flex-shrink:0;}
+  .chip:hover,.chip:active{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-color:transparent;}
 
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  .bubble-wrap{animation:fadeIn .25s ease;}
+  /* ── Input area ──────────────────────────────── */
+  #input-area{background:#fff;padding:8px 10px;display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;}
+  #btn-mic{width:36px;height:36px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:color .2s,background .2s;}
+  #btn-mic:hover{background:#f5f5f5;color:#2ecc71;}
+  #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
+  #msg-input{flex:1;border:1.5px solid #e5e7eb;border-radius:22px;padding:9px 14px;font-size:13.5px;outline:none;resize:none;max-height:90px;overflow-y:auto;transition:border-color .2s;font-family:inherit;background:#fafafa;}
+  #msg-input:focus{border-color:#2ecc71;background:#fff;}
+  #btn-send{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2ecc71,#128C7E);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .2s;}
+  #btn-send:hover{opacity:.88;}
+  #btn-send:disabled{background:#ddd;cursor:not-allowed;}
 
-  /* Order status card */
-  .order-card{background:#fff;border-radius:14px;overflow:hidden;max-width:88%;box-shadow:0 2px 10px rgba(0,0,0,0.1);margin-top:4px;font-size:13px;}
+  /* ── Product card ────────────────────────────── */
+  .prod-card{background:#fff;border-radius:16px;overflow:hidden;max-width:86%;box-shadow:0 2px 12px rgba(0,0,0,0.1);margin-top:4px;}
+  .prod-img-wrap{position:relative;width:100%;height:140px;background:#f5f5f5;overflow:hidden;}
+  .prod-img-wrap img{width:100%;height:100%;object-fit:cover;}
+  .prod-img-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:36px;background:linear-gradient(135deg,#f0f9f4,#e8f5e9);}
+  .prod-badge{position:absolute;top:8px;left:8px;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;}
+  .prod-body{padding:10px 12px;}
+  .prod-name{font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:7px;line-height:1.3;}
+  .prod-variants{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+  .pv-btn{border:1.5px solid #e0e0e0;border-radius:10px;padding:4px 9px;font-size:11px;font-weight:600;color:#444;cursor:pointer;background:#fff;transition:all .2s;line-height:1.3;text-align:center;}
+  .pv-btn:hover,.pv-btn.active{background:#2ecc71;color:#fff;border-color:#2ecc71;}
+  .prod-price{font-size:16px;font-weight:700;color:#2ecc71;margin-bottom:8px;}
+  .prod-price-orig{font-size:12px;color:#aaa;text-decoration:line-through;margin-left:5px;}
+  .prod-actions{display:flex;gap:7px;}
+  .prod-btn-view{flex:1;border:1.5px solid #e0e0e0;background:#fff;color:#444;border-radius:10px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .2s;}
+  .prod-btn-view:hover{border-color:#aaa;}
+  .prod-btn-add{flex:1;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:10px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;}
+  .prod-btn-add:hover{opacity:.9;}
+
+  /* ── Order tracking card ─────────────────────── */
+  .order-card{background:#fff;border-radius:14px;overflow:hidden;max-width:88%;box-shadow:0 2px 10px rgba(0,0,0,0.1);margin-top:4px;}
   .oc-hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);padding:10px 12px;display:flex;align-items:center;gap:8px;}
   .oc-hdr-left{flex:1;}
   .oc-hdr-label{font-size:10px;color:rgba(255,255,255,0.6);}
@@ -109,33 +125,42 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .oc-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;border:1px solid;}
   .oc-body{padding:10px 12px;}
   .oc-row{display:flex;align-items:center;gap:6px;margin-bottom:7px;}
-  .oc-row svg{flex-shrink:0;opacity:0.6;}
   .oc-row-label{font-size:10px;color:#999;}
   .oc-row-val{font-size:12px;font-weight:600;color:#1a1a2e;}
   .oc-courier{background:#f5f5f5;border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:7px;margin-bottom:7px;}
   .oc-track-id{font-family:monospace;font-size:11px;font-weight:700;color:#1a1a2e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .oc-track-link{font-size:10px;font-weight:700;color:#5FA800;text-decoration:none;display:flex;align-items:center;gap:2px;flex-shrink:0;}
+  .oc-track-link{font-size:10px;font-weight:700;color:#2ecc71;text-decoration:none;flex-shrink:0;}
   .oc-items{border-top:1px solid #f0f0f0;padding-top:7px;margin-top:3px;}
   .oc-item{display:flex;justify-content:space-between;font-size:11px;color:#555;padding:2px 0;}
   .oc-item span:last-child{font-weight:600;color:#1a1a2e;}
   .oc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f0f0f0;padding-top:7px;margin-top:5px;}
   .oc-pay{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;}
   .oc-total{font-size:14px;font-weight:700;color:#1a1a2e;}
-  .oc-btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;margin-top:8px;padding:9px;border-radius:10px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5FA800,#3d7000);text-decoration:none;border:none;cursor:pointer;}
+  .oc-btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;margin-top:8px;padding:9px;border-radius:10px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#2ecc71,#128C7E);text-decoration:none;border:none;cursor:pointer;}
   .order-notfound{background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:10px 12px;max-width:88%;margin-top:4px;display:flex;gap:8px;align-items:flex-start;}
   .order-notfound p{font-size:12px;color:#92400e;margin:0;}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes micPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .bubble-wrap,.prod-card,.order-card,.order-notfound{animation:fadeUp .25s ease;}
 </style>
 </head>
 <body>
 
 <!-- Header -->
 <div id="hdr">
-  <div id="hdr-avatar">🌰</div>
+  <div id="hdr-avatar">K</div>
   <div id="hdr-info">
-    <div id="hdr-name">KDF NUTS Support</div>
-    <div id="hdr-status"><span id="hdr-dot"></span> Online — 24/7 Live Support</div>
+    <div id="hdr-name">24/7 Live Support</div>
+    <div id="hdr-status"><span id="hdr-dot"></span> KDF Nuts Support Team</div>
   </div>
-  <button id="btn-close" title="Close" aria-label="Close chat">✕</button>
+  <button class="hdr-btn" id="btn-refresh" title="Reconnect" aria-label="Reconnect">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+  </button>
+  <button class="hdr-btn" id="btn-close" title="Close" aria-label="Close chat">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
 </div>
 
 <!-- Messages -->
@@ -144,15 +169,15 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 <!-- Typing indicator -->
 <div id="typing" class="bubble-wrap">
   <div class="avatar-sm">K</div>
-  <div class="bubble bot" style="display:flex;gap:4px;padding:12px 14px;">
+  <div class="bubble bot" style="display:flex;gap:4px;padding:12px 15px;">
     <span class="dot"></span><span class="dot"></span><span class="dot"></span>
   </div>
 </div>
 
-<!-- Lead capture form (shown first) -->
+<!-- Lead capture form -->
 <div id="lead-form">
   <h3>👋 Welcome to KDF NUTS!</h3>
-  <p>Share your name & number to start chatting with our team.</p>
+  <p>Share your name & number to start chatting with our support team.</p>
   <input class="lf-input" id="lf-name" type="text" placeholder="Your name *" autocomplete="name">
   <input class="lf-input" id="lf-phone" type="tel" placeholder="Phone number * (03xx-xxxxxxx)" autocomplete="tel">
   <input class="lf-input" id="lf-email" type="email" placeholder="Email (optional)" autocomplete="email">
@@ -163,44 +188,51 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 <!-- Quick chips -->
 <div id="chips" style="display:none;">
   <span class="chip" data-msg="mera order kahan hai">📍 Track Order</span>
-  <span class="chip" data-msg="What products do you have?">🛒 Products</span>
+  <span class="chip" data-msg="Show me your products">🛒 Products</span>
   <span class="chip" data-msg="What are your prices?">💰 Prices</span>
   <span class="chip" data-msg="How long is delivery?">🚚 Delivery</span>
   <span class="chip" data-msg="I want to place an order">📦 Order</span>
-  <span class="chip" data-msg="I need human support">👤 Human Support</span>
+  <span class="chip" data-msg="I need human support">👤 Human</span>
 </div>
 
-<!-- Input area -->
+<!-- Input area: [mic] [input] [send] -->
 <div id="input-area" style="display:none;">
-  <textarea id="msg-input" rows="1" placeholder="Type your message..." autocomplete="off"></textarea>
-  <button id="btn-wa" onclick="window.open('https://wa.me/923049996000?text=Hello%20I%20need%20help','_blank')">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.963 2C6.466 2 2 6.466 2 11.963c0 1.82.49 3.524 1.345 4.989L2 22l5.217-1.319A9.925 9.925 0 0011.963 22C17.46 22 22 17.534 22 12.037 22 6.54 17.46 2 11.963 2zm0 18.12a8.168 8.168 0 01-4.152-1.132l-.297-.177-3.095.782.812-3.006-.198-.31A8.12 8.12 0 013.88 12.037c0-4.46 3.624-8.085 8.083-8.085 4.46 0 8.084 3.624 8.084 8.085 0 4.46-3.624 8.083-8.084 8.083z"/></svg>
-    WA
+  <button id="btn-mic" aria-label="Voice input" title="Speak your order">
+    <svg id="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
   </button>
+  <textarea id="msg-input" rows="1" placeholder="Type or speak your order..." autocomplete="off"></textarea>
   <button id="btn-send" aria-label="Send">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
   </button>
 </div>
 
 <script>
 (function() {
-  var API = ${JSON.stringify(apiUrl)};
+  var API       = ${JSON.stringify(apiUrl)};
+  var WA_URL    = 'https://wa.me/923049996000?text=' + encodeURIComponent('Hello! I need help with my KDF Nuts order.');
   var sessionId = localStorage.getItem('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
   var leadSaved = localStorage.getItem('kdf_embed_lead') === '1';
 
   localStorage.setItem('kdf_embed_session', sessionId);
 
-  var msgs   = document.getElementById('msgs');
-  var input  = document.getElementById('msg-input');
-  var btnSend= document.getElementById('btn-send');
-  var typing = document.getElementById('typing');
-  var chips  = document.getElementById('chips');
+  var msgs      = document.getElementById('msgs');
+  var input     = document.getElementById('msg-input');
+  var btnSend   = document.getElementById('btn-send');
+  var btnMic    = document.getElementById('btn-mic');
+  var typing    = document.getElementById('typing');
+  var chips     = document.getElementById('chips');
   var inputArea = document.getElementById('input-area');
   var leadForm  = document.getElementById('lead-form');
 
-  /* ── Close button → postMessage to parent widget ── */
+  /* ── Header buttons ── */
   document.getElementById('btn-close').addEventListener('click', function() {
     try { window.parent.postMessage({ type: 'KDF_CLOSE' }, '*'); } catch(e) {}
+  });
+  document.getElementById('btn-refresh').addEventListener('click', function() {
+    var btn = this; btn.style.opacity = '0.5';
+    setTimeout(function(){ btn.style.opacity = '1'; }, 800);
+    if (msgs.children.length === 0) return;
+    addBubble('Reconnected! How can I help you?', 'bot');
   });
 
   /* ── Helpers ── */
@@ -208,32 +240,31 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     return new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true});
   }
 
+  function appendToMsgs(el) {
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
   function addBubble(text, role) {
     var wrap = document.createElement('div');
     wrap.className = 'bubble-wrap' + (role === 'user' ? ' me' : '');
-
     var avatar = document.createElement('div');
     avatar.className = 'avatar-sm';
     avatar.textContent = role === 'user' ? 'U' : 'K';
-
     var bub = document.createElement('div');
     bub.className = 'bubble ' + (role === 'user' ? 'me' : 'bot');
-
     var txt = document.createElement('div');
     txt.textContent = text;
     bub.appendChild(txt);
-
     var time = document.createElement('div');
     time.className = 'bubble-time';
     time.textContent = fmtTime();
     bub.appendChild(time);
-
     if (role !== 'user') wrap.appendChild(avatar);
     wrap.appendChild(bub);
     if (role === 'user') wrap.appendChild(avatar);
-
-    msgs.appendChild(wrap);
-    msgs.scrollTop = msgs.scrollHeight;
+    appendToMsgs(wrap);
+    return wrap;
   }
 
   function showTyping(show) {
@@ -241,7 +272,82 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     if (show) msgs.scrollTop = msgs.scrollHeight;
   }
 
-  /* ── Order status card builder ── */
+  /* ── Product card builder ── */
+  function buildProductCard(p) {
+    var card = document.createElement('div');
+    card.className = 'prod-card';
+    var variants = p.variants || [];
+    var selectedIdx = 0;
+    var basePrice = p.price || 0;
+
+    function variantPrice(v) {
+      return v && v.price ? Number(v.price) : basePrice;
+    }
+
+    function renderPrice() {
+      var price = variants.length ? variantPrice(variants[selectedIdx]) : basePrice;
+      return 'Rs.' + Number(price).toLocaleString();
+    }
+
+    function imgHtml() {
+      if (p.image) {
+        var src = p.image.startsWith('http') ? p.image : (API.replace('/api','') + '/api/storage/objects/' + p.image);
+        return '<img src="' + src + '" alt="' + (p.name||'') + '" onerror="this.parentNode.innerHTML=\'<div class=prod-img-placeholder>🥜</div>\'">';
+      }
+      return '<div class="prod-img-placeholder">🥜</div>';
+    }
+
+    function variantsHtml() {
+      if (!variants.length) return '';
+      return variants.map(function(v, i) {
+        var label = (v.value || v.name || '') + (v.price ? '<br><span style="font-size:10px;color:inherit;">Rs.' + Number(v.price).toLocaleString() + '</span>' : '');
+        return '<button class="pv-btn' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '">' + label + '</button>';
+      }).join('');
+    }
+
+    card.innerHTML =
+      '<div class="prod-img-wrap">' +
+        imgHtml() +
+        (p.badge ? '<span class="prod-badge">⭐ ' + p.badge + '</span>' : (p.orderCount > 5 ? '<span class="prod-badge">🔥 Hot</span>' : '')) +
+      '</div>' +
+      '<div class="prod-body">' +
+        '<div class="prod-name">' + (p.name || 'Product') + '</div>' +
+        (variants.length ? '<div class="prod-variants">' + variantsHtml() + '</div>' : '') +
+        '<div class="prod-price" id="pp-' + p.id + '">' + renderPrice() + (p.originalPrice ? '<span class="prod-price-orig">Rs.' + Number(p.originalPrice).toLocaleString() + '</span>' : '') + '</div>' +
+        '<div class="prod-actions">' +
+          '<button class="prod-btn-view" data-id="' + p.id + '">👁 View</button>' +
+          '<button class="prod-btn-add" data-id="' + p.id + '">🛒 Add</button>' +
+        '</div>' +
+      '</div>';
+
+    /* Variant selection */
+    card.querySelectorAll('.pv-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        card.querySelectorAll('.pv-btn').forEach(function(b){ b.classList.remove('active'); });
+        this.classList.add('active');
+        selectedIdx = parseInt(this.dataset.idx, 10);
+        var priceEl = document.getElementById('pp-' + p.id);
+        if (priceEl) priceEl.childNodes[0].textContent = renderPrice();
+      });
+    });
+
+    /* Add to cart → send to chat */
+    card.querySelector('.prod-btn-add').addEventListener('click', function() {
+      var v = variants[selectedIdx];
+      var varLabel = v ? (v.value || v.name || '') : '';
+      var msg = 'I want to order ' + (p.name || 'this product') + (varLabel ? ' (' + varLabel + ')' : '');
+      sendMessage(msg);
+    });
+
+    /* View → open product page */
+    card.querySelector('.prod-btn-view').addEventListener('click', function() {
+      window.open('https://kdfnuts.com/products/' + (p.slug || p.id), '_blank', 'noopener');
+    });
+
+    return card;
+  }
+
+  /* ── Order tracking card builder ── */
   function buildOrderCard(os) {
     if (os.notFound) {
       var nf = document.createElement('div');
@@ -250,7 +356,6 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       return nf;
     }
     if (!os.found || !os.orderNumber) return null;
-
     var statusMap = {
       'Delivered':        { bg:'#dcfce7', color:'#166534', border:'#bbf7d0' },
       'Out for Delivery': { bg:'#dbeafe', color:'#1e40af', border:'#bfdbfe' },
@@ -263,25 +368,19 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     var sc = statusMap[os.fulfillmentStatus] || { bg:'#f3f4f6', color:'#374151', border:'#e5e7eb' };
     var isDelivered = os.fulfillmentStatus && os.fulfillmentStatus.toLowerCase().includes('delivered');
     var isTransit   = os.fulfillmentStatus && (os.fulfillmentStatus.toLowerCase().includes('transit') || os.fulfillmentStatus.toLowerCase().includes('out for'));
-
+    var hdrPrefix   = isDelivered ? '✓ ' : isTransit ? '⟳ ' : '';
     var card = document.createElement('div');
     card.className = 'order-card';
-
-    var hdrPrefix = isDelivered ? '✓ ' : isTransit ? '⟳ ' : '';
     card.innerHTML =
       '<div class="oc-hdr">' +
-        '<div class="oc-hdr-left">' +
-          '<div class="oc-hdr-label">Order</div>' +
-          '<div class="oc-hdr-num">#' + (os.orderNumber || '') + '</div>' +
-        '</div>' +
-        '<span class="oc-badge" style="background:' + sc.bg + ';color:' + sc.color + ';border-color:' + sc.border + '">' + hdrPrefix + (os.fulfillmentStatus || '') + '</span>' +
+        '<div class="oc-hdr-left"><div class="oc-hdr-label">Order</div><div class="oc-hdr-num">#' + (os.orderNumber||'') + '</div></div>' +
+        '<span class="oc-badge" style="background:' + sc.bg + ';color:' + sc.color + ';border-color:' + sc.border + '">' + hdrPrefix + (os.fulfillmentStatus||'') + '</span>' +
       '</div>' +
       '<div class="oc-body">' +
-        (os.customerName ? '<div class="oc-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><div><div class="oc-row-label">Customer</div><div class="oc-row-val">' + os.customerName + '</div></div></div>' : '') +
-        (os.city ? '<div class="oc-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><div><div class="oc-row-label">City</div><div class="oc-row-val">' + os.city + '</div></div></div>' : '') +
+        (os.customerName ? '<div class="oc-row"><div><div class="oc-row-label">Customer</div><div class="oc-row-val">' + os.customerName + '</div></div></div>' : '') +
+        (os.city ? '<div class="oc-row"><div><div class="oc-row-label">City</div><div class="oc-row-val">' + os.city + '</div></div></div>' : '') +
         (os.courierName || os.trackingId ?
           '<div class="oc-courier">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5FA800" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' +
             '<div style="flex:1;min-width:0;">' +
               (os.courierName ? '<div style="font-size:10px;color:#999;">' + os.courierName + '</div>' : '') +
               (os.trackingId ? '<div class="oc-track-id">' + os.trackingId + '</div>' : '') +
@@ -289,29 +388,22 @@ router.get("/chat-embed", (req: Request, res: Response) => {
             (os.trackingUrl ? '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-track-link">Track ↗</a>' : '') +
           '</div>'
         : '') +
-        (os.items && os.items.length ?
-          '<div class="oc-items">' +
-            os.items.map(function(it) {
-              return '<div class="oc-item"><span>' + it.name + ' × ' + it.qty + '</span><span>Rs.' + it.price + '</span></div>';
-            }).join('') +
-          '</div>'
-        : '') +
+        (os.items && os.items.length ? '<div class="oc-items">' + os.items.map(function(it){ return '<div class="oc-item"><span>' + it.name + ' × ' + it.qty + '</span><span>Rs.' + it.price + '</span></div>'; }).join('') + '</div>' : '') +
         '<div class="oc-footer">' +
-          (os.financialStatus ?
-            '<span class="oc-pay" style="background:' + (os.financialStatus==='paid'?'#dcfce7':'#fff7ed') + ';color:' + (os.financialStatus==='paid'?'#166534':'#9a3412') + '">' +
-              (os.financialStatus==='paid' ? '✓ Paid' : 'COD Pending') +
-            '</span>'
-          : '<span></span>') +
+          (os.financialStatus ? '<span class="oc-pay" style="background:' + (os.financialStatus==='paid'?'#dcfce7':'#fff7ed') + ';color:' + (os.financialStatus==='paid'?'#166534':'#9a3412') + '">' + (os.financialStatus==='paid'?'✓ Paid':'COD Pending') + '</span>' : '<span></span>') +
           (os.totalPrice ? '<span class="oc-total">Rs.' + Number(os.totalPrice).toLocaleString() + '</span>' : '<span></span>') +
         '</div>' +
-        (os.trackingUrl ?
-          '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-btn">' +
-            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' +
-            ' Track Live Parcel' +
-          '</a>'
-        : '') +
+        (os.trackingUrl ? '<a href="' + os.trackingUrl + '" target="_blank" rel="noopener" class="oc-btn">🚚 Track Live Parcel</a>' : '') +
       '</div>';
     return card;
+  }
+
+  /* ── Attach extra card below last bubble ── */
+  function attachCard(card) {
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
+    wrap.appendChild(card);
+    appendToMsgs(wrap);
   }
 
   /* ── Send message ── */
@@ -322,7 +414,6 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     btnSend.disabled = true;
     addBubble(text, 'user');
     showTyping(true);
-
     try {
       var res = await fetch(API + '/chat/message', {
         method: 'POST',
@@ -333,29 +424,97 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       showTyping(false);
 
       var reply = data.reply || data.message || data.text || (data.error ? '❌ ' + data.error : 'Sorry, I could not process that.');
-      addBubble(reply, 'bot');
+      if (reply) addBubble(reply, 'bot');
 
-      /* Render order tracking card if present */
+      /* Product cards */
+      if (data.products && data.products.length) {
+        data.products.forEach(function(p) {
+          attachCard(buildProductCard(p));
+        });
+      }
+
+      /* Order tracking card */
       if (data.orderStatus && (data.orderStatus.found || data.orderStatus.notFound)) {
         var card = buildOrderCard(data.orderStatus);
-        if (card) {
-          /* Attach card below last bot bubble */
-          var lastWrap = msgs.querySelector('.bubble-wrap:last-child');
-          if (lastWrap) {
-            var cardWrap = document.createElement('div');
-            cardWrap.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
-            cardWrap.appendChild(card);
-            msgs.appendChild(cardWrap);
-            msgs.scrollTop = msgs.scrollHeight;
-          }
-        }
+        if (card) attachCard(card);
       }
+
+      /* Escalate to WhatsApp */
+      if (data.escalateToHuman) {
+        var waWrap = document.createElement('div');
+        waWrap.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
+        waWrap.innerHTML = '<a href="' + WA_URL + '" target="_blank" rel="noopener" style="background:#25D366;color:#fff;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:7px;">💬 Chat on WhatsApp — 9am to 9pm PKT</a>';
+        appendToMsgs(waWrap);
+      }
+
+      /* Unread badge for parent */
+      try { window.parent.postMessage({ type: 'KDF_UNREAD', count: 1 }, '*'); } catch(e) {}
+
     } catch(e) {
       showTyping(false);
-      addBubble('⚠️ Connection error. Please try WhatsApp instead.', 'bot');
+      addBubble('⚠️ Connection error. Tap below to reach us on WhatsApp.', 'bot');
+      var waFallback = document.createElement('div');
+      waFallback.style.cssText = 'display:flex;padding-left:32px;margin-bottom:8px;';
+      waFallback.innerHTML = '<a href="' + WA_URL + '" target="_blank" rel="noopener" style="background:#25D366;color:#fff;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;text-decoration:none;">💬 Open WhatsApp</a>';
+      appendToMsgs(waFallback);
     }
     btnSend.disabled = false;
     input.focus();
+  }
+
+  /* ── Voice input (Web Speech API) ── */
+  var recognition = null;
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition && btnMic) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    var listeningLang = 'ur-PK';
+    recognition.lang = listeningLang;
+
+    recognition.onstart = function() {
+      btnMic.classList.add('listening');
+      input.placeholder = '🎤 Listening... (Urdu/English)';
+    };
+    recognition.onresult = function(e) {
+      var transcript = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      input.value = transcript;
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 90) + 'px';
+      if (e.results[e.results.length - 1].isFinal) {
+        btnMic.classList.remove('listening');
+        input.placeholder = 'Type or speak your order...';
+        if (transcript.trim()) sendMessage(transcript.trim());
+      }
+    };
+    recognition.onerror = function(e) {
+      btnMic.classList.remove('listening');
+      input.placeholder = 'Type or speak your order...';
+      /* Fallback to English if Urdu not supported */
+      if (e.error === 'language-not-supported' || e.error === 'network') {
+        recognition.lang = 'en-US';
+      }
+    };
+    recognition.onend = function() {
+      btnMic.classList.remove('listening');
+      input.placeholder = 'Type or speak your order...';
+    };
+
+    btnMic.addEventListener('click', function() {
+      if (btnMic.classList.contains('listening')) {
+        recognition.stop();
+      } else {
+        recognition.lang = 'ur-PK';
+        try { recognition.start(); } catch(e2) {}
+      }
+    });
+  } else if (btnMic) {
+    btnMic.style.display = 'none'; /* Hide if not supported */
   }
 
   /* ── Input auto-resize ── */
@@ -379,9 +538,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
     input.focus();
-    /* Welcome message */
     setTimeout(function() {
-      addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Mujhe batayein main aapki kaise madad kar sakta hoon? Apna order place karein ya koi bhi sawal poochhein!', 'bot');
+      addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
     }, 300);
   }
 
@@ -395,7 +553,6 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       return;
     }
     localStorage.setItem('kdf_embed_lead', '1');
-    /* Save lead to API (non-blocking) */
     fetch(API + '/chat/lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -412,9 +569,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   });
 
   /* ── Auto-show chat if lead already captured ── */
-  if (leadSaved) {
-    showChatInterface();
-  }
+  if (leadSaved) { showChatInterface(); }
 
 })();
 </script>

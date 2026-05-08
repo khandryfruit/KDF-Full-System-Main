@@ -1,0 +1,357 @@
+# WA Chat + Website Chat + WhatsApp — Unified Tracking Widget Integration Prompt
+
+## IMPORTANT
+
+Existing:
+
+* Shopify integration
+* Courier integrations
+* WhatsApp APIs
+* Website chat
+* AI chatbot
+* Order systems
+* Tracking systems
+
+کو break یا replace نہیں کرنا۔
+
+صرف:
+
+# Unified Dynamic Tracking Experience
+
+تمام chat systems کے اندر professional انداز میں integrate کرنا ہے۔
+
+---
+
+# MAIN GOAL
+
+جہاں جہاں customer ہم سے chat کرے:
+
+✅ WhatsApp Chat
+✅ Website Chat
+✅ WA Chat
+✅ AI Assistant
+✅ Live Support
+
+وہیں سے:
+
+# Customer Self Order Tracking
+
+کر سکے۔
+
+---
+
+# IMPORTANT
+
+میں tracking widget code دے رہا ہوں:
+
+```html id="c8m2qp"
+<style>
+.track-frame-wrap{
+  width:100%
+}
+.track-frame-wrap iframe{
+  width:100%;
+  height:100vh;
+  border:none;
+  display:block
+}
+@media(min-width:768px){
+  .track-frame-wrap{
+    width:100vw;
+    margin-left:calc(50% - 50vw)
+  }
+}
+</style>
+
+<div class="track-frame-wrap">
+  <iframe src="https://ucp-app.hexon.app/track/track.php?hxs_shop=khandryfruit-5155.myshopify.com"></iframe>
+</div>
+```
+
+---
+
+# REQUIRED IMPLEMENTATION
+
+اس code کو:
+
+# Standalone Fullscreen Website Loader
+
+کی طرح use نہ کریں۔
+
+---
+
+# DO NOT DO THIS
+
+❌ پورا website iframe میں load نہ کریں
+❌ storefront replace نہ کریں
+❌ full overlay نہ کھولیں
+❌ app shell نہ mount کریں
+
+---
+
+# REQUIRED CORRECT IMPLEMENTATION
+
+اس widget کو صرف:
+
+# Compact Tracking Module
+
+کی طرح use کریں۔
+
+---
+
+# REQUIRED FLOW
+
+## Customer لکھے:
+
+* “Track Order”
+* “Mera parcel?”
+* “Tracking”
+* “Order status”
+
+↓
+
+AI / Bot پوچھے:
+
+# Please provide:
+
+* Order Number
+  یا
+* Tracking Number
+  یا
+* Email / Phone Number
+
+---
+
+# AFTER CUSTOMER ENTERS DATA
+
+System:
+
+✅ dynamic tracking کرے
+✅ courier data fetch کرے
+✅ Shopify order verify کرے
+✅ tracking API query کرے
+
+---
+
+# REQUIRED RESULT
+
+Customer کو:
+
+# Professional Tracking Card
+
+send ہو۔
+
+---
+
+# EXAMPLE RESPONSE
+
+# 📦 Live Order Tracking
+
+━━━━━━━━━━━━━━
+
+👤 Customer: Ali Khan
+
+🛒 Order ID: #KDF2045
+
+🚚 Courier: Leopards Courier
+
+📍 Status: In Transit
+
+🔍 Tracking Number:
+LK123456789PK
+
+📅 Dispatch Date:
+08 May 2026
+
+🕒 Estimated Delivery:
+Tomorrow
+
+━━━━━━━━━━━━━━
+
+# 📸 Live Tracking Snapshot
+
+[Tracking Screenshot]
+
+━━━━━━━━━━━━━━
+
+# 🔗 Track Live
+
+[Open Tracking]
+
+---
+
+# IMPORTANT SCREENSHOT REQUIREMENT
+
+Customer کو:
+
+# Tracking Screenshot
+
+بھی automatically generate/send ہو۔
+
+---
+
+# REQUIRED SYSTEM
+
+Tracking widget سے:
+
+* screenshot capture کریں
+* tracking state render کریں
+* customer کو image preview بھیجیں
+
+---
+
+# IMPLEMENTATION RULE
+
+## Use Widget Inside Chat ONLY
+
+یہ widget:
+
+# Chat Tracking Component
+
+کے طور پر use ہو۔
+
+---
+
+# DO NOT OPEN
+
+❌ full website
+❌ fullscreen iframe
+❌ storefront overlay
+❌ app preview mode
+
+---
+
+# REQUIRED COMPONENT STRUCTURE
+
+```bash id="v4n9tx"
+/wa-chat/
+├── tracking/
+│   ├── tracking-widget
+│   ├── tracking-preview
+│   ├── tracking-screenshot
+│   ├── courier-parser
+│   └── live-status
+```
+
+---
+
+# REQUIRED AI BEHAVIOR
+
+AI automatically understand کرے:
+
+* “mera order”
+* “tracking”
+* “parcel”
+* “shipment”
+* “dispatch hua?”
+
+---
+
+# AI SHOULD SEARCH
+
+```bash id="s6f1yr"
+- Shopify orders
+- courier APIs
+- tracking widget
+- customer phone
+- email
+- order history
+- WhatsApp history
+```
+
+---
+
+# IMPORTANT UI
+
+## Tracking Card Should Be
+
+✅ beautiful
+✅ mobile responsive
+✅ WhatsApp friendly
+✅ fast loading
+✅ compact
+✅ branded
+
+---
+
+# REQUIRED FEATURES
+
+## 1. Live Tracking Button
+
+Customer click کرے:
+
+# “Track Live”
+
+---
+
+# 2. Screenshot Preview
+
+Tracking page preview image آئے۔
+
+---
+
+# 3. Auto Courier Detection
+
+System خود detect کرے:
+
+* Leopards
+* TCS
+* CallCourier
+* Trax
+* PostEx
+* M&P
+
+---
+
+# 4. Unified Chat Integration
+
+یہ tracking feature:
+
+✅ WhatsApp
+✅ Website Chat
+✅ WA Chat
+✅ AI Assistant
+
+سب میں کام کرے۔
+
+---
+
+# PERFORMANCE RULES
+
+Use:
+
+✅ lazy loading
+✅ async iframe loading
+✅ isolated tracking component
+✅ non-blocking rendering
+
+---
+
+# DO NOT USE
+
+❌ fullscreen iframe
+❌ page replacement
+❌ overlay website
+❌ nested storefront rendering
+
+---
+
+# FINAL GOAL
+
+Create:
+
+# Unified Smart Tracking Experience
+
+جہاں customer:
+
+✅ chat کے اندر tracking کرے
+✅ live status دیکھے
+✅ screenshot دیکھے
+✅ courier info دیکھے
+✅ WhatsApp/web دونوں پر tracking کرے
+
+اور پورا system:
+
+# AI Powered Unified Commerce Support
+
+کی طرح کام کرے۔

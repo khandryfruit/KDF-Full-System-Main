@@ -1,0 +1,433 @@
+# MASTER UI/UX FIX PROMPT — Shopify + React Website WA Chat Unified Experience
+
+## CRITICAL ISSUE
+
+Currently:
+
+# ❌ Shopify Chat Widget
+
+اور
+
+# ❌ Custom React Website Chat Widget
+
+دونوں:
+
+* different UI use کر رہے ہیں
+* different behavior رکھتے ہیں
+* different features show کر رہے ہیں
+
+یہ غلط ہے۔
+
+---
+
+# MAIN GOAL
+
+میں چاہتا ہوں:
+
+# BOTH SYSTEMS LOOK & WORK EXACTLY SAME
+
+---
+
+# REQUIRED
+
+## Shopify Store
+
+اور
+
+## Custom React Website
+
+دونوں کے اندر:
+
+# Same WA Chat Experience
+
+ہونا چاہیے۔
+
+---
+
+# CURRENT PROBLEMS
+
+## React Website Chat
+
+❌ Shopify products show نہیں ہو رہے
+❌ voice system remove ہو گیا
+❌ compact UI نہیں
+❌ design different ہے
+❌ behavior different ہے
+
+---
+
+## Shopify Widget
+
+❌ popup behavior incomplete
+❌ hover open نہیں
+❌ close/hide logic missing
+❌ WhatsApp icon inconsistent
+
+---
+
+# REQUIRED FINAL EXPERIENCE
+
+## Both Platforms Must Have
+
+✅ Same Design
+✅ Same Layout
+✅ Same Product Cards
+✅ Same Voice Support
+✅ Same AI Behavior
+✅ Same Floating Button
+✅ Same Popup Style
+✅ Same Tracking Features
+✅ Same WhatsApp Actions
+
+---
+
+# REQUIRED MASTER STRUCTURE
+
+Create:
+
+```bash id="g6p2nx"
+/wa-chat-core/
+│
+├── ui-system/
+├── product-cards/
+├── voice-engine/
+├── ai-chat/
+├── whatsapp/
+├── tracking/
+├── floating-widget/
+├── animations/
+└── shared-styles/
+```
+
+---
+
+# VERY IMPORTANT
+
+## SINGLE SHARED COMPONENT SYSTEM
+
+DO NOT create:
+
+❌ separate Shopify chat
+❌ separate React chat
+❌ separate layouts
+
+---
+
+# USE
+
+# Shared Universal WA Chat Component
+
+for both platforms.
+
+---
+
+# REQUIRED CHAT HEADER
+
+Top header ہونا چاہیے:
+
+# “24/7 Live Support”
+
+اور subtitle:
+
+# “KDF Nuts Support Team”
+
+---
+
+# REQUIRED HEADER FEATURES
+
+## Add
+
+✅ online indicator
+✅ smooth gradient background
+✅ proper avatar/logo
+✅ refresh/reconnect button
+✅ close button
+
+---
+
+# CLOSE BUTTON REQUIREMENT
+
+## If customer clicks close:
+
+Widget:
+
+✅ hide ہو جائے
+✅ minimized state میں جائے
+
+اور:
+
+# 2 minutes بعد
+
+softly دوبارہ show ہو۔
+
+---
+
+# REQUIRED SETTINGS
+
+Add:
+
+```bash id="w8z4yt"
+- auto_reopen_after_close
+- minimized_state
+- hover_trigger
+- auto_popup
+```
+
+---
+
+# REQUIRED POPUP BEHAVIOR
+
+## On Desktop
+
+اگر user:
+
+# hover
+
+کرے floating button پر:
+
+# Chat preview popup open ہو جائے۔
+
+---
+
+# On Mobile
+
+Tap پر open ہو۔
+
+---
+
+# REQUIRED CHAT PRIORITY
+
+## FIRST OPTION MUST BE
+
+# Live Chat
+
+NOT WhatsApp۔
+
+---
+
+# REQUIRED ORDER
+
+```bash id="t4v7lm"
+1. Live Support Chat
+2. AI Assistant
+3. WhatsApp
+4. Order Tracking
+```
+
+---
+
+# REQUIRED VOICE FEATURE
+
+## Voice System MUST RETURN
+
+Currently:
+
+❌ removed/broken
+
+---
+
+# REQUIRED
+
+Add back:
+
+✅ microphone button
+✅ speech-to-text
+✅ voice input
+✅ Urdu/Roman Urdu support
+
+---
+
+# REQUIRED PRODUCT CARDS
+
+## Shopify Products MUST SHOW
+
+inside BOTH chats۔
+
+---
+
+# Product Card Must Include
+
+✅ product image
+✅ title
+✅ weight options
+✅ prices
+✅ add to cart
+✅ quick buy
+✅ variants
+
+---
+
+# IMPORTANT
+
+Use:
+
+# Shared Shopify Product API
+
+for both React + Shopify chat systems.
+
+---
+
+# REQUIRED CHAT INPUT AREA
+
+Bottom area:
+
+```bash id="r9k3qx"
+[ 🎤 Voice ] [ Type Message ] [ WhatsApp ] [ Send ]
+```
+
+---
+
+# REQUIRED WHATSAPP BUTTON
+
+## WhatsApp button
+
+نیچے compact icon کی شکل میں ہو۔
+
+NOT large floating duplicate button۔
+
+---
+
+# REQUIRED SPEED OPTIMIZATION
+
+Widget ہونا چاہیے:
+
+✅ fast
+✅ lightweight
+✅ realtime
+✅ lazy loaded
+✅ non-blocking
+
+---
+
+# REQUIRED AI BEHAVIOR
+
+AI should:
+
+✅ understand products
+✅ fetch Shopify products
+✅ track orders
+✅ access courier data
+✅ answer intelligently
+
+---
+
+# REQUIRED TRACKING FEATURE
+
+Customer لکھے:
+
+# “Track Order”
+
+↓
+
+Bot asks:
+
+* order number
+* phone
+* tracking ID
+
+↓
+
+Shows:
+
+✅ live tracking
+✅ courier status
+✅ ETA
+✅ screenshot preview
+
+---
+
+# IMPORTANT DESIGN RULE
+
+## DO NOT LOAD
+
+❌ full website
+❌ storefront preview
+❌ homepage
+❌ banners
+❌ navigation
+
+inside widget.
+
+---
+
+# ONLY SHOW
+
+✅ compact chat UI
+✅ products
+✅ messages
+✅ tracking cards
+✅ AI responses
+
+---
+
+# REQUIRED FINAL RESULT
+
+## Shopify Website
+
+AND
+
+## React Website
+
+دونوں پر:
+
+# EXACT SAME CHAT EXPERIENCE
+
+ہونا چاہیے۔
+
+---
+
+# FINAL UX EXPERIENCE
+
+User hover کرے:
+
+↓
+
+Compact Live Support opens
+
+↓
+
+AI replies fast
+
+↓
+
+Voice input works
+
+↓
+
+Products show
+
+↓
+
+Tracking works
+
+↓
+
+WhatsApp accessible
+
+↓
+
+Close کرے
+
+↓
+
+Widget hides
+
+↓
+
+2 minutes بعد softly واپس آ جائے
+
+---
+
+# FINAL WARNING
+
+STOP building:
+
+❌ separate systems
+❌ duplicate chat UIs
+❌ inconsistent layouts
+
+Build:
+
+# ONE UNIVERSAL WA CHAT SYSTEM
+
+for all platforms.
