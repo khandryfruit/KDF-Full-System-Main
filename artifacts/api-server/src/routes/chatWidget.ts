@@ -77,8 +77,10 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   #lead-form p{font-size:12px;color:#666;margin-bottom:12px;line-height:1.5;}
   .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:14px;outline:none;transition:border-color .2s;margin-bottom:8px;font-family:inherit;-webkit-appearance:none;}
   .lf-input:focus{border-color:#2ecc71;}
-  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:block;margin-top:4px;}
-  #btn-lead:active{opacity:0.88;}
+  #btn-lead{width:100%;background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;display:block;margin-top:4px;position:relative;z-index:10;pointer-events:auto;-webkit-appearance:none;outline:none;}
+  #btn-lead:active{opacity:0.82;transform:scale(0.98);}
+  #btn-lead.shaking{animation:kdfShake .35s ease;}
+  @keyframes kdfShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
   #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;padding:4px;}
 
   /* ── Chips ───────────────────────────────────── */
@@ -88,7 +90,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .chip:hover,.chip:active{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-color:transparent;}
 
   /* ── Input area ──────────────────────────────── */
-  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;position:sticky;bottom:0;}
+  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;}
   #btn-mic{width:36px;height:36px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:color .2s,background .2s;}
   #btn-mic:hover{background:#f5f5f5;color:#2ecc71;}
   #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
@@ -238,7 +240,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   <input class="lf-input" id="lf-name" type="text" placeholder="Your name *" autocomplete="name">
   <input class="lf-input" id="lf-phone" type="tel" placeholder="Phone number * (03xx-xxxxxxx)" autocomplete="tel">
   <input class="lf-input" id="lf-email" type="email" placeholder="Email (optional)" autocomplete="email">
-  <button id="btn-lead">Start Chat →</button>
+  <button type="button" id="btn-lead">Start Chat →</button>
   <span id="lead-skip">Skip for now</span>
 </div>
 
@@ -751,14 +753,28 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
 
   function submitLead() {
-    var name  = document.getElementById('lf-name').value.trim();
-    var phone = document.getElementById('lf-phone').value.trim();
-    var email = document.getElementById('lf-email').value.trim();
+    var nameEl  = document.getElementById('lf-name');
+    var phoneEl = document.getElementById('lf-phone');
+    var emailEl = document.getElementById('lf-email');
+    var name  = nameEl.value.trim();
+    var phone = phoneEl.value.trim();
+    var email = emailEl.value.trim();
     if (!name || !phone) {
-      document.getElementById('lf-name').style.borderColor = name ? '#e5e7eb' : '#ef4444';
-      document.getElementById('lf-phone').style.borderColor = phone ? '#e5e7eb' : '#ef4444';
+      nameEl.style.borderColor  = name  ? '#e5e7eb' : '#ef4444';
+      phoneEl.style.borderColor = phone ? '#e5e7eb' : '#ef4444';
+      /* Shake button to signal validation error — reset _leadFired immediately */
+      _leadFired = false;
+      btnLead.style.opacity = '';
+      btnLead.classList.remove('shaking');
+      void btnLead.offsetWidth; /* force reflow to restart animation */
+      btnLead.classList.add('shaking');
+      setTimeout(function(){ btnLead.classList.remove('shaking'); }, 400);
+      /* Focus first empty field */
+      if (!name) { nameEl.focus(); } else { phoneEl.focus(); }
       return;
     }
+    /* Reset border colours on success */
+    nameEl.style.borderColor = phoneEl.style.borderColor = '#e5e7eb';
     lsSet('kdf_embed_lead', '1');
     fetch(API + '/chat/lead', {
       method: 'POST',
@@ -773,10 +789,11 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   var _leadFired = false;
   function onLeadTap(e) {
     e.preventDefault();
+    e.stopPropagation();
     if (_leadFired) return;
     _leadFired = true;
     btnLead.style.opacity = '0.75';
-    setTimeout(function(){ btnLead.style.opacity = ''; _leadFired = false; }, 600);
+    setTimeout(function(){ btnLead.style.opacity = ''; _leadFired = false; }, 800);
     submitLead();
   }
   btnLead.addEventListener('touchend', onLeadTap, { passive: false });

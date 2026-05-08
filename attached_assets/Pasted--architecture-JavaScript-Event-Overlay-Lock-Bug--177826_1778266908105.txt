@@ -1,0 +1,265 @@
+یہ اب واضح ہے کہ مسئلہ architecture سے زیادہ:
+
+# JavaScript Event / Overlay Lock Bug
+
+کا ہے۔
+
+آپ کے screenshot میں:
+
+* button visible ہے
+* inputs fill ہو رہے ہیں
+* UI render ہو رہی ہے
+
+لیکن:
+
+# Start Chat click نہیں ہو رہا
+
+اس کا مطلب عموماً یہ ہوتا ہے:
+
+* invisible overlay اوپر بیٹھا ہوا ہے
+* z-index conflict ہے
+* pointer-events block ہو رہے ہیں
+* fullscreen layer button کے اوپر ہے
+* body/modal lock active ہے
+* iframe capture issue ہے
+
+یہ Shopify themes میں بہت common ہے۔
+
+ان کو یہ strict debugging prompt دیں:
+
+---
+
+# MASTER DEBUG PROMPT
+
+The Shopify live chat widget UI is rendering, but the “Start Chat” button is NOT clickable on mobile and desktop.
+
+This is NOT a design issue anymore.
+
+This is a frontend interaction bug.
+
+You MUST deeply debug the widget rendering and event system.
+
+Current symptoms:
+
+* Inputs work
+* Form fields accept typing
+* Widget opens
+* UI renders correctly
+* But “Start Chat” button does nothing
+* Screen feels frozen/stuck
+* Same issue on mobile and desktop
+* Shopify storefront becomes partially unresponsive
+
+This strongly indicates:
+
+* overlay conflict
+* z-index issue
+* pointer-events issue
+* fullscreen invisible layer
+* body scroll lock conflict
+* duplicated modal wrapper
+* iframe event capture
+* React mount conflict
+* event propagation blocked
+
+You MUST inspect and debug ALL of the following:
+
+# 1. POINTER EVENTS
+
+Check if any parent container has:
+
+```css
+pointer-events:none;
+```
+
+OR another layer above button.
+
+Inspect using DevTools.
+
+---
+
+# 2. Z-INDEX STACKING
+
+Inspect all layers above the button.
+
+Especially:
+
+* modal overlay
+* fullscreen div
+* transparent wrappers
+* backdrop layer
+* Shopify drawer system
+
+Ensure button container is above ALL overlays.
+
+---
+
+# 3. REMOVE BODY LOCK
+
+Check if widget is applying:
+
+```css
+overflow:hidden;
+position:fixed;
+height:100vh;
+```
+
+to:
+
+```css
+body
+html
+```
+
+This is freezing mobile interaction.
+
+Do NOT globally lock body.
+
+---
+
+# 4. SHOPIFY THEME CONFLICT
+
+Theme JS may be intercepting clicks.
+
+Namespace all widget classes.
+
+Use isolated root:
+
+```js
+#kdf-chat-root
+```
+
+Avoid generic class names.
+
+---
+
+# 5. REACT HYDRATION / DUPLICATE MOUNT
+
+Check if widget is mounting twice.
+
+Possible issue:
+
+* duplicate React root
+* duplicate event listeners
+* multiple portals
+
+This causes click failures.
+
+---
+
+# 6. DEBUG CLICK EVENT
+
+Add test:
+
+```js
+button.onclick = () => {
+  console.log('clicked');
+};
+```
+
+If console never logs:
+
+→ another layer is blocking clicks.
+
+---
+
+# 7. FORCE BUTTON LAYER
+
+Temporarily test:
+
+```css
+.kdf-start-btn{
+  position:relative;
+  z-index:9999999;
+  pointer-events:auto;
+}
+```
+
+---
+
+# 8. INSPECT FULLSCREEN DIVS
+
+Search for any element with:
+
+```css
+position:fixed;
+inset:0;
+width:100%;
+height:100%;
+```
+
+A transparent fullscreen div is likely blocking interaction.
+
+---
+
+# 9. MOBILE SAFARI BUG
+
+Avoid:
+
+```css
+100vh
+```
+
+Use:
+
+```css
+100dvh
+```
+
+instead.
+
+---
+
+# 10. DO NOT LOAD FULL APP INSIDE SHOPIFY DOM
+
+The widget MUST run isolated.
+
+Recommended:
+
+* iframe widget
+  OR
+* Shadow DOM
+
+Do NOT inject entire React app directly into Shopify body.
+
+---
+
+# REQUIRED FIX
+
+The widget must:
+
+* open smoothly
+* Start Chat must work instantly
+* no screen freeze
+* no overlay lock
+* no body freeze
+* no hidden blockers
+* work on Android + iPhone
+* work on desktop
+* preserve scrolling
+* preserve touch interactions
+
+---
+
+# IMPORTANT
+
+The OLD widget version was working correctly.
+
+The problem started AFTER redesign and extra integrations.
+
+So compare current version with old stable version and identify:
+
+* what new wrapper
+* overlay
+* modal
+* event system
+* body lock
+* fullscreen layer
+
+was added that broke interaction.
+
+Rollback unstable layers if needed.
+
+---
+
+یہ issue تقریباً 90% frontend overlay/pointer-event bug لگ رہا ہے، backend کا مسئلہ نہیں۔
