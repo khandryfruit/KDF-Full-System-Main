@@ -20,7 +20,7 @@ const basePath = process.env.BASE_PATH ?? "/";
 export default defineConfig({
   base: basePath,
   plugins: [
-    react(),
+    react({ jsxRuntime: "automatic" }),
     tailwindcss(),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
@@ -48,7 +48,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    target: ["es2015", "safari12"],
+    target: "es2018",
     cssCodeSplit: true,
     rollupOptions: {
       output: {
