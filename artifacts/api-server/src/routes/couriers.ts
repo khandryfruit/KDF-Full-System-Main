@@ -76,15 +76,127 @@ router.post("/admin/couriers", adminMiddleware as any, async (req: AuthRequest, 
 
 /* ─── Admin: TCS – test connection ─────────────────── */
 router.post("/admin/couriers/tcs/test", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  type StepStatus = "ok" | "fail" | "info" | "warn";
+  const steps: Array<{ step: string; status: StepStatus; detail: string }> = [];
+
   try {
     const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
-    const settings = (courierRow?.settings ?? {}) as Record<string, any>;
-    const bearer = getTcsStaticBearer(settings);
-    res.json({ ok: true, message: "TCS connection ready — Static Bearer Token configured", bearerLength: bearer.length, mode: "static-bearer" });
-    return;
+    if (!courierRow) {
+      res.status(404).json({ ok: false, steps, error: "TCS courier not configured in admin yet" }); return;
+    }
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const bearer    = getTcsStaticBearer(settings);
+    const baseUrl   = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    const hasStaleToken = !!(settings.accessToken?.trim());
+
+    /* ── Step 1: Configuration ── */
+    const missingConfig: string[] = [];
+    if (!bearer) missingConfig.push("ENVO Bearer Token (Advanced Settings → ENVO Portal Bearer Token)");
+    if (!settings.username?.trim()) missingConfig.push("Username");
+    if (!settings.password?.trim()) missingConfig.push("Password");
+    if (!settings.tcsaccount?.trim()) missingConfig.push("TCS Account Number");
+
+    steps.push({
+      step: "Configuration",
+      status: missingConfig.length === 0 ? "ok" : bearer ? "warn" : "fail",
+      detail: [
+        `🔑 ENVO Bearer Token: ${bearer ? `✅ Present (${bearer.length} chars)` : "❌ MISSING — add in Advanced Settings"}`,
+        `👤 Username: ${settings.username ? `✅ ${settings.username}` : "❌ NOT SET"}`,
+        `🔒 Password: ${settings.password ? "✅ Set" : "❌ NOT SET"}`,
+        `🏢 Account Number: ${settings.tcsaccount ? `✅ ${settings.tcsaccount}` : "❌ NOT SET"}`,
+        `🌐 Environment: ${settings.sandbox ? "🧪 SANDBOX (safe)" : "🚀 PRODUCTION"}`,
+        `📡 Base URL: ${baseUrl}`,
+        hasStaleToken
+          ? `⚠ Direct ECOM Token: SET — may override auto Step-2 and cause "Invalid Bearer" errors. Clear it in Advanced Settings!`
+          : `✅ Direct ECOM Token: Not set (auto Step-2 will be used)`,
+        missingConfig.length > 0 ? `❌ Missing: ${missingConfig.join(", ")}` : "✅ All required fields present",
+      ].join("\n"),
+    });
+
+    if (!bearer) {
+      res.json({ ok: false, steps, error: "ENVO Bearer Token not configured" }); return;
+    }
+
+    /* ── Step 2: ECOM Token (Step-2 auth) ── */
+    let ecomToken = "";
+    try {
+      const t0 = Date.now();
+      ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
+      const ms = Date.now() - t0;
+      steps.push({
+        step: "ECOM Access Token (Step-2)",
+        status: "ok",
+        detail: [
+          `✅ Token obtained in ${ms}ms`,
+          `Method: POST /ecom/api/authentication/token`,
+          `Token tail: ●●●●…${ecomToken.slice(-16)}`,
+          hasStaleToken ? "⚠ Used manual Direct ECOM Token (from settings) — consider clearing it to use auto Step-2" : "✅ Auto-generated via Username + Password + Bearer",
+        ].join("\n"),
+      });
+    } catch (e: any) {
+      steps.push({
+        step: "ECOM Access Token (Step-2)",
+        status: "fail",
+        detail: [
+          `❌ Token generation FAILED: ${e.message}`,
+          ``,
+          `Common fixes:`,
+          `• If "Invalid Bearer token": Clear "Direct ECOM Access Token" in Advanced Settings`,
+          `• If "Unauthorized" / 401: Check Username + Password are correct`,
+          `• If timeout: TCS server unreachable — check sandbox vs production setting`,
+          `• If account mismatch: Username (${settings.username || "not set"}) may need to match TCS ENVO credentials`,
+        ].join("\n"),
+      });
+      res.json({ ok: false, steps, error: e.message }); return;
+    }
+
+    /* ── Step 3: Booking Payload Validation (dry-run, no API call) ── */
+    const payloadErrors: string[] = [];
+    if (!settings.tcsaccount?.trim()) payloadErrors.push("TCS Account Number is empty");
+    if (!settings.shipperCity?.trim()) payloadErrors.push("Shipper City is empty (Pickup Address section)");
+    if (!settings.shipperAddress?.trim()) payloadErrors.push("Shipper Address is empty (Pickup Address section)");
+    if (!settings.shipperName?.trim()) payloadErrors.push("Shipper Name is empty (Pickup Address section)");
+    const defWeight = parseFloat(settings.defaultWeight ?? "0");
+    if (isNaN(defWeight) || defWeight <= 0) payloadErrors.push(`Default Weight is invalid: "${settings.defaultWeight || "not set"}" — must be > 0 kg`);
+
+    steps.push({
+      step: "Booking Payload Validation",
+      status: payloadErrors.length === 0 ? "ok" : "warn",
+      detail: payloadErrors.length === 0
+        ? [
+          `✅ All required booking fields are configured`,
+          `Account: ${settings.tcsaccount}`,
+          `Shipper: ${settings.shipperName} — ${settings.shipperCity} (${settings.shipperCityCode || "no city code"})`,
+          `Default Weight: ${settings.defaultWeight} kg`,
+          `Service Code: ${settings.serviceCode || "O"}`,
+        ].join("\n")
+        : [
+          `⚠ Booking will fail — missing fields:`,
+          ...payloadErrors.map(e => `• ${e}`),
+          ``,
+          `Fix: Go to Couriers → TCS Settings → Edit → fill in missing fields → Save`,
+        ].join("\n"),
+    });
+
+    const anyFail = steps.some(s => s.status === "fail");
+    const anyWarn = steps.some(s => s.status === "warn");
+    const overallOk = !anyFail;
+
+    res.json({
+      ok: overallOk,
+      steps,
+      ecomTokenOk: true,
+      configWarnings: payloadErrors,
+      message: anyFail
+        ? "TCS connection test FAILED — see steps above"
+        : anyWarn
+          ? "TCS auth OK but some booking fields need attention — see warnings"
+          : "All checks passed — TCS ready for bookings ✅",
+    });
   } catch (err: any) {
     req.log.error(err);
-    res.status(502).json({ error: err.message ?? "TCS connection test failed" });
+    steps.push({ step: "Unexpected Error", status: "fail", detail: String(err.message ?? err) });
+    res.status(502).json({ ok: false, steps, error: err.message ?? "TCS test failed" });
   }
 });
 
@@ -453,47 +565,65 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
       res.json({ ok: false, steps, error: e.message }); return;
     }
 
-    /* Build test booking payload — official nested structure per TCS API Guide v1.0 */
+    /* Build test booking payload — full official nested structure per TCS PHP Guide */
     const testOrderNo = `KDFTEST-${Date.now()}`;
+    const nowT = new Date();
+    const padT = (n: number) => String(n).padStart(2, "0");
+    const shipDateT = `${padT(nowT.getDate())}/${padT(nowT.getMonth() + 1)}/${nowT.getFullYear()} ${padT(nowT.getHours())}:${padT(nowT.getMinutes())}:${padT(nowT.getSeconds())}`;
+    const shipperNameT  = (settings.shipperName    || "KDF Nuts").slice(0, 50);
+    const shipperAddrT  = (settings.shipperAddress || "Liberty Market, Lahore").slice(0, 120);
+    const shipperCityT  = (settings.shipperCity    || "Lahore").slice(0, 50);
+    const shipperCodeT  = (settings.shipperCityCode || "LHE").toUpperCase();
+    const shipperPhoneT = (settings.shipperPhone   || "03001234567").replace(/\D/g, "").slice(-11);
+
     const bookingPayload = {
-      accesstoken: ecomToken,   /* ECOM token in body (not Authorization header) */
+      accesstoken:   ecomToken,   /* ECOM token in body — NO Authorization header */
+      consignmentno: "",           /* Required empty string per official PHP guide */
       shipperinfo: {
         tcsaccount:  settings.tcsaccount || "",
-        shippername: (settings.shipperName || "KDF Nuts").slice(0, 50),
-        address1:    (settings.shipperAddress || "Shop, Liberty Market").slice(0, 120),
-        countrycode: "PK",
-        countryname: "Pakistan",
-        citycode:    (settings.shipperCityCode || "LHE").toUpperCase(),
-        cityname:    (settings.shipperCity || "Lahore").slice(0, 50),
-        mobile:      (settings.shipperPhone || "03001234567").replace(/\D/g, "").slice(-11),
+        shippername: shipperNameT,
+        address1:    shipperAddrT,
+        address2: "", address3: "", zip: "",
+        countrycode: "PK", countryname: "Pakistan",
+        citycode:    shipperCodeT, cityname: shipperCityT,
+        mobile:      shipperPhoneT,
       },
       consigneeinfo: {
-        firstname:   "KDF",
-        middlename:  ".",
-        lastname:    "Test",
-        address1:    "House 10, Block B, DHA Phase 5",
-        countrycode: "PK",
-        countryname: "Pakistan",
-        citycode:    "",
-        cityname:    "Karachi",
-        mobile:      "03219876543",
-        email:       "",
+        consigneecode: "",
+        firstname: "KDF", middlename: ".", lastname: "Test",
+        address1:  "House 10, Block B, DHA Phase 5",
+        address2: "", address3: "", zip: "74000",
+        countrycode: "PK", countryname: "Pakistan",
+        citycode: "", cityname: "Karachi",
+        email: "", areacode: "", areaname: "",
+        blockcode: "", blockname: "", lat: "", lng: "", landmark: "",
+        mobile: "03219876543",
+      },
+      vendorinfo: {                /* Required per official PHP guide */
+        name: shipperNameT, address1: shipperAddrT,
+        address2: "", address3: "",
+        citycode: shipperCodeT, cityname: shipperCityT,
+        mobile: shipperPhoneT,
       },
       shipmentinfo: {
         costcentercode: (settings.costcentercode ?? "").toString().slice(0, 20),
         referenceno:    testOrderNo,
+        contentdesc:    "Test Dry Fruits Pack",
         servicecode:    (settings.serviceCode || "O").slice(0, 6),
-        currency:       "PKR",
+        parametertype:  "Standard",   /* Required per PHP guide */
+        shipmentdate:   shipDateT,    /* DD/MM/YYYY HH:MM:SS */
+        shippingtype: "", currency: "PKR",
         codamount:      0,
-        weightinkg:     0.5,
-        pieces:         1,
-        fragile:        false,
+        declaredvalue: null, insuredvalue: null,
+        transactiontype: "", dsflag: "", carrierslug: "",
+        weightinkg:     0.5, pieces: 1, fragile: false,
         remarks:        "TEST BOOKING — DO NOT DELIVER",
         skus: [{
           description: "KDF Nuts Test Product",
-          quantity:    1,
-          weight:      0.5,
-          unitprice:   1,
+          quantity: 1, weight: 0.5,
+          uom: "KG",               /* Required per PHP guide */
+          unitprice: 1,
+          declaredvalue: null, insuredvalue: null,
         }],
       },
     };
@@ -513,10 +643,11 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
       raw: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }, null, 2).slice(0, 1000),
     });
 
-    /* Authorization = ENVO Bearer (Step-1); accesstoken = ECOM token in body */
+    /* Per official TCS PHP guide: booking endpoint does NOT use Authorization header.
+     * The accesstoken in body IS the authentication. Only Content-Type + Accept. */
     const bookHeaders = {
-      "Authorization": `Bearer ${bearer}`,   /* ENVO bearer in header */
       "Content-Type": "application/json",
+      "Accept": "application/json",
     };
 
     /* Official endpoint first, fallback second */

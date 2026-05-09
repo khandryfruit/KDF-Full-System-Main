@@ -209,12 +209,19 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const testConn = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/test", { method: "POST" }),
     onSuccess: (d: any) => {
-      setTokenStatus("ok");
-      toast({ title: "✅ Connection successful", description: d.message ?? "TCS credentials validated" });
+      /* Show step-by-step results in the debug console */
+      openConsoleWith("Connection Test", d);
+      if (d.ok) {
+        setTokenStatus("ok");
+        toast({ title: "✅ TCS Connection Test Passed", description: d.message ?? "Auth + Token + Config validated" });
+      } else {
+        setTokenStatus("fail");
+        toast({ variant: "destructive", title: "TCS Connection Test Failed", description: d.error?.slice(0, 120) ?? "See debug console for details" });
+      }
     },
     onError: (e: any) => {
       setTokenStatus("fail");
-      toast({ variant: "destructive", title: "Connection failed", description: e.message });
+      toast({ variant: "destructive", title: "Connection test error", description: e.message });
     },
   });
 
