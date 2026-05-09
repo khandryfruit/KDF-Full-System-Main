@@ -1,0 +1,316 @@
+// =============================================
+// KDF MART — TCS COURIER INTEGRATION
+// NODE.JS + EXPRESS + AXIOS
+// Production Ready Structure
+// =============================================
+
+// INSTALL:
+// npm install axios dotenv express
+
+require('dotenv').config();
+
+const express = require('express');
+const axios = require('axios');
+
+const app = express();
+app.use(express.json());
+
+// =============================================
+// ENV VARIABLES (.env)
+// =============================================
+
+/*
+
+TCS_USERNAME=LGEC11060
+TCS_PASSWORD=YOUR_PASSWORD
+TCS_ACCOUNT=LGEC11060
+
+TCS_BASE_URL=https://api.tcscourier.com
+TCS_AUTH_URL=https://api.tcscourier.com/auth
+TCS_BOOKING_URL=https://api.tcscourier.com/bookShipment
+
+*/
+
+// =============================================
+// GLOBAL TOKEN CACHE
+// =============================================
+
+let TCS_TOKEN = null;
+let TOKEN_EXPIRY = null;
+
+// =============================================
+// DEBUG LOGGER
+// =============================================
+
+function debugLog(title, data) {
+    console.log('\n================================');
+    console.log(title);
+    console.log('================================');
+
+    if (typeof data === 'object') {
+        console.dir(data, { depth: null });
+    } else {
+        console.log(data);
+    }
+}
+
+// =============================================
+// GET TCS TOKEN
+// =============================================
+
+async function getTCSToken() {
+
+    try {
+
+        // Reuse valid token
+        if (TCS_TOKEN && TOKEN_EXPIRY > Date.now()) {
+            return TCS_TOKEN;
+        }
+
+        const authPayload = {
+            username: process.env.TCS_USERNAME,
+            password: process.env.TCS_PASSWORD,
+            accountNo: process.env.TCS_ACCOUNT
+        };
+
+        debugLog('TCS AUTH REQUEST', authPayload);
+
+        const response = await axios.post(
+            process.env.TCS_AUTH_URL,
+            authPayload,
+            {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        debugLog('TCS AUTH RESPONSE', response.data);
+
+        // IMPORTANT:
+        // Adjust according to TCS response
+
+        TCS_TOKEN = response.data.accessToken;
+
+        TOKEN_EXPIRY = Date.now() + (50 * 60 * 1000);
+
+        return TCS_TOKEN;
+
+    } catch (error) {
+
+        debugLog('TCS AUTH ERROR', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+
+        throw new Error('TCS Authentication Failed');
+    }
+}
+
+// =============================================
+// CREATE TCS BOOKING
+// =============================================
+
+async function createTCSBooking(order) {
+
+    try {
+
+        const token = await getTCSToken();
+
+        const payload = {
+
+            orderNo: order.orderNo,
+
+            consigneeName: order.customerName,
+
+            consigneePhone: order.phone,
+
+            consigneeAddress: order.address,
+
+            destinationCity: order.city,
+
+            codAmount: order.codAmount,
+
+            weight: parseFloat(order.weight).toFixed(2),
+
+            pieces: 1,
+
+            serviceType: "OVERNIGHT",
+
+            remarks: order.notes || "KDF MART Order"
+
+        };
+
+        debugLog('TCS BOOKING PAYLOAD', payload);
+
+        const response = await axios.post(
+            process.env.TCS_BOOKING_URL,
+            payload,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        debugLog('TCS BOOKING RESPONSE', response.data);
+
+        // =====================================
+        // VALIDATE SUCCESS
+        // =====================================
+
+        if (!response.data) {
+            throw new Error('Empty booking response');
+        }
+
+        // Adjust according to TCS response format
+
+        const trackingNumber =
+            response.data.trackingNumber ||
+            response.data.consignmentNumber;
+
+        if (!trackingNumber) {
+            throw new Error('Tracking number missing');
+        }
+
+        return {
+            success: true,
+            trackingNumber,
+            raw: response.data
+        };
+
+    } catch (error) {
+
+        debugLog('TCS BOOKING ERROR', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+
+        return {
+            success: false,
+            error: error.response?.data || error.message
+        };
+    }
+}
+
+// =============================================
+// PREVENT DUPLICATE BOOKINGS
+// =============================================
+
+const bookedOrders = new Set();
+
+async function safeBooking(order) {
+
+    if (bookedOrders.has(order.orderNo)) {
+
+        return {
+            success: false,
+            message: 'Already booked'
+        };
+    }
+
+    const booking = await createTCSBooking(order);
+
+    if (booking.success) {
+        bookedOrders.add(order.orderNo);
+    }
+
+    return booking;
+}
+
+// =============================================
+// BOOKING API ROUTE
+// =============================================
+
+app.post('/api/courier/book', async (req, res) => {
+
+    try {
+
+        const order = req.body;
+
+        const booking = await safeBooking(order);
+
+        if (!booking.success) {
+
+            return res.status(400).json({
+                success: false,
+                error: booking.error || booking.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            trackingNumber: booking.trackingNumber,
+            trackingUrl:
+                `https://ociconnect.tcscourier.com/tracking/index.html?consignment=${booking.trackingNumber}`
+        });
+
+    } catch (error) {
+
+        debugLog('BOOKING ROUTE ERROR', error);
+
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// =============================================
+// TEST CONNECTION API
+// =============================================
+
+app.get('/api/courier/test', async (req, res) => {
+
+    try {
+
+        const token = await getTCSToken();
+
+        return res.json({
+            success: true,
+            token
+        });
+
+    } catch (error) {
+
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// =============================================
+// SERVER
+// =============================================
+
+const PORT = 5000;
+
+app.listen(PORT, () => {
+
+    console.log(`TCS Server Running on ${PORT}`);
+});
+
+// =============================================
+// IMPORTANT FOR DEVELOPER
+// =============================================
+
+/*
+
+CHECK THESE:
+
+1. Correct Production URLs from TCS docs
+2. Correct auth endpoint
+3. Correct booking endpoint
+4. Token response format
+5. Booking response format
+6. HTTPS SSL issues
+7. Production ENV mismatch
+8. Firewall / hosting blocking
+9. Cloudflare issues
+10. Do NOT use fake tracking
+
+*/
