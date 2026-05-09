@@ -6,6 +6,55 @@ import { sendOrderStatusUpdate } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
 import OpenAI from "openai";
 import type { Response } from "express";
+import https from "node:https";
+import http from "node:http";
+
+/**
+ * httpJsonRequest — makes ANY HTTP/HTTPS request with a JSON body, including GET.
+ * Node.js native fetch BLOCKS GET+body (Fetch spec restriction).
+ * This helper uses node:https / node:http directly — no such restriction.
+ */
+function httpJsonRequest(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: Record<string, any>,
+  timeoutMs = 15000,
+): Promise<{ status: number; text: string; data: Record<string, any> }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const isHttps = parsed.protocol === "https:";
+    const bodyStr = JSON.stringify(body);
+    const reqHeaders = {
+      ...headers,
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(bodyStr).toString(),
+    };
+    const opts = {
+      hostname: parsed.hostname,
+      port: parsed.port || (isHttps ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: method.toUpperCase(),
+      headers: reqHeaders,
+    };
+    const mod = isHttps ? https : http;
+    const req = mod.request(opts, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let data: Record<string, any> = {};
+        try { data = JSON.parse(text); } catch { data = {}; }
+        resolve({ status: res.statusCode ?? 0, text, data });
+      });
+      res.on("error", reject);
+    });
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error(`Timeout after ${timeoutMs}ms`)); });
+    req.on("error", reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
 
 const router = Router();
 
@@ -811,16 +860,12 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
           const { url: aUrl, method: aMethod, body: aBody } = attempts[i];
           const ta = Date.now();
           try {
-            const aResp = await fetch(aUrl, {
-              method: aMethod,
-              headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
-              body: JSON.stringify(aBody),
-              signal: AbortSignal.timeout(10000),
-            });
-            const aText = await aResp.text();
+            /* Use httpJsonRequest — node:https bypasses fetch GET+body restriction */
+            const aResult = await httpJsonRequest(aUrl, aMethod, { "Authorization": `Bearer ${bearer}` }, aBody, 10000);
+            const aResp = { status: aResult.status };
+            const aText = aResult.text;
             const aDuration = Date.now() - ta;
-            let aData: Record<string, any> = {};
-            try { aData = JSON.parse(aText); } catch { aData = {}; }
+            let aData: Record<string, any> = aResult.data;
             const aToken = aData.accessToken ?? aData.accesstoken ?? aData.token ?? aData.result?.accessToken ?? aData.data?.accessToken;
             const fieldStyle = Object.keys(aBody).includes("Username") ? "PascalCase" : "lowercase";
             const statusHint =
@@ -2623,18 +2668,15 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     const t0 = Date.now();
     logger.info({ url: attemptUrl, method: attemptMethod, attempt: i + 1, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — Step-2 attempt");
 
-    let resp: Response;
+    let respStatus = 0;
     let data: Record<string, any> = {};
     let rawText = "";
     try {
-      resp = await fetch(attemptUrl, {
-        method: attemptMethod,
-        headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
-        body: JSON.stringify(attemptBody),   /* Node.js fetch allows GET+body */
-        signal: AbortSignal.timeout(12000),
-      });
-      rawText = await resp.text();
-      try { data = JSON.parse(rawText); } catch { data = {}; }
+      /* httpJsonRequest uses node:https — no GET+body restriction unlike native fetch */
+      const result = await httpJsonRequest(attemptUrl, attemptMethod, { "Authorization": `Bearer ${bearer}` }, attemptBody, 12000);
+      respStatus = result.status;
+      rawText = result.text;
+      data = result.data;
     } catch (netErr: any) {
       const durationMs = Date.now() - t0;
       pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: null, resBody: netErr.message, durationMs, success: false, error: netErr.message, attempt: i + 1 });
@@ -2643,29 +2685,29 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     }
 
     const durationMs = Date.now() - t0;
-    lastStatus = resp.status;
+    lastStatus = respStatus;
     lastRaw = rawText.slice(0, 400);
 
     /* 405 / 404 — try next body-field variant */
-    if (resp.status === 405 || resp.status === 404) {
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 200), durationMs, success: false, error: `HTTP ${resp.status} — trying next variant`, attempt: i + 1 });
-      logger.warn({ url: attemptUrl, method: attemptMethod, status: resp.status, attempt: i + 1 }, "TCS Step-2 — trying next variant");
-      lastError = `HTTP ${resp.status} on ${attemptMethod} ${attemptUrl}`;
+    if (respStatus === 405 || respStatus === 404) {
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: respStatus, resBody: rawText.slice(0, 200), durationMs, success: false, error: `HTTP ${respStatus} — trying next variant`, attempt: i + 1 });
+      logger.warn({ url: attemptUrl, method: attemptMethod, status: respStatus, attempt: i + 1 }, "TCS Step-2 — trying next variant");
+      lastError = `HTTP ${respStatus} on ${attemptMethod} ${attemptUrl}`;
       continue;
     }
 
     /* 401 — endpoint reached but bearer/credentials rejected */
-    if (resp.status === 401 || resp.status === 403) {
+    if (respStatus === 401 || respStatus === 403) {
       const apiMsg = data.message ?? data.statusMessage ?? data.error ?? "";
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: `HTTP ${resp.status} — bearer/credentials rejected`, attempt: i + 1 });
-      logger.warn({ url: attemptUrl, method: attemptMethod, status: resp.status, attempt: i + 1, apiMsg }, "TCS Step-2 — credentials rejected");
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: respStatus, resBody: rawText.slice(0, 400), durationMs, success: false, error: `HTTP ${respStatus} — bearer/credentials rejected`, attempt: i + 1 });
+      logger.warn({ url: attemptUrl, method: attemptMethod, status: respStatus, attempt: i + 1, apiMsg }, "TCS Step-2 — credentials rejected");
       lastError =
-        `HTTP ${resp.status} — TCS rejected your credentials. ` +
+        `HTTP ${respStatus} — TCS rejected your credentials. ` +
         `Two possible causes:\n` +
         `  1. ENVO Bearer Token (TCS_STATIC_BEARER_TOKEN env var) is EXPIRED — get a fresh one from TCS ENVO Portal.\n` +
         `  2. TCS Username/Password is wrong — verify in Couriers → TCS → Advanced Settings.\n` +
         `TCS response: ${apiMsg || rawText.slice(0, 100)}`;
-      lastStatus = resp.status;
+      lastStatus = respStatus;
       lastRaw = rawText.slice(0, 300);
       break; /* 401 is definitive — no point trying PascalCase variant with same bad credentials */
     }
@@ -2677,7 +2719,7 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
       data.data?.accessToken ?? data.data?.token;
 
     if (token) {
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: respStatus, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
       /* Official response uses lowercase "accesstoken" and "expiry" (string) */
       const expiry = data.expiry ? new Date(data.expiry).getTime() - Date.now() : 55 * 60 * 1000;
       const ttlMs = typeof data.expiresIn === "number"
@@ -2689,10 +2731,10 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     }
 
     /* Got 2xx/3xx response but no token field — unexpected format */
-    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status} — no token in response`;
-    pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
+    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${respStatus} — no token in response`;
+    pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: respStatus, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
     lastError = `${msg} — Raw: ${rawText.slice(0, 150)}`;
-    lastStatus = resp.status;
+    lastStatus = respStatus;
     lastRaw = rawText.slice(0, 300);
     continue; /* try PascalCase variant */
   }
