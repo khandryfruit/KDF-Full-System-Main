@@ -116,34 +116,38 @@ function TestAIReply() {
   );
 }
 
-/* ─── Meta Cloud API Setup Guide ─────────────────────── */
-const META_SETUP_STEPS = [
+/* ─── System User Permanent Token Guide ───────────────── */
+const SYSTEM_USER_STEPS = [
   {
-    n: 1, icon: "🏢", title: "Create or use a Meta Business Account",
-    desc: "Go to business.facebook.com and sign in. If you don't have a Business Account yet, click 'Create account'. Your existing WhatsApp Business number will be linked here.",
-    link: { label: "Open Meta Business Manager →", href: "https://business.facebook.com" },
+    n: 1, icon: "🏢", title: "Open Meta Business Manager",
+    desc: "Go to business.facebook.com → sign in with the account that owns your WhatsApp Business Account (WABA). You should see 'KHAN DRY FRUITS' or 'KDF MART' in the top-left portfolio selector.",
+    link: { label: "Open Meta Business Manager →", href: "https://business.facebook.com/settings/system-users" },
   },
   {
-    n: 2, icon: "🛠️", title: "Create a Meta Developer App",
-    desc: "Go to developers.facebook.com → My Apps → Create App. Select 'Business' as the app type. Link it to your Business Account.",
+    n: 2, icon: "👤", title: "Create a System User",
+    desc: "In Business Settings → Users → System Users → click 'Add'. Name it (e.g. 'KDF API User'), set Role to 'Admin'. System Users don't expire like regular user tokens.",
+    link: { label: "System Users docs →", href: "https://developers.facebook.com/docs/marketing-api/system-users" },
+  },
+  {
+    n: 3, icon: "🔗", title: "Assign the Meta App to the System User",
+    desc: "On the System User you just created → click 'Add Assets' → select 'Apps' → find your Meta App (the one with your META_APP_ID) → assign it with 'Full Control' permission.",
+  },
+  {
+    n: 4, icon: "📱", title: "Assign the WABA to the System User",
+    desc: "Still on the System User → click 'Add Assets' → select 'WhatsApp Accounts' → find 'KDF MART' or your WABA → assign with 'Full Control'. This allows the token to send messages.",
+  },
+  {
+    n: 5, icon: "🔑", title: "Generate a Permanent Access Token",
+    desc: "Click 'Generate New Token' on the System User. Select your App. Under Permissions, enable: whatsapp_business_messaging, whatsapp_business_management, business_management. Set Token Expiry to 'Never'. Copy the token — it will only be shown once.",
+  },
+  {
+    n: 6, icon: "🆔", title: "Get Phone Number ID and WABA ID",
+    desc: "Go to developers.facebook.com → your App → WhatsApp → Getting Started. You'll see 'Phone Number ID' (a 15+ digit number) and 'WhatsApp Business Account ID' (WABA ID) listed there. Copy both.",
     link: { label: "Open Meta Developer Portal →", href: "https://developers.facebook.com/apps" },
   },
   {
-    n: 3, icon: "📱", title: "Add WhatsApp Product to your App",
-    desc: "In your app dashboard, click 'Add Product' → find 'WhatsApp' → click 'Set up'. This gives you access to the WhatsApp Business API.",
-  },
-  {
-    n: 4, icon: "📲", title: "Add your existing WhatsApp Business Number",
-    desc: "In WhatsApp → Getting Started, click 'Add phone number'. Enter your existing number. You'll receive a verification OTP. You must first unregister the number from the WhatsApp Business App on your phone: Settings → Business Tools → WhatsApp Business API → Migrate.",
-    link: { label: "Meta guide: Migrate existing number →", href: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started/migrate-existing-whatsapp-number-to-a-business-account" },
-  },
-  {
-    n: 5, icon: "🔑", title: "Get your Phone Number ID & Permanent Access Token",
-    desc: "Phone Number ID is shown on the Getting Started page. For the Access Token: go to Meta Business Manager → Settings → System Users → create a System User → assign your app with admin permissions → Generate Token. Select whatsapp_business_messaging and whatsapp_business_management scopes.",
-  },
-  {
-    n: 6, icon: "🔗", title: "Configure the Webhook in Meta",
-    desc: "In your App → WhatsApp → Configuration → Webhooks: paste the Webhook URL and Verify Token from the API Settings below. Subscribe to: messages, message_deliveries, message_reads, messaging_postbacks.",
+    n: 7, icon: "🔗", title: "Configure Webhook in Meta",
+    desc: "In your App → WhatsApp → Configuration → Webhooks: paste the Webhook URL and Verify Token from the panel above. Subscribe to: messages, message_deliveries, message_reads, messaging_postbacks.",
   },
 ];
 function MetaSetupGuide() {
@@ -154,22 +158,25 @@ function MetaSetupGuide() {
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-5 py-4 hover:bg-muted/20 transition-colors text-left"
       >
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#25D36615" }}>
-          <span className="text-lg">📋</span>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50">
+          <span className="text-lg">🔑</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">How to Connect Your Existing WhatsApp Business Number</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Step-by-step guide to set up Meta Cloud API (official method only — no unofficial tools)</p>
+          <p className="font-semibold text-sm">How to Generate a System User Permanent Access Token</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Step-by-step for existing WABA owners — no new account needed, token never expires</p>
         </div>
         <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${open ? "rotate-90" : ""}`} />
       </button>
       {open && (
         <div className="border-t border-border px-5 py-4 space-y-4">
-          <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-blue-800 leading-relaxed">
-            <strong>Before you start:</strong> To move your existing number to Meta Cloud API, first open WhatsApp Business on your phone → Settings → Business Tools → WhatsApp Business API → tap <em>Migrate</em>. This unregisters it from the app so it can be registered via Cloud API.
+          {/* Why not Embedded Signup explanation */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-900 leading-relaxed space-y-1.5">
+            <p className="font-semibold text-sm text-amber-800">⚠️ Why Embedded Signup doesn't work for your setup</p>
+            <p>Meta's Embedded Signup is designed for <strong>SaaS providers</strong> to onboard <em>other people's</em> WhatsApp accounts. When your Meta App lives inside the <strong>KDF MART</strong> business portfolio (which is owned by <strong>KHAN DRY FRUITS</strong>), Meta intentionally greys out KHAN DRY FRUITS in the popup because you <em>cannot use your own app to onboard yourself</em> — it's a hard Meta policy restriction, not a configuration bug.</p>
+            <p>The correct official method for app-owners connecting their <strong>own</strong> WABA is the <strong>System User Permanent Token</strong> approach below. This is what Meta recommends.</p>
           </div>
           <div className="space-y-3">
-            {META_SETUP_STEPS.map(step => (
+            {SYSTEM_USER_STEPS.map(step => (
               <div key={step.n} className="flex gap-3">
                 <div className="w-7 h-7 rounded-full bg-[#25D366]/10 text-[#25D366] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">{step.n}</div>
                 <div className="flex-1 min-w-0">
@@ -185,8 +192,8 @@ function MetaSetupGuide() {
               </div>
             ))}
           </div>
-          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-xs text-amber-800">
-            <strong>After completing setup:</strong> Enter your Phone Number ID, Access Token, and Verify Token in the API Settings form below. Copy the Webhook URL shown there and paste it into Meta's webhook configuration.
+          <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-blue-800 leading-relaxed">
+            <strong>After generating the token:</strong> Paste it into the Access Token field above and click <strong>"Auto-Resolve IDs"</strong> — the system will automatically fetch your Phone Number ID and WABA ID so you don't need to look them up manually.
           </div>
         </div>
       )}
@@ -451,7 +458,7 @@ export default function WhatsAppPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("settings");
-  const [connMethod, setConnMethod] = useState<"meta" | "manual">("meta");
+  const [connMethod, setConnMethod] = useState<"meta" | "manual">("manual");
   const [showToken, setShowToken] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testMsg, setTestMsg] = useState("Hello from KDF NUTS! 🥜 This is a test message.");
@@ -974,6 +981,49 @@ export default function WhatsAppPage() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  /* ── Auto-resolve WABA+Phone from token ── */
+  const [isResolving, setIsResolving] = useState(false);
+  const handleResolveFromToken = async () => {
+    if (!form.accessToken) {
+      toast({ title: "Paste your Access Token first", variant: "destructive" });
+      return;
+    }
+    setIsResolving(true);
+    try {
+      const res = await apiFetch("/api/admin/whatsapp/resolve-from-token", {
+        method: "POST",
+        body: JSON.stringify({ token: form.accessToken }),
+      });
+      if (res.success && (res.phoneId || res.wabaId)) {
+        setForm(f => ({
+          ...f,
+          phoneNumberId: res.phoneId ?? f.phoneNumberId,
+          businessAccountId: res.wabaId ?? f.businessAccountId,
+        }));
+        toast({
+          title: "IDs resolved automatically!",
+          description: `Phone ID: ${res.phoneId ?? "not found"} · WABA ID: ${res.wabaId ?? "not found"}${res.wabaName ? ` · ${res.wabaName}` : ""}`,
+        });
+      } else if (res.allWabas?.length === 0) {
+        toast({
+          title: "No WABA found for this token",
+          description: "Make sure the System User token has whatsapp_business_messaging and whatsapp_business_management permissions and is assigned to the WABA.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Partial result — check fields",
+          description: res.error ?? "Some IDs could not be auto-detected. Fill them in manually.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: "Resolve failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
   /* ── Debug ── */
   const [connStatus, setConnStatus] = useState<{ success?: boolean; status?: string; message?: string; data?: any } | null>(null);
   const testConnection = useMutation({
@@ -1455,30 +1505,7 @@ export default function WhatsAppPage() {
             <div className="px-5 py-5 space-y-4">
               {/* Method toggle cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <button
-                  onClick={() => setConnMethod("meta")}
-                  className={`relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${connMethod === "meta" ? "border-[#1877F2] bg-blue-50" : "border-border bg-card hover:bg-muted/30"}`}
-                >
-                  {connMethod === "meta" && (
-                    <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[#1877F2] flex items-center justify-center">
-                      <CheckCircle2 className="w-3 h-3 text-white" />
-                    </span>
-                  )}
-                  <div className="w-10 h-10 rounded-xl bg-[#1877F2] flex items-center justify-center shrink-0 mt-0.5">
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                  </div>
-                  <div className="flex-1 min-w-0 pr-6">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className={`font-semibold text-sm ${connMethod === "meta" ? "text-[#1877F2]" : "text-foreground"}`}>Connect via Meta</p>
-                      <span className="text-[10px] font-bold bg-[#1877F2] text-white px-1.5 py-0.5 rounded-full">Recommended</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">One-click official Meta onboarding. Select your Business Account and WhatsApp number through a secure Meta popup — no manual credentials needed.</p>
-                    {!metaConfig?.isConfigured && (
-                      <p className="text-[10px] text-amber-700 mt-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1">META_APP_ID + META_CONFIG_ID secrets required.</p>
-                    )}
-                  </div>
-                </button>
-
+                {/* Manual — Recommended for self-owned WABAs */}
                 <button
                   onClick={() => setConnMethod("manual")}
                   className={`relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${connMethod === "manual" ? "border-[#25D366] bg-[#25D366]/5" : "border-border bg-card hover:bg-muted/30"}`}
@@ -1493,10 +1520,32 @@ export default function WhatsAppPage() {
                   </div>
                   <div className="flex-1 min-w-0 pr-6">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className={`font-semibold text-sm ${connMethod === "manual" ? "text-[#25D366]" : "text-foreground"}`}>Manual API Setup</p>
-                      <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full border">Advanced</span>
+                      <p className={`font-semibold text-sm ${connMethod === "manual" ? "text-[#25D366]" : "text-foreground"}`}>Manual — System User Token</p>
+                      <span className="text-[10px] font-bold bg-[#25D366] text-white px-1.5 py-0.5 rounded-full">Recommended for you</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Enter credentials manually from Meta Developer Portal. Requires Access Token, Phone Number ID, WABA ID, and Webhook Token.</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Paste your permanent System User token → click "Auto-Resolve IDs" to auto-fill Phone ID &amp; WABA ID. Works with any existing WABA you already own.</p>
+                  </div>
+                </button>
+
+                {/* Meta Embedded Signup — for 3rd-party onboarding only */}
+                <button
+                  onClick={() => setConnMethod("meta")}
+                  className={`relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${connMethod === "meta" ? "border-slate-400 bg-slate-50" : "border-border bg-card hover:bg-muted/30"}`}
+                >
+                  {connMethod === "meta" && (
+                    <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-slate-500 flex items-center justify-center">
+                      <CheckCircle2 className="w-3 h-3 text-white" />
+                    </span>
+                  )}
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                    <svg className="w-5 h-5 text-slate-500" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  </div>
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`font-semibold text-sm ${connMethod === "meta" ? "text-slate-700" : "text-muted-foreground"}`}>Meta Embedded Signup</p>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200">Not for app-owners</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Designed for SaaS vendors onboarding <em>other businesses'</em> WABAs. Will not work if your WABA is already owned by the same business that created this Meta App.</p>
                   </div>
                 </button>
               </div>
@@ -1515,6 +1564,21 @@ export default function WhatsAppPage() {
                     </div>
                   </div>
                   <div className="px-5 py-5 space-y-4">
+                    {/* ── Why this doesn't work for self-owned WABAs ── */}
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-red-800">Why "KHAN DRY FRUITS" is greyed out</p>
+                          <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                            This is a <strong>Meta policy restriction</strong>, not a configuration bug. Embedded Signup is designed for SaaS vendors onboarding <em>other businesses'</em> WABAs. Because this Meta App was created inside the <strong>KDF MART</strong> business portfolio (owned by <strong>KHAN DRY FRUITS</strong>), Meta intentionally prevents you from using your own app to onboard yourself — it detects circular ownership and blocks it.
+                          </p>
+                          <p className="text-xs text-red-700 mt-1.5 leading-relaxed font-medium">
+                            Solution: Switch to "Manual — System User Token" (the left card above). That is the correct official path for connecting your own WABA.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                     {metaConfig?.isConfigured ? (
                       <>
                         {/* ── Existing WABA detected card ── */}
@@ -1627,42 +1691,67 @@ export default function WhatsAppPage() {
                     </div>
                   ) : (
                     <div className="px-5 py-5 space-y-4">
+                      {/* Step 1 banner */}
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs text-emerald-800 leading-relaxed space-y-1">
+                        <p className="font-semibold text-sm text-emerald-800">✅ Production-Ready: System User Permanent Token</p>
+                        <p>1. Paste your System User permanent token below &nbsp;→&nbsp; 2. Click <strong>"Auto-Resolve IDs"</strong> to auto-fetch Phone Number ID &amp; WABA ID &nbsp;→&nbsp; 3. Save &amp; Connect</p>
+                        <p className="text-emerald-700">Need help generating the token? Expand the <strong>"System User Permanent Token"</strong> guide below the form.</p>
+                      </div>
+
                       {/* Access Token */}
                       <div className="space-y-1.5">
                         <Label className="text-sm font-medium">Access Token <span className="text-red-500">*</span></Label>
-                        <div className="relative">
-                          <Input
-                            type={showToken ? "text" : "password"}
-                            value={form.accessToken}
-                            onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
-                            placeholder="EAAxxxxx… (Permanent System User Token)"
-                            className="pr-10 font-mono text-xs"
-                          />
-                          <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                            {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Input
+                              type={showToken ? "text" : "password"}
+                              value={form.accessToken}
+                              onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))}
+                              placeholder="EAAxxxxx… (Permanent System User Token — never expires)"
+                              className="pr-10 font-mono text-xs"
+                            />
+                            <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleResolveFromToken}
+                            disabled={isResolving || !form.accessToken}
+                            title="Auto-fetch Phone Number ID and WABA ID from this token"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs transition-colors shrink-0 whitespace-nowrap"
+                          >
+                            {isResolving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                            Auto-Resolve IDs
                           </button>
                         </div>
-                        <p className="text-[11px] text-muted-foreground">Meta Business Manager → Settings → System Users → Generate Token (use a Permanent token that never expires)</p>
+                        <p className="text-[11px] text-muted-foreground">Meta Business Manager → Business Settings → Users → System Users → Generate New Token → select <em>whatsapp_business_messaging</em> + <em>whatsapp_business_management</em> → set Expiry to <strong>Never</strong></p>
                       </div>
 
                       {/* Phone Number ID + WABA ID */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Phone Number ID <span className="text-red-500">*</span></Label>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm font-medium">Phone Number ID <span className="text-red-500">*</span></Label>
+                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">Auto-filled by resolve</span>
+                          </div>
                           <Input
                             value={form.phoneNumberId}
                             onChange={(e) => setForm((f) => ({ ...f, phoneNumberId: e.target.value }))}
-                            placeholder="123456789012345"
+                            placeholder="Auto-filled — or paste manually from Meta → Getting Started"
                             className="font-mono text-xs"
                           />
                           <p className="text-[11px] text-muted-foreground">Meta App Dashboard → WhatsApp → Getting Started → Phone Number ID</p>
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">WABA ID (Business Account ID)</Label>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm font-medium">WABA ID (Business Account ID)</Label>
+                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">Auto-filled by resolve</span>
+                          </div>
                           <Input
                             value={form.businessAccountId}
                             onChange={(e) => setForm((f) => ({ ...f, businessAccountId: e.target.value }))}
-                            placeholder="987654321098765"
+                            placeholder="Auto-filled — or paste manually from Meta → Getting Started"
                             className="font-mono text-xs"
                           />
                           <p className="text-[11px] text-muted-foreground">WhatsApp Business Account ID — needed for template management</p>

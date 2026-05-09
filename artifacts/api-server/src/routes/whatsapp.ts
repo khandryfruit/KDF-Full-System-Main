@@ -2170,6 +2170,25 @@ router.get("/admin/whatsapp/meta-existing-waba", adminMiddleware as any, async (
   }
 });
 
+/* ─── Resolve WABA + Phone from token (Manual setup helper) ── */
+router.post("/admin/whatsapp/resolve-from-token", adminMiddleware, async (req, res) => {
+  const { token } = req.body ?? {};
+  if (!token || typeof token !== "string") return res.status(400).json({ error: "token required" });
+  try {
+    const result = await discoverWabaAndPhone(token.trim());
+    return res.json({
+      success: result.wabaId !== null || result.allWabas.length > 0,
+      wabaId: result.wabaId,
+      wabaName: result.wabaName,
+      phoneId: result.phoneId,
+      phoneDetails: result.phoneDetails,
+      allWabas: result.allWabas,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message ?? "Discovery failed" });
+  }
+});
+
 /* ─── Helper: auto-discover WABA + phone via Graph API chain ── */
 async function discoverWabaAndPhone(token: string): Promise<{
   wabaId: string | null;
