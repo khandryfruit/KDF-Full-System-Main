@@ -1,0 +1,585 @@
+# TCS Courier Complete API Integration Guide (Production Ready)
+
+## Overview
+
+This document explains:
+
+* TCS Authentication Flow
+* Bearer Token Generation
+* Access Token Generation
+* Shipment Booking
+* Tracking
+* Label Printing
+* Shopify Order Integration
+* Debugging System
+* Postman Testing Flow
+* Production Deployment Fixes
+
+This architecture is designed for:
+
+* Laravel Backend
+* Shopify Admin Integration
+* Replit Deployment
+* Production Domains
+* WhatsApp Automation
+
+---
+
+# IMPORTANT — TCS Uses 2 Different Tokens
+
+TCS authentication works in TWO steps.
+
+## STEP 1
+
+Generate Bearer Token
+
+## STEP 2
+
+Generate Access Token
+
+These tokens are DIFFERENT.
+
+Never overwrite one token with another.
+
+---
+
+# Environment URLs
+
+## Production
+
+### Auth API
+
+[https://ociconnect.tcscourier.com/auth/api/auth](https://ociconnect.tcscourier.com/auth/api/auth)
+
+### ECOM Auth
+
+[https://ociconnect.tcscourier.com/ecom/api/authentication/token](https://ociconnect.tcscourier.com/ecom/api/authentication/token)
+
+### Booking API
+
+[https://ociconnect.tcscourier.com/ecom/api/shipment/book](https://ociconnect.tcscourier.com/ecom/api/shipment/book)
+
+### Label API
+
+[https://ociconnect.tcscourier.com/ecom/api/print/label](https://ociconnect.tcscourier.com/ecom/api/print/label)
+
+### Tracking
+
+[https://ociconnect.tcscourier.com/tracking/index.html](https://ociconnect.tcscourier.com/tracking/index.html)
+
+---
+
+## Sandbox
+
+### Auth API
+
+[https://devconnect.tcscourier.com/auth/api/auth](https://devconnect.tcscourier.com/auth/api/auth)
+
+### ECOM Auth
+
+[https://devconnect.tcscourier.com/ecom/api/authentication/token](https://devconnect.tcscourier.com/ecom/api/authentication/token)
+
+---
+
+# REQUIRED DATABASE TABLE
+
+```sql
+CREATE TABLE courier_tokens (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    provider VARCHAR(50),
+    bearer_token TEXT,
+    access_token TEXT,
+    expires_at DATETIME,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL
+);
+```
+
+---
+
+# ENV VARIABLES
+
+```env
+TCS_CLIENT_ID=YOUR_CLIENT_ID
+TCS_CLIENT_SECRET=YOUR_CLIENT_SECRET
+
+TCS_USERNAME=LGEC11060
+TCS_PASSWORD=YOUR_PASSWORD
+
+TCS_ACCOUNT_NUMBER=LGEC11060
+
+TCS_ENV=production
+
+TCS_DIRECT_ACCESS_TOKEN=
+```
+
+---
+
+# COMPLETE AUTHENTICATION FLOW
+
+## STEP 1 — Generate Bearer Token
+
+### Laravel Example
+
+```php
+public function generateBearerToken()
+{
+    $url = 'https://ociconnect.tcscourier.com/auth/api/auth';
+
+    $response = Http::post($url, [
+        'clientid' => env('TCS_CLIENT_ID'),
+        'clientsecret' => env('TCS_CLIENT_SECRET')
+    ]);
+
+    if (!$response->successful()) {
+        throw new Exception('Bearer Token Failed: ' . $response->body());
+    }
+
+    $data = $response->json();
+
+    return $data['accessToken'];
+}
+```
+
+---
+
+# STEP 2 — Generate Access Token
+
+```php
+public function generateAccessToken($bearerToken)
+{
+    $url = 'https://ociconnect.tcscourier.com/ecom/api/authentication/token';
+
+    $response = Http::withHeaders([
+        'Authorization' => 'Bearer ' . $bearerToken,
+        'Content-Type' => 'application/json'
+    ])->post($url, [
+        'username' => env('TCS_USERNAME'),
+        'password' => env('TCS_PASSWORD')
+    ]);
+
+    if (!$response->successful()) {
+        throw new Exception('Access Token Failed: ' . $response->body());
+    }
+
+    $data = $response->json();
+
+    return $data['accesstoken'];
+}
+```
+
+---
+
+# IMPORTANT TOKEN LOGIC
+
+```php
+$bearerToken = generateBearerToken();
+$accessToken = generateAccessToken($bearerToken);
+```
+
+Never do:
+
+```php
+$accessToken = $bearerToken;
+```
+
+This causes:
+
+* HTTP 403
+* Invalid access token
+* Booking failures
+
+---
+
+# DIRECT ACCESS TOKEN SUPPORT
+
+If TCS emails a direct token:
+
+```php
+if(env('TCS_DIRECT_ACCESS_TOKEN')) {
+    $accessToken = env('TCS_DIRECT_ACCESS_TOKEN');
+}
+```
+
+---
+
+# BOOK SHIPMENT API
+
+```php
+public function bookShipment($order)
+{
+    $token = $this->getAccessToken();
+
+    $url = 'https://ociconnect.tcscourier.com/ecom/api/shipment/book';
+
+    $payload = [
+        'consigneeName' => $order->customer_name,
+        'consigneeAddress' => $order->address,
+        'consigneeMobNo' => $order->phone,
+        'shipperName' => 'Khan Dry Fruits',
+        'weightInKg' => number_format($order->weight, 1),
+        'pieces' => 1,
+        'codAmount' => $order->total,
+        'orderReferenceNo' => $order->id,
+        'serviceType' => 'OVERNIGHT',
+        'originCityName' => 'Lahore',
+        'destinationCityName' => $order->city
+    ];
+
+    $response = Http::withHeaders([
+        'Authorization' => 'Bearer ' . $token,
+        'Content-Type' => 'application/json'
+    ])->post($url, $payload);
+
+    if (!$response->successful()) {
+        Log::error('TCS Booking Error', [
+            'status' => $response->status(),
+            'body' => $response->body()
+        ]);
+
+        throw new Exception($response->body());
+    }
+
+    return $response->json();
+}
+```
+
+---
+
+# WEIGHT FIX
+
+TCS requires decimal weight.
+
+Correct:
+
+```php
+0.5
+1.0
+2.5
+```
+
+Wrong:
+
+```php
+1
+null
+''
+```
+
+Always use:
+
+```php
+number_format($weight, 1)
+```
+
+---
+
+# DUPLICATE BOOKING PROTECTION
+
+```php
+if($order->tcs_cn_number) {
+    throw new Exception('Shipment already booked');
+}
+```
+
+Add database field:
+
+```sql
+ALTER TABLE orders
+ADD COLUMN tcs_cn_number VARCHAR(100) NULL;
+```
+
+---
+
+# TRACKING URL
+
+```php
+$trackingUrl = 'https://ociconnect.tcscourier.com/tracking/index.html?consignment=' . $cn;
+```
+
+---
+
+# LABEL PRINTING
+
+```php
+public function printLabel($cn)
+{
+    $token = $this->getAccessToken();
+
+    $url = 'https://ociconnect.tcscourier.com/ecom/api/print/label';
+
+    return Http::withHeaders([
+        'Authorization' => 'Bearer ' . $token
+    ])->post($url, [
+        'consignmentNo' => $cn
+    ]);
+}
+```
+
+---
+
+# SHOPIFY WORKFLOW
+
+## Order Created
+
+1. Shopify webhook received
+2. Order saved
+3. WhatsApp confirmation sent
+4. Admin books courier
+5. TCS CN generated
+6. Tracking attached
+7. Customer receives WhatsApp tracking
+8. Label printable
+
+---
+
+# REQUIRED SHOPIFY ORDER FIELDS
+
+```php
+customer_name
+phone
+address
+city
+postal_code
+payment_method
+order_total
+weight
+```
+
+---
+
+# REQUIRED DEBUGGING PANEL
+
+Show:
+
+* API URL
+* Request payload
+* Response payload
+* HTTP status
+* Token expiry
+* Environment
+* Booking status
+* CN number
+* Tracking URL
+* Label URL
+
+---
+
+# PRODUCTION DOMAIN ISSUE FIX
+
+Current issue:
+
+Works locally
+Fails on:
+
+admin.khanbabadryfruits.com
+
+## REQUIRED FIXES
+
+### 1. Backend Only Requests
+
+Never call TCS APIs from frontend.
+
+Wrong:
+
+```javascript
+fetch('https://ociconnect.tcscourier.com/...')
+```
+
+Correct:
+
+Frontend → Laravel API → TCS API
+
+---
+
+### 2. Replit Secrets
+
+Ensure ALL ENV variables exist in production deployment.
+
+---
+
+### 3. HTTPS
+
+Ensure:
+
+```php
+URL::forceScheme('https');
+```
+
+---
+
+### 4. CORS
+
+```php
+'allowed_origins' => ['https://admin.khanbabadryfruits.com']
+```
+
+---
+
+# POSTMAN TEST FLOW
+
+## TEST 1 — Generate Bearer Token
+
+### Method
+
+POST
+
+### URL
+
+[https://ociconnect.tcscourier.com/auth/api/auth](https://ociconnect.tcscourier.com/auth/api/auth)
+
+### Body
+
+```json
+{
+  "clientid": "YOUR_CLIENT_ID",
+  "clientsecret": "YOUR_CLIENT_SECRET"
+}
+```
+
+Expected:
+
+```json
+{
+  "accessToken": "TOKEN"
+}
+```
+
+---
+
+# TEST 2 — Generate Access Token
+
+### Method
+
+POST
+
+### URL
+
+[https://ociconnect.tcscourier.com/ecom/api/authentication/token](https://ociconnect.tcscourier.com/ecom/api/authentication/token)
+
+### Headers
+
+```text
+Authorization: Bearer TOKEN
+Content-Type: application/json
+```
+
+### Body
+
+```json
+{
+  "username": "LGEC11060",
+  "password": "YOUR_PASSWORD"
+}
+```
+
+Expected:
+
+```json
+{
+  "accesstoken": "TOKEN"
+}
+```
+
+---
+
+# TEST 3 — Book Shipment
+
+### Method
+
+POST
+
+### URL
+
+[https://ociconnect.tcscourier.com/ecom/api/shipment/book](https://ociconnect.tcscourier.com/ecom/api/shipment/book)
+
+### Headers
+
+```text
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+```
+
+### Body
+
+```json
+{
+  "consigneeName": "Ali Khan",
+  "consigneeAddress": "Johar Town Lahore",
+  "consigneeMobNo": "03001234567",
+  "shipperName": "Khan Dry Fruits",
+  "weightInKg": 1.0,
+  "pieces": 1,
+  "codAmount": 2500,
+  "orderReferenceNo": "KDF-1001",
+  "serviceType": "OVERNIGHT",
+  "originCityName": "Lahore",
+  "destinationCityName": "Karachi"
+}
+```
+
+Expected:
+
+```json
+{
+  "consignmentNo": "123456789"
+}
+```
+
+---
+
+# WHATSAPP AUTOMATION FLOW
+
+## ORDER CONFIRMED
+
+Send:
+
+* Order ID
+* Customer name
+* Amount
+* Address
+* Tracking link
+* Courier name
+
+---
+
+## RIDER ASSIGNED
+
+Send:
+
+* Rider name
+* Rider phone
+* ETA
+* Tracking URL
+
+---
+
+# FINAL REQUIREMENTS
+
+Need:
+
+* Real booking
+* Real tracking
+* Real labels
+* Real CN generation
+* Real production authentication
+* Proper logs
+* Stable deployment
+* No duplicate bookings
+* Shopify sync
+* WhatsApp sync
+* Professional debugging tools
+
+---
+
+# IMPORTANT SECURITY NOTE
+
+Never expose:
+
+* TCS password
+* Client secret
+* Tokens
+
+inside frontend JavaScript.
+
+All courier APIs must run from backend only.

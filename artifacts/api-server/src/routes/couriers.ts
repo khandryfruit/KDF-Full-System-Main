@@ -194,7 +194,98 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       });
     }
 
-    /* ── Step 3: Live Tracking API test ── */
+    /* ── Step 3: ECOM Access Token (Step-2 auth) ── */
+    const username = (settings.username ?? "").trim();
+    const password = (settings.password ?? "").trim();
+    const manualAccessToken = (settings.accessToken ?? "").trim();
+
+    if (manualAccessToken) {
+      steps.push({
+        step: "ECOM Access Token (Step-2)",
+        status: "ok",
+        detail: [
+          `Mode: ✅ Direct ECOM Access Token (manual — Step-2 skipped)`,
+          `Token tail: ●●●●…${manualAccessToken.slice(-12)}`,
+          `This token goes into the booking body as "accesstoken".`,
+        ].join("\n"),
+      });
+    } else if (username && password) {
+      /* Try to generate ECOM token live */
+      try {
+        const ecomUrl = `${baseUrl}/ecom/api/authentication/token`;
+        const ecomResp = await fetch(ecomUrl, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(15000),
+        });
+        let ecomData: Record<string, any> = {};
+        try { ecomData = await ecomResp.json(); } catch { ecomData = {}; }
+        const ecomToken =
+          ecomData.accessToken ?? ecomData.accesstoken ??
+          ecomData.token ??
+          ecomData.result?.accessToken ?? ecomData.result?.accesstoken ??
+          ecomData.data?.accessToken ?? ecomData.data?.token;
+
+        if (ecomToken) {
+          /* Cache immediately */
+          const cacheKey = `${settings.tcsaccount ?? ""}:${username}`;
+          tcsEcomCache.set(cacheKey, { token: ecomToken, expiresAt: Date.now() + 55 * 60 * 1000 });
+          steps.push({
+            step: "ECOM Access Token (Step-2)",
+            status: "ok",
+            detail: [
+              `Mode: ✅ Auto-generated via Step-2 (username + password + bearer)`,
+              `Endpoint: POST ${ecomUrl}`,
+              `HTTP Status: ${ecomResp.status}`,
+              `Username: ${username}`,
+              `Token tail: ●●●●…${ecomToken.slice(-12)}`,
+              `Cached for 55 minutes — will auto-refresh before expiry.`,
+            ].join("\n"),
+            raw: JSON.stringify(ecomData).slice(0, 300),
+          });
+        } else {
+          const msg = ecomData.message ?? ecomData.statusMessage ?? ecomData.error ?? `HTTP ${ecomResp.status}`;
+          steps.push({
+            step: "ECOM Access Token (Step-2)",
+            status: "fail",
+            detail: [
+              `❌ Step-2 auth failed: ${msg}`,
+              `Endpoint: POST ${ecomUrl}`,
+              `HTTP Status: ${ecomResp.status}`,
+              `Username: ${username}`,
+              `Fix: Check TCS Username + Password, OR paste a Direct ECOM Access Token in Advanced Settings.`,
+            ].join("\n"),
+            raw: JSON.stringify(ecomData).slice(0, 300),
+          });
+          const serverIp = await getServerIp();
+          res.json({ ok: false, steps, serverIp, error: `TCS Step-2 auth failed: ${msg}` });
+          return;
+        }
+      } catch (e: any) {
+        steps.push({
+          step: "ECOM Access Token (Step-2)",
+          status: "warn",
+          detail: `Network/timeout error during Step-2: ${e.message}\n\nMay be a firewall restriction. Try pasting a Direct ECOM Access Token.`,
+        });
+      }
+    } else {
+      steps.push({
+        step: "ECOM Access Token (Step-2)",
+        status: "fail",
+        detail: [
+          `❌ Cannot generate ECOM Access Token — no username/password configured.`,
+          `Fix options:`,
+          `  A) Add TCS Username + Password in Courier Settings (auto Step-2)`,
+          `  B) Paste a Direct ECOM Access Token in Advanced Settings → "Direct ECOM Access Token"`,
+        ].join("\n"),
+      });
+      const serverIp = await getServerIp();
+      res.json({ ok: false, steps, serverIp, error: "ECOM Access Token not available — configure username/password or paste a Direct Access Token" });
+      return;
+    }
+
+    /* ── Step 4: Live Tracking API test ── */
     const trackUrl = `${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`;
     try {
       const trackResp = await fetch(trackUrl, {
@@ -232,7 +323,7 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       });
     }
 
-    /* ── Step 4: Server IP ── */
+    /* ── Step 5: Server IP ── */
     const serverIp = await getServerIp();
     steps.push({
       step: "Server Outbound IP",
@@ -242,17 +333,26 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
 
     res.json({
       ok: true,
-      mode: "static-bearer",
+      mode: manualAccessToken ? "direct-ecom-manual" : "step2-auto",
       sandbox: !!(settings.sandbox),
       serverIp,
       steps,
-      hint: "Static Bearer Token auth is configured. All TCS API calls use Authorization: Bearer <token> — no ECOM token, no username/password.",
+      hint: manualAccessToken
+        ? "Direct ECOM Access Token mode — manual token in settings bypasses Step-2. To switch to auto Step-2, clear the Direct ECOM Access Token field."
+        : "Auto Step-2 mode — ECOM Access Token is auto-generated from Username + Password + Bearer (cached 55 min).",
     });
     return;
   } catch (err: any) {
     steps.push({ step: "Fatal Error", status: "fail", detail: err.message });
     res.status(500).json({ ok: false, steps, error: err.message });
   }
+});
+
+/* ─── Admin: TCS – Clear ECOM token cache ────────────── */
+router.post("/admin/couriers/tcs/clear-cache", adminMiddleware as any, async (_req: AuthRequest, res: Response): Promise<void> => {
+  const count = tcsEcomCache.size;
+  tcsEcomCache.clear();
+  res.json({ ok: true, cleared: count, message: `Cleared ${count} cached ECOM token(s). Next booking will generate a fresh token via Step-2.` });
 });
 
 /* ─── Admin: TCS – CN / Label Print ─────────────────── */
@@ -1721,7 +1821,9 @@ async function sendCourierNotification(shipment: any, newStatus: string, req: an
 const TCS_SANDBOX_URL = "https://devconnect.tcscourier.com";
 const TCS_PROD_URL = "https://ociconnect.tcscourier.com";
 
-/* In-memory TCS token cache — 50-min TTL, auto-refreshes on next request */
+/* ── TCS ECOM token in-memory cache — 55-min TTL, auto-refreshes on next booking ── */
+interface TcsEcomCacheEntry { token: string; expiresAt: number; }
+const tcsEcomCache = new Map<string, TcsEcomCacheEntry>();
 /* ─── Courier tracking URLs ──────────────────────────── */
 function getTrackingUrl(slug: string, trackingId: string): string {
   const id = encodeURIComponent(trackingId);
@@ -1829,6 +1931,82 @@ async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox
   throw new Error("TCS Authorization API — no token returned. Check clientId and clientSecret.");
 }
 
+
+/**
+ * TCS Step-2: Generate ECOM Access Token (goes in booking body as `accesstoken`).
+ *
+ * Priority:
+ *   1. settings.accessToken (Direct ECOM Access Token — manual, bypasses Step 2)
+ *   2. In-memory cache (55-min TTL)
+ *   3. POST /ecom/api/authentication/token  with bearer + username + password
+ *
+ * Throws a descriptive error if neither manual token nor credentials are available.
+ */
+async function getTcsEcomToken(settings: Record<string, any>, bearer: string, baseUrl: string): Promise<string> {
+  /* Priority 1: Manual Direct ECOM Access Token pasted by admin */
+  const manual = (settings.accessToken ?? "").trim();
+  if (manual) {
+    logger.info({ src: "manual" }, "TCS ECOM token — using Direct Access Token from settings");
+    return manual;
+  }
+
+  const username = (settings.username ?? "").trim();
+  const password = (settings.password ?? "").trim();
+
+  if (!username || !password) {
+    throw new Error(
+      "TCS: ECOM Access Token required. Either (a) paste a Direct ECOM Access Token in " +
+      "Courier → TCS → Advanced Settings → \"Direct ECOM Access Token\" field, OR " +
+      "(b) configure your TCS Username + Password so it can be auto-generated."
+    );
+  }
+
+  /* Priority 2: In-memory cache (keyed by account + username) */
+  const cacheKey = `${settings.tcsaccount ?? ""}:${username}`;
+  const cached = tcsEcomCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    logger.info({ cacheKey, expiresInMin: Math.round((cached.expiresAt - Date.now()) / 60000) }, "TCS ECOM token — cache hit");
+    return cached.token;
+  }
+
+  /* Priority 3: Call Step-2 auth endpoint */
+  const url = `${baseUrl}/ecom/api/authentication/token`;
+  logger.info({ url, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — calling Step-2 auth");
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  let data: Record<string, any> = {};
+  try { data = await resp.json(); } catch { data = {}; }
+
+  const token =
+    data.accessToken ?? data.accesstoken ??
+    data.token ??
+    data.result?.accessToken ?? data.result?.accesstoken ??
+    data.data?.accessToken ?? data.data?.token;
+
+  if (!token) {
+    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status}`;
+    throw new Error(
+      `TCS ECOM token (Step-2) failed: ${msg}. ` +
+      `Verify Username/Password in TCS settings, or paste a Direct ECOM Access Token to skip Step-2.`
+    );
+  }
+
+  /* Cache with 55-min TTL (or API-provided expiresIn if shorter) */
+  const ttlMs = typeof data.expiresIn === "number"
+    ? Math.min(data.expiresIn * 1000, 55 * 60 * 1000)
+    : 55 * 60 * 1000;
+
+  tcsEcomCache.set(cacheKey, { token, expiresAt: Date.now() + ttlMs });
+  logger.info({ tcsaccount: settings.tcsaccount, username, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
+
+  return token;
+}
 
 /**
  * TCS weight formatter — returns a STRING decimal e.g. "0.50", "1.00", "1.25".
@@ -1948,23 +2126,20 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       },
     };
 
-    /* ── Booking request ────────────────────────────────────────────────────
+    /* ── Step 2: Get ECOM Access Token (goes in booking body) ───────────────
        TCS requires BOTH:
-         1. Header:  Authorization: Bearer <bearerToken>  (ENVO Portal static token)
-         2. Body:    accesstoken: <ecomToken>             (ECOM access token)
-       If a dedicated accessToken is saved in settings, use it in the body.
-       Otherwise fall back to the same bearer token (works when TCS issued one
-       token that serves both roles, as confirmed via the debug endpoint).        */
-    const bodyAccessToken = settings.accessToken?.trim() || bearer;
-    const bookingPayload = { ...payload, accesstoken: bodyAccessToken };
+         1. Header:  Authorization: Bearer <bearerToken>   (ENVO Portal static token)
+         2. Body:    accesstoken: <ecomToken>              (Step-2 ECOM access token)
+       getTcsEcomToken() handles: manual override → cache → Step-2 API call.       */
+    const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
+    const bookingPayload = { ...payload, accesstoken: ecomToken };
 
     const finalWeight = payload.shipmentinfo.weightinkg;
     logger.info({
       finalWeight,
-      tcsaccount:       settings.tcsaccount,
-      hasBodyAccessTok: !!bodyAccessToken,
-      bodyTokSrc:       settings.accessToken?.trim() ? "settings.accessToken" : "bearer (fallback)",
-      sandbox:          !!settings.sandbox,
+      tcsaccount:  settings.tcsaccount,
+      ecomTokSrc:  settings.accessToken?.trim() ? "Direct (manual)" : (tcsEcomCache.has(`${settings.tcsaccount ?? ""}:${(settings.username ?? "").trim()}`) ? "cache" : "Step-2 fresh"),
+      sandbox:     !!settings.sandbox,
       baseUrl,
     }, "TCS booking — payload summary");
 

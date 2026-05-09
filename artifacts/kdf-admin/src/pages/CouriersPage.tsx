@@ -208,13 +208,21 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
       setShowDebug(true);
       if (d.ok) {
         setTokenStatus("ok");
-        toast({ title: "✅ TCS Auth Debug Complete", description: `Mode: ${d.mode} · All checks passed` });
+        toast({ title: "✅ TCS Auth Debug Complete", description: "All steps passed — ECOM token ready" });
       } else {
         setTokenStatus("fail");
         toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error?.slice(0, 120) ?? "See debug panel below" });
       }
     },
     onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
+  });
+
+  const clearCache = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/clear-cache", { method: "POST" }),
+    onSuccess: (d: any) => {
+      toast({ title: "🗑 Token Cache Cleared", description: d.message ?? "Next booking will auto-generate a fresh ECOM token via Step-2" });
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Clear failed", description: e.message }),
   });
 
   const toggleActive = useMutation({
@@ -428,6 +436,15 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
           </div>
 
+          {/* ── Warning: manual ECOM token set ── */}
+          {config && cs.accessToken && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">⚠ Direct ECOM Access Token is set</p>
+              <p>A manual ECOM token in Advanced Settings is bypassing auto Step-2. If you're getting "Invalid access token", this token may be wrong or expired.</p>
+              <p className="font-medium">Fix: Clear the "Direct ECOM Access Token" field in Advanced Settings → Save → Run Auth Debug.</p>
+            </div>
+          )}
+
           {/* ── Action Buttons ── */}
           {config && (
             <div className="grid grid-cols-2 gap-2">
@@ -440,6 +457,11 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 onClick={() => refreshToken.mutate()} disabled={refreshToken.isPending}>
                 {refreshToken.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                 Run Auth Debug
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs text-red-700 border-red-200 hover:bg-red-50"
+                onClick={() => clearCache.mutate()} disabled={clearCache.isPending}>
+                {clearCache.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Clear Token Cache
               </Button>
               <a href="https://ociconnect.tcscourier.com" target="_blank" rel="noopener noreferrer"
                 className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
@@ -474,14 +496,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   <p className="text-yellow-300 font-bold text-xs">TCS API — 2-Token Architecture</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p><span className="text-blue-300">TOKEN 1</span> · ENVO Bearer Token</p>
-                  <p className="text-slate-400 pl-2">→ From TCS ENVO Portal (paste below)</p>
+                  <p className="text-slate-400 pl-2">→ From TCS ENVO Portal → paste below</p>
                   <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">Authorization: Bearer …</span> header</p>
-                  <p className="text-slate-400 pl-2">→ Used for: ALL TCS API calls</p>
+                  <p className="text-slate-400 pl-2">→ Required for ALL TCS API calls</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p><span className="text-orange-300">TOKEN 2</span> · ECOM Access Token</p>
-                  <p className="text-slate-400 pl-2">→ Generated: POST /ecom/api/authentication/token</p>
-                  <p className="text-slate-400 pl-2">→ Using: Bearer (above) + Username + Password</p>
-                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">body.accesstoken</span> field</p>
+                  <p className="text-slate-400 pl-2">→ <span className="text-green-300">AUTO:</span> POST /ecom/api/authentication/token</p>
+                  <p className="text-slate-400 pl-2">   using Bearer + Username + Password above</p>
+                  <p className="text-slate-400 pl-2">   cached 55 min, auto-refreshes on booking</p>
+                  <p className="text-slate-400 pl-2">→ <span className="text-yellow-300">MANUAL:</span> paste "Direct ECOM Token" below</p>
+                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">booking body.accesstoken</span> field</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p className="text-amber-300">⚠ These are DIFFERENT tokens. Do NOT mix them.</p>
                 </div>
@@ -521,18 +545,18 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   </div>
                 </div>
 
-                {/* Direct ECOM Access Token — bypass shortcut */}
+                {/* Direct ECOM Access Token — manual bypass */}
                 <div className="space-y-1.5 pt-1 border-t border-border/50">
                   <Label className="text-xs font-medium text-orange-800">
                     Direct ECOM Access Token
-                    <span className="ml-1 font-normal text-muted-foreground">(optional — skip Step 2)</span>
+                    <span className="ml-1 font-normal text-muted-foreground">(optional — bypasses Step-2 auto-generation)</span>
                   </Label>
-                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ECOM Access Token from TCS (separate from Bearer Token above)" className="text-xs font-mono" />
-                  <p className="text-[10px] text-muted-foreground">
-                    Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>.
-                    If left blank, the Bearer Token above is used as fallback (works when TCS issues one token for both roles).
-                    If TCS gave you a separate "Access Token" via email — paste it here.
-                  </p>
+                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Only if TCS emailed you a separate ECOM token" className="text-xs font-mono" />
+                  <div className="text-[10px] text-muted-foreground space-y-0.5">
+                    <p>Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>.</p>
+                    <p className="text-green-700 font-medium">✅ If blank: auto-generated via Step-2 (Username + Password + Bearer) — cached 55 min.</p>
+                    <p>Only paste here if TCS sent you a "Direct Access Token" separately. Overrides auto Step-2.</p>
+                  </div>
                 </div>
 
                 {/* Shipping Defaults */}

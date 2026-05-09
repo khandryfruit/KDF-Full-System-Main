@@ -1,0 +1,186 @@
+TCS INVALID ACCESS TOKEN — FINAL MASTER FIX
+
+Current Error:
+“TCS: Invalid access token [tcsaccount: LGEC11060]”
+
+Configured Credentials:
+
+* TCS Username: LGEC11060
+* TCS Account Number: LGEC11060
+
+This confirms:
+✔ Credentials are loading correctly
+✔ TCS account exists
+✔ API endpoint is reachable
+❌ But the Access Token is invalid / expired / incorrectly generated
+
+IMPORTANT:
+TCS uses TWO DIFFERENT TOKENS:
+
+1. Bearer Token
+2. Access Token
+
+These are NOT the same.
+
+Do NOT overwrite one token with another.
+
+==================================================
+REQUIRED FIXES
+==============
+
+1. CLEAR ALL OLD TOKENS
+
+Delete:
+✔ cached tokens
+✔ database tokens
+✔ old ENV tokens
+✔ memory/session cache
+
+Generate completely fresh authentication.
+
+==================================================
+2. REBUILD TCS AUTH FLOW PROPERLY
+
+STEP 1 — AUTHORIZATION TOKEN
+
+Generate Bearer Token from official TCS auth API.
+
+STEP 2 — ECOM ACCESS TOKEN
+
+Generate Access Token using:
+✔ TCS Username
+✔ TCS Password
+✔ Bearer Token
+
+Store separately:
+✔ bearer_token
+✔ access_token
+
+==================================================
+3. DIRECT ACCESS TOKEN SUPPORT
+
+TCS sometimes sends Direct Access Token by email.
+
+Add new field:
+✔ Direct Access Token
+
+If enabled:
+✔ bypass Step-2 authentication
+✔ use Direct Access Token directly
+
+Add toggle:
+✔ Use Manual Token
+✔ Use Auto Authentication
+
+==================================================
+4. PRODUCTION DOMAIN ISSUE
+
+Current behavior:
+✔ Works on Replit preview/local
+❌ Fails after publish on:
+admin.khanbabadryfruits.com
+
+Check:
+✔ Replit Secrets
+✔ production ENV variables
+✔ HTTPS
+✔ reverse proxy
+✔ deployment config
+✔ backend server requests
+✔ CORS
+✔ firewall restrictions
+
+IMPORTANT:
+TCS APIs must be called ONLY from backend server.
+
+Never from frontend browser.
+
+==================================================
+5. TOKEN DEBUGGING PANEL
+
+Add professional debugging system:
+
+Show:
+✔ Bearer token generated?
+✔ Access token generated?
+✔ token expiry
+✔ auth environment
+✔ request URL
+✔ request headers
+✔ response body
+✔ HTTP status
+✔ traceid
+
+==================================================
+6. AUTO TOKEN REFRESH
+
+Implement:
+✔ token expiry detection
+✔ auto refresh before expiry
+✔ retry failed auth once
+✔ fallback handling
+
+==================================================
+7. VALIDATE TOKEN BEFORE BOOKING
+
+Before creating shipment:
+
+✔ verify token active
+✔ verify account linked
+✔ verify production environment
+✔ verify permissions
+
+==================================================
+8. REAL BOOKING ONLY
+
+Current system sometimes creates fake booking.
+
+Need:
+✔ real TCS booking
+✔ real CN generation
+✔ portal sync
+✔ shipment visible on TCS portal
+
+==================================================
+9. SHOPIFY ORDER INTEGRATION
+
+When booking Shopify order:
+✔ booking must save real CN
+✔ tracking URL auto attach
+✔ customer name must match Shopify order
+✔ courier booking must sync with order
+
+Tracking URL:
+[https://ociconnect.tcscourier.com/tracking/index.html](https://ociconnect.tcscourier.com/tracking/index.html)
+
+==================================================
+10. LABEL PRINTING
+
+Implement:
+✔ Print Label
+✔ Download PDF
+✔ Thermal label
+✔ A4 label
+
+Booking label must include:
+✔ customer name
+✔ address
+✔ phone
+✔ order ID
+✔ tracking/CN number
+
+==================================================
+11. FINAL GOAL
+
+Need stable production-ready courier system with:
+✔ real authentication
+✔ real booking
+✔ real tracking
+✔ real labels
+✔ Shopify sync
+✔ debugging tools
+✔ production-safe deployment
+✔ scalable architecture
+
+Official TCS Portal:
+[https://ociconnect.tcscourier.com/ecom/index.html](https://ociconnect.tcscourier.com/ecom/index.html)
