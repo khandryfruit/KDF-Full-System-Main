@@ -1,11 +1,15 @@
 /**
  * TCS Courier Integration — Clean Modular Implementation
- * Official TCS COD API v1.0 | Built from scratch
  *
- * Auth Flow:
+ * Booking Auth Flow (ociconnect.tcscourier.com):
  *   Step 1 → POST /auth/api/auth          {clientId, clientSecret}  → bearerToken
  *   Step 2 → GET  /ecom/api/authentication/token + Bearer header   → accesstoken
  *   Book   → POST /ecom/api/booking/create + Bearer header + accesstoken in body
+ *
+ * Tracking API (api.tcscourier.com — IBM API Gateway, completely separate):
+ *   GET /production/track/v1/shipments/detail?consignmentNo={CN}
+ *   Header: X-IBM-Client-Id: {trackingClientId}
+ *   Note: trackingClientId is different from booking clientId/clientSecret
  */
 
 import https from "node:https";
@@ -13,21 +17,28 @@ import http  from "node:http";
 import { logger } from "./logger";
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
+/* Booking API (ECOM, 3-step auth) */
 export const TCS_PROD_URL    = "https://ociconnect.tcscourier.com";
 export const TCS_SANDBOX_URL = "https://devconnect.tcscourier.com";
+/* Tracking API (IBM API Gateway — different auth: X-IBM-Client-Id header) */
+export const TCS_TRACK_URL         = "https://api.tcscourier.com/production/track/v1";
+export const TCS_TRACK_SANDBOX_URL = "https://api.tcscourier.com/sandbox/track/v1";
 
 /* ─── Settings shape ────────────────────────────────────────────────────── */
 export interface TcsSettings {
-  /* Step 1 — Bearer Token generation */
+  /* Booking Step 1 — ENVO Portal app credentials → bearerToken */
   clientId:     string;
   clientSecret: string;
-  /* Step 2 — ECOM Access Token */
+  /* Booking Step 2 — TCS user credentials → accesstoken */
   username: string;
   password: string;
+  /* Tracking API — IBM API Gateway (completely separate from booking auth)
+   * Get from: TCS Developer Portal → My Apps → X-IBM-Client-Id            */
+  trackingClientId?: string;
   /* Booking */
-  tcsAccountNo:   string;   /* Actual TCS account from contract — NOT the username */
+  tcsAccountNo:    string;   /* From TCS contract — NOT the username */
   costcentercode?: string;
-  serviceCode?:    string;  /* O=Overnight, S=SameDay, E=Economy, 2D, 3D */
+  serviceCode?:    string;   /* O=Overnight, S=SameDay, E=Economy, 2D, 3D */
   defaultWeight?:  number;
   defaultRemarks?: string;
   /* Shipper info */
@@ -484,53 +495,97 @@ export async function createBooking(
 }
 
 /* ─── Track Shipment ─────────────────────────────────────────────────────
- * POST /tracking/api/Tracking/GetDynamicTrackDetail
- *   Authorization: Bearer {bearerToken}
- *   Body: { consignee: [trackingId] }
+ * Official TCS Tracking API (IBM API Gateway — completely separate from booking):
+ *   GET https://api.tcscourier.com/production/track/v1/shipments/detail
+ *   Query: consignmentNo={CN}
+ *   Header: X-IBM-Client-Id: {trackingClientId}
+ *
+ * Response: { returnStatus: { code, status, message }, TrackDetailReply: { ... } }
+ *   returnStatus.code === "0200" means success.
+ *   DeliveryInfo[].code: OK=delivered, RO=returned, OFD=out_for_delivery
+ *   Checkpoints[].status: "DELIVERED" | "RETURNED" | "IN TRANSIT" etc.
  */
 export async function trackShipment(
   settings: TcsSettings,
   trackingId: string,
 ): Promise<{ status: string; rawResponse: Record<string, any> }> {
-  const { bearerToken, baseUrl } = await getTcsTokens(settings);
-
-  const url = `${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`;
+  const clientId = settings.trackingClientId?.trim();
+  const trackUrl = settings.sandbox ? TCS_TRACK_SANDBOX_URL : TCS_TRACK_URL;
+  const url = `${trackUrl}/shipments/detail?consignmentNo=${encodeURIComponent(trackingId)}`;
   const t0  = Date.now();
 
-  logger.info({ url, trackingId }, "TCS tracking — calling");
+  /* If no tracking clientId configured, return graceful fallback */
+  if (!clientId) {
+    logger.warn({ trackingId }, "TCS tracking — trackingClientId not configured");
+    return {
+      status: "in_transit",
+      rawResponse: {
+        note: "TCS Tracking Client ID (X-IBM-Client-Id) not configured. Add it in Couriers → TCS Settings → Tracking API Client ID.",
+      },
+    };
+  }
+
+  logger.info({ url, trackingId }, "TCS tracking — calling official tracking API");
 
   let result: Awaited<ReturnType<typeof httpReq>>;
   try {
-    result = await httpReq(url, "POST", { "Authorization": `Bearer ${bearerToken}` }, { consignee: [trackingId] }, 15000);
+    result = await httpReq(
+      url, "GET",
+      { "X-IBM-Client-Id": clientId, "Accept": "application/json" },
+      undefined,
+      15000,
+    );
   } catch (netErr: any) {
-    pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "POST", httpStatus: null, success: false, error: netErr.message, durationMs: Date.now() - t0 });
+    pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: null, success: false, error: netErr.message, durationMs: Date.now() - t0 });
     return { status: "in_transit", rawResponse: { error: netErr.message } };
   }
 
   const { status, text, data } = result;
   const durationMs = Date.now() - t0;
-  pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "POST", reqBody: `{consignee: ["${trackingId}"]}`, httpStatus: status, resBody: text.slice(0, 400), durationMs, success: status < 400 });
+  pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: status, resBody: text.slice(0, 600), durationMs, success: status < 400 });
 
-  if (data.message === "FAIL" || !data.checkpoints) {
+  /* Check TCS returnStatus envelope */
+  const rs = data?.returnStatus ?? {};
+  if (rs.code && rs.code !== "0200") {
+    logger.warn({ code: rs.code, message: rs.message, trackingId }, "TCS tracking — non-success returnStatus");
     return { status: "in_transit", rawResponse: data };
   }
 
-  const checkpoints: any[] = Array.isArray(data.checkpoints) ? data.checkpoints : [];
-  const deliveryinfo: any[] = Array.isArray(data.deliveryinfo) ? data.deliveryinfo : [];
-  const latest = deliveryinfo[0];
-  const chk    = checkpoints[0];
+  /* Parse tracking detail — TCS wraps in TrackDetailReply or flat in the body */
+  const detail     = data?.TrackDetailReply ?? data;
+  const deliveries: any[] = Array.isArray(detail?.DeliveryInfo) ? detail.DeliveryInfo : [];
+  const checkpoints: any[] = Array.isArray(detail?.Checkpoints) ? detail.Checkpoints : [];
+
+  const latest = deliveries[0];   /* most-recent delivery event */
+  const chk    = checkpoints[0];  /* most-recent checkpoint */
 
   let shipStatus = "in_transit";
-  if      (latest?.code === "OK")  shipStatus = "delivered";
-  else if (latest?.code === "RO")  shipStatus = "returned";
-  else if (latest?.code === "OFD") shipStatus = "out_for_delivery";
-  else if (chk?.status) {
-    const s = String(chk.status).toLowerCase();
-    if (s.includes("deliver")) shipStatus = "delivered";
-    else if (s.includes("return")) shipStatus = "returned";
-    else if (s.includes("transit") || s.includes("route")) shipStatus = "in_transit";
+
+  /* DeliveryInfo.code mapping (from TCS API docs) */
+  if (latest?.code) {
+    const code = String(latest.code).toUpperCase();
+    if      (code === "OK"  || code === "DEL") shipStatus = "delivered";
+    else if (code === "RO"  || code === "RET") shipStatus = "returned";
+    else if (code === "OFD")                   shipStatus = "out_for_delivery";
+  }
+
+  /* Fall back to DeliveryInfo.status text */
+  if (shipStatus === "in_transit" && latest?.status) {
+    const s = String(latest.status).toLowerCase();
+    if      (s.includes("deliver"))          shipStatus = "delivered";
+    else if (s.includes("return"))           shipStatus = "returned";
     else if (s.includes("out for delivery")) shipStatus = "out_for_delivery";
   }
 
+  /* Fall back to Checkpoints.status */
+  if (shipStatus === "in_transit" && chk?.status) {
+    const s = String(chk.status).toLowerCase();
+    if      (s.includes("deliver"))          shipStatus = "delivered";
+    else if (s.includes("return"))           shipStatus = "returned";
+    else if (s.includes("out for delivery")) shipStatus = "out_for_delivery";
+    else if (s.includes("transit"))          shipStatus = "in_transit";
+  }
+
+  logger.info({ trackingId, shipStatus, durationMs }, "TCS tracking — complete");
   return { status: shipStatus, rawResponse: data };
 }

@@ -121,6 +121,8 @@ interface TcsFormState {
   /* Step 2 — ECOM Auth: GET /ecom/api/authentication/token → accessToken (auto-generated, cached) */
   username: string;
   password: string;
+  /* Tracking API — IBM API Gateway (completely separate from booking) */
+  trackingClientId: string;
   /* Booking fields */
   tcsAccountNo: string;
   costcentercode: string;
@@ -174,6 +176,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const blankForm = (): TcsFormState => ({
     clientId: "", clientSecret: "",
     username: "", password: "",
+    trackingClientId: "",
     tcsAccountNo: "", costcentercode: "",
     shipperName: "", shipperAddress: "", shipperCity: "", shipperCityCode: "", shipperPhone: "",
     sandbox: false,
@@ -188,6 +191,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     setForm({
       clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
       username: s.username ?? "", password: s.password ?? "",
+      trackingClientId: s.trackingClientId ?? "",
       tcsAccountNo: s.tcsAccountNo ?? s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
       shipperCity: s.shipperCity ?? "", shipperCityCode: s.shipperCityCode ?? "",
@@ -408,21 +412,19 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Architecture Guide ── */}
           <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
-            <p className="text-yellow-300 font-bold text-xs">TCS API — 3-Step Auth Flow</p>
-            <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+            <p className="text-yellow-300 font-bold text-xs">TCS API Architecture</p>
+            <p className="text-slate-500 text-[10px]">── Booking (ociconnect.tcscourier.com) ─────────────</p>
             <p><span className="text-blue-300">STEP 1</span> · POST /auth/api/auth</p>
-            <p className="text-slate-400 pl-2">→ Body: clientId + clientSecret</p>
-            <p className="text-slate-400 pl-2">→ Returns: <span className="text-green-300">bearerToken</span> (cached auto)</p>
-            <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+            <p className="text-slate-400 pl-2">→ Body: clientId + clientSecret → <span className="text-green-300">bearerToken</span></p>
             <p><span className="text-orange-300">STEP 2</span> · GET /ecom/api/authentication/token</p>
-            <p className="text-slate-400 pl-2">→ Header: Authorization: Bearer {"{"}<span className="text-green-300">bearerToken</span>{"}"}</p>
-            <p className="text-slate-400 pl-2">→ Query: username + password</p>
-            <p className="text-slate-400 pl-2">→ Returns: <span className="text-orange-300">accesstoken</span> (cached auto)</p>
-            <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+            <p className="text-slate-400 pl-2">→ Bearer header + username/password → <span className="text-orange-300">accesstoken</span></p>
             <p><span className="text-purple-300">STEP 3</span> · POST /ecom/api/booking/create</p>
-            <p className="text-slate-400 pl-2">→ Header: Bearer {"{"}<span className="text-green-300">bearerToken</span>{"}"}</p>
-            <p className="text-slate-400 pl-2">→ Body includes: <span className="text-orange-300">accesstoken</span> field</p>
-            <p className="text-amber-300 mt-1">✅ All tokens auto-generated + cached. No manual pasting.</p>
+            <p className="text-slate-400 pl-2">→ Header: Bearer · Body includes: <span className="text-orange-300">accesstoken</span></p>
+            <p className="text-slate-500 text-[10px] mt-1">── Tracking (api.tcscourier.com — IBM API Gateway) ──</p>
+            <p><span className="text-cyan-300">TRACK</span> · GET /production/track/v1/shipments/detail</p>
+            <p className="text-slate-400 pl-2">→ Header: <span className="text-cyan-300">X-IBM-Client-Id</span> · Query: consignmentNo</p>
+            <p className="text-slate-400 pl-2">→ <strong className="text-red-300">Separate credential</strong> from booking — different portal</p>
+            <p className="text-amber-300 mt-1">✅ All booking tokens auto-generated + cached.</p>
           </div>
 
           {/* ── Step 1: ENVO App Credentials ── */}
@@ -472,6 +474,35 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ── Tracking API (IBM) ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">T</span>
+              Tracking API Client ID
+              <span className="text-xs font-normal text-muted-foreground">(separate IBM portal)</span>
+            </p>
+            <div>
+              <Label className="text-xs font-medium">X-IBM-Client-Id</Label>
+              <Input
+                value={form.trackingClientId}
+                onChange={f("trackingClientId")}
+                placeholder="e.g. a1b2c3d4-e5f6-…"
+                autoComplete="off"
+                className="mt-1 text-xs font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                From <strong>TCS Developer Portal</strong> (developer.tcscourier.com) → My Apps → Credentials → Client ID.
+                This is <strong>different</strong> from the ENVO Portal Client ID above.
+                Used for: <code className="bg-muted px-0.5 rounded">GET /shipments/detail?consignmentNo=CN</code>
+              </p>
+            </div>
+            {!form.trackingClientId && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                Without this, shipment tracking will return <em>in_transit</em> without real data. Booking still works.
+              </div>
+            )}
           </div>
 
           {/* ── Account Info ── */}

@@ -266,12 +266,30 @@ router.post("/admin/couriers/tcs/test-tracking", adminMiddleware as any, async (
     if (!s) { res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured" }] }); return; }
 
     const trackingNumber = (req.body?.trackingNumber ?? "TEST123456").toString();
-    steps.push({ step: "Config", status: "info", detail: `Tracking CN: ${trackingNumber} | mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"}` });
+    const hasTrackingClientId = !!s.trackingClientId?.trim();
+    steps.push({
+      step: "Config",
+      status: hasTrackingClientId ? "info" : "warn",
+      detail: `CN: ${trackingNumber} | mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"} | X-IBM-Client-Id: ${hasTrackingClientId ? "✅ configured" : "⚠ MISSING — tracking will return in_transit without real data. Add Tracking API Client ID from developer.tcscourier.com"}`,
+    });
+    steps.push({
+      step: "API",
+      status: "info",
+      detail: `URL: ${s.sandbox ? "api.tcscourier.com/sandbox" : "api.tcscourier.com/production"}/track/v1/shipments/detail?consignmentNo=${trackingNumber}`,
+    });
 
     let result: { status: string; rawResponse: Record<string, any> };
     try {
       result = await Tcs.trackShipment(s, trackingNumber);
-      steps.push({ step: "Tracking API", status: "ok", detail: `✅ Tracking API reachable | status: ${result.status}`, raw: JSON.stringify(result.rawResponse, null, 2).slice(0, 800) });
+      const isReal = !result.rawResponse?.note;
+      steps.push({
+        step: "Tracking API",
+        status: isReal ? "ok" : "warn",
+        detail: isReal
+          ? `✅ Response received | shipStatus: ${result.status}`
+          : `⚠ ${result.rawResponse?.note ?? "No tracking data"}`,
+        raw: JSON.stringify(result.rawResponse, null, 2).slice(0, 1000),
+      });
     } catch (e: any) {
       steps.push({ step: "Tracking API", status: "fail", detail: e.message });
       res.json({ ok: false, steps, error: e.message }); return;
