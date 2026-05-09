@@ -1109,9 +1109,9 @@ export default function WhatsAppPage() {
     try {
       await loadFbSdk(metaConfig.appId);
 
-      /* If an existing WABA is saved, use phone_zero_step_signup so Meta
-         opens the MIGRATION / QR-linking flow directly instead of "Create new WABA" */
-      const hasExistingWaba = existingWaba?.hasExisting && existingWaba?.wabaId;
+      /* Always use phone_zero_step_signup so Meta presents existing WABA / phone
+         selection rather than forcing "Create new account".
+         This is the correct featureType for attaching existing business assets. */
       const loginParams: Record<string, any> = {
         config_id: metaConfig.configId,
         response_type: "code",
@@ -1119,10 +1119,8 @@ export default function WhatsAppPage() {
         extras: {
           version: 2,
           sessionInfoVersion: 3,
-          ...(hasExistingWaba && {
-            featureType: "phone_zero_step_signup",
-            sessionId: `kdfnuts_${Date.now()}`,
-          }),
+          featureType: "phone_zero_step_signup",
+          sessionId: `kdfnuts_${Date.now()}`,
         },
       };
 
@@ -1130,7 +1128,7 @@ export default function WhatsAppPage() {
         window.removeEventListener("message", messageHandler);
         if (response?.authResponse?.code) {
           const { phone_number_id, waba_id } = metaEmbeddedDataRef.current ?? {};
-          /* Prefer IDs from signup event; fall back to existing saved ones */
+          /* Prefer IDs returned by the signup event; fall back to what we already have saved */
           exchangeMetaToken.mutate({
             code: response.authResponse.code,
             wabaId:        waba_id        ?? existingWaba?.wabaId,
@@ -1513,7 +1511,7 @@ export default function WhatsAppPage() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-blue-900">Connect via Meta — Official Embedded Signup</p>
-                      <p className="text-xs text-blue-700 mt-0.5">Click the button below to open a secure Meta popup. You'll log in to Meta, select your WhatsApp Business Account and phone number — credentials are fetched and saved automatically.</p>
+                      <p className="text-xs text-blue-700 mt-0.5">Click Connect to open a secure Meta popup. Meta will show your <strong>existing</strong> WhatsApp Business Accounts and phone numbers for selection — no new account will be created. Credentials are fetched and saved automatically.</p>
                     </div>
                   </div>
                   <div className="px-5 py-5 space-y-4">
@@ -1539,14 +1537,10 @@ export default function WhatsAppPage() {
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                          {(existingWaba?.hasExisting ? [
-                            { step: "1", title: "Click Reconnect", desc: "Opens Meta popup in migration mode" },
-                            { step: "2", title: "Select KHAN DRY FRUITS", desc: "Existing number auto-detected" },
-                            { step: "3", title: "Scan QR Code", desc: "WhatsApp shows 'Connect this account'" },
-                          ] : [
+                          {([
                             { step: "1", title: "Click Connect", desc: "Opens secure Meta login popup" },
-                            { step: "2", title: "Select Business Account", desc: "Choose your WhatsApp Business Number" },
-                            { step: "3", title: "Auto-Connected", desc: "Token + IDs fetched and saved" },
+                            { step: "2", title: "Select Existing WABA", desc: "Choose KDF MART / KHAN DRY FRUITS — existing assets shown" },
+                            { step: "3", title: "Select Phone Number", desc: "Attach your existing number — no new account created" },
                           ]).map(s => (
                             <div key={s.step} className="flex items-start gap-2.5 p-3 bg-muted/30 rounded-lg border border-border">
                               <span className="w-5 h-5 rounded-full bg-[#1877F2]/10 text-[#1877F2] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>

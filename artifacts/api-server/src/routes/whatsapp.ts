@@ -2187,31 +2187,57 @@ async function discoverWabaAndPhone(token: string): Promise<{
 
   /* Step B: get all business portfolios this user has access to */
   const bizData = await gFetch(
-    `https://graph.facebook.com/${GV}/${userId}/businesses?fields=id,name&limit=10&access_token=${token}`
+    `https://graph.facebook.com/${GV}/${userId}/businesses?fields=id,name&limit=25&access_token=${token}`
   );
   const businesses: any[] = bizData.data ?? [];
 
-  /* Step C: for each business, fetch owned WhatsApp Business Accounts */
+  /* Step C: for each business, fetch BOTH owned AND client WABAs.
+     Existing WABAs attached to an app may appear as "client" accounts,
+     not "owned" ones — so we must check both edges. */
+  const seenIds = new Set<string>();
   const allWabas: Array<{ id: string; name: string; phones: any[] }> = [];
-  for (const biz of businesses) {
-    const wabaData = await gFetch(
-      `https://graph.facebook.com/${GV}/${biz.id}/owned_whatsapp_business_accounts?fields=id,name,currency,timezone_id&access_token=${token}`
+
+  const addWaba = async (waba: any, bizName: string) => {
+    if (seenIds.has(waba.id)) return;
+    seenIds.add(waba.id);
+    const phonesData = await gFetch(
+      `https://graph.facebook.com/${GV}/${waba.id}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status&access_token=${token}`
     );
-    const wabas: any[] = wabaData.data ?? [];
-    for (const waba of wabas) {
-      /* Step D: fetch phone numbers for each WABA */
-      const phonesData = await gFetch(
-        `https://graph.facebook.com/${GV}/${waba.id}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status&access_token=${token}`
-      );
-      allWabas.push({ id: waba.id, name: waba.name ?? biz.name, phones: phonesData.data ?? [] });
-    }
+    allWabas.push({ id: waba.id, name: waba.name ?? bizName, phones: phonesData.data ?? [] });
+  };
+
+  for (const biz of businesses) {
+    /* Owned WABAs */
+    const ownedData = await gFetch(
+      `https://graph.facebook.com/${GV}/${biz.id}/owned_whatsapp_business_accounts?fields=id,name&access_token=${token}`
+    );
+    for (const waba of (ownedData.data ?? [])) await addWaba(waba, biz.name);
+
+    /* Client WABAs — existing accounts attached/shared via the app */
+    const clientData = await gFetch(
+      `https://graph.facebook.com/${GV}/${biz.id}/client_whatsapp_business_accounts?fields=id,name&access_token=${token}`
+    );
+    for (const waba of (clientData.data ?? [])) await addWaba(waba, biz.name);
   }
 
-  /* Pick first WABA with phones; fall back to first WABA */
-  const chosen = allWabas.find(w => w.phones.length > 0) ?? allWabas[0] ?? null;
+  /* Step D: also check WABAs accessible directly via the user token
+     (covers accounts not linked to a business portfolio) */
+  const directData = await gFetch(
+    `https://graph.facebook.com/${GV}/me/whatsapp_business_accounts?fields=id,name&access_token=${token}`
+  ).catch(() => ({ data: [] }));
+  for (const waba of (directData.data ?? [])) await addWaba(waba, waba.name ?? "");
+
+  /* Pick: prefer WABA with phones; among those, prefer ones with an active/connected status */
+  const withPhones = allWabas.filter(w => w.phones.length > 0);
+  const chosen = withPhones.find(w => w.phones.some((p: any) => p.status === "CONNECTED"))
+    ?? withPhones[0]
+    ?? allWabas[0]
+    ?? null;
+
   if (!chosen) return { wabaId: null, wabaName: null, phoneId: null, phoneDetails: {}, allWabas };
 
-  const phone = chosen.phones[0] ?? {};
+  /* Prefer an already-CONNECTED phone */
+  const phone = chosen.phones.find((p: any) => p.status === "CONNECTED") ?? chosen.phones[0] ?? {};
   return {
     wabaId: chosen.id,
     wabaName: chosen.name,
