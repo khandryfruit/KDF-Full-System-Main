@@ -1481,6 +1481,31 @@ router.post("/admin/whatsapp/test", adminMiddleware as any, async (req, res) => 
   }
 });
 
+/* ─── Admin: Fetch Meta Templates (GET, 5-min cache) ────── */
+const _metaTplCache: { data: any[]; at: number } = { data: [], at: 0 };
+router.get("/admin/whatsapp/meta-templates", adminMiddleware as any, async (req, res) => {
+  try {
+    const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
+    if (!settings?.accessToken)       return res.json({ templates: [], error: "no_token" });
+    if (!settings?.businessAccountId) return res.json({ templates: [], error: "no_waba_id" });
+    const forceRefresh = req.query.refresh === "1";
+    if (!forceRefresh && _metaTplCache.data.length > 0 && Date.now() - _metaTplCache.at < 5 * 60_000) {
+      return res.json({ templates: _metaTplCache.data, cached: true, total: _metaTplCache.data.length });
+    }
+    const r = await fetch(
+      `https://graph.facebook.com/v18.0/${settings.businessAccountId}/message_templates?limit=200&fields=name,status,language,category,components`,
+      { headers: { Authorization: `Bearer ${settings.accessToken}` } }
+    );
+    const data: any = await r.json();
+    if (!r.ok) return res.json({ templates: [], error: data?.error?.message ?? "Meta API error" });
+    _metaTplCache.data = data.data ?? [];
+    _metaTplCache.at   = Date.now();
+    return res.json({ templates: _metaTplCache.data, total: _metaTplCache.data.length });
+  } catch (e: any) {
+    return res.json({ templates: [], error: e.message });
+  }
+});
+
 /* ─── Admin: Sync Meta Templates ─────────────────────── */
 router.post("/admin/whatsapp/sync-meta-templates", adminMiddleware as any, async (req, res) => {
   try {
@@ -2710,6 +2735,45 @@ router.post("/admin/whatsapp/campaigns", adminMiddleware as any, async (req, res
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
+/* ─── Admin: Audience Count Estimator ──────────────── */
+router.get("/admin/whatsapp/campaigns/audience-count", adminMiddleware as any, async (req, res) => {
+  try {
+    const { audience, filter } = req.query as { audience?: string; filter?: string };
+    let count = 0;
+    if (audience === "all_customers") {
+      const r = await db.execute(sql`SELECT COUNT(DISTINCT (shipping_address->>'phone')) AS cnt FROM orders WHERE shipping_address->>'phone' IS NOT NULL`) as any;
+      count = Number((r.rows ?? r)[0]?.cnt ?? 0);
+    } else if (audience === "by_order_status" && filter) {
+      const r = await db.execute(sql`SELECT COUNT(DISTINCT (shipping_address->>'phone')) AS cnt FROM orders WHERE status::text = ${filter} AND shipping_address->>'phone' IS NOT NULL`) as any;
+      count = Number((r.rows ?? r)[0]?.cnt ?? 0);
+    } else if (audience === "chat_leads") {
+      const r = await db.execute(sql`SELECT COUNT(*) AS cnt FROM chat_leads WHERE phone IS NOT NULL`) as any;
+      count = Number((r.rows ?? r)[0]?.cnt ?? 0);
+    }
+    return res.json({ count });
+  } catch { return res.json({ count: 0 }); }
+});
+
+/* ─── Admin: Campaign Duplicate ─────────────────────── */
+router.post("/admin/whatsapp/campaigns/:id/duplicate", adminMiddleware as any, async (req, res) => {
+  try {
+    const [src] = await db.select().from(whatsappCampaignsTable)
+      .where(eq(whatsappCampaignsTable.id, Number(req.params.id))).limit(1);
+    if (!src) return res.status(404).json({ error: "Campaign not found" });
+    const [dup] = await db.insert(whatsappCampaignsTable).values({
+      name: `${src.name} (copy)`,
+      type: src.type, messageBody: src.messageBody,
+      templateId: src.templateId, templateParams: src.templateParams,
+      headerImageUrl: src.headerImageUrl,
+      audience: src.audience, audienceFilter: src.audienceFilter, customPhones: src.customPhones,
+      rateLimitDelay: src.rateLimitDelay, maxDelay: src.maxDelay, frequencyCapHours: src.frequencyCapHours,
+      tags: src.tags, status: "draft",
+      recipientCount: 0, sentCount: 0, failedCount: 0, deliveredCount: 0, readCount: 0, skippedCount: 0,
+    }).returning();
+    return res.json(dup);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
 /* ─── Admin: Campaigns (DELETE) ─────────────────────── */
 router.delete("/admin/whatsapp/campaigns/:id", adminMiddleware as any, async (req, res) => {
   try {
@@ -2751,6 +2815,12 @@ router.post("/admin/whatsapp/campaigns/:id/send", adminMiddleware as any, async 
       }
     } else if (campaign.audience === "custom_phones" && campaign.customPhones) {
       phones = campaign.customPhones.split("\n").map(p => p.trim()).filter(Boolean).map(p => ({ phone: p }));
+    } else if (campaign.audience === "chat_leads") {
+      const leadsR = await db.execute(sql`SELECT phone, full_name AS name FROM chat_leads WHERE phone IS NOT NULL`) as any;
+      const seen = new Set<string>();
+      for (const r of (leadsR.rows ?? leadsR) as any[]) {
+        if (r.phone && !seen.has(r.phone)) { seen.add(r.phone); phones.push({ phone: r.phone, name: r.name ?? undefined }); }
+      }
     }
 
     await db.update(whatsappCampaignsTable).set({
@@ -3277,6 +3347,58 @@ router.get("/admin/wa/cost-stats", adminMiddleware as any, async (req, res) => {
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
+/* ─── Admin: Chatbot Performance Analytics ────────────── */
+router.get("/admin/wa/analytics/chatbot", adminMiddleware as any, async (req, res) => {
+  try {
+    const days = Math.min(Number(req.query.days ?? 30), 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const [summary] = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE template_name = 'ai_reply') AS ai_replies,
+        COUNT(*) FILTER (WHERE template_name = 'ai_reply' AND created_at >= NOW() - INTERVAL '1 day') AS ai_replies_today,
+        COUNT(*) FILTER (WHERE template_name = 'incoming') AS incoming_total,
+        COUNT(*) FILTER (WHERE template_name LIKE 'menu%') AS menu_interactions,
+        COUNT(DISTINCT phone) FILTER (WHERE template_name = 'incoming') AS unique_customers,
+        COUNT(DISTINCT phone) FILTER (WHERE template_name = 'ai_reply') AS bot_handled_customers
+      FROM whatsapp_logs WHERE created_at >= ${since.toISOString()}
+    `) as any;
+    const row = (summary.rows ?? summary)[0] ?? {};
+    const [convStats] = await db.execute(sql`
+      SELECT
+        COUNT(*) AS total_conversations,
+        COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
+        COUNT(*) FILTER (WHERE bot_mode = 'human') AS human_mode_count,
+        COUNT(*) FILTER (WHERE bot_mode = 'bot') AS bot_mode_count
+      FROM wa_conversations
+    `) as any;
+    const conv = (convStats.rows ?? convStats)[0] ?? {};
+    const topFlows = await db.select({ name: waFlowsTable.name, action: waFlowsTable.action, firedCount: waFlowsTable.firedCount, keywords: waFlowsTable.keywords })
+      .from(waFlowsTable).orderBy(desc(waFlowsTable.firedCount)).limit(6);
+    const dailyR = await db.execute(sql`
+      SELECT DATE(created_at) AS date,
+        COUNT(*) FILTER (WHERE template_name = 'ai_reply') AS ai_replies,
+        COUNT(*) FILTER (WHERE template_name = 'incoming') AS incoming
+      FROM whatsapp_logs WHERE created_at >= ${since.toISOString()}
+      GROUP BY DATE(created_at) ORDER BY DATE(created_at) ASC
+    `) as any;
+    const aiReplies = Number(row.ai_replies ?? 0);
+    const incoming = Number(row.incoming_total ?? 0);
+    const totalConvs = Number(conv.total_conversations ?? 0);
+    return res.json({
+      aiReplies, aiRepliesToday: Number(row.ai_replies_today ?? 0),
+      incomingTotal: incoming, menuInteractions: Number(row.menu_interactions ?? 0),
+      uniqueCustomers: Number(row.unique_customers ?? 0), botHandledCustomers: Number(row.bot_handled_customers ?? 0),
+      botHandleRate: incoming > 0 ? Math.round((aiReplies / incoming) * 100) : 0,
+      totalConversations: totalConvs, resolvedConversations: Number(conv.resolved ?? 0),
+      humanModeConversations: Number(conv.human_mode_count ?? 0), botModeConversations: Number(conv.bot_mode_count ?? 0),
+      resolutionRate: totalConvs > 0 ? Math.round((Number(conv.resolved ?? 0) / totalConvs) * 100) : 0,
+      topFlows: topFlows.map(f => ({ name: f.name, action: f.action, firedCount: f.firedCount, keywords: f.keywords as string[] })),
+      dailyTrend: ((dailyR.rows ?? dailyR) as any[]).map((d: any) => ({ date: d.date, aiReplies: Number(d.ai_replies ?? 0), incoming: Number(d.incoming ?? 0) })),
+      days,
+    });
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
 /* ═══════════════════════════════════════════════════════════════
    PHASE 4: AI Flow Builder — CRUD for wa_flows
    ═══════════════════════════════════════════════════════════════ */
@@ -3338,6 +3460,30 @@ router.patch("/admin/wa/flows/:id/toggle", adminMiddleware as any, async (req, r
     const [updated] = await db.update(waFlowsTable).set({ isEnabled: !current.isEnabled, updatedAt: new Date() })
       .where(eq(waFlowsTable.id, Number(req.params.id))).returning();
     return res.json(updated);
+  } catch (e: any) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ─── Admin: Test a Flow with a sample message ────────── */
+router.post("/admin/wa/flows/:id/test", adminMiddleware as any, async (req, res) => {
+  try {
+    const [flow] = await db.select().from(waFlowsTable).where(eq(waFlowsTable.id, Number(req.params.id))).limit(1);
+    if (!flow) return res.status(404).json({ error: "Flow not found" });
+    const msg = String(req.body.message ?? "").toLowerCase().trim();
+    const kws = (flow.keywords as string[]) ?? [];
+    const matched = kws.length === 0 || kws.some(kw => msg.includes(kw.toLowerCase()));
+    const ad = flow.actionData as Record<string, any>;
+    const actionLabel: Record<string, string> = {
+      ai_reply: "Would reply with AI (OpenAI)",
+      send_menu: "Would display the interactive welcome menu",
+      send_message: `Would send: "${(ad?.message ?? "(no message set)").slice(0, 120)}"`,
+      send_url: `Would share URL: ${ad?.url ?? "(none)"}`,
+      send_discount: `Would send discount code: ${ad?.discountCode ?? "(none)"}`,
+      track_order: "Would ask for order ID and look up tracking status",
+      human_support: "Would hand off conversation to a human agent",
+      collect_order_id: "Would prompt customer to type their order ID",
+      show_catalog: "Would send top products with buy links",
+    };
+    return res.json({ matched, flowName: flow.name, action: flow.action, actionDescription: actionLabel[flow.action] ?? flow.action, keywords: kws, message: req.body.message ?? "" });
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 

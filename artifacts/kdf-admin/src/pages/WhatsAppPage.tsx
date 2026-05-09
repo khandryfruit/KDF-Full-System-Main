@@ -10,7 +10,7 @@ import {
   ChevronRight, User, Sparkles, Info, ShoppingBag, Zap, RotateCw,
   Megaphone, Bug, Play, Users, Filter, TimerIcon, TrendingUp,
   CheckSquare, Globe, QrCode, Download, MessageSquare, Tag,
-  ArrowUp, ArrowDown, Edit2, GitBranch, CalendarClock,
+  ArrowUp, ArrowDown, Edit2, GitBranch, CalendarClock, Search,
 } from "lucide-react";
 import { WhatsAppTemplatesTab } from "./WhatsAppTemplatesTab";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,8 @@ interface WaMenuItem {
   label: string;
   description: string;
   sectionTitle?: string;
+  replyMessage?: string;
+  enabled?: boolean;
   isDefault?: boolean;
 }
 
@@ -602,6 +604,373 @@ function WhatsAppQRTab() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Smart Test Message Component
+   ═══════════════════════════════════════════════════════════ */
+type MetaTemplate = {
+  name: string; status: string; language: string; category: string;
+  components: Array<{ type: string; text?: string; format?: string; buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }> }>;
+};
+
+function _extractVarCount(text: string): number {
+  const m = text.match(/\{\{(\d+)\}\}/g);
+  return m ? Math.max(...m.map(x => parseInt(x.replace(/\D/g, ""), 10))) : 0;
+}
+function _getComp(tpl: MetaTemplate, type: string) { return tpl.components.find(c => c.type === type) ?? null; }
+function _applyVars(text: string, vars: string[]): string {
+  let s = text;
+  for (let i = 0; i < vars.length; i++) s = s.replace(new RegExp(`\\{\\{${i + 1}\\}\\}`, "g"), vars[i] || `{{${i + 1}}}`);
+  return s;
+}
+function _translateError(err: string): { title: string; detail: string } {
+  if (err.includes("#132000")) return { title: "Variable count mismatch", detail: `The number of variables filled doesn't match what this template expects. Count the {{1}}, {{2}}… placeholders in the template body and fill every one of them.` };
+  if (err.includes("#132001") || err.includes("not exist") || err.includes("not found")) return { title: "Template not found", detail: "No approved template with that exact name exists. Check the name in Meta Business Manager → Message Templates." };
+  if (err.includes("#131031")) return { title: "Template not approved", detail: "This template hasn't been approved by Meta yet. Check its status in Meta Business Manager." };
+  if (err.includes("#131049") || err.includes("language")) return { title: "Language code mismatch", detail: "The language code doesn't match the template's language. Try en_US or check the exact code in Meta." };
+  if (err.includes("#100") || err.includes("phone") || err.includes("recipient")) return { title: "Invalid phone number", detail: "Use international format with country code, e.g. +923001234567. The number must be registered on WhatsApp." };
+  if (err.includes("not configured") || err.includes("inactive")) return { title: "WhatsApp not connected", detail: "Go to API Settings and make sure your Access Token and Phone Number ID are saved and the integration is Active." };
+  return { title: "Send failed", detail: err };
+}
+
+function SmartTestMessage() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [mode, setMode] = React.useState<"template" | "freeform">("template");
+  const [phone, setPhone] = React.useState("");
+  const [message, setMessage] = React.useState("Hello from KDF NUTS! 🥜 This is a test message.");
+  const [search, setSearch] = React.useState("");
+  const [selectedTpl, setSelectedTpl] = React.useState<MetaTemplate | null>(null);
+  const [vars, setVars] = React.useState<string[]>([]);
+  const [result, setResult] = React.useState<{ success: boolean; error?: string; messageId?: string; translatedError?: { title: string; detail: string } } | null>(null);
+  const [isSending, setIsSending] = React.useState(false);
+  const [recentNames, setRecentNames] = React.useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("kdf_recent_tpls") ?? "[]"); } catch { return []; }
+  });
+
+  const { data: tplData, isFetching, refetch } = useQuery<{ templates: MetaTemplate[]; error?: string; cached?: boolean }>({
+    queryKey: ["/api/admin/whatsapp/meta-templates"],
+    queryFn: () => apiFetch("/api/admin/whatsapp/meta-templates"),
+    staleTime: 5 * 60_000, retry: false,
+  });
+
+  const allTpls   = tplData?.templates ?? [];
+  const approved  = allTpls.filter(t => t.status === "APPROVED");
+  const filtered  = search.trim() ? approved.filter(t => t.name.toLowerCase().includes(search.toLowerCase())) : approved;
+
+  const handleSelectTpl = (tpl: MetaTemplate) => {
+    setSelectedTpl(tpl);
+    const body = _getComp(tpl, "BODY")?.text ?? "";
+    setVars(Array(_extractVarCount(body)).fill(""));
+    setResult(null);
+    const updated = [tpl.name, ...recentNames.filter(n => n !== tpl.name)].slice(0, 5);
+    setRecentNames(updated);
+    localStorage.setItem("kdf_recent_tpls", JSON.stringify(updated));
+  };
+
+  const handleSend = async () => {
+    if (!phone.trim()) { toast({ title: "Phone number required", variant: "destructive" }); return; }
+    if (mode === "template" && !selectedTpl) { toast({ title: "Select a template first", variant: "destructive" }); return; }
+    setIsSending(true); setResult(null);
+    try {
+      const payload = mode === "template" && selectedTpl
+        ? { phone, useTemplate: true, templateName: selectedTpl.name, languageCode: selectedTpl.language, templateParams: vars }
+        : { phone, message };
+      const r = await apiFetch("/api/admin/whatsapp/test", { method: "POST", body: JSON.stringify(payload) });
+      setResult(r.success ? r : { ...r, translatedError: _translateError(r.error ?? "") });
+    } catch (e: any) {
+      setResult({ success: false, error: e.message, translatedError: _translateError(e.message) });
+    } finally { setIsSending(false); }
+  };
+
+  const handleForceSync = async () => {
+    qc.removeQueries({ queryKey: ["/api/admin/whatsapp/meta-templates"] });
+    await refetch();
+    toast({ title: "Templates synced from Meta" });
+  };
+
+  const headerComp  = selectedTpl ? _getComp(selectedTpl, "HEADER")  : null;
+  const footerText  = selectedTpl ? (_getComp(selectedTpl, "FOOTER")?.text ?? "") : "";
+  const buttons     = selectedTpl ? (_getComp(selectedTpl, "BUTTONS")?.buttons ?? []) : [];
+  const bodyText    = selectedTpl ? (_getComp(selectedTpl, "BODY")?.text ?? "") : "";
+  const previewBody = _applyVars(bodyText, vars);
+  const previewHdr  = headerComp?.text ? _applyVars(headerComp.text, vars) : null;
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      {/* ── Header ── */}
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-base flex items-center gap-2">
+            <Send className="w-4 h-4 text-[#25D366]" /> Test Message
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Select an approved template, fill variables, and send a live test to any number</p>
+        </div>
+        <button
+          onClick={handleForceSync}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium hover:bg-muted transition-colors shrink-0"
+        >
+          {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Sync Templates
+        </button>
+      </div>
+
+      <div className="px-5 py-5">
+        {/* ── Mode toggle ── */}
+        <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border mb-5 w-fit">
+          <button onClick={() => setMode("template")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${mode === "template" ? "bg-[#25D366] text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            Approved Template
+          </button>
+          <button onClick={() => setMode("freeform")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${mode === "freeform" ? "bg-white shadow-sm text-foreground border border-border" : "text-muted-foreground hover:text-foreground"}`}>
+            Free-form Text
+          </button>
+        </div>
+
+        {/* ── Main layout: form + preview ── */}
+        <div className="flex gap-6 items-start">
+
+          {/* ─── Left: Form ─── */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {/* Result card */}
+            {result && (
+              <div className={`rounded-xl border px-4 py-3.5 ${result.success ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                {result.success ? (
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-800">Message sent successfully!</p>
+                      <p className="text-xs text-emerald-700 mt-0.5 leading-relaxed">Meta accepted the message. Delivery status will appear in the Logs tab once Meta sends a webhook callback.</p>
+                      {result.messageId && <p className="text-[10px] font-mono text-emerald-600 mt-2 bg-emerald-100 px-2 py-1 rounded">{result.messageId}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2.5">
+                    <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-red-800">{result.translatedError?.title ?? "Send failed"}</p>
+                      <p className="text-xs text-red-700 mt-0.5 leading-relaxed">{result.translatedError?.detail ?? result.error}</p>
+                      {result.translatedError && result.error && (
+                        <p className="text-[10px] font-mono text-red-400 mt-2 bg-red-100 px-2 py-1 rounded">{result.error}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Phone input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Recipient Phone Number</label>
+              <input
+                type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                placeholder="+923001234567"
+                className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 focus:border-[#25D366] transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground">Include country code, e.g. +923001234567</p>
+            </div>
+
+            {mode === "freeform" ? (
+              <>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                  <span><strong>Free-form messages</strong> are blocked by Meta if the recipient hasn't messaged you in the last 24 hours. Use Approved Template mode to send proactively.</span>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Message</label>
+                  <textarea value={message} onChange={e => setMessage(e.target.value)} rows={4}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 focus:border-[#25D366] resize-none transition-colors"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {/* Search bar */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">Select Template</label>
+                    <div className="flex items-center gap-2">
+                      {tplData?.error && (
+                        <span className="text-[10px] text-amber-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {tplData.error === "no_token" ? "Add Access Token first" : tplData.error === "no_waba_id" ? "Add Business Account ID first" : tplData.error}
+                        </span>
+                      )}
+                      {tplData?.cached && <span className="text-[10px] text-muted-foreground">cached · </span>}
+                      <span className="text-[10px] text-muted-foreground">{approved.length} approved</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+                      placeholder="Search templates…"
+                      className="w-full h-8 rounded-lg border border-border bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 focus:border-[#25D366] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Template list */}
+                {isFetching ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#25D366]" /> Fetching templates from Meta…
+                  </div>
+                ) : filtered.length > 0 ? (
+                  <div className="border border-border rounded-xl overflow-hidden divide-y divide-border max-h-52 overflow-y-auto">
+                    {filtered.map(tpl => {
+                      const body = _getComp(tpl, "BODY")?.text ?? "";
+                      const varCount = _extractVarCount(body);
+                      const isSelected = selectedTpl?.name === tpl.name && selectedTpl?.language === tpl.language;
+                      return (
+                        <button key={`${tpl.name}-${tpl.language}`} onClick={() => handleSelectTpl(tpl)}
+                          className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${isSelected ? "bg-[#25D366]/10 border-l-2 border-l-[#25D366]" : "hover:bg-muted/40"}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate">{tpl.name}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground">{tpl.language}</span>
+                              <span className="text-[10px] text-muted-foreground">·</span>
+                              <span className="text-[10px] text-muted-foreground capitalize">{tpl.category?.toLowerCase()}</span>
+                              {varCount > 0 && (
+                                <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded font-medium">{varCount} var{varCount > 1 ? "s" : ""}</span>
+                              )}
+                              {recentNames.includes(tpl.name) && (
+                                <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded">recent</span>
+                              )}
+                            </div>
+                          </div>
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-[#25D366] shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : approved.length === 0 && !isFetching ? (
+                  <div className="border border-dashed border-border rounded-xl px-4 py-6 text-center text-xs text-muted-foreground">
+                    <p className="font-medium">No approved templates found</p>
+                    <p className="mt-1 leading-relaxed">Click <strong>Sync Templates</strong> above to fetch from Meta, or make sure your Business Account ID is configured in API Settings.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-2">No templates match "{search}"</p>
+                )}
+
+                {/* Selected template detail + variable inputs */}
+                {selectedTpl && (
+                  <div className="border border-[#25D366]/30 bg-[#25D366]/5 rounded-xl px-4 py-3.5 space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold">{selectedTpl.name}</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">APPROVED</span>
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{selectedTpl.language}</span>
+                      <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full capitalize">{selectedTpl.category?.toLowerCase()}</span>
+                    </div>
+                    {vars.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-semibold text-foreground">
+                          {vars.length} variable{vars.length > 1 ? "s" : ""} auto-detected — fill them in:
+                        </p>
+                        {vars.map((val, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono bg-[#25D366]/10 border border-[#25D366]/30 text-[#1a9e50] rounded-lg px-2 py-1.5 min-w-[42px] text-center font-bold shrink-0">
+                              {`{{${i + 1}}}`}
+                            </span>
+                            <input type="text" value={val}
+                              onChange={e => { const n = [...vars]; n[i] = e.target.value; setVars(n); }}
+                              placeholder={`Value for {{${i + 1}}}`}
+                              className="flex-1 h-8 rounded-lg border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 focus:border-[#25D366] transition-colors"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">No variables — this template has a fixed body (no placeholders).</p>
+                    )}
+                    {/* Body preview text */}
+                    {bodyText && (
+                      <div className="bg-white/70 border border-border rounded-lg px-3 py-2 text-[11px] text-foreground font-mono whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
+                        {bodyText}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Send button */}
+            <button onClick={handleSend}
+              disabled={isSending || !phone.trim() || (mode === "template" && !selectedTpl)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#25D366] hover:bg-[#20b859] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
+            >
+              {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isSending ? "Sending…" : "Send Test"}
+            </button>
+          </div>
+
+          {/* ─── Right: WhatsApp live preview ─── */}
+          {mode === "template" && selectedTpl && (
+            <div className="w-64 shrink-0 hidden md:block">
+              <p className="text-[10px] text-muted-foreground font-medium mb-2 flex items-center gap-1">
+                <Eye className="w-3 h-3" /> Live Preview
+              </p>
+              <div className="bg-[#ECE5DD] rounded-2xl overflow-hidden border border-border shadow-lg">
+                {/* WA header */}
+                <div className="bg-[#075E54] px-3 py-2.5 flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[9px] font-bold shrink-0">KDF</div>
+                  <div>
+                    <p className="text-white text-[11px] font-semibold">KDF NUTS</p>
+                    <p className="text-[9px] text-[#9FCEA3]">WhatsApp Business</p>
+                  </div>
+                </div>
+                {/* Chat bubble */}
+                <div className="px-2.5 py-3">
+                  <div className="bg-white rounded-xl rounded-tl-none shadow-sm overflow-hidden max-w-[96%]">
+                    {/* Header */}
+                    {headerComp && (
+                      <div className="px-3 pt-3 pb-1">
+                        {headerComp.format === "IMAGE" ? (
+                          <div className="h-24 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-[10px]">[ Image ]</div>
+                        ) : headerComp.format === "VIDEO" ? (
+                          <div className="h-20 bg-gray-800 rounded-lg flex items-center justify-center text-gray-300 text-[10px]">▶ Video</div>
+                        ) : headerComp.format === "DOCUMENT" ? (
+                          <div className="h-10 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center text-blue-500 text-[10px] gap-1"><FileText className="w-3 h-3" /> Document</div>
+                        ) : (
+                          <p className="text-[11px] font-bold text-foreground leading-snug">{previewHdr ?? headerComp.text}</p>
+                        )}
+                      </div>
+                    )}
+                    {/* Body */}
+                    {previewBody && (
+                      <div className="px-3 py-2">
+                        <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-line">{previewBody}</p>
+                      </div>
+                    )}
+                    {/* Footer */}
+                    {footerText && (
+                      <div className="px-3 pb-1.5">
+                        <p className="text-[9px] text-gray-400 leading-snug">{footerText}</p>
+                      </div>
+                    )}
+                    {/* Timestamp */}
+                    <div className="px-3 pb-2 text-right">
+                      <span className="text-[9px] text-gray-400">9:19 AM ✓✓</span>
+                    </div>
+                    {/* Buttons */}
+                    {buttons.length > 0 && (
+                      <div className="border-t border-gray-100 divide-y divide-gray-100">
+                        {buttons.map((btn, i) => (
+                          <div key={i} className="px-3 py-2 text-center text-[11px] font-semibold text-[#00a5f4]">{btn.text}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WhatsAppPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -993,12 +1362,23 @@ export default function WhatsAppPage() {
     { value: "send_discount", label: "🎁 Send Discount", desc: "Send a discount code" },
     { value: "track_order", label: "📦 Track Order", desc: "Prompt for order ID and look it up" },
     { value: "human_support", label: "👤 Human Support", desc: "Hand off to human agent" },
+    { value: "collect_order_id", label: "🔖 Collect Order ID", desc: "Ask customer for their order ID then auto-look up" },
+    { value: "show_catalog", label: "🛍️ Show Catalog", desc: "Send top products with buy links" },
   ];
   const EMPTY_FLOW = { name: "", description: "", triggerType: "keyword", keywords: [] as string[], action: "ai_reply", actionData: {} as any, isEnabled: true, priority: 0 };
   const [showFlowForm, setShowFlowForm] = useState(false);
   const [editingFlow, setEditingFlow] = useState<any>(null);
   const [newFlow, setNewFlow] = useState<any>(EMPTY_FLOW);
   const [newFlowKeyword, setNewFlowKeyword] = useState("");
+  const [testingFlowId, setTestingFlowId] = useState<number | null>(null);
+  const [flowTestInput, setFlowTestInput] = useState("");
+  const [flowTestResult, setFlowTestResult] = useState<any>(null);
+  const testFlow = useMutation({
+    mutationFn: ({ id, message }: { id: number; message: string }) =>
+      apiFetch(`/api/admin/wa/flows/${id}/test`, { method: "POST", body: JSON.stringify({ message }) }),
+    onSuccess: (r: any) => setFlowTestResult(r),
+    onError: (e: any) => toast({ title: "Test failed", description: e.message, variant: "destructive" }),
+  });
 
   const { data: waFlows = [], refetch: refetchFlows } = useQuery<any[]>({
     queryKey: ["/api/admin/wa/flows"],
@@ -1071,12 +1451,29 @@ export default function WhatsAppPage() {
     onSuccess: () => { refetchCampaigns(); toast({ title: "Campaign cancelled" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+  const duplicateCampaign = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/whatsapp/campaigns/${id}/duplicate`, { method: "POST" }),
+    onSuccess: () => { refetchCampaigns(); toast({ title: "Campaign duplicated!" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const { data: audienceCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/whatsapp/campaigns/audience-count", newCampaign.audience, newCampaign.audienceFilter],
+    queryFn: () => apiFetch(`/api/admin/whatsapp/campaigns/audience-count?audience=${newCampaign.audience}&filter=${encodeURIComponent(newCampaign.audienceFilter)}`),
+    enabled: tab === "campaigns" && showCampaignForm && newCampaign.audience !== "custom_phones",
+    staleTime: 30_000,
+  });
 
   /* ── Analytics + Cost Data ── */
   const [analyticsDays, setAnalyticsDays] = useState(30);
   const { data: costStats, isLoading: costLoading, refetch: refetchCostStats } = useQuery<any>({
     queryKey: ["/api/admin/wa/cost-stats", analyticsDays],
     queryFn: () => apiFetch(`/api/admin/wa/cost-stats?days=${analyticsDays}`),
+    enabled: tab === "analytics",
+    staleTime: 60_000,
+  });
+  const { data: chatbotAnalytics } = useQuery<any>({
+    queryKey: ["/api/admin/wa/analytics/chatbot", analyticsDays],
+    queryFn: () => apiFetch(`/api/admin/wa/analytics/chatbot?days=${analyticsDays}`),
     enabled: tab === "analytics",
     staleTime: 60_000,
   });
@@ -2222,155 +2619,7 @@ export default function WhatsAppPage() {
 
           <SaveBar />
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
-              <h2 className="font-semibold text-base flex items-center gap-2"><Send className="w-4 h-4" /> Test Message</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Send a test to verify your API credentials are working</p>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              {testResult && (
-                <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${testResult.success ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
-                  {testResult.success ? <CheckCircle2 className="w-4 h-4 mt-0.5 text-green-600 flex-shrink-0" /> : <XCircle className="w-4 h-4 mt-0.5 text-red-500 flex-shrink-0" />}
-                  <div>
-                    <p>{testResult.success ? "Message accepted by Meta!" : (testResult.error ?? "Send failed")}</p>
-                    {testResult.success && testResult.messageId && <p className="text-xs mt-0.5 font-mono opacity-70">wamid: {testResult.messageId}</p>}
-                    {testResult.success && <p className="text-xs mt-1 opacity-80">Delivery status will appear in the Logs tab once Meta sends a webhook callback.</p>}
-                  </div>
-                </div>
-              )}
-
-              {/* Mode toggle */}
-              <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg border border-border">
-                <button
-                  onClick={() => setTestUseTemplate(false)}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${!testUseTemplate ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Free-form Text
-                </button>
-                <button
-                  onClick={() => setTestUseTemplate(true)}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${testUseTemplate ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Approved Template
-                </button>
-              </div>
-
-              {!testUseTemplate && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-                  ⚠️ <strong>Free-form messages</strong> are blocked by Meta if the recipient hasn't messaged you in the last 24 hours. Use <strong>Approved Template</strong> mode to send proactively.
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Recipient Phone Number</Label>
-                <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+92 300 1234567" />
-              </div>
-
-              {testUseTemplate ? (
-                <div className="space-y-3">
-                  {/* Template name + language */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Template Name (exact, from Meta)</Label>
-                      <Input
-                        value={testTemplateName}
-                        onChange={(e) => { setTestTemplateName(e.target.value); setTestTemplateParams([]); }}
-                        placeholder="order_confirmation"
-                      />
-                      {metaTemplates.length > 0 && (
-                        <select
-                          className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background"
-                          onChange={(e) => {
-                            const t = metaTemplates.find(m => m.name === e.target.value);
-                            selectMetaTemplate(e.target.value, t?.language);
-                          }}
-                          value={testTemplateName}
-                        >
-                          <option value="">— pick from synced templates —</option>
-                          {metaTemplates.filter(t => t.status === "APPROVED").map((t: any) => (
-                            <option key={`${t.name}-${t.language}`} value={t.name}>{t.name} ({t.language})</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Language Code</Label>
-                      <Input value={testLangCode} onChange={(e) => setTestLangCode(e.target.value)} placeholder="en_US" />
-                    </div>
-                  </div>
-
-                  {/* Template body preview (synced templates) */}
-                  {testTemplateName && metaTemplates.length > 0 && (() => {
-                    const tpl = metaTemplates.find(t => t.name === testTemplateName);
-                    const body = tpl?.components?.find((c: any) => c.type === "BODY");
-                    return body?.text ? (
-                      <div className="bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground font-mono whitespace-pre-wrap">
-                        {body.text}
-                      </div>
-                    ) : null;
-                  })()}
-
-                  {/* Variable count row — always shown once a template name is entered */}
-                  {testTemplateName && (
-                    <div className="flex items-center gap-3 bg-muted/40 border border-border rounded-xl px-3 py-2.5">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground">How many variables does this template have?</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          Count the <code className="bg-muted px-1 rounded">{"{{1}}"}</code> <code className="bg-muted px-1 rounded">{"{{2}}"}</code> … placeholders in your Meta template body.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          onClick={() => setTestTemplateParams(p => p.length > 0 ? p.slice(0, -1) : [])}
-                          className="w-7 h-7 rounded-lg border border-border bg-background flex items-center justify-center text-sm hover:bg-accent font-bold"
-                        >−</button>
-                        <span className="text-sm font-bold w-6 text-center">{testTemplateParams.length}</span>
-                        <button
-                          onClick={() => setTestTemplateParams(p => [...p, ""])}
-                          className="w-7 h-7 rounded-lg border border-border bg-background flex items-center justify-center text-sm hover:bg-accent font-bold"
-                        >+</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Dynamic parameter inputs */}
-                  {testTemplateParams.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-foreground">
-                        Fill in each variable value
-                      </Label>
-                      <div className="space-y-1.5">
-                        {testTemplateParams.map((val, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono bg-[#25D366]/10 border border-[#25D366]/30 text-[#1a9e50] rounded px-1.5 py-1 min-w-[40px] text-center font-bold">{`{{${i + 1}}}`}</span>
-                            <Input
-                              value={val}
-                              onChange={(e) => {
-                                const next = [...testTemplateParams];
-                                next[i] = e.target.value;
-                                setTestTemplateParams(next);
-                              }}
-                              placeholder={`Value for {{${i + 1}}}`}
-                              className="text-xs h-8"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Message</Label>
-                  <Input value={testMsg} onChange={(e) => setTestMsg(e.target.value)} />
-                </div>
-              )}
-
-              <Button onClick={handleTest} disabled={isTesting || !testPhone || (testUseTemplate && !testTemplateName)} variant="outline" className="gap-1.5">
-                {isTesting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Sending…</> : <><Send className="w-3.5 h-3.5" />Send Test</>}
-              </Button>
-            </div>
-          </div>
+          <SmartTestMessage />
         </div>
       )}
 
@@ -2655,12 +2904,23 @@ export default function WhatsAppPage() {
               )}
 
               <div className="space-y-1.5">
-                <Label>Audience</Label>
+                <Label className="flex items-center justify-between">
+                  <span>Audience</span>
+                  {audienceCount !== undefined && newCampaign.audience !== "custom_phones" && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1">
+                      <Users className="w-3 h-3" />{audienceCount.count.toLocaleString()} recipients
+                    </span>
+                  )}
+                </Label>
                 <select value={newCampaign.audience} onChange={e => setNewCampaign(f => ({ ...f, audience: e.target.value }))} className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background">
                   <option value="all_customers">All Customers (unique phones from orders)</option>
                   <option value="by_order_status">By Order Status</option>
+                  <option value="chat_leads">Chat Leads (website widget leads)</option>
                   <option value="custom_phones">Custom Phone List</option>
                 </select>
+                {newCampaign.audience === "chat_leads" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Info className="w-3 h-3" />Contacts who filled the chat widget lead form on your website</p>
+                )}
               </div>
               {newCampaign.audience === "by_order_status" && (
                 <div className="space-y-1.5">
@@ -2763,7 +3023,8 @@ export default function WhatsAppPage() {
                           : <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.messageBody}</p>
                         }
                         <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
-                          <span className="flex items-center gap-1"><Users className="w-3 h-3" />{c.audience === "all_customers" ? "All customers" : c.audience === "by_order_status" ? `${c.audienceFilter}` : "Custom list"}</span>
+                          <span className="flex items-center gap-1"><Users className="w-3 h-3" />{c.audience === "all_customers" ? "All customers" : c.audience === "by_order_status" ? `${c.audienceFilter}` : c.audience === "chat_leads" ? "Chat leads" : "Custom list"}</span>
+                          {c.scheduledAt && c.status === "draft" && <span className="flex items-center gap-1 text-indigo-600 font-medium"><CalendarClock className="w-3 h-3" />Scheduled: {new Date(c.scheduledAt).toLocaleString("en-PK", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>}
                           <span className="flex items-center gap-1"><TimerIcon className="w-3 h-3" />{c.rateLimitDelay}–{c.maxDelay ?? c.rateLimitDelay}s</span>
                           {(c.frequencyCapHours ?? 0) > 0 && <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" />{c.frequencyCapHours}h cap</span>}
                           {c.sentAt && <span>{new Date(c.sentAt).toLocaleDateString("en-PK")}</span>}
@@ -2790,6 +3051,9 @@ export default function WhatsAppPage() {
                             </Button>
                           </>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => duplicateCampaign.mutate(c.id)} disabled={duplicateCampaign.isPending} className="text-muted-foreground hover:text-foreground hover:bg-muted" title="Duplicate campaign">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this campaign?")) deleteCampaign.mutate(c.id); }} disabled={deleteCampaign.isPending || c.status === "sending"} className="text-red-500 hover:text-red-700 hover:bg-red-50">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -3397,7 +3661,8 @@ export default function WhatsAppPage() {
 
                         <div className="space-y-2">
                           {liveItems.map((item, idx) => (
-                            <div key={item.id} className="border border-border rounded-lg bg-muted/20 p-3 space-y-2">
+                            <div key={item.id} className={`border rounded-lg bg-muted/20 p-3 space-y-2 transition-opacity ${item.enabled === false ? "opacity-50 border-dashed" : "border-border"}`}>
+                              {/* Row 1: reorder + emoji + label + enable toggle + delete */}
                               <div className="flex items-center gap-2">
                                 <div className="flex flex-col gap-0.5">
                                   <button onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowUp className="w-3 h-3" /></button>
@@ -3409,17 +3674,28 @@ export default function WhatsAppPage() {
                                   <input value={item.label} onChange={e => updateItem(idx, { label: e.target.value })}
                                     className="flex-1 border border-input rounded px-2 py-1 text-sm bg-background min-w-0" placeholder="Label" maxLength={24} />
                                 </div>
+                                <button
+                                  onClick={() => updateItem(idx, { enabled: item.enabled === false ? true : false })}
+                                  title={item.enabled === false ? "Enable item" : "Disable item"}
+                                  className={`p-1 rounded transition-colors ${item.enabled === false ? "text-muted-foreground/40 hover:text-muted-foreground" : "text-green-600 hover:text-green-700"}`}>
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
                                 <button onClick={() => deleteItem(idx)} disabled={liveItems.length <= 1}
                                   className="text-red-400 hover:text-red-600 disabled:opacity-20 p-1">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
+                              {/* Row 2: description */}
                               <input value={item.description} onChange={e => updateItem(idx, { description: e.target.value })}
                                 className="w-full border border-input rounded px-2 py-1 text-xs bg-background text-muted-foreground" placeholder="Description (shown under label)" maxLength={72} />
-                              {idx === 0 && (
-                                <input value={item.sectionTitle ?? ""} onChange={e => updateItem(idx, { sectionTitle: e.target.value })}
-                                  className="w-full border border-input rounded px-2 py-1 text-xs bg-background" placeholder="Section title (optional, shown above menu)" maxLength={24} />
-                              )}
+                              {/* Row 3: custom reply message */}
+                              <textarea value={item.replyMessage ?? ""} onChange={e => updateItem(idx, { replyMessage: e.target.value })}
+                                rows={2}
+                                className="w-full border border-input rounded px-2 py-1 text-xs bg-background resize-none font-mono"
+                                placeholder="Auto-reply when this item is tapped (leave blank for default AI / flow handling)" />
+                              {/* Row 4: section title (all items) */}
+                              <input value={item.sectionTitle ?? ""} onChange={e => updateItem(idx, { sectionTitle: e.target.value })}
+                                className="w-full border border-input rounded px-2 py-1 text-xs bg-background" placeholder="Section header above this item (optional)" maxLength={24} />
                             </div>
                           ))}
                         </div>
@@ -4101,6 +4377,73 @@ export default function WhatsAppPage() {
               )}
             </>
           )}
+
+          {/* ── Chatbot Performance Section ── */}
+          {chatbotAnalytics && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pt-1">
+                <Bot className="w-5 h-5 text-indigo-500" />
+                <h3 className="font-bold text-base">Chatbot Performance</h3>
+                <span className="text-xs text-muted-foreground">({chatbotAnalytics.days}d)</span>
+              </div>
+
+              {/* KPI cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "AI Replies", value: chatbotAnalytics.aiReplies, sub: `${chatbotAnalytics.aiRepliesToday} today`, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100" },
+                  { label: "Bot Handle Rate", value: `${chatbotAnalytics.botHandleRate}%`, sub: `of ${chatbotAnalytics.incomingTotal} messages`, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+                  { label: "Menu Interactions", value: chatbotAnalytics.menuInteractions, sub: "taps on menu options", color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+                  { label: "Resolution Rate", value: `${chatbotAnalytics.resolutionRate}%`, sub: `${chatbotAnalytics.resolvedConversations} resolved`, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
+                ].map(({ label, value, sub, color, bg, border }) => (
+                  <div key={label} className={`rounded-xl border ${border} ${bg} px-4 py-3`}>
+                    <p className={`text-xl font-bold ${color}`}>{value}</p>
+                    <p className="text-xs font-medium text-foreground mt-0.5">{label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bot vs Human mode */}
+              {chatbotAnalytics.totalConversations > 0 && (
+                <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+                  <p className="text-sm font-semibold">Bot vs Human Mode</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden flex">
+                      <div className="h-full bg-indigo-500 rounded-l-full transition-all" style={{ width: `${chatbotAnalytics.totalConversations > 0 ? Math.round((chatbotAnalytics.botModeConversations / chatbotAnalytics.totalConversations) * 100) : 0}%` }} />
+                      <div className="h-full bg-amber-400 rounded-r-full transition-all" style={{ width: `${chatbotAnalytics.totalConversations > 0 ? Math.round((chatbotAnalytics.humanModeConversations / chatbotAnalytics.totalConversations) * 100) : 0}%` }} />
+                    </div>
+                    <div className="flex gap-3 text-xs shrink-0">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />Bot {chatbotAnalytics.botModeConversations}</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Human {chatbotAnalytics.humanModeConversations}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Top flows */}
+              {(chatbotAnalytics.topFlows ?? []).length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b bg-muted/30"><h3 className="font-semibold text-sm flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" />Top Triggered Flows</h3></div>
+                  <div className="divide-y divide-border">
+                    {(chatbotAnalytics.topFlows as any[]).map((f: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between px-5 py-2.5 text-sm hover:bg-muted/20">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{f.name}</span>
+                          {(f.keywords ?? []).length > 0 && (
+                            <span className="ml-2 text-xs text-muted-foreground font-mono">({(f.keywords as string[]).slice(0, 3).join(", ")})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">{f.action}</span>
+                          <span className="font-bold text-sm">{f.firedCount ?? 0}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -4435,6 +4778,7 @@ export default function WhatsAppPage() {
                       </div>
                     </div>
                   ) : (
+                    <>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -4462,10 +4806,44 @@ export default function WhatsAppPage() {
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <Switch checked={flow.isEnabled} onCheckedChange={() => toggleFlow.mutate(flow.id)} />
+                        <Button size="sm" variant="ghost" title="Test this flow"
+                          onClick={() => { setTestingFlowId(testingFlowId === flow.id ? null : flow.id); setFlowTestInput(""); setFlowTestResult(null); }}
+                          className={testingFlowId === flow.id ? "text-blue-600 bg-blue-50" : "text-muted-foreground hover:text-foreground"}>
+                          <Zap className="w-3.5 h-3.5" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditingFlow(flow)} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this flow?")) deleteFlow.mutate(flow.id); }} className="text-red-500 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     </div>
+                    {testingFlowId === flow.id && (
+                      <div className="border-t border-border pt-3 space-y-2 mt-1">
+                        <p className="text-xs font-medium text-blue-600 flex items-center gap-1.5"><Zap className="w-3 h-3" />Test Flow — type a sample customer message to see if it would trigger</p>
+                        <div className="flex gap-2">
+                          <input
+                            value={flowTestInput}
+                            onChange={e => { setFlowTestInput(e.target.value); setFlowTestResult(null); }}
+                            onKeyDown={e => { if (e.key === "Enter" && flowTestInput.trim()) testFlow.mutate({ id: flow.id, message: flowTestInput }); }}
+                            placeholder="e.g. track my order / hi / discount code"
+                            className="flex-1 border border-input rounded-lg px-3 py-1.5 text-sm bg-background"
+                          />
+                          <Button size="sm" onClick={() => testFlow.mutate({ id: flow.id, message: flowTestInput })} disabled={testFlow.isPending || !flowTestInput.trim()} className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5">
+                            {testFlow.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Run"}
+                          </Button>
+                        </div>
+                        {flowTestResult && (flowTestResult as any).flowName === flow.name && (
+                          <div className={`rounded-lg px-3 py-2.5 border ${flowTestResult.matched ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+                            <p className={`font-semibold text-xs mb-1 ${flowTestResult.matched ? "text-green-700" : "text-amber-700"}`}>
+                              {flowTestResult.matched ? "✅ Would trigger!" : "⚠️ Would NOT trigger — no keyword match"}
+                            </p>
+                            {flowTestResult.matched && <p className="text-xs text-gray-700">{flowTestResult.actionDescription}</p>}
+                            {!flowTestResult.matched && (flowTestResult.keywords ?? []).length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-1">Expected keywords: {(flowTestResult.keywords as string[]).join(", ")}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               ))}

@@ -1,0 +1,112 @@
+The current “Test Message” page is still too manual and not user-friendly. Please redesign and improve this entire section professionally.
+
+Right now we have to manually type the Meta approved template name, language code, and variables count. This creates errors like:
+
+```text
+(#132000) Number of parameters does not match the expected number of params
+```
+
+I want this entire workflow automated and much smarter.
+
+Required Improvements:
+
+1. Auto Fetch Approved Templates from Meta
+
+* Automatically fetch all approved WhatsApp templates directly from Meta API.
+* Show them in a searchable dropdown/list.
+* No need to manually type template names.
+* When I select a template, it should auto-fill:
+
+  * Template Name
+  * Language Code
+  * Header Type
+  * Variables Count
+  * Body placeholders
+  * Buttons (if any)
+
+2. Auto Detect Variables
+
+* Detect placeholders like:
+  {{1}}, {{2}}, {{3}}
+* Automatically generate input fields below.
+  Example:
+  If template has:
+
+```text
+Hello {{1}}, your order {{2}} is confirmed
+```
+
+Then automatically show:
+
+* Variable 1 input
+* Variable 2 input
+
+No manual variable counter should exist anymore.
+
+3. Professional UI/UX Redesign
+   Please redesign this page completely with a modern WhatsApp Business style UI:
+
+* Clean cards
+* Better spacing
+* Responsive design
+* Smooth loading states
+* Green success states
+* Proper error cards
+* Better typography
+* Live preview section
+
+4. Live Template Preview
+   When a template is selected:
+
+* Show live WhatsApp-style preview on the right side.
+* Replace variables dynamically as user types.
+* Show buttons exactly like real WhatsApp.
+
+5. Smart Error Handling
+   Instead of raw Meta errors, show friendly messages:
+   Example:
+
+* “This template requires 2 variables”
+* “Template language mismatch”
+* “Template is not approved”
+* “Phone number format invalid”
+
+6. Quick Actions
+   Add:
+
+* “Send Test”
+* “Save as Favorite”
+* “Duplicate Test”
+* “Recent Templates”
+
+7. Template Sync Button
+   Add:
+
+```text
+Sync Templates from Meta
+```
+
+This should instantly pull latest approved templates from Meta API.
+
+8. Campaign Ready Structure
+   Prepare this system for future campaign broadcasting:
+
+* Multi-template selection
+* Bulk testing
+* Audience groups
+* Scheduled sending
+
+9. Technical Requirement
+   Please integrate:
+
+* Meta Graph API template fetch endpoint
+* Real-time template caching
+* Proper validation before send
+* Dynamic parameter mapping
+
+10. Important
+    Do NOT break the existing WhatsApp sending functionality.
+    Existing approved templates must continue sending normally.
+    Only improve the UI, automation, validation, and testing experience professionally.
+
+This page should feel like a premium SaaS WhatsApp Business dashboard, not a raw testing form.
