@@ -2954,6 +2954,84 @@ router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, asyn
       recentWaLogs = (recentRes.rows ?? []) as any[];
     }
 
+    const riderObj = rider ? {
+      id: rider.id,
+      riderName: rider.rider_name,
+      riderPhone: rider.rider_phone,
+      status: rider.status,
+      assignedAt: rider.assigned_at,
+      pickedAt: rider.picked_at,
+      outForDeliveryAt: rider.out_for_delivery_at,
+      deliveredAt: rider.delivered_at,
+      waToRiderAt: rider.wa_sent_at,
+      waToCustomerAt: rider.customer_wa_assigned_at,
+      codAmount: rider.cod_amount,
+    } : null;
+
+    /* ── Structured 7-stage timeline ── */
+    const isLahoreOrder = ((order.shippingAddress as any)?.city ?? "").toLowerCase().includes("lahore");
+    const activeShipment = activeShipments[0];
+    const timeline = [
+      {
+        stage: "order_created",
+        label: "Order Created",
+        at: order.createdAt,
+        done: true,
+      },
+      {
+        stage: "wa_sent",
+        label: "WA Confirmation Sent",
+        at: conf?.last_sent_at ?? null,
+        done: !!conf?.last_sent_at,
+        meta: {
+          metaStatus: waLog?.delivery_status ?? (conf?.last_sent_at ? "sent" : null),
+          retries: conf?.retry_count ?? 0,
+          messageId: conf?.wa_message_id ?? null,
+        },
+      },
+      {
+        stage: "confirmed",
+        label: "Customer Confirmed",
+        at: conf?.confirmation_received_at ?? null,
+        done: ["confirmed", "booked"].includes(conf?.status ?? ""),
+        meta: { reply: conf?.confirmation_reply ?? null, method: conf?.confirmation_reply?.startsWith("button") ? "button" : "text" },
+      },
+      {
+        stage: "booked",
+        label: isLahoreOrder ? "Rider Assigned" : "Courier Booked",
+        at: rider?.assigned_at ?? activeShipment?.createdAt ?? null,
+        done: !!rider?.assigned_at || activeShipments.some((s: any) => !s.isCancelled),
+        meta: {
+          trackingId: activeShipment?.trackingId ?? order.trackingNumber ?? null,
+          courierSlug: activeShipment?.courierSlug ?? null,
+          riderName: rider?.rider_name ?? null,
+        },
+      },
+      {
+        stage: "picked",
+        label: "Picked Up",
+        at: rider?.picked_at ?? null,
+        done: !!rider?.picked_at,
+        meta: { waToRider: rider?.wa_sent_at ?? null },
+        lahoreOnly: true,
+      },
+      {
+        stage: "out_for_delivery",
+        label: "Out for Delivery",
+        at: rider?.out_for_delivery_at ?? null,
+        done: !!rider?.out_for_delivery_at,
+        meta: { waToCustomer: rider?.customer_wa_status_at ?? null },
+        lahoreOnly: true,
+      },
+      {
+        stage: "delivered",
+        label: "Delivered",
+        at: rider?.delivered_at ?? null,
+        done: rider?.status === "delivered",
+        last: true,
+      },
+    ];
+
     res.json({
       order: { id: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt },
       confirmation: conf ?? null,
@@ -2963,24 +3041,20 @@ router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, asyn
         sentAt: conf?.last_sent_at ?? null,
         updatedAt: waLog.updated_at,
         rawResponse: waLog.response,
+      } : conf?.last_sent_at ? {
+        messageId: conf?.wa_message_id ?? null,
+        status: "sent",
+        sentAt: conf.last_sent_at,
+        updatedAt: null,
+        rawResponse: null,
       } : null,
       waSentCount: recentWaLogs.length,
-      rider: rider ? {
-        id: rider.id,
-        riderName: rider.rider_name,
-        riderPhone: rider.rider_phone,
-        status: rider.status,
-        assignedAt: rider.assigned_at,
-        pickedAt: rider.picked_at,
-        outForDeliveryAt: rider.out_for_delivery_at,
-        deliveredAt: rider.delivered_at,
-        waToRiderAt: rider.wa_sent_at,
-        waToCustomerAt: rider.customer_wa_assigned_at,
-        codAmount: rider.cod_amount,
-      } : null,
+      rider: riderObj,
       templates,
       shipments: activeShipments,
       recentWaLogs,
+      timeline,
+      isLahoreOrder,
     });
   } catch (err: any) {
     req.log.error(err);

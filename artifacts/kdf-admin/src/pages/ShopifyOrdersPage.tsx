@@ -729,18 +729,39 @@ function ApiResponseLog({ rawResponse }: { rawResponse: any }) {
 }
 
 /* ─── WA Delivery Status Badge ───────────────────────────── */
-function WaDeliveryBadge({ status }: { status?: string | null }) {
-  if (!status) return <span className="text-xs text-muted-foreground">No status</span>;
-  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    sent:      { label: "Sent",      cls: "bg-blue-100 text-blue-700 border-blue-200",   icon: <Send className="w-3 h-3" /> },
-    delivered: { label: "Delivered", cls: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle className="w-3 h-3" /> },
-    read:      { label: "Read ✓✓",   cls: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <CircleCheck className="w-3 h-3" /> },
-    failed:    { label: "Failed",    cls: "bg-red-100 text-red-700 border-red-200",      icon: <XCircle className="w-3 h-3" /> },
-  };
-  const s = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border", icon: <Clock className="w-3 h-3" /> };
+/* WhatsApp-style double tick SVG */
+function WaTick({ variant }: { variant: "single" | "double" | "double-blue" }) {
+  if (variant === "single") return (
+    <svg viewBox="0 0 16 11" className="w-4 h-3 fill-current text-gray-400" xmlns="http://www.w3.org/2000/svg">
+      <path d="M11.07.59L4.62 7.04 1.93 4.35.59 5.69l4.03 4.03L12.41 1.93z"/>
+    </svg>
+  );
+  if (variant === "double") return (
+    <svg viewBox="0 0 18 11" className="w-4 h-3 fill-current text-gray-400" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.38.59l-9.5 9.5-3.54-3.54L3 7.89l4.88 4.88L18.72 1.93z"/>
+      <path d="M12.07.59L5.62 7.04 4.35 5.77 3 7.11l2.62 2.62L13.41 1.93z"/>
+    </svg>
+  );
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${s.cls}`}>
-      {s.icon}{s.label}
+    <svg viewBox="0 0 18 11" className="w-4 h-3 fill-current text-[#53bdeb]" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.38.59l-9.5 9.5-3.54-3.54L3 7.89l4.88 4.88L18.72 1.93z"/>
+      <path d="M12.07.59L5.62 7.04 4.35 5.77 3 7.11l2.62 2.62L13.41 1.93z"/>
+    </svg>
+  );
+}
+
+function WaDeliveryBadge({ status }: { status?: string | null }) {
+  if (!status) return <span className="text-xs text-muted-foreground italic">No status</span>;
+  const map: Record<string, { label: string; cls: string; tick: React.ReactNode }> = {
+    sent:      { label: "Sent",       cls: "bg-blue-50 text-blue-700 border-blue-200",      tick: <WaTick variant="single" /> },
+    delivered: { label: "Delivered",  cls: "bg-green-50 text-green-700 border-green-200",   tick: <WaTick variant="double" /> },
+    read:      { label: "Read",       cls: "bg-sky-50 text-sky-700 border-sky-200",         tick: <WaTick variant="double-blue" /> },
+    failed:    { label: "Failed",     cls: "bg-red-50 text-red-700 border-red-200",         tick: <XCircle className="w-3.5 h-3.5" /> },
+  };
+  const s = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border", tick: <Clock className="w-3 h-3" /> };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-semibold ${s.cls}`}>
+      {s.tick}{s.label}
     </span>
   );
 }
@@ -835,17 +856,8 @@ function WaConfirmTab({ order }: { order: any }) {
   const city = (addr.city ?? "").toLowerCase();
   const isLahore = city.includes("lahore");
   const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
-  const [showRecentLogs, setShowRecentLogs] = useState(false);
-
-  /* Auto-select recommended template when panel first opens */
-  useEffect(() => {
-    if (!showTemplatePanel || selectedTemplate) return;
-    const approvedTpls = (data?.templates ?? []).filter((t: any) => t.approval_status === "approved");
-    const rec = approvedTpls.find((t: any) => t.trigger_event === recommendedEvent)
-      ?? approvedTpls[0];
-    if (rec) setSelectedTemplate(String(rec.id));
-  }, [showTemplatePanel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [showTemplatePanel, setShowTemplatePanel] = useState(true);
+  const [showRecentLogs, setShowRecentLogs] = useState(true);
 
   /* ── Full WA status + timeline data (auto-refreshes every 15s) ── */
   const { data, isLoading, refetch } = useQuery({
@@ -861,6 +873,7 @@ function WaConfirmTab({ order }: { order: any }) {
   const templates: any[] = data?.templates ?? [];
   const shipments: any[] = data?.shipments ?? [];
   const recentWaLogs: any[] = data?.recentWaLogs ?? [];
+  const backendTimeline: any[] = data?.timeline ?? [];
 
   const approvedTemplates = templates.filter((t: any) => t.approval_status === "approved");
 
@@ -886,6 +899,15 @@ function WaConfirmTab({ order }: { order: any }) {
     : isBooked ? "order_shipped"
     : isConfirmed ? "order_shipped"
     : "order_confirmation";
+
+  /* Auto-select recommended template on load or when recommendation changes */
+  useEffect(() => {
+    if (selectedTemplate) return;
+    const approvedTpls = (data?.templates ?? []).filter((t: any) => t.approval_status === "approved");
+    const rec = approvedTpls.find((t: any) => t.trigger_event === recommendedEvent)
+      ?? approvedTpls[0];
+    if (rec) setSelectedTemplate(String(rec.id));
+  }, [data?.templates, recommendedEvent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Send initial WA confirmation ── */
   const sendMutation = useMutation({

@@ -2202,15 +2202,45 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       "Authorization": `Bearer ${ecomToken}`,
     };
 
-    const bookResp = await fetch(`${baseUrl}/ecom/api/shipment/book`, {
-      method: "POST",
-      headers: bookHeaders,
-      body: JSON.stringify(bookingPayload),
-      signal: AbortSignal.timeout(15000),
-    });
-    const bookText = await bookResp.text();
+    /* ── URL Fallback: try /ecom/api/shipment/book first, then /ecom/api/booking/create ── */
+    const bookUrls = [
+      `${baseUrl}/ecom/api/shipment/book`,
+      `${baseUrl}/ecom/api/booking/create`,
+    ];
+
     let bookData: Record<string, any> = {};
-    try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
+    let bookText = "";
+    let lastStatus = 0;
+    let usedUrl = bookUrls[0];
+
+    for (const bookUrl of bookUrls) {
+      usedUrl = bookUrl;
+      /* For /booking/create, also include accesstoken in body (old API style) */
+      const payload = bookUrl.includes("booking/create")
+        ? { ...bookingPayload, accesstoken: ecomToken }
+        : bookingPayload;
+
+      logger.info({ bookUrl }, "TCS booking — trying URL");
+      const resp = await fetch(bookUrl, {
+        method: "POST",
+        headers: bookHeaders,
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000),
+      });
+      lastStatus = resp.status;
+      bookText = await resp.text();
+      try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
+
+      logger.info({ bookUrl, status: lastStatus, body: bookText.slice(0, 200) }, "TCS booking — URL response");
+
+      /* If 404, endpoint doesn't exist — try next URL */
+      if (resp.status === 404) {
+        logger.warn({ bookUrl }, "TCS booking — 404, trying fallback URL");
+        continue;
+      }
+      /* Any other status (200, 400, 401, 403, 422…) — stop here, this URL exists */
+      break;
+    }
 
     /* Success: consignmentNo present OR HTTP 200 with no error message */
     const isSuccess =
@@ -2218,21 +2248,26 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       bookData.message?.toUpperCase() === "SUCCESS" ||
       bookData.code === "200" || bookData.code === 200 ||
       bookData.status === true || bookData.status === "SUCCESS" ||
-      (bookResp.ok && !bookData.message?.toUpperCase()?.startsWith("FAIL") && !bookData.message?.toLowerCase()?.includes("invalid"));
+      (lastStatus >= 200 && lastStatus < 300 &&
+        !bookData.message?.toUpperCase()?.startsWith("FAIL") &&
+        !bookData.message?.toLowerCase()?.includes("invalid"));
 
     if (!isSuccess) {
       const errorList: any[] = Array.isArray(bookData.errorList) ? bookData.errorList : [];
       const legacyError: any[] = Array.isArray(bookData.error) ? bookData.error : [];
-      const errMsg = errorList.length > 0
+      const rawMsg = errorList.length > 0
         ? errorList.map((e: any) => `${e.key ?? ""}: ${e.errormessage ?? e.message ?? JSON.stringify(e)}`).join(" | ")
         : legacyError.length > 0
           ? Object.values(legacyError[0]).join(", ")
-          : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 300)}`;
+          : bookData.message ?? bookData.statusMessage ?? `HTTP ${lastStatus}: ${bookText.slice(0, 200)}`;
       const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY]";
-      const bearerHint = !bearer
-        ? " | Hint: Add ENVO Portal Bearer Token in Advanced Settings."
-        : "";
-      throw new Error(`TCS: ${errMsg}${acct}${bearerHint}`);
+      const urlHint = ` [url: ${usedUrl.split("/").slice(-3).join("/")}]`;
+      const tokenHint = settings.accessToken?.trim()
+        ? " | IMPORTANT: Clear 'Direct ECOM Access Token' field in Advanced Settings — stale token detected!"
+        : !bearer
+          ? " | Hint: Add ENVO Bearer Token in Advanced Settings."
+          : "";
+      throw new Error(`TCS: ${rawMsg}${acct}${urlHint}${tokenHint}`);
     }
 
     const trackingId =
@@ -2244,7 +2279,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       bookData.data?.bookingNo ??
       bookData.result?.consignmentNo ??
       generateTrackingId("tcs");
-    return { trackingId, trackingUrl: getTrackingUrl("tcs", trackingId), rawResponse: bookData };
+    return { trackingId, trackingUrl: getTrackingUrl("tcs", trackingId), rawResponse: { ...bookData, _usedUrl: usedUrl } };
   }
 
   /* ── Leopards ── */
