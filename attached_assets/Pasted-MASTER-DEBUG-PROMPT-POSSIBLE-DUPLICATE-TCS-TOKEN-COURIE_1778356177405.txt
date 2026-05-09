@@ -1,0 +1,164 @@
+MASTER DEBUG PROMPT — POSSIBLE DUPLICATE TCS TOKEN / COURIER SYSTEM CONFLICT
+
+IMPORTANT:
+We currently have TWO separate order systems inside admin:
+
+1. Shopify Orders
+2. Commerce / Ecommerce Orders (Website Orders)
+
+Possible issue:
+Both systems may be using:
+
+* separate courier services
+* separate auth logic
+* different tokens
+* duplicate booking logic
+* different environments
+
+This may be causing:
+✔ fake booking
+✔ fake tracking
+✔ duplicate CN generation
+✔ invalid access token
+✔ bookings not appearing on TCS portal
+
+==================================================
+REQUIRED FULL SYSTEM AUDIT
+==========================
+
+Please audit BOTH systems completely:
+
+1. Shopify Orders Module
+2. Commerce / Ecommerce Orders Module
+
+Check whether:
+
+✔ both are using different TCS services
+✔ both are generating different tokens
+✔ both are storing tokens separately
+✔ both are using different environments
+✔ both are booking from different APIs
+✔ both are calling courier APIs independently
+
+==================================================
+VERY IMPORTANT
+==============
+
+Need ONE centralized courier engine.
+
+NOT:
+❌ separate courier logic
+❌ separate token generation
+❌ separate booking APIs
+❌ duplicate auth systems
+
+==================================================
+REQUIRED ARCHITECTURE
+=====================
+
+Create ONE shared courier service:
+
+Example:
+
+```php
+CourierService.php
+```
+
+Both:
+
+* Shopify Orders
+* Ecommerce Orders
+
+must use SAME service.
+
+==================================================
+CENTRALIZED TOKEN SYSTEM
+========================
+
+Need ONLY ONE:
+
+✔ bearer token
+✔ access token
+✔ token refresh system
+✔ production environment
+✔ sandbox environment
+
+stored centrally.
+
+==================================================
+DEBUGGING REQUIRED
+==================
+
+Please add logs:
+
+✔ Which module created booking?
+✔ Which token used?
+✔ Which environment?
+✔ Which API URL?
+✔ Real CN generated?
+✔ Portal sync successful?
+✔ Tracking valid?
+✔ Duplicate booking prevented?
+
+==================================================
+FAKE BOOKING ISSUE
+==================
+
+Currently Ecommerce orders appear to create:
+❌ fake bookings
+❌ fake tracking
+❌ non-synced CN numbers
+
+Need to verify:
+
+✔ booking actually exists on TCS portal
+✔ tracking works on official TCS tracking page
+✔ CN is real
+✔ shipment visible in courier dashboard
+
+Tracking URL:
+[https://ociconnect.tcscourier.com/tracking/index.html](https://ociconnect.tcscourier.com/tracking/index.html)
+
+==================================================
+DUPLICATE TOKEN ISSUE
+=====================
+
+Please check:
+Are TWO different access tokens being generated simultaneously?
+
+Possible issue:
+
+Shopify module:
+
+```php
+generateAccessToken()
+```
+
+Commerce module:
+
+```php
+generateAccessToken()
+```
+
+This may overwrite tokens and invalidate sessions.
+
+Need:
+✔ single token manager
+✔ centralized auth service
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✔ one courier engine
+✔ one token system
+✔ one booking flow
+✔ one tracking flow
+✔ real bookings only
+✔ real CN generation
+✔ production-safe architecture
+✔ proper debugging logs
+✔ no fake tracking
+✔ no duplicate booking
+✔ Shopify + Ecommerce unified courier system

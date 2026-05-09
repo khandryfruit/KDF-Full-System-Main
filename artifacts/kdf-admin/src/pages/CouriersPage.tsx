@@ -497,17 +497,20 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p><span className="text-blue-300">TOKEN 1</span> · ENVO Bearer Token</p>
                   <p className="text-slate-400 pl-2">→ From TCS ENVO Portal → paste below</p>
-                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">Authorization: Bearer …</span> header</p>
-                  <p className="text-slate-400 pl-2">→ Required for ALL TCS API calls</p>
+                  <p className="text-slate-400 pl-2">→ Used ONLY to generate Token 2 (ECOM)</p>
+                  <p className="text-slate-400 pl-2">→ Not sent directly to booking / label APIs</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p><span className="text-orange-300">TOKEN 2</span> · ECOM Access Token</p>
                   <p className="text-slate-400 pl-2">→ <span className="text-green-300">AUTO:</span> POST /ecom/api/authentication/token</p>
                   <p className="text-slate-400 pl-2">   using Bearer + Username + Password above</p>
                   <p className="text-slate-400 pl-2">   cached 55 min, auto-refreshes on booking</p>
                   <p className="text-slate-400 pl-2">→ <span className="text-yellow-300">MANUAL:</span> paste "Direct ECOM Token" below</p>
-                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">booking body.accesstoken</span> field</p>
+                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">Authorization: Bearer …</span> header</p>
+                  <p className="text-slate-400 pl-2">   for /shipment/book · /print/label · /booking/cancel</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
-                  <p className="text-amber-300">⚠ These are DIFFERENT tokens. Do NOT mix them.</p>
+                  <p className="text-amber-300">⚠ These are DIFFERENT tokens. Never mix them.</p>
+                  <p className="text-slate-400 pl-2">Token 1 (Bearer) → only used to generate Token 2</p>
+                  <p className="text-slate-400 pl-2">Token 2 (ECOM) → used for all booking operations</p>
                 </div>
 
                 {/* ENVO Bearer Token — primary field */}

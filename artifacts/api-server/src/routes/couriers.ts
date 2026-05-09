@@ -368,6 +368,8 @@ router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (re
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
     const bearer = getTcsStaticBearer(settings);
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    /* Label API uses ECOM token in Authorization header (same as booking) */
+    const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
 
     /* Build consignment list — single or batch */
     const cnList: string[] = consignmentNumber
@@ -376,8 +378,8 @@ router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (re
 
     const printResp = await fetch(`${baseUrl}/ecom/api/print/label`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ consignmentno: cnList }),
+      headers: { "Authorization": `Bearer ${ecomToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ consignmentNo: cnList[0], consignmentno: cnList }),
       signal: AbortSignal.timeout(20000),
     });
 
@@ -1004,10 +1006,12 @@ router.post("/admin/shipments/:id/cancel", adminMiddleware as any, async (req: A
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
     const bearer = getTcsStaticBearer(settings);
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    /* Cancel API uses ECOM token in Authorization header (same as booking) */
+    const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
 
     const cancelResp = await fetch(`${baseUrl}/ecom/api/booking/cancel`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${ecomToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ consignmentNumber: shipment.trackingId }),
       signal: AbortSignal.timeout(10000),
     });
@@ -2047,108 +2051,56 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
     const items: any[] = Array.isArray(order.items) ? order.items : [];
 
-    const payload = {
-      consignmentno: "",
-      shipperinfo: {
-        tcsaccount: settings.tcsaccount || "",
-        shippername: (settings.shipperName || "KDF Nuts").trim().slice(0, 50),
-        address1: settings.shipperAddress || "",
-        address2: "",
-        address3: "",
-        zip: "",
-        countrycode: "PK",
-        countryname: "Pakistan",
-        citycode: (settings.shipperCityCode || "LHE").trim().toUpperCase().slice(0, 5),
-        cityname: settings.shipperCity || "Lahore",
-        mobile: settings.shipperPhone || "",
-      },
-      consigneeinfo: {
-        consigneecode: "",
-        firstname: address.name ?? "",
-        middlename: "",
-        lastname: "",
-        address1: address.address ?? "",
-        address2: "",
-        address3: "",
-        zip: "",
-        countrycode: "PK",
-        countryname: "Pakistan",
-        citycode: "",
-        cityname: address.city ?? "",
-        email: address.email ?? "",
-        areacode: "",
-        areaname: "",
-        blockcode: "",
-        blockname: "",
-        lat: "",
-        lng: "",
-        landmark: "",
-        mobile: address.phone ?? "",
-      },
-      shipmentinfo: {
-        costcentercode: settings.costcentercode ?? "",
-        referenceno: String(order.orderNumber ?? order.id),
-        contentdesc: order.contentDesc ?? (items.length > 0 ? items.map((i: any) => i.name).join(", ") : "KDF Nuts Products"),
-        servicecode: service ?? settings.serviceCode ?? "O",
-        parametertype: "",
-        shipmentdate: formatTcsShipmentDate(),
-        shippingtype: "",
-        currency: "PKR",
-        codamount: codAmount,
-        declaredvalue: order.declaredValue ?? (settings.declaredValue > 0 ? settings.declaredValue : null),
-        insuredvalue: order.insuredValue ?? (settings.insuredValue > 0 ? settings.insuredValue : null),
-        transactiontype: "",
-        dsflag: "",
-        carrierslug: "",
-        weightinkg: tcsWeight(order.weight ?? settings.defaultWeight),
-        pieces: parseInt(String(order.pieces ?? 1), 10),
-        fragile: order.fragile ?? settings.fragile ?? false,
-        remarks: order.specialInstructions || settings.defaultRemarks || order.notes || "",
-        skus: items.length > 0
-          ? items.map((item: any) => ({
-              description: item.name ?? "Product",
-              quantity: parseInt(String(item.qty ?? 1), 10),
-              weight: tcsWeight(settings.defaultWeight),
-              uom: "KG",
-              unitprice: Number(item.price ?? 0),
-              declaredvalue: settings.declaredValue > 0 ? Number(settings.declaredValue) : null,
-              insuredvalue: settings.insuredValue > 0 ? Number(settings.insuredValue) : null,
-            }))
-          : [{
-              description: "KDF Nuts Products",
-              quantity: 1,
-              weight: tcsWeight(settings.defaultWeight),
-              uom: "KG",
-              unitprice: codAmount,
-              declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
-              insuredvalue: settings.insuredValue > 0 ? settings.insuredValue : null,
-            }],
-      },
+    /* ── Step 2: Get ECOM Access Token ─────────────────────────────────────
+       TCS 2-Token architecture (official guide):
+         • Bearer Token (Step 1)  → used ONLY to generate ECOM token via Step-2
+         • ECOM Access Token (Step 2) → goes in Authorization: Bearer header for
+           ALL booking/tracking/label calls.  NOT in request body.
+       getTcsEcomToken(): manual override → in-memory cache → Step-2 API call.    */
+    const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
+
+    /* ── Flat booking payload (official /ecom/api/shipment/book format) ─── */
+    const weightKg = parseFloat(tcsWeight(order.weight ?? settings.defaultWeight));
+    const bookingPayload: Record<string, any> = {
+      /* Consignee / delivery info */
+      consigneeName:        (address.name ?? address.firstName ?? "Customer").trim().slice(0, 100),
+      consigneeAddress:     [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").slice(0, 200) || address.address || "",
+      consigneeMobNo:       (address.phone ?? "").replace(/\D/g, "").slice(-11),
+      /* Shipper info */
+      shipperName:          (settings.shipperName || "KDF Nuts").trim().slice(0, 50),
+      shipperAccountNo:     settings.tcsaccount || "",
+      shipperAddress:       settings.shipperAddress || "",
+      shipperPhone:         settings.shipperPhone || "",
+      /* Origin / destination cities */
+      originCityName:       settings.shipperCity || "Lahore",
+      destinationCityName:  address.city ?? "",
+      /* Shipment details */
+      weightInKg:           weightKg,
+      pieces:               parseInt(String(order.pieces ?? 1), 10),
+      codAmount:            codAmount,
+      orderReferenceNo:     String(order.orderNumber ?? order.id),
+      serviceType:          service ?? settings.serviceType ?? "OVERNIGHT",
+      /* Optional */
+      remarks:              (order.specialInstructions || settings.defaultRemarks || order.notes || "").slice(0, 200),
+      fragile:              !!(order.fragile ?? settings.fragile),
+      contentDesc:          (order.contentDesc ?? (items.length > 0 ? items.map((i: any) => i.name).join(", ") : "KDF Nuts Products")).slice(0, 200),
     };
 
-    /* ── Step 2: Get ECOM Access Token (goes in booking body) ───────────────
-       TCS requires BOTH:
-         1. Header:  Authorization: Bearer <bearerToken>   (ENVO Portal static token)
-         2. Body:    accesstoken: <ecomToken>              (Step-2 ECOM access token)
-       getTcsEcomToken() handles: manual override → cache → Step-2 API call.       */
-    const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
-    const bookingPayload = { ...payload, accesstoken: ecomToken };
-
-    const finalWeight = payload.shipmentinfo.weightinkg;
     logger.info({
-      finalWeight,
+      weightKg,
       tcsaccount:  settings.tcsaccount,
       ecomTokSrc:  settings.accessToken?.trim() ? "Direct (manual)" : (tcsEcomCache.has(`${settings.tcsaccount ?? ""}:${(settings.username ?? "").trim()}`) ? "cache" : "Step-2 fresh"),
+      url:         `${baseUrl}/ecom/api/shipment/book`,
       sandbox:     !!settings.sandbox,
-      baseUrl,
     }, "TCS booking — payload summary");
 
+    /* ECOM Access Token goes in Authorization header (NOT in body) */
     const bookHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${bearer}`,
+      "Authorization": `Bearer ${ecomToken}`,
     };
 
-    const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
+    const bookResp = await fetch(`${baseUrl}/ecom/api/shipment/book`, {
       method: "POST",
       headers: bookHeaders,
       body: JSON.stringify(bookingPayload),
@@ -2158,11 +2110,13 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     let bookData: Record<string, any> = {};
     try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
 
+    /* Success: consignmentNo present OR HTTP 200 with no error message */
     const isSuccess =
+      !!bookData.consignmentNo ||
       bookData.message?.toUpperCase() === "SUCCESS" ||
       bookData.code === "200" || bookData.code === 200 ||
       bookData.status === true || bookData.status === "SUCCESS" ||
-      (bookResp.ok && !bookData.message?.toUpperCase().startsWith("FAIL"));
+      (bookResp.ok && !bookData.message?.toUpperCase()?.startsWith("FAIL") && !bookData.message?.toLowerCase()?.includes("invalid"));
 
     if (!isSuccess) {
       const errorList: any[] = Array.isArray(bookData.errorList) ? bookData.errorList : [];
