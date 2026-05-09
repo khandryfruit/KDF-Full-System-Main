@@ -28,8 +28,9 @@ export const TCS_TRACKING_LINK   = "https://ociconnect.tcscourier.com/tracking/i
 
 /* ─── Settings — only what is actually needed ───────────────────────────── */
 export interface TcsSettings {
-  /* ── Required: 3 fields only ── */
+  /* ── Required: 4 fields ── */
   bearerToken: string;   /* Long-lived JWT from TCS ENVO Portal */
+  clientId:    string;   /* X-IBM-Client-Id from TCS ENVO Portal → API Credentials */
   username:    string;   /* TCS username — sent in booking body as "userName" */
   password:    string;   /* TCS password — sent in booking body as "password" */
 
@@ -107,17 +108,24 @@ export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
     "Content-Type":  "application/json",
     "Accept":        "application/json",
   };
-  // IBM API Gateway requires X-IBM-Client-Id — auto-decoded from JWT payload
-  const clientId = extractClientIdFromJwt(settings.bearerToken);
+  // IBM API Gateway requires X-IBM-Client-Id
+  // Use explicit clientId field first; fall back to JWT decode for backwards compat
+  const clientId = settings.clientId?.trim() || extractClientIdFromJwt(settings.bearerToken);
   if (clientId) headers["X-IBM-Client-Id"] = clientId;
   return headers;
 }
 
-/* ─── Validate — only 3 required fields ─────────────────────────────────── */
+/* ─── Validate — 4 required fields ──────────────────────────────────────── */
 export function validateSettings(settings: TcsSettings): string[] {
   const errs: string[] = [];
   if (!settings.bearerToken?.trim())
     errs.push("Bearer Token is empty — paste your JWT from TCS ENVO Portal in Couriers → TCS Settings");
+  if (!settings.clientId?.trim()) {
+    // Try JWT fallback — if it works, warn but don't error
+    const fromJwt = extractClientIdFromJwt(settings.bearerToken ?? "");
+    if (!fromJwt)
+      errs.push("X-IBM-Client-Id is empty — find it in TCS ENVO Portal → My APIs → Subscriptions → Client ID");
+  }
   if (!settings.username?.trim())
     errs.push("TCS Username is empty");
   if (!settings.password?.trim())
@@ -199,20 +207,25 @@ export async function testConnection(
     return { ok: false, steps };
   }
 
-  const clientId = extractClientIdFromJwt(settings.bearerToken);
+  const explicitClientId = settings.clientId?.trim() || null;
+  const jwtClientId = extractClientIdFromJwt(settings.bearerToken);
+  const resolvedClientId = explicitClientId ?? jwtClientId;
+
   steps.push({
     step: "Config", status: "info",
-    detail: `username: ${settings.username} | token: ${settings.bearerToken.slice(0, 20)}… | clientId: ${clientId ?? "(not found in JWT)"} | mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`,
+    detail: `username: ${settings.username} | token: ${settings.bearerToken.slice(0, 20)}… | X-IBM-Client-Id: ${resolvedClientId ?? "(MISSING)"} | mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`,
   });
 
-  if (!clientId) {
+  if (resolvedClientId) {
+    const src = explicitClientId ? "entered in settings" : "auto-decoded from JWT";
+    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId=${resolvedClientId} (${src}) — will be sent as X-IBM-Client-Id header` });
+  } else {
     steps.push({
       step: "X-IBM-Client-Id",
-      status: "warn",
-      detail: "Could not decode clientId from Bearer JWT payload — IBM API Gateway may reject requests.\nCheck that your bearer token is the full JWT (eyJ…) from TCS ENVO Portal.",
+      status: "fail",
+      detail: "❌ X-IBM-Client-Id is MISSING — IBM API Gateway will reject every request with 401.\n\n✅ ACTION: Go to TCS ENVO Portal → My APIs → Subscriptions → copy your Client ID → paste it in the X-IBM-Client-Id field in Couriers → TCS Settings.",
     });
-  } else {
-    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId=${clientId} auto-decoded from JWT — will be sent as X-IBM-Client-Id header` });
+    return { ok: false, steps };
   }
 
   const baseUrl = settings.sandbox ? TCS_COD_SANDBOX_URL : TCS_COD_URL;
