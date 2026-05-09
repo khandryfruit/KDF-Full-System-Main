@@ -1217,6 +1217,7 @@ export default function WhatsAppPage() {
 
   /* ── Meta Embedded Signup ── */
   const [isConnectingMeta, setIsConnectingMeta] = useState(false);
+  const [metaLoginError, setMetaLoginError] = useState<"feature_unavailable" | "cancelled" | null>(null);
   const metaEmbeddedDataRef = useRef<{ phone_number_id?: string; waba_id?: string } | null>(null);
 
   const { data: metaConfig } = useQuery<{ appId: string | null; configId: string | null; isConfigured: boolean }>({
@@ -1266,9 +1267,10 @@ export default function WhatsAppPage() {
     onError: (e: any) => { setIsConnectingMeta(false); toast({ title: "Error", description: e.message, variant: "destructive" }); },
   });
 
+  /* Always default to manual — Embedded Signup doesn't work for self-owned WABAs */
   useEffect(() => {
-    if (metaConfig !== undefined) {
-      setConnMethod(metaConfig?.isConfigured ? "meta" : "manual");
+    if (metaConfig !== undefined && !metaConfig?.isConfigured) {
+      setConnMethod("manual");
     }
   }, [metaConfig]);
 
@@ -1293,7 +1295,11 @@ export default function WhatsAppPage() {
   const handleEmbeddedSignup = async () => {
     if (!metaConfig?.appId || !metaConfig?.configId) return;
     setIsConnectingMeta(true);
+    setMetaLoginError(null);
     metaEmbeddedDataRef.current = null;
+
+    /* Track whether the popup was closed quickly (< 3 s) — a sign of "Feature unavailable" */
+    const popupOpenedAt = Date.now();
 
     const messageHandler = (event: MessageEvent) => {
       if (event.origin !== "https://www.facebook.com") return;
@@ -1325,6 +1331,7 @@ export default function WhatsAppPage() {
       window.FB.login((response: any) => {
         window.removeEventListener("message", messageHandler);
         if (response?.authResponse?.code) {
+          setMetaLoginError(null);
           const { phone_number_id, waba_id } = metaEmbeddedDataRef.current ?? {};
           /* Prefer IDs returned by the signup event; fall back to what we already have saved */
           exchangeMetaToken.mutate({
@@ -1334,7 +1341,20 @@ export default function WhatsAppPage() {
           });
         } else {
           setIsConnectingMeta(false);
-          toast({ title: "Cancelled", description: "Meta login was closed or not completed." });
+          /* If popup closed in < 4 seconds without a code, Meta showed "Feature unavailable"
+             (Development mode / missing Privacy Policy / App Icon etc.) */
+          const elapsed = Date.now() - popupOpenedAt;
+          if (elapsed < 4000) {
+            setMetaLoginError("feature_unavailable");
+            toast({
+              title: "Meta App is not Live",
+              description: 'Meta showed "Feature unavailable — Facebook Login is currently unavailable for this app". Your app is in Development mode or missing required fields. Run the Health Check below to see exactly what needs fixing.',
+              variant: "destructive",
+            });
+          } else {
+            setMetaLoginError("cancelled");
+            toast({ title: "Cancelled", description: "Meta login was closed without completing." });
+          }
         }
       }, loginParams);
     } catch (e: any) {
@@ -1790,6 +1810,95 @@ export default function WhatsAppPage() {
                             <p>4. Changes save karein, phir dobara "Connect with Meta" click karein</p>
                           </div>
                         </div>
+
+                        {/* ── "Feature unavailable" error banner ── */}
+                        {metaLoginError === "feature_unavailable" && (
+                          <div className="border-2 border-red-400 bg-red-50 rounded-xl overflow-hidden">
+                            {/* Header */}
+                            <div className="px-4 py-3 bg-red-600 flex items-center gap-2.5">
+                              <XCircle className="w-5 h-5 text-white shrink-0" />
+                              <p className="text-sm font-bold text-white">Meta App is not Live — "Feature unavailable" error detected</p>
+                            </div>
+                            <div className="px-4 py-4 space-y-3">
+                              <p className="text-xs text-red-800 leading-relaxed">
+                                Meta showed <strong>"Facebook Login is currently unavailable for this app as we are updating additional details"</strong>. This is not a code bug — your Meta App (ID: <code className="font-mono bg-red-100 px-1 rounded">{metaConfig?.appId ?? "890613233206413"}</code>) is either in <strong>Development mode</strong> or missing required fields. Fix these in the Meta Developer Portal:
+                              </p>
+
+                              {/* Checklist of required fixes */}
+                              <div className="space-y-2">
+                                {[
+                                  {
+                                    num: "1", urgent: true,
+                                    label: "Switch app to LIVE mode",
+                                    desc: 'Top-right toggle in your Meta App dashboard. Development mode = only app admins/developers can log in.',
+                                    url: `https://developers.facebook.com/apps/${metaConfig?.appId ?? "890613233206413"}/dashboard/`,
+                                    linkLabel: "Open App Dashboard →",
+                                  },
+                                  {
+                                    num: "2", urgent: true,
+                                    label: "Add Privacy Policy URL",
+                                    desc: 'Settings → Basic → Privacy Policy URL. Required before switching to Live.',
+                                    url: `https://developers.facebook.com/apps/${metaConfig?.appId ?? "890613233206413"}/settings/basic/`,
+                                    linkLabel: "Open Basic Settings →",
+                                  },
+                                  {
+                                    num: "3", urgent: true,
+                                    label: "Upload App Icon (1024×1024 px)",
+                                    desc: 'Settings → Basic → App Icon. Required before switching to Live.',
+                                    url: `https://developers.facebook.com/apps/${metaConfig?.appId ?? "890613233206413"}/settings/basic/`,
+                                    linkLabel: "Open Basic Settings →",
+                                  },
+                                  {
+                                    num: "4", urgent: false,
+                                    label: "Add Data Deletion Callback URL",
+                                    desc: 'Settings → Basic → Data Deletion → URL or Instructions. Required for Facebook Login apps.',
+                                    url: `https://developers.facebook.com/apps/${metaConfig?.appId ?? "890613233206413"}/settings/basic/`,
+                                    linkLabel: "Open Basic Settings →",
+                                  },
+                                  {
+                                    num: "5", urgent: false,
+                                    label: "Add App Domains",
+                                    desc: 'Settings → Basic → App Domains. Add: khanbabadryfruits.com, admin.khanbabadryfruits.com',
+                                    url: `https://developers.facebook.com/apps/${metaConfig?.appId ?? "890613233206413"}/settings/basic/`,
+                                    linkLabel: "Open Basic Settings →",
+                                  },
+                                ].map(item => (
+                                  <div key={item.num} className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border ${item.urgent ? "border-red-200 bg-white" : "border-red-100 bg-red-50/50"}`}>
+                                    <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5 ${item.urgent ? "bg-red-600 text-white" : "bg-red-200 text-red-800"}`}>{item.num}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`text-xs font-semibold ${item.urgent ? "text-red-900" : "text-red-800"}`}>{item.label}</p>
+                                      <p className="text-[11px] text-red-700 mt-0.5 leading-relaxed">{item.desc}</p>
+                                      <a href={item.url} target="_blank" rel="noopener noreferrer"
+                                         className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 hover:underline">
+                                        {item.linkLabel} <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Action row */}
+                              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                                <button
+                                  onClick={() => { setConnMethod("manual"); setMetaLoginError(null); }}
+                                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs transition-colors"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Switch to Manual Method (Recommended)
+                                </button>
+                                <button
+                                  onClick={() => setMetaLoginError(null)}
+                                  className="flex items-center gap-1.5 px-4 py-2 border border-red-300 text-red-700 hover:bg-red-100 font-medium rounded-xl text-xs transition-colors"
+                                >
+                                  Dismiss
+                                </button>
+                                <p className="text-[10px] text-red-600 flex items-center gap-1">
+                                  <Info className="w-3 h-3 shrink-0" />
+                                  After fixing, run the Health Check in Settings tab to verify
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex flex-wrap items-center gap-3">
                           <button
