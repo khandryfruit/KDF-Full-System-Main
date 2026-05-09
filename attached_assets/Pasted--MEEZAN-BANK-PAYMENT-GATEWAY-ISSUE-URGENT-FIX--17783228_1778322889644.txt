@@ -1,0 +1,279 @@
+====================================================
+MEEZAN BANK PAYMENT GATEWAY ISSUE — URGENT FIX REQUIRED
+=======================================================
+
+We are getting the following error while integrating Meezan Bank E-commerce Payment Gateway API:
+
+ERROR:
+"Network error reaching Meezan Bank API
+(https://securepayment.meezanbank.com/payment/rest/register.do)
+
+Ensure the server's outbound IP (34.180.10.179) is reachable and not blocked.
+
+Details:
+TypeError: fetch failed"
+
+Also using:
+https://test-securepayment.meezanbank.com:9716/payment/rest
+
+====================================================
+IMPORTANT
+=========
+
+I have already received the official Meezan Bank API documentation and test URLs from Meezan Bank.
+
+You must carefully analyze the API documentation before implementing or debugging anything.
+
+The integration must strictly follow Meezan Bank EPG API specification.
+
+====================================================
+THINGS YOU MUST CHECK IMMEDIATELY
+=================================
+
+1. SERVER OUTBOUND IP WHITELISTING
+
+---
+
+The main issue most likely is:
+
+Meezan Bank has NOT whitelisted our server IP:
+34.180.10.179
+
+Please:
+
+* Contact Meezan Bank technical team
+* Confirm whitelist status
+* Confirm firewall access
+* Confirm outbound connectivity
+
+Without IP whitelisting Meezan Bank server may reject connections.
+
+====================================================
+2. TEST URL vs LIVE URL
+=======================
+
+Check carefully whether we are mixing:
+
+* TEST environment
+* LIVE environment
+
+Meezan Bank documentation shows:
+
+* register.do
+* paymentorder.do
+* finish3dsPayment.do
+* deposit.do
+
+The test URL currently being used is:
+https://test-securepayment.meezanbank.com:9716/payment/rest
+
+Verify:
+
+* Correct hostname
+* Correct port
+* Correct environment
+* Correct SSL/TLS support
+
+====================================================
+3. TLS / SSL COMPATIBILITY
+==========================
+
+Meezan Bank requires secure TLS/SSL communication.
+
+Verify:
+
+* TLS 1.2 enabled
+* HTTPS certificates valid
+* Node/Laravel server supports required TLS version
+* OpenSSL compatibility
+* cURL SSL support enabled
+
+Test from server terminal:
+
+curl -v https://test-securepayment.meezanbank.com:9716/payment/rest/register.do
+
+====================================================
+4. FIREWALL / HOSTING RESTRICTIONS
+==================================
+
+Check:
+
+* Google Cloud firewall
+* Hosting outbound restrictions
+* Port 9716 accessibility
+* DNS resolution
+* Proxy blocking
+* Cloudflare interference
+
+Try:
+telnet test-securepayment.meezanbank.com 9716
+
+or
+
+nc -vz test-securepayment.meezanbank.com 9716
+
+====================================================
+5. REQUEST FORMAT VALIDATION
+============================
+
+Meezan Bank API requires proper request parameters.
+
+For register.do request these are mandatory:
+
+* userName
+* password
+* orderNumber
+* amount
+* currency
+* returnUrl
+
+Make sure:
+
+* Parameters are URL encoded
+* POST/GET method correct
+* JSON structure valid
+* No missing fields
+* No null values
+
+====================================================
+6. IMPLEMENT PROPER API LOGGING
+===============================
+
+Add full logs for:
+
+* Request payload
+* Response body
+* HTTP status codes
+* SSL handshake errors
+* Timeout errors
+* cURL errors
+* DNS errors
+
+Store logs in:
+
+* Laravel logs
+* Payment logs table
+
+====================================================
+7. ADD SANDBOX + LIVE MODE SWITCH
+=================================
+
+Create proper settings:
+
+Sandbox:
+https://test-securepayment.meezanbank.com:9716/payment/rest
+
+Live:
+https://securepayment.meezanbank.com/payment/rest
+
+Admin should switch environments easily.
+
+====================================================
+8. PROPER PAYMENT FLOW IMPLEMENTATION
+=====================================
+
+Implement full official Meezan flow:
+
+STEP 1:
+register.do
+
+STEP 2:
+Receive:
+
+* orderId
+* formUrl
+
+STEP 3:
+Redirect customer to formUrl
+
+STEP 4:
+Handle 3DS authentication
+
+STEP 5:
+finish3dsPayment.do if required
+
+STEP 6:
+Verify payment status
+
+STEP 7:
+Update Shopify/order status automatically
+
+====================================================
+9. IMPORTANT SECURITY REQUIREMENTS
+==================================
+
+Meezan documentation clearly requires:
+
+* SSL/TLS secure requests
+* Proper authentication
+* 3DS support
+* Secure payment flow
+
+Do NOT bypass security checks.
+
+====================================================
+10. PAYMENT STATUS SYNCHRONIZATION
+==================================
+
+After successful payment:
+
+* Update Shopify order automatically
+* Send WhatsApp confirmation
+* Save transaction logs
+* Save Meezan orderId
+* Save transaction reference
+* Save response codes
+
+====================================================
+11. ADD ADVANCED ERROR HANDLING
+===============================
+
+Handle properly:
+
+* Network timeout
+* Invalid credentials
+* SSL failure
+* Bank downtime
+* Duplicate order IDs
+* Invalid currency
+* 3DS failure
+* Customer cancellation
+
+Show user-friendly messages.
+
+====================================================
+12. PERFORMANCE & STABILITY
+===========================
+
+Make payment gateway:
+
+* Fast
+* Stable
+* Retry-safe
+* Production ready
+
+Add:
+
+* Retry mechanism
+* Queue system
+* Timeout handling
+* Fallback logging
+
+====================================================
+13. FINAL TASK
+==============
+
+Please fully audit:
+
+* Current Meezan integration
+* API endpoints
+* SSL/TLS configuration
+* Server networking
+* Firewall access
+* Laravel implementation
+* Shopify order sync
+* WhatsApp sync
+
+Then fix the integration professionally according to official Meezan Bank API documentation.
+
+This payment system is business critical and must work reliably in both test and live environments.

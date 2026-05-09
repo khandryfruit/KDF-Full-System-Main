@@ -660,15 +660,20 @@ router.get("/admin/shopify/customers", adminMiddleware, async (req, res) => {
     /* Segment filter */
     if (segment === "high_value") conditions.push(gte(shopifyCustomersTable.totalSpent, "5000"));
     if (segment === "vip") conditions.push(gte(shopifyCustomersTable.totalSpent, "15000"));
-    if (segment === "repeat") conditions.push(gte(shopifyCustomersTable.totalOrders, 2));
-    if (segment === "new") conditions.push(eq(shopifyCustomersTable.totalOrders, 1));
+    if (segment === "repeat") conditions.push(gte(shopifyCustomersTable.totalOrders, 3));
+    if (segment === "new") {
+      const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      conditions.push(sql`shopify_created_at >= ${d30.toISOString()}`);
+    }
     if (segment === "csv") conditions.push(eq(shopifyCustomersTable.source, "csv"));
     if (segment === "with_phone") conditions.push(sql`phone is not null`);
     if (segment === "with_email") conditions.push(sql`email is not null`);
     if (segment === "marketing") conditions.push(eq(shopifyCustomersTable.acceptsMarketing, true));
     if (segment === "inactive") {
       const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-      conditions.push(sql`(${shopifyCustomersTable.lastOrderAt} IS NULL OR ${shopifyCustomersTable.lastOrderAt} < ${cutoff.toISOString()})`);
+      conditions.push(sql`total_orders >= 1`);
+      conditions.push(sql`shopify_created_at < ${cutoff.toISOString()}`);
+      conditions.push(sql`(last_order_at IS NULL OR last_order_at < ${cutoff.toISOString()})`);
     }
     /* RFM advanced segments */
     if (segment === "one_time") {
