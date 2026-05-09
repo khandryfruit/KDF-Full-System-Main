@@ -11,6 +11,33 @@ function isCleanSlug(slug: string): boolean {
   return generateSlugFromName(slug) === slug;
 }
 
+/**
+ * Returns true when the caller explicitly asked for JSON (API client).
+ * Browsers and crawlers typically send Accept headers containing "text/html"
+ * or bare "*\/*" with no explicit JSON type.
+ *
+ * Matches:
+ *   application/json
+ *   application/vnd.api+json  (JSON:API)
+ *   application/vnd.*+json    (any vendor JSON subtype)
+ *   application/*             (wildcard application)
+ *
+ * Matching is case-insensitive and token-based to avoid false positives from
+ * substrings (e.g. "text/html,application/xhtml+xml" is NOT treated as JSON).
+ */
+function wantsJson(req: import("express").Request): boolean {
+  const raw = (req.headers.accept ?? "").toLowerCase();
+  // Split on comma to get individual media-type tokens, strip quality params.
+  const types = raw.split(",").map((t) => t.split(";")[0].trim());
+  return types.some(
+    (t) =>
+      t === "application/json" ||
+      t === "application/*" ||
+      // vendor subtypes ending in +json (e.g. application/vnd.api+json)
+      (t.startsWith("application/") && t.endsWith("+json"))
+  );
+}
+
 router.get("/products", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -107,13 +134,26 @@ router.get("/products/:id", async (req, res) => {
   try {
     const param = req.params.id;
     const isNumeric = /^\d+$/.test(param);
+    const jsonClient = wantsJson(req);
 
     if (isNumeric) {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(param))).limit(1);
       if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-      // Numeric IDs are never canonical — tell the SPA to replace the URL with the slug.
+
       if (product.slug) {
+        const canonicalUrl = `${req.baseUrl}/products/${product.slug}`;
+        if (!jsonClient) {
+          // Browsers / crawlers: redirect permanently to the slug URL so they
+          // update bookmarks and indexes. This avoids a redirect loop because
+          // the target URL is always a clean slug, never a numeric ID.
+          res.redirect(301, canonicalUrl);
+          return;
+        }
+        // JSON API consumers: keep backward-compatible 200 but signal the
+        // preferred URL via headers so they can update their stored reference.
         res.setHeader("X-Canonical-Slug", product.slug);
+        res.setHeader("Deprecation", "true");
+        res.setHeader("Link", `<${canonicalUrl}>; rel="canonical"`);
       }
       res.json(product);
       return;
@@ -132,10 +172,20 @@ router.get("/products/:id", async (req, res) => {
 
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-    // If the requested param differs from the canonical slug, set X-Canonical-Slug so
-    // the SPA frontend can silently replace the browser URL without a page reload.
+    // If the requested param differs from the canonical slug, handle accordingly.
     if (!isCleanSlug(param) || param !== product.slug) {
+      const canonicalUrl = `${req.baseUrl}/products/${product.slug}`;
+      if (!jsonClient) {
+        // Browsers / crawlers: 301 to the canonical slug. No loop risk because
+        // the target is always the clean slug and will match exactly on the
+        // next request.
+        res.redirect(301, canonicalUrl);
+        return;
+      }
+      // JSON API consumers: 200 + headers signalling the preferred URL.
       res.setHeader("X-Canonical-Slug", product.slug);
+      res.setHeader("Deprecation", "true");
+      res.setHeader("Link", `<${canonicalUrl}>; rel="canonical"`);
     }
 
     res.json(product);
