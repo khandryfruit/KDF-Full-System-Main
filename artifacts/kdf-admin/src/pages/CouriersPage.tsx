@@ -132,6 +132,13 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const [showPw, setShowPw] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [debugResult, setDebugResult] = useState<{ serverIp?: string; ipHint?: string; mode?: string; ok?: boolean } | null>(null);
+
+  const { data: serverIpData } = useQuery({
+    queryKey: ["/api/admin/couriers/server-ip"],
+    queryFn: () => apiFetch("/api/admin/couriers/server-ip"),
+    staleTime: 5 * 60 * 1000,
+  });
   const [form, setForm] = useState<TcsFormState>({
     accessToken: "",
     bearerToken: "", username: "", password: "", tcsaccount: "", costcentercode: "",
@@ -172,8 +179,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const debugAuth = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/debug-auth", { method: "POST" }),
-    onSuccess: (d: any) => { setDebugLog(d.log ?? []); setShowDebug(true); if (!d.ok) toast({ variant: "destructive", title: "Auth failed", description: d.error }); },
-    onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
+    onSuccess: (d: any) => {
+      setDebugLog(d.log ?? []);
+      setShowDebug(true);
+      setDebugResult({ serverIp: d.serverIp, ipHint: d.ipHint, mode: d.mode, ok: d.ok });
+      if (!d.ok) toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error });
+    },
+    onError: (e: any) => {
+      setShowDebug(false);
+      toast({ variant: "destructive", title: "Debug failed", description: e.message });
+    },
   });
 
   const toggleActive = useMutation({
@@ -229,14 +244,66 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <p>Auth: <span className={(config.settings as any)?.bearerToken && !(config.settings as any)?.username && !(config.settings as any)?.accessToken ? "text-amber-600 font-medium" : ""}>{authMode}</span></p>
           </div>
         )}
+
+        {/* ── Server IP Panel — always visible, helps TCS whitelisting ── */}
+        {serverIpData?.ip && (
+          <div className={`mt-3 rounded-lg border px-3 py-2 ${serverIpData.env === "production" ? "bg-orange-50 border-orange-300" : "bg-sky-50 border-sky-200"}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-xs font-semibold ${serverIpData.env === "production" ? "text-orange-800" : "text-sky-800"}`}>
+                  {serverIpData.env === "production" ? "🚀 Production" : "🧪 Development"} Server IP
+                </p>
+                <p className="font-mono text-sm font-bold mt-0.5">{serverIpData.ip}</p>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText(serverIpData.ip); toast({ title: "IP Copied!", description: "Share this with TCS for whitelisting" }); }}
+                className={`text-xs px-2 py-1 rounded font-medium border ${serverIpData.env === "production" ? "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200" : "bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-200"}`}
+              >
+                Copy IP
+              </button>
+            </div>
+            <p className={`text-xs mt-1 ${serverIpData.env === "production" ? "text-orange-700" : "text-sky-600"}`}>
+              {serverIpData.env === "production"
+                ? "⚠️ If TCS returns HTTP 403, email TCS support to whitelist this IP for your account."
+                : "TCS HTTP 403 on production? The production IP will differ — run DBG after publishing to get it."}
+            </p>
+          </div>
+        )}
+
+        {/* ── HTTP 403 Quick Fix Banner ── */}
+        {debugResult && !debugResult.ok && (
+          <div className="mt-3 bg-red-50 border border-red-300 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-bold text-red-800">⛔ TCS HTTP 403 — IP Not Whitelisted</p>
+            <p className="text-xs text-red-700">TCS is blocking requests from this server. Two ways to fix:</p>
+            <div className="space-y-1.5">
+              <div className="bg-white border border-red-200 rounded px-2 py-1.5">
+                <p className="text-xs font-semibold text-red-800">Option A — Whitelist Server IP (recommended)</p>
+                {debugResult.serverIp && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono text-sm font-bold text-red-900">{debugResult.serverIp}</span>
+                    <button onClick={() => { navigator.clipboard.writeText(debugResult.serverIp!); toast({ title: "Copied!", description: "Email this IP to TCS support" }); }}
+                      className="text-xs bg-red-100 border border-red-300 text-red-700 px-2 py-0.5 rounded hover:bg-red-200">Copy</button>
+                  </div>
+                )}
+                <p className="text-xs text-red-600 mt-0.5">Email TCS tech support: <em>"Please whitelist IP {debugResult.serverIp} for account {(config?.settings as any)?.tcsaccount}"</em></p>
+              </div>
+              <div className="bg-white border border-blue-200 rounded px-2 py-1.5">
+                <p className="text-xs font-semibold text-blue-800">Option B — Use Direct Access Token (bypass 2-step)</p>
+                <p className="text-xs text-blue-600 mt-0.5">Get a Direct Access Token from TCS portal → paste it in Settings → "Direct Access Token" field. This skips the Step 2 auth that causes 403.</p>
+                <button onClick={loadForm} className="mt-1.5 text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">Open Settings →</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showDebug && debugLog.length > 0 && (
-          <div className="mt-3 bg-gray-900 text-green-400 rounded-lg p-3 text-xs font-mono max-h-48 overflow-y-auto space-y-0.5">
+          <div className="mt-3 bg-gray-900 text-green-400 rounded-lg p-3 text-xs font-mono max-h-64 overflow-y-auto space-y-0.5">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-400 text-xs">TCS Auth Debug Log</span>
+              <span className="text-gray-400 text-xs">TCS Auth Debug Log {debugResult?.ok ? "✅" : "❌"}</span>
               <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
             </div>
             {debugLog.map((line, i) => (
-              <div key={i} className={line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : "text-gray-300"}>{line}</div>
+              <div key={i} className={line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : line.includes("Server outbound IP") ? "text-yellow-300 font-semibold" : "text-gray-300"}>{line}</div>
             ))}
           </div>
         )}

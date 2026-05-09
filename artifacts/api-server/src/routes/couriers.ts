@@ -88,6 +88,32 @@ router.post("/admin/couriers/tcs/test", adminMiddleware as any, async (req: Auth
   }
 });
 
+/* ─── Admin: quick server outbound IP check ──────────── */
+router.get("/admin/couriers/server-ip", adminMiddleware as any, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    let ip = "unknown";
+    let env = "unknown";
+    try {
+      const r = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
+      const d = await r.json() as { ip?: string };
+      ip = d.ip ?? "unknown";
+    } catch { /* non-fatal */ }
+
+    const domains = (process.env.REPLIT_DOMAINS ?? "").split(",").map(d => d.trim()).filter(Boolean);
+    const isProduction = domains.some(d => !d.includes("replit.dev") && !d.includes("replit.app"));
+    env = isProduction ? "production" : domains.length ? "development" : "unknown";
+
+    res.json({
+      ip,
+      env,
+      domains,
+      hint: `Share this IP with TCS and ask them to whitelist it: ${ip}`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ─── Admin: TCS – full auth debug ──────────────────── */
 router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   const log: string[] = [];
