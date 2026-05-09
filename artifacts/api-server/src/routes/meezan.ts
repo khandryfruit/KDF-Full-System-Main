@@ -666,12 +666,14 @@ router.post("/admin/meezan/transactions/:id/refund", adminMiddleware as any, asy
     const { epg } = await getEpg();
     if (!epg) { res.status(503).json({ error: "Gateway not configured" }); return; }
 
-    const result = await epg.refund(txn.meezanOrderId, amountPKR);
-    if (!result.success) { res.status(400).json({ error: result.errorMessage, errorCode: result.errorCode }); return; }
-
+    /* Per spec §2.11, amount is mandatory for refund.do.
+     * If no amount is specified by the admin, default to the full transaction amount. */
     const originalAmount  = Number(txn.amount);
     const alreadyRefunded = Number(txn.refundedAmount || 0);
     const refundAmt       = amountPKR ?? originalAmount;
+
+    const result = await epg.refund(txn.meezanOrderId, refundAmt);
+    if (!result.success) { res.status(400).json({ error: result.errorMessage, errorCode: result.errorCode }); return; }
     const newRefunded     = alreadyRefunded + refundAmt;
     const isPartial       = newRefunded < originalAmount;
 

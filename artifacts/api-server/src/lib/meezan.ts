@@ -377,15 +377,20 @@ export class MeezanEpg {
   }
 
   /* ── Refund ── */
-  async refund(meezanOrderId: string, amountPKR?: number): Promise<RefundResult> {
+  /**
+   * Refund a deposited order.
+   * Per spec v1.32.3 §2.11, `amount` (in paisa) is MANDATORY for refund.do.
+   * Pass the full transaction amount for a full refund, or a lesser amount for a partial refund.
+   */
+  async refund(meezanOrderId: string, amountPKR: number): Promise<RefundResult> {
     try {
       const params: Record<string, string> = {
         userName: this.user,
         password: this.pass,
         orderId:  meezanOrderId,
+        amount:   this.paisas(amountPKR),
         language: "EN",
       };
-      if (amountPKR !== undefined) params.amount = this.paisas(amountPKR);
       const raw = await this.post("refund.do", params);
       const ec  = raw.errorCode;
       if (ec !== undefined && String(ec) !== "0") {
@@ -616,9 +621,18 @@ export function buildMeezanClient(
    PURE UTILITY HELPERS
 ────────────────────────────────────────────────────── */
 
-/** Returns true when Meezan orderStatus === 2 (APPROVED / PAID) */
+/**
+ * Returns true when a Meezan order is considered paid/approved.
+ *
+ * Per spec v1.32.3 §2.13 orderStatus values:
+ *   1 = Transaction approved (one-phase payment) — funds secured immediately
+ *   2 = Amount deposited successfully (two-phase after deposit.do, or confirmed one-phase)
+ *
+ * Both statuses indicate that the customer's payment has been captured.
+ * Checking only status=2 would silently miss one-phase approved orders.
+ */
 export function isPaid(orderStatus: number | undefined): boolean {
-  return orderStatus === 2;
+  return orderStatus === 1 || orderStatus === 2;
 }
 
 /** Unique order reference for Meezan (e.g. KBDF-M5QAC-XY12) */
@@ -636,21 +650,21 @@ export function generateInvoiceNumber(): string {
 }
 
 /**
- * Meezan orderStatus codes:
- *  0 → registered (not paid)
- *  1 → pre-authorised
- *  2 → PAID / APPROVED
- *  3 → DECLINED / FAILED
- *  4 → reversed
- *  5 → refunded
- *  6 → partially refunded
+ * Meezan orderStatus codes — per official API spec v1.32.3 §2.13:
+ *  0 → Order registered, but not paid
+ *  1 → Transaction approved (one-phase) / Pre-auth hold (two-phase)
+ *  2 → Amount deposited successfully (PAID)
+ *  3 → Authorization has been REVERSED
+ *  4 → Transaction has been REFUNDED
+ *  6 → Authorization DECLINED
+ *
+ * NOTE: Status 5 does NOT exist in the spec. The sequence jumps from 4 to 6.
  */
 export const ORDER_STATUS_LABELS: Record<number, string> = {
   0: "Registered",
   1: "Pre-Authorised",
   2: "Paid",
-  3: "Declined",
-  4: "Reversed",
-  5: "Refunded",
-  6: "Partial Refund",
+  3: "Reversed",
+  4: "Refunded",
+  6: "Declined",
 };
