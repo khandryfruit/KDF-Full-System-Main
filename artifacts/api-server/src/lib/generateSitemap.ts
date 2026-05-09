@@ -12,11 +12,11 @@ export async function generateSitemapXml(domain: string): Promise<string> {
       .from(productsTable)
       .where(eq(productsTable.active, true)),
     db
-      .select({ slug: categoriesTable.slug, createdAt: categoriesTable.createdAt })
+      .select({ id: categoriesTable.id, slug: categoriesTable.slug, createdAt: categoriesTable.createdAt })
       .from(categoriesTable)
       .where(eq(categoriesTable.active, true)),
     db
-      .select({ slug: blogPostsTable.slug, updatedAt: blogPostsTable.updatedAt })
+      .select({ id: blogPostsTable.id, slug: blogPostsTable.slug, updatedAt: blogPostsTable.updatedAt })
       .from(blogPostsTable)
       .where(eq(blogPostsTable.status, "published")),
   ]);
@@ -33,8 +33,9 @@ export async function generateSitemapXml(domain: string): Promise<string> {
     const lastmod = cat.createdAt
       ? new Date(cat.createdAt).toISOString().split("T")[0]
       : today;
+    const cleanSlug = generateSlugFromName(cat.slug) || String(cat.id);
     urls.push(
-      `  <url><loc>${base}/category/${cat.slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority><lastmod>${lastmod}</lastmod></url>`
+      `  <url><loc>${base}/category/${cleanSlug}</loc><changefreq>weekly</changefreq><priority>0.7</priority><lastmod>${lastmod}</lastmod></url>`
     );
   }
 
@@ -52,8 +53,9 @@ export async function generateSitemapXml(domain: string): Promise<string> {
     const lastmod = post.updatedAt
       ? new Date(post.updatedAt).toISOString().split("T")[0]
       : today;
+    const cleanSlug = generateSlugFromName(post.slug) || String(post.id);
     urls.push(
-      `  <url><loc>${base}/blog/${post.slug}</loc><changefreq>monthly</changefreq><priority>0.7</priority><lastmod>${lastmod}</lastmod></url>`
+      `  <url><loc>${base}/blog/${cleanSlug}</loc><changefreq>monthly</changefreq><priority>0.7</priority><lastmod>${lastmod}</lastmod></url>`
     );
   }
 
