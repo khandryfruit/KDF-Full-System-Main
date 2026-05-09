@@ -1710,55 +1710,72 @@ function jwtIsValid(token: string): boolean {
  *   body.accesstoken: {accessToken}        ← Step 2 E-COM token (user/session)
  *
  * Mode priority (first match wins):
- *  A. settings.accessToken          → direct: use as both bearer + accessToken (skip all)
- *  B. TCS_STATIC_BEARER_TOKEN env   → Step 1 bearer; run Step 2 with username+password
- *                                     production only, expiry checked
- *  C. settings.bearerToken          → Step 1 bearer; run Step 2 with username+password
- *  D. clientId + clientSecret       → Step 1 via /auth/api/auth; run Step 2
- *  E. username + password only      → Step 2 only (bearerToken = "")
+ *  A. settings.accessToken        → direct (skip all auth)
+ *  B. clientId + clientSecret     → Step 1 via /auth/api/auth → Step 2
+ *  F. username + password         → try username as clientId/secret for Step 1 → Step 2
+ *                                   (most TCS accounts: account# = clientId, password = clientSecret)
+ *     F-fallback-env              → env JWT as Step 1 bearer (if F fails + env JWT valid)
+ *     F-fallback-static           → settings.bearerToken as Step 1 bearer (if F+env fail)
+ *     E                           → Step 2 only with no bearer (last resort)
  */
 async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   bearerToken: string; accessToken: string; mode: string;
 }> {
-  /* ── Mode A: Direct Access Token — use as-is for both bearer and body ── */
+  /* ── Mode A: Direct Access Token pasted in settings ── */
   const directToken = (settings.accessToken ?? "").trim();
   if (directToken) {
     return { bearerToken: directToken, accessToken: directToken, mode: "direct" };
   }
 
-  /* ── Step 2 credentials (always needed for Modes B-E) ── */
-  const username = (settings.username ?? "").trim();
-  const password = (settings.password ?? "").trim();
-
-  /* ── Resolve Step 1 bearer ── */
-  const envToken    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
-  const staticToken = (settings.bearerToken ?? "").trim();
-  const clientId    = (settings.clientId ?? "").trim();
-  const clientSecret= (settings.clientSecret ?? "").trim();
+  const username     = (settings.username ?? "").trim();
+  const password     = (settings.password ?? "").trim();
+  const clientId     = (settings.clientId ?? "").trim();
+  const clientSecret = (settings.clientSecret ?? "").trim();
+  const envToken     = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+  const staticBearer = (settings.bearerToken ?? "").trim();
 
   let bearerToken = "";
-  let mode: string;
+  let mode = "direct-creds";
 
-  if (envToken && !settings.sandbox && jwtIsValid(envToken)) {
-    /* Mode B — env JWT as Step 1 bearer (production only, expiry checked) */
-    bearerToken = envToken;
-    mode = "env-bearer";
-  } else if (staticToken) {
-    /* Mode C — manually saved bearer in settings as Step 1 */
-    bearerToken = staticToken;
-    mode = "static-bearer";
-  } else if (clientId && clientSecret) {
-    /* Mode D — fetch Step 1 bearer via /auth/api/auth */
+  if (clientId && clientSecret) {
+    /* Mode B — explicit clientId + clientSecret → Step 1 */
     const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
     bearerToken = result.bearerToken;
-    mode = "full-2step";
-  } else {
-    /* Mode E — no Step 1; Step 2 will POST username+password directly */
-    bearerToken = "";
-    mode = "direct-creds";
+    mode = "explicit-2step";
+
+  } else if (username && password) {
+    /* Mode F — try username as clientId, password as clientSecret for Step 1.
+       Standard TCS account pattern: account number = clientId, password = clientSecret.
+       e.g. LGEC11060 / Qadr786@@ → Step 1 bearer for LGEC11060 → Step 2 → LGEC11060 accessToken. */
+    try {
+      const result = await getTcsBearerToken(username, password, settings.sandbox);
+      bearerToken = result.bearerToken;
+      mode = "user-as-client";
+    } catch {
+      /* Mode F failed — fall back to env JWT or static bearer as Step 1, then Step 2 */
+      if (envToken && !settings.sandbox && jwtIsValid(envToken)) {
+        bearerToken = envToken;
+        mode = "env-bearer-fallback";
+      } else if (staticBearer) {
+        bearerToken = staticBearer;
+        mode = "static-bearer-fallback";
+      } else {
+        bearerToken = "";
+        mode = "direct-creds"; /* Mode E: Step 2 only — no Step 1 bearer */
+      }
+    }
+
+  } else if (envToken && !settings.sandbox && jwtIsValid(envToken)) {
+    /* No username/password — env JWT as Step 1 bearer */
+    bearerToken = envToken;
+    mode = "env-bearer";
+
+  } else if (staticBearer) {
+    bearerToken = staticBearer;
+    mode = "static-bearer";
   }
 
-  /* ── Cache key ── */
+  /* ── Cache key (includes bearer tail to invalidate on credential changes) ── */
   const cacheKey = [
     settings.tcsaccount || "anon",
     settings.sandbox ? "sb" : "live",
@@ -1768,11 +1785,9 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   const cached = tcsTokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return { ...cached, mode: `cached:${mode}` };
 
-  /* ── Step 2: get E-COM access token ── */
+  /* ── Step 2: E-COM access token (username + password always required) ── */
   if (!username || !password) {
-    throw new Error(
-      "TCS not configured. Add Username + Password in Courier Settings → TCS, then Save."
-    );
+    throw new Error("TCS not configured. Add Username + Password in Courier Settings → TCS, then Save.");
   }
 
   let accessToken: string;
@@ -1780,8 +1795,8 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
     accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
   } catch (err: any) {
     throw new Error(
-      `TCS Step 2 auth failed (mode=${mode}): ${err.message ?? "unknown error"}. ` +
-      "Check Username + Password in Courier Settings."
+      `TCS auth failed (mode=${mode}): ${err.message ?? "unknown"}. ` +
+      "Check TCS Username + Password in Courier Settings."
     );
   }
 
