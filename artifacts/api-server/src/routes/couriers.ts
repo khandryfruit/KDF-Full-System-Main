@@ -2723,45 +2723,92 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       ? items.map((i: any) => i.name).join(", ").slice(0, 100)
       : "KDF Nuts Products";
 
+    /* shipmentdate in TCS format: DD/MM/YYYY HH:MM:SS */
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const shipmentDate = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+    const shipperCityCode = (settings.shipperCityCode || "LHE").toUpperCase().slice(0, 10);
+    const shipperCityName = (settings.shipperCity || "Lahore").slice(0, 50);
+    const shipperName     = (settings.shipperName || "KDF Nuts").trim().slice(0, 50);
+    const shipperAddr     = (settings.shipperAddress || "").slice(0, 120);
+    const shipperPhone    = (settings.shipperPhone || "").replace(/\D/g, "").slice(-11);
+
     const bookingPayload: Record<string, any> = {
-      accesstoken: ecomToken,         /* ECOM token goes IN BODY (not Authorization header) */
+      accesstoken:   ecomToken,    /* ECOM token goes IN BODY (per official TCS PHP guide) */
+      consignmentno: "",           /* Empty string at root — per official PHP guide */
       shipperinfo: {
         tcsaccount:  settings.tcsaccount || "",
-        shippername: (settings.shipperName  || "KDF Nuts").trim().slice(0, 50),
-        address1:    (settings.shipperAddress || "").slice(0, 120),
+        shippername: shipperName,
+        address1:    shipperAddr,
+        address2:    "",
+        address3:    "",
+        zip:         "",
         countrycode: "PK",
         countryname: "Pakistan",
-        citycode:    (settings.shipperCityCode || "LHE").toUpperCase().slice(0, 10),
-        cityname:    (settings.shipperCity || "Lahore").slice(0, 50),
-        mobile:      (settings.shipperPhone || "").replace(/\D/g, "").slice(-11),
+        citycode:    shipperCityCode,
+        cityname:    shipperCityName,
+        mobile:      shipperPhone,
       },
       consigneeinfo: {
+        consigneecode: "",
         firstname:   firstName.slice(0, 50),
         middlename:  middleName.slice(0, 50),
         lastname:    lastName.slice(0, 50),
         address1:    consigneeAddr,
+        address2:    (address.address2 ?? "").slice(0, 120),
+        address3:    "",
+        zip:         (address.zip ?? address.postal_code ?? "").slice(0, 20),
         countrycode: "PK",
         countryname: "Pakistan",
-        citycode:    "",              /* TCS often doesn't require citycode if cityname given */
+        citycode:    "",           /* TCS cityname is sufficient; citycode can be blank */
         cityname:    (address.city ?? "").slice(0, 50),
-        mobile:      consigneePhone,
         email:       (address.email ?? "").slice(0, 100),
+        areacode:    "",
+        areaname:    "",
+        blockcode:   "",
+        blockname:   "",
+        lat:         "",
+        lng:         "",
+        landmark:    "",
+        mobile:      consigneePhone,
+      },
+      vendorinfo: {               /* Required per official PHP guide */
+        name:     shipperName,
+        address1: shipperAddr,
+        address2: "",
+        address3: "",
+        citycode: shipperCityCode,
+        cityname: shipperCityName,
+        mobile:   shipperPhone,
       },
       shipmentinfo: {
         costcentercode: costCenter,
         referenceno:    orderRef.slice(0, 50),
+        contentdesc:    itemDesc,
         servicecode:    serviceCode,
+        parametertype:  "Standard",   /* Required per official PHP guide */
+        shipmentdate:   shipmentDate, /* DD/MM/YYYY HH:MM:SS format */
+        shippingtype:   "",
         currency:       "PKR",
         codamount:      codAmount,
+        declaredvalue:  null,
+        insuredvalue:   null,
+        transactiontype: "",
+        dsflag:         "",
+        carrierslug:    "",
         weightinkg:     weightKg,
         pieces:         pieces,
         fragile:        !!(order.fragile ?? settings.fragile),
         remarks:        (order.specialInstructions || settings.defaultRemarks || order.notes || "KDF Nuts Order").slice(0, 200),
         skus: [{
-          description: itemDesc,
-          quantity:    pieces,
-          weight:      weightKg,
-          unitprice:   codAmount > 0 ? codAmount : 1,
+          description:   itemDesc,
+          quantity:      pieces,
+          weight:        weightKg,
+          uom:           "KG",         /* Required per official PHP guide */
+          unitprice:     codAmount > 0 ? codAmount : 1,
+          declaredvalue: null,
+          insuredvalue:  null,
         }],
       },
     };
@@ -2775,10 +2822,12 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       sandbox:      !!settings.sandbox,
     }, "TCS ECOM booking — nested payload ready");
 
-    /* Authorization header = ENVO Bearer Token (Step-1) — NOT the ECOM token */
+    /* Per official TCS PHP guide: booking endpoint does NOT use Authorization header.
+     * The accesstoken in the request body IS the authentication for booking.
+     * Only Content-Type + Accept are sent — matching the official PHP curl example. */
     const bookHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${bearer}`,    /* ENVO bearer (Step-1) in header */
+      "Accept":       "application/json",
     };
 
     /* ── Official: POST /ecom/api/booking/create

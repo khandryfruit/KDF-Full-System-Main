@@ -1,0 +1,138 @@
+<?php
+// Mukammal Code (TCS Booking - Create API)
+// Developer ke liye hidayat: Is script ko order aane par (maslan Shopify webhook) trigger karein.
+// Development URL: https://devconnect.tcscourier.com/ecom/api/booking/create
+// Production URL: https://ociconnect.tcscourier.com/ecom/api/booking/create
+
+function createTcsBooking($accessToken, $orderData) {
+    $apiUrl = "https://devconnect.tcscourier.com/ecom/api/booking/create";
+
+    // TCS API Manual ke mutabiq mukammal JSON Payload
+    $payload = [
+        "accesstoken" => $accessToken,
+        "consignmentno" => "",
+        "shipperinfo" => [
+            "tcsaccount" => "04011K1", // Yahan apna TCS Account Number dalen
+            "shippername" => "Khan Dry Fruit", 
+            "address1" => "Main Store Address", 
+            "address2" => "",
+            "address3" => "",
+            "zip" => "54000",
+            "countrycode" => "PK",
+            "countryname" => "Pakistan",
+            "citycode" => "LHE", 
+            "cityname" => "Lahore",
+            "mobile" => "03000000000" // Store ka active mobile number
+        ],
+        "consigneeinfo" => [
+            "consigneecode" => "", 
+            "firstname" => $orderData['customer_first_name'],
+            "middlename" => "",
+            "lastname" => $orderData['customer_last_name'],
+            "address1" => $orderData['shipping_address_1'],
+            "address2" => $orderData['shipping_address_2'],
+            "address3" => "",
+            "zip" => $orderData['shipping_zip'],
+            "countrycode" => "PK",
+            "countryname" => "Pakistan",
+            "citycode" => $orderData['shipping_city_code'], // Customer ki city ka TCS code
+            "cityname" => $orderData['shipping_city'],
+            "email" => $orderData['customer_email'],
+            "areacode" => "",
+            "areaname" => "",
+            "blockcode" => "",
+            "blockname" => "",
+            "lat" => "",
+            "lng" => "",
+            "landmark" => "",
+            "mobile" => $orderData['customer_phone'] // Format: 0300XXXXXXX hona zaroori hai
+        ],
+        "vendorinfo" => [
+            "name" => "Khan Dry Fruit",
+            "address1" => "Lahore, Pakistan",
+            "address2" => "",
+            "address3" => "",
+            "citycode" => "LHE",
+            "cityname" => "Lahore",
+            "mobile" => "03000000000"
+        ],
+        "shipmentinfo" => [
+            "costcentercode" => "Test-01", // Apna Cost Center Code yahan dalein
+            "referenceno" => $orderData['order_id'], // Order ID (e.g., Shopify Order #)
+            "contentdesc" => "Premium Dry Fruits", 
+            "servicecode" => "0", 
+            "parametertype" => "Standard",
+            "shipmentdate" => date("d/m/Y H:i:s"),
+            "shippingtype" => "",
+            "currency" => "PKR",
+            "codamount" => $orderData['total_amount'], // Agar paid hai toh 0 rakhein
+            "declaredvalue" => null,
+            "insuredvalue" => null,
+            "transactiontype" => "",
+            "dsflag" => "",
+            "carrierslug" => "",
+            "weightinkg" => $orderData['total_weight'], // Minimum 0.5 hona chahiye
+            "pieces" => 1,
+            "fragile" => false,
+            "remarks" => "Handle with care",
+            "skus" => [
+                [
+                    "description" => "Mixed Dry Fruits Pack",
+                    "quantity" => 1,
+                    "weight" => $orderData['total_weight'],
+                    "uom" => "KG",
+                    "unitprice" => $orderData['total_amount'],
+                    "declaredvalue" => null,
+                    "insuredvalue" => null
+                ]
+            ]
+        ]
+    ];
+
+    $ch = curl_init($apiUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Accept: application/json'
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'http_code' => $httpCode,
+        'response' => json_decode($response, true)
+    ];
+}
+
+// --- ISTEMAL KA TARIKA (USAGE EXAMPLE) ---
+
+// 1. Authentication API se Access Token hasil karein aur yahan dalein:
+$accessToken = "YAHAN_TCS_KA_ACCESS_TOKEN_LIKHEIN"; 
+
+// 2. Order ki details dynamically system se fetch kar ke yahan pass karein:
+$orderData = [
+    'customer_first_name' => 'Ali',
+    'customer_last_name' => 'Ahmad',
+    'shipping_address_1' => 'House 123, Street 4',
+    'shipping_address_2' => 'Johar Town',
+    'shipping_zip' => '54000',
+    'shipping_city_code' => 'LHE',
+    'shipping_city' => 'Lahore',
+    'customer_email' => 'ali@example.com',
+    'customer_phone' => '03001234567',
+    'order_id' => 'KDF-1001',
+    'total_amount' => 5000,
+    'total_weight' => 0.5
+];
+
+// 3. Request bhej kar output check karein:
+$result = createTcsBooking($accessToken, $orderData);
+
+echo "<pre>";
+print_r($result);
+echo "</pre>";
+?>
