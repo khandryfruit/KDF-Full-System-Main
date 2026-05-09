@@ -1,0 +1,174 @@
+TCS BOOKING ERROR — FINAL ROOT CAUSE FIX
+
+Current Error:
+
+“TCS bearer mismatch and auth recovery failed for LGEC11060”
+
+This means the system is still mixing:
+
+* ENVO Bearer Token
+* ECOM Access Token
+* Username/Password auth
+
+and authentication flow is implemented incorrectly.
+
+━━━━━━━━━━━━━━━
+IMPORTANT IMPLEMENTATION
+━━━━━━━━━━━━━━━
+
+You MUST follow this exact architecture:
+
+━━━━━━━━━━━━━━━
+1️⃣ ENVO PORTAL TOKEN
+━━━━━━━━━━━━━━━
+
+The Bearer Token comes from:
+TCS ENVO Portal
+
+This token MUST be sent ONLY in HTTP HEADER.
+
+Example:
+
+```http id="z3xj5e"
+Authorization: Bearer ENVO_BEARER_TOKEN
+```
+
+DO NOT:
+❌ send in payload
+❌ use as accessToken
+❌ replace Step 2 token with this
+
+━━━━━━━━━━━━━━━
+2️⃣ USERNAME/PASSWORD AUTH
+━━━━━━━━━━━━━━━
+
+Now use:
+
+* TCS Username
+* TCS Password
+
+to generate ECOM Access Token.
+
+That token is DIFFERENT from Bearer Token.
+
+━━━━━━━━━━━━━━━
+3️⃣ BOOKING API FLOW
+━━━━━━━━━━━━━━━
+
+Correct logic:
+
+HEADER:
+
+```http id="74lcm5"
+Authorization: Bearer ENVO_BEARER_TOKEN
+```
+
+BODY:
+
+```json id="mjzq5i"
+{
+  "accessToken": "ECOM_ACCESS_TOKEN",
+  "consigneeName": "Customer Name",
+  "consigneePhone": "03001234567",
+  "consigneeAddress": "Full Address",
+  "weight": 1,
+  "pieces": 1
+}
+```
+
+━━━━━━━━━━━━━━━
+4️⃣ REMOVE WRONG LOGIC
+━━━━━━━━━━━━━━━
+
+Right now system is trying:
+❌ bearer token recovery
+❌ mixed auth mode
+❌ fallback auth
+❌ wrong token exchange
+
+Remove this broken recovery logic.
+
+Implement ONE CLEAN FLOW.
+
+━━━━━━━━━━━━━━━
+5️⃣ ADVANCED SETTINGS FIX
+━━━━━━━━━━━━━━━
+
+In Courier Settings add separate fields:
+
+✔ ENVO Bearer Token
+✔ Client ID
+✔ Client Secret
+✔ TCS Username
+✔ TCS Password
+✔ ECOM Access Token
+✔ Token Expiry
+✔ Refresh Button
+✔ Test Connection Button
+
+DO NOT merge them together.
+
+━━━━━━━━━━━━━━━
+6️⃣ DEBUGGING PANEL
+━━━━━━━━━━━━━━━
+
+Add professional debug logs:
+
+Show:
+✔ current auth mode
+✔ bearer token status
+✔ access token status
+✔ token expiry
+✔ API endpoint
+✔ request payload
+✔ response payload
+✔ HTTP status
+✔ booking response
+✔ CN generated or not
+
+━━━━━━━━━━━━━━━
+7️⃣ REAL TCS VALIDATION
+━━━━━━━━━━━━━━━
+
+After booking:
+✔ booking MUST appear on official TCS portal
+✔ tracking number generated
+✔ label generated
+✔ tracking URL active
+
+Portal:
+https://ociconnect.tcscourier.com/ecom/index.html
+
+Tracking:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+━━━━━━━━━━━━━━━
+8️⃣ PRODUCTION DOMAIN ISSUE
+━━━━━━━━━━━━━━━
+
+Booking works locally but fails after deployment.
+
+Check:
+✔ ENV variables
+✔ Authorization header forwarding
+✔ HTTPS SSL
+✔ Replit deployment config
+✔ Cloudflare proxy
+✔ backend fetch headers
+✔ production token loading
+
+━━━━━━━━━━━━━━━
+9️⃣ FINAL TARGET
+━━━━━━━━━━━━━━━
+
+After fix:
+✔ no bearer mismatch
+✔ no auth recovery errors
+✔ no fake booking
+✔ real shipment creation
+✔ Shopify sync works
+✔ tracking works
+✔ labels work
+✔ duplicate booking prevention works
+
+Implement professionally according to official TCS documentation.
