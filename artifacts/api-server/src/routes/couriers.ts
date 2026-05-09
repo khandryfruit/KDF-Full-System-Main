@@ -2070,6 +2070,183 @@ function normalizeShipmentStatus(raw: string): string {
   return "in_transit";
 }
 
+/* ─── Admin: Debug Logs — enriched shipments for debugging ── */
+router.get("/admin/shipments/debug-logs", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { courier, source, search, from, to } = req.query as Record<string, string>;
+    const limit = 200;
+
+    const conditions: any[] = [];
+    if (courier && courier !== "all") conditions.push(eq(shipmentsTable.courierSlug, courier));
+    if (from) conditions.push(gte(shipmentsTable.createdAt, new Date(from)));
+    if (to)   conditions.push(lte(shipmentsTable.createdAt, new Date(to + "T23:59:59")));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const shipments = await db.select().from(shipmentsTable)
+      .where(where as any)
+      .orderBy(desc(shipmentsTable.createdAt))
+      .limit(limit);
+
+    /* Enrich each shipment with debug fields */
+    const enriched = shipments.map(s => {
+      const raw = (s.rawResponse ?? {}) as Record<string, any>;
+      const isRealApi = raw.realApiBooking === true;
+      const isLocal   = raw.localTracking  === true;
+      const duration  = raw.apiCallDurationMs as number | undefined;
+      const bookedAt  = raw.bookedAt as string | undefined;
+      const errorNote = raw.note ?? raw.error ?? null;
+
+      return {
+        id:               s.id,
+        courierSlug:      s.courierSlug,
+        courierName:      (s.courierSlug === "tcs" ? "TCS Couriers" : s.courierSlug === "postex" ? "PostEx" : s.courierSlug === "leopards" ? "Leopards" : s.courierSlug === "trax" ? "Trax" : s.courierSlug) ?? "—",
+        trackingId:       s.trackingId,
+        shopifyOrderNumber: (s as any).shopifyOrderNumber,
+        shopifyOrderId:   (s as any).shopifyOrderId,
+        customerName:     (s as any).customerName,
+        customerPhone:    (s as any).customerPhone,
+        customerCity:     (s as any).customerCity,
+        codAmount:        (s as any).codAmount,
+        status:           s.status,
+        bookingSource:    (s as any).bookingSource ?? "manual",
+        isRealApi,
+        isLocal,
+        duration,
+        bookedAt,
+        errorNote,
+        rawResponse:      raw,
+        createdAt:        s.createdAt,
+        updatedAt:        s.updatedAt,
+      };
+    }).filter(s => {
+      /* source filter: real / local */
+      if (source === "real"  && !s.isRealApi) return false;
+      if (source === "local" &&  s.isRealApi) return false;
+      /* text search */
+      if (search) {
+        const q = search.toLowerCase();
+        return [s.trackingId, s.shopifyOrderNumber, s.customerName, s.customerPhone, s.customerCity, s.courierSlug]
+          .some(v => v && String(v).toLowerCase().includes(q));
+      }
+      return true;
+    });
+
+    const stats = {
+      total:     enriched.length,
+      realApi:   enriched.filter(s => s.isRealApi).length,
+      local:     enriched.filter(s => s.isLocal).length,
+      avgDuration: (() => {
+        const real = enriched.filter(s => s.duration != null);
+        return real.length > 0 ? Math.round(real.reduce((a, s) => a + (s.duration ?? 0), 0) / real.length) : 0;
+      })(),
+    };
+
+    res.json({ logs: enriched, stats });
+    return;
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to fetch debug logs" });
+  }
+});
+
+/* ─── Admin: Retry booking for a local/failed shipment ─── */
+router.post("/admin/shipments/:id/retry-booking", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const [shipment] = await db.select().from(shipmentsTable).where(eq(shipmentsTable.id, id)).limit(1);
+    if (!shipment) { res.status(404).json({ error: "Shipment not found" }); return; }
+
+    const raw = (shipment.rawResponse ?? {}) as Record<string, any>;
+    if (raw.realApiBooking) {
+      res.status(400).json({ error: "This shipment already has a real API booking" }); return;
+    }
+
+    const [courierRow] = shipment.courierId
+      ? await db.select().from(couriersTable).where(eq(couriersTable.id, shipment.courierId!)).limit(1)
+      : await db.select().from(couriersTable).where(eq(couriersTable.slug, shipment.courierSlug ?? "")).limit(1);
+
+    if (!courierRow) { res.status(404).json({ error: "Courier configuration not found" }); return; }
+
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const hasApiCreds = courierRow.slug === "tcs"
+      ? !!(settings.bearerToken || (settings.username && settings.password))
+      : !!(courierRow.apiKey && courierRow.apiEndpoint);
+
+    if (!hasApiCreds) {
+      res.status(422).json({
+        error: `Courier API not configured for ${courierRow.name}. Add credentials in Courier Settings → Integrations.`,
+        notConfigured: true,
+      }); return;
+    }
+
+    /* Reconstruct order object from shipment fields */
+    const s = shipment as any;
+    const retryOrder: Record<string, any> = {
+      id:          s.orderId,
+      orderNumber: s.shopifyOrderNumber ?? s.orderId,
+      paymentMethod: s.isCod ? "cod" : "online",
+      total:       parseFloat(s.codAmount ?? "0"),
+      invoiceAmount: parseFloat(s.codAmount ?? "0"),
+      notes: "",
+      contentDesc: s.contentDesc ?? "KDF Nuts Products",
+      specialInstructions: s.specialInstructions ?? "",
+      items: [],
+      shippingAddress: {
+        name:    s.customerName ?? "",
+        phone:   s.customerPhone ?? "",
+        address: s.customerAddress ?? "",
+        city:    s.customerCity ?? "",
+        email:   "",
+      },
+      weight: parseFloat(String(s.weight ?? "0.5")),
+      pieces: s.pieces ?? 1,
+      postexOrderType: "Normal",
+    };
+
+    const apiStart = Date.now();
+    let newTrackingId: string;
+    let newRawResponse: Record<string, any>;
+
+    try {
+      const result = await callCourierApi(courierRow, retryOrder, s.serviceCode ?? "O");
+      newTrackingId = result.trackingId;
+      newRawResponse = {
+        ...result.rawResponse,
+        realApiBooking: true,
+        apiCallDurationMs: Date.now() - apiStart,
+        bookedAt: new Date().toISOString(),
+        courier: courierRow.slug,
+        retryOf: id,
+      };
+    } catch (apiErr: any) {
+      req.log.warn({ err: apiErr, courierSlug: courierRow.slug }, "Retry booking failed");
+      res.status(422).json({
+        error: apiErr.message ?? "Courier API booking failed",
+        apiError: true,
+        durationMs: Date.now() - apiStart,
+      }); return;
+    }
+
+    const history = [...((shipment.statusHistory as any[]) ?? []),
+      { status: "pending", timestamp: new Date().toISOString(), note: `Retry booking via ${courierRow.name} API · tracking: ${newTrackingId}` }
+    ];
+
+    const [updated] = await db.update(shipmentsTable).set({
+      trackingId: newTrackingId,
+      rawResponse: newRawResponse,
+      statusHistory: history,
+      updatedAt: new Date(),
+    } as any).where(eq(shipmentsTable.id, id)).returning();
+
+    req.log.info({ newTrackingId, courier: courierRow.slug, shipmentId: id }, "Retry booking success");
+    res.json({ ok: true, shipment: updated, trackingId: newTrackingId, courierName: courierRow.name });
+    return;
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message ?? "Retry failed" });
+  }
+});
+
 /* ─── Exported helpers for shopify.ts ─────────────────── */
 export { callCourierApi as callCourierApiForShopify, trackWithCourierApi as trackWithCourierApiForShopify };
 

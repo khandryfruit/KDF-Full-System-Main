@@ -29,6 +29,7 @@ const TABS = [
   { key: "integrations", label: "Integrations",    icon: Wifi       },
   { key: "shipments",    label: "Shipments",        icon: Package    },
   { key: "manual",       label: "Manual Booking",  icon: BookOpen   },
+  { key: "logs",         label: "API Logs",         icon: FileText   },
   { key: "analytics",   label: "Analytics",        icon: TrendingUp },
   { key: "settings",    label: "Settings",         icon: Settings   },
 ];
@@ -595,6 +596,121 @@ function CourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   );
 }
 
+/* ─── Courier Debug Log Entry ─────────────────────────── */
+function DebugLogEntry({ log, onRetry, retrying }: { log: any; onRetry: (id: number) => void; retrying: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const [jsonTab, setJsonTab] = useState<"raw" | "summary">("summary");
+
+  const statusColor: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    booked: "bg-blue-100 text-blue-700 border-blue-200",
+    in_transit: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    delivered: "bg-green-100 text-green-700 border-green-200",
+    returned: "bg-orange-100 text-orange-700 border-orange-200",
+    failed: "bg-red-100 text-red-700 border-red-200",
+    cancelled: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+
+  return (
+    <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+      {/* ── Header row ── */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className="text-xl shrink-0">{COURIER_ICONS[log.courierSlug] ?? "📦"}</span>
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-sm">{log.courierName ?? log.courierSlug ?? "—"}</span>
+            {/* Real / Local badge */}
+            {log.isRealApi
+              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold bg-green-100 text-green-700 border-green-300">✅ Real API</span>
+              : log.isLocal
+                ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold bg-orange-100 text-orange-700 border-orange-300">⚠ Local ID</span>
+                : null}
+            {/* Delivery status */}
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${statusColor[log.status] ?? "bg-muted text-muted-foreground border-border"}`}>
+              {log.status}
+            </span>
+            {/* API duration */}
+            {log.duration != null && (
+              <span className="text-[10px] text-muted-foreground font-mono">{log.duration}ms</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            {log.shopifyOrderNumber && <span>Order #{log.shopifyOrderNumber}</span>}
+            {log.trackingId && <span className="font-mono text-blue-600">{log.trackingId}</span>}
+            {log.customerName && <span>{log.customerName}</span>}
+            {log.customerCity && <span>{log.customerCity}</span>}
+            <span className="ml-auto">{new Date(log.createdAt).toLocaleString("en-PK", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+          </div>
+          {/* Error note */}
+          {log.errorNote && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1 mt-1">
+              ⚠ {String(log.errorNote)}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Retry button — only for local/failed */}
+          {(log.isLocal || !log.isRealApi) && (
+            <Button size="sm" variant="outline"
+              className="text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={() => onRetry(log.id)} disabled={retrying}>
+              <RefreshCw className={`w-3 h-3 ${retrying ? "animate-spin" : ""}`} />
+              Retry
+            </Button>
+          )}
+          <button onClick={() => setExpanded(p => !p)} className="p-1 text-muted-foreground hover:text-foreground">
+            <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Expanded: full API payload ── */}
+      {expanded && (
+        <div className="border-t border-border bg-muted/20 p-4 space-y-3">
+          <div className="flex gap-2">
+            {(["summary", "raw"] as const).map(t => (
+              <button key={t} onClick={() => setJsonTab(t)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${jsonTab === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>
+                {t === "summary" ? "Summary" : "Raw Response"}
+              </button>
+            ))}
+          </div>
+
+          {jsonTab === "summary" && (
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {[
+                ["Courier", log.courierName ?? log.courierSlug],
+                ["Tracking ID", log.trackingId ?? "—"],
+                ["Order #", log.shopifyOrderNumber ?? "—"],
+                ["Customer", log.customerName ?? "—"],
+                ["City", log.customerCity ?? "—"],
+                ["COD Amount", log.codAmount != null ? `₨${log.codAmount}` : "—"],
+                ["Booking Source", log.bookingSource ?? "—"],
+                ["Status", log.status ?? "—"],
+                ["API Booking", log.isRealApi ? "✅ Yes" : "❌ No (local)"],
+                ["Duration", log.duration != null ? `${log.duration}ms` : "—"],
+                ["Booked At", log.bookedAt ? new Date(log.bookedAt).toLocaleString("en-PK") : "—"],
+                ["Created At", log.createdAt ? new Date(log.createdAt).toLocaleString("en-PK") : "—"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-2 border-b border-border/40 pb-1">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="font-medium text-foreground truncate">{v ?? "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {jsonTab === "raw" && (
+            <pre className="text-[10px] font-mono bg-muted rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto text-foreground/80 whitespace-pre-wrap">
+              {JSON.stringify(log.rawResponse, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShipmentCard({ shipment }: { shipment: any }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
@@ -721,6 +837,41 @@ export default function CouriersPage() {
       return apiFetch(`/api/admin/courier-financial?${p}`);
     },
     enabled: tab === "dashboard",
+  });
+
+  /* ── API Logs tab state ── */
+  const [logSearch, setLogSearch]   = useState("");
+  const [logCourier, setLogCourier] = useState("all");
+  const [logSource, setLogSource]   = useState("all"); // all | real | local
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+
+  const logsQs = (() => {
+    const p = new URLSearchParams();
+    if (logCourier !== "all") p.set("courier", logCourier);
+    if (logSource  !== "all") p.set("source",  logSource);
+    if (logSearch.trim())     p.set("search",  logSearch.trim());
+    return p.toString();
+  })();
+
+  const { data: debugLogsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
+    queryKey: ["/api/admin/shipments/debug-logs", logsQs],
+    queryFn: () => apiFetch(`/api/admin/shipments/debug-logs?${logsQs}`),
+    enabled: tab === "logs",
+    refetchInterval: tab === "logs" ? 30_000 : false,
+  });
+
+  const retryBooking = useMutation({
+    mutationFn: (shipmentId: number) => apiFetch(`/api/admin/shipments/${shipmentId}/retry-booking`, { method: "POST" }),
+    onMutate: (id) => setRetryingId(id),
+    onSuccess: (d: any) => {
+      setRetryingId(null);
+      toast({ title: `✅ Retry successful! Tracking: ${d.trackingId}` });
+      refetchLogs();
+    },
+    onError: (e: any, id) => {
+      setRetryingId(null);
+      toast({ variant: "destructive", title: e.message ?? "Retry booking failed" });
+    },
   });
 
   const { data: shipmentsData, isLoading: shipmentsLoading, refetch: refetchShipments } = useQuery({
@@ -1470,6 +1621,107 @@ export default function CouriersPage() {
                 {saveSettings.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : <><Settings className="w-4 h-4 mr-2" />Save Courier Settings</>}
               </Button>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          API LOGS TAB
+      ════════════════════════════════════════════════════════ */}
+      {tab === "logs" && (
+        <div className="space-y-4">
+
+          {/* ── Stats bar ── */}
+          {debugLogsData?.stats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Total Bookings", value: debugLogsData.stats.total, color: "text-foreground" },
+                { label: "Real API ✅",     value: debugLogsData.stats.realApi, color: "text-green-600" },
+                { label: "Local ID ⚠",     value: debugLogsData.stats.local,   color: "text-orange-600" },
+                { label: "Avg Duration",   value: debugLogsData.stats.avgDuration > 0 ? `${debugLogsData.stats.avgDuration}ms` : "—", color: "text-blue-600" },
+              ].map(s => (
+                <div key={s.label} className="bg-card border rounded-xl p-3 shadow-sm">
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p className={`text-xl font-bold mt-0.5 ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Filters ── */}
+          <div className="bg-card border rounded-xl p-4 shadow-sm">
+            <div className="flex flex-wrap gap-3">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Order #, tracking, customer, city…"
+                  value={logSearch}
+                  onChange={e => setLogSearch(e.target.value)}
+                  className="pl-8 h-8 text-sm"
+                />
+              </div>
+              {/* Courier filter */}
+              <select value={logCourier} onChange={e => setLogCourier(e.target.value)}
+                className="border border-border rounded-lg px-3 py-1.5 text-sm bg-background h-8">
+                <option value="all">All Couriers</option>
+                {couriers.map((c: any) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                <option value="tcs">TCS</option>
+                <option value="postex">PostEx</option>
+                <option value="leopards">Leopards</option>
+                <option value="trax">Trax</option>
+              </select>
+              {/* Source filter */}
+              <select value={logSource} onChange={e => setLogSource(e.target.value)}
+                className="border border-border rounded-lg px-3 py-1.5 text-sm bg-background h-8">
+                <option value="all">All Bookings</option>
+                <option value="real">✅ Real API Only</option>
+                <option value="local">⚠ Local IDs Only</option>
+              </select>
+              {/* Refresh */}
+              <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => refetchLogs()} disabled={logsLoading}>
+                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Alert for local IDs ── */}
+          {(debugLogsData?.stats?.local ?? 0) > 0 && logSource !== "real" && (
+            <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-orange-800">
+                <strong>{debugLogsData.stats.local} shipment(s) with local IDs</strong> — these were not booked via real courier API.
+                Use the <strong>Retry</strong> button to re-book through the real API after configuring courier credentials.
+              </div>
+            </div>
+          )}
+
+          {/* ── Log entries ── */}
+          {logsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+            </div>
+          ) : (debugLogsData?.logs ?? []).length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-border rounded-xl text-muted-foreground">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="font-medium">No booking logs found</p>
+              <p className="text-sm mt-1">Book a courier to see API logs here</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground px-1">
+                Showing {(debugLogsData?.logs ?? []).length} booking(s) — most recent first · Auto-refreshes every 30s
+              </p>
+              {(debugLogsData?.logs ?? []).map((log: any) => (
+                <DebugLogEntry
+                  key={log.id}
+                  log={log}
+                  onRetry={(id) => retryBooking.mutate(id)}
+                  retrying={retryingId === log.id && retryBooking.isPending}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
