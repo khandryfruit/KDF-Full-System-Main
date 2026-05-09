@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, integrationsTable, shopifyIntegrationsTable, woocommerceIntegrationsTable, marketingIntegrationsTable, syncJobsTable, productsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or, sql } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { generateSlugFromName } from "../lib/slugify";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -101,30 +102,89 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
             const price = sp.variants?.[0]?.price ?? "0";
             const stock = sp.variants?.reduce((sum: number, v: any) => sum + (parseInt(v.inventory_quantity) || 0), 0) ?? 0;
             const images = (sp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slug = sp.handle ?? generateSlugFromName(sp.title ?? "untitled");
+            const shopifyProductId = String(sp.id);
+            const candidateSlug = sp.handle ?? generateSlugFromName(sp.title ?? "untitled");
             const name = sp.title ?? "Untitled";
             const description = sp.body_html?.replace(/<[^>]*>/g, "").trim() || undefined;
             const active = sp.status === "active";
-            await db.insert(productsTable).values({
-              name,
-              slug,
-              description,
-              price: String(price),
-              stock,
-              images,
-              active,
-            }).onConflictDoUpdate({
-              target: productsTable.slug,
-              set: {
+
+            // Four-tier lookup to find any pre-existing product for this Shopify item:
+            //
+            // Tier 1 — shopify_product_id: stable Shopify numeric ID.
+            //           Reliable from the second sync onwards once stored.
+            //
+            // Tier 2 — shopify_handle = candidateSlug: the last-seen Shopify handle
+            //           stored on the DB row. Catches handle changes for products
+            //           synced at least once with this code.
+            //
+            // Tier 3 — slug = candidateSlug: backward-compat for legacy products
+            //           (no shopify_product_id / shopify_handle stored yet) where
+            //           the handle has not changed since the last old-code sync.
+            //
+            // Tier 4 — name match on unlinked rows: last-resort heuristic for
+            //           legacy products whose Shopify handle changed before the
+            //           first sync with this code. Only matches rows that still
+            //           lack a shopify_product_id to avoid false positives.
+            let [existing] = await db
+              .select({ id: productsTable.id, slug: productsTable.slug })
+              .from(productsTable)
+              .where(
+                or(
+                  eq(productsTable.shopifyProductId, shopifyProductId),
+                  eq(productsTable.shopifyHandle, candidateSlug),
+                  eq(productsTable.slug, candidateSlug),
+                ),
+              )
+              .limit(1);
+
+            if (!existing) {
+              // Tier 4: case-insensitive name match for unlinked legacy rows.
+              // This is a heuristic — log every hit so operators can review
+              // potential mislinks (e.g. two products sharing the same name).
+              const lowerName = name.toLowerCase();
+              const [byName] = await db
+                .select({ id: productsTable.id, slug: productsTable.slug })
+                .from(productsTable)
+                .where(sql`lower(${productsTable.name}) = ${lowerName} AND ${productsTable.shopifyProductId} IS NULL`)
+                .limit(1);
+              if (byName) {
+                logger.warn(
+                  { shopifyProductId, shopifyHandle: candidateSlug, productId: byName.id, slug: byName.slug, name },
+                  "Shopify sync: Tier-4 name-based match used — verify this link is correct",
+                );
+                existing = byName;
+              }
+            }
+
+            if (existing) {
+              // Product already exists — update content but preserve the slug.
+              // Also store / refresh shopifyProductId and shopifyHandle so future
+              // syncs always find this product by the stable Shopify ID.
+              await db.update(productsTable).set({
                 name,
                 description,
                 price: String(price),
                 stock,
                 images,
                 active,
+                shopifyProductId,
+                shopifyHandle: candidateSlug,
                 updatedAt: new Date(),
-              },
-            });
+              }).where(eq(productsTable.id, existing.id));
+            } else {
+              // Truly new product — insert with the Shopify handle as the initial slug.
+              await db.insert(productsTable).values({
+                name,
+                slug: candidateSlug,
+                shopifyProductId,
+                shopifyHandle: candidateSlug,
+                description,
+                price: String(price),
+                stock,
+                images,
+                active,
+              });
+            }
             successCount++;
           } catch { failedCount++; }
         }
@@ -200,22 +260,30 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
             const originalPrice = wp.regular_price && wp.sale_price ? wp.regular_price : undefined;
             const stock = wp.stock_quantity ?? 0;
             const images = (wp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slug = wp.slug ?? generateSlugFromName(wp.name ?? "untitled");
+            const woocommerceProductId = String(wp.id);
+            const candidateSlug = wp.slug ?? generateSlugFromName(wp.name ?? "untitled");
             const name = wp.name ?? "Untitled";
             const description = wp.description?.replace(/<[^>]*>/g, "").trim() || undefined;
             const active = wp.status === "publish";
-            await db.insert(productsTable).values({
-              name,
-              slug,
-              description,
-              price: String(price),
-              originalPrice: originalPrice ? String(originalPrice) : undefined,
-              stock,
-              images,
-              active,
-            }).onConflictDoUpdate({
-              target: productsTable.slug,
-              set: {
+
+            // Three-tier lookup — same strategy as Shopify sync above:
+            // Tier 1: woocommerce_product_id (stable numeric ID, populated from first sync onwards)
+            // Tier 2: slug = candidateSlug (backward-compat when slug/handle hasn't changed)
+            const [existing] = await db
+              .select({ id: productsTable.id, slug: productsTable.slug })
+              .from(productsTable)
+              .where(
+                or(
+                  eq(productsTable.woocommerceProductId, woocommerceProductId),
+                  eq(productsTable.slug, candidateSlug),
+                ),
+              )
+              .limit(1);
+
+            if (existing) {
+              // Product already exists — update content but preserve the slug.
+              // Refresh woocommerceProductId so future syncs always find it by ID.
+              await db.update(productsTable).set({
                 name,
                 description,
                 price: String(price),
@@ -223,9 +291,23 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
                 stock,
                 images,
                 active,
+                woocommerceProductId,
                 updatedAt: new Date(),
-              },
-            });
+              }).where(eq(productsTable.id, existing.id));
+            } else {
+              // Truly new product — insert with the WooCommerce slug as the initial slug.
+              await db.insert(productsTable).values({
+                name,
+                slug: candidateSlug,
+                woocommerceProductId,
+                description,
+                price: String(price),
+                originalPrice: originalPrice ? String(originalPrice) : undefined,
+                stock,
+                images,
+                active,
+              });
+            }
             successCount++;
           } catch { failedCount++; }
         }

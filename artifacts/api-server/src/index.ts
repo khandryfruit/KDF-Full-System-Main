@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runMigrations } from "./lib/runMigrations";
 import { startAbandonedRecoveryScheduler } from "./lib/whatsappRecovery";
 import { startCampaignQueueProcessor } from "./lib/campaignQueue";
 import { startShopifyAutoSync, autoRegisterWebhooksOnStartup } from "./lib/shopifyAutoSync";
@@ -19,16 +20,25 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+// Apply idempotent SQL migrations before accepting traffic so any new
+// schema columns (e.g. shopify_product_id) exist before sync routes run.
+runMigrations()
+  .then(() => {
+    app.listen(port, (err) => {
+      if (err) {
+        logger.error({ err }, "Error listening on port");
+        process.exit(1);
+      }
 
-  logger.info({ port }, "Server listening");
-  startAbandonedRecoveryScheduler();
-  startCampaignQueueProcessor();
-  startShopifyAutoSync(15); /* incremental sync every 15 minutes */
-  autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
-  startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
-});
+      logger.info({ port }, "Server listening");
+      startAbandonedRecoveryScheduler();
+      startCampaignQueueProcessor();
+      startShopifyAutoSync(15); /* incremental sync every 15 minutes */
+      autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
+      startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
+    });
+  })
+  .catch((err) => {
+    logger.error({ err }, "Failed to apply migrations — aborting startup");
+    process.exit(1);
+  });
