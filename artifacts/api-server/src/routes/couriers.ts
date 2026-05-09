@@ -2091,7 +2091,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       customerPhone: address.phone ?? "",
       deliveryAddress: address.address ?? "",
       cityName: address.city ?? "",
-      invoicePayment: String(invoicePayment),   /* docs: String type */
+      invoicePayment: Number(invoicePayment),   /* docs: integer/number — NOT string */
       invoiceDivision: 1,
       items: pieceCount,
       orderType,

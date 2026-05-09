@@ -1,0 +1,514 @@
+URGENT — COMPLETE POSTEX API INTEGRATION FIX REQUIRED
+
+This is the FINAL warning regarding the PostEx courier integration.
+
+We have already invested significant time and money into this system, but the PostEx integration is still incomplete, unstable, and improperly implemented.
+
+You are REQUIRED to fully review the COMPLETE official PostEx Merchant API Integration Guide (v4.1.9 — 33 Pages) and professionally implement the entire system according to the official documentation. 
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANT AUTHENTICATION FIX
+━━━━━━━━━━━━━━━━━━━
+
+PostEx DOES NOT use Bearer authentication.
+
+ALL requests MUST use:
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+DO NOT USE:
+❌ Authorization: Bearer
+❌ JWT validation
+❌ OAuth flow
+
+Current implementation is wrong.
+
+━━━━━━━━━━━━━━━━━━━
+
+1. OPERATIONAL CITIES API
+   ━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v2/get-operational-city
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Optional Query:
+operationalCityType=Pickup
+operationalCityType=Delivery
+
+Expected Response:
+{
+"statusCode": "200",
+"statusMessage": "SUCCESSFULLY OPERATED",
+"dist": [
+{
+"operationalCityName": "Karachi",
+"countryName": "Pakistan",
+"isPickupCity": true,
+"isDeliveryCity": true
+}
+]
+}
+
+System MUST:
+• validate cities before booking
+• reject unsupported cities
+
+━━━━━━━━━━━━━━━━━━━
+2. GET PICKUP ADDRESS API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/get-merchant-address
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Response:
+{
+"statusCode": "200",
+"statusMessage": "SUCCESSFULLY OPERATED",
+"dist": [
+{
+"phone1": "+923001234567",
+"phone2": "+923001234567",
+"contactPersonName": "Warehouse Manager",
+"cityName": "Karachi",
+"address": "Warehouse Address",
+"addressCode": "PK001"
+}
+]
+}
+
+System MUST:
+• fetch pickup addresses
+• save addressCode
+• support multiple warehouses
+
+━━━━━━━━━━━━━━━━━━━
+3. CREATE PICKUP ADDRESS API
+━━━━━━━━━━━━━━━━━━━
+
+POST
+https://api.postex.pk/services/integration/api/order/v2/create-merchant-address
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"address": "Warehouse Street",
+"addressTypeId": 2,
+"cityName": "Karachi",
+"contactPersonName": "Manager",
+"phone1": "03001234567",
+"phone2": "03001234567",
+"phone3": "03001234567",
+"wareHouseManagerName": "Ahmed"
+}
+
+addressTypeId:
+1 = Return
+2 = Pickup
+
+━━━━━━━━━━━━━━━━━━━
+4. ORDER TYPES API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/get-order-types
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Expected Response:
+{
+"statusCode": "200",
+"statusMessage": "SUCCESSFULLY OPERATED",
+"dist": [
+"Normal",
+"Reversed",
+"Replacement"
+]
+}
+
+━━━━━━━━━━━━━━━━━━━
+5. ORDER CREATION API
+━━━━━━━━━━━━━━━━━━━
+
+POST
+https://api.postex.pk/services/integration/api/order/v3/create-order
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+VALID JSON PAYLOAD:
+
+{
+"cityName": "Karachi",
+"customerName": "Ahmed Khan",
+"customerPhone": "03001234567",
+"deliveryAddress": "House 12 Street 5 Karachi",
+"invoiceDivision": 1,
+"invoicePayment": 2500,
+"items": 1,
+"orderDetail": "Dry Fruits Order",
+"orderRefNumber": "ORD-1001",
+"orderType": "Normal",
+"transactionNotes": "Handle Carefully",
+"pickupAddressCode": "PK001",
+"storeAddressCode": "STORE001"
+}
+
+CRITICAL VALIDATIONS:
+
+customerPhone:
+✅ 03001234567
+
+invoicePayment:
+✅ 2500
+❌ "2500 PKR"
+
+invoiceDivision:
+✅ integer only
+
+items:
+✅ integer only
+
+orderType:
+✅ Normal
+✅ Reverse
+✅ Replacement
+
+cityName:
+✅ MUST match operational city API
+
+orderRefNumber:
+✅ MUST be unique
+
+Expected Response:
+{
+"statusCode": "200",
+"statusMessage": "ORDER HAS BEEN CREATED",
+"dist": {
+"trackingNumber": "CX-123456789",
+"orderStatus": "UnBooked",
+"orderDate": "2025-05-09 10:00:00"
+}
+}
+
+━━━━━━━━━━━━━━━━━━━
+6. LIST UNBOOKED ORDERS API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v2/get-unbooked-orders
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Request:
+{
+"startDate": "2025-05-01",
+"endDate": "2025-05-09",
+"cityName": "Karachi"
+}
+
+━━━━━━━━━━━━━━━━━━━
+7. GENERATE LOAD SHEET API
+━━━━━━━━━━━━━━━━━━━
+
+POST
+https://api.postex.pk/services/integration/api/order/v2/generate-load-sheet
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"pickupAddress": "Karachi Warehouse",
+"trackingNumbers": [
+"CX-123456789",
+"CX-123456790"
+]
+}
+
+Features Required:
+• PDF download
+• Print button
+• Bulk load sheet support
+
+━━━━━━━━━━━━━━━━━━━
+8. TRACK ORDER API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/track-order/CX-123456789
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Expected Response:
+{
+"statusCode": "200",
+"statusMessage": "SUCCESSFULLY OPERATED",
+"dist": {
+"customerName": "Ahmed",
+"trackingNumber": "CX-123456789",
+"transactionStatus": "Delivered"
+}
+}
+
+━━━━━━━━━━━━━━━━━━━
+TRACKING STATUS CODES
+━━━━━━━━━━━━━━━━━━━
+
+0001 = At Merchant Warehouse
+0002 = Returned
+0003 = At PostEx Warehouse
+0004 = Package on Route
+0005 = Delivered
+0006 = Returned
+0007 = Returned
+0008 = Delivery Under Review
+0013 = Attempt Made
+
+Admin panel MUST map all statuses properly.
+
+━━━━━━━━━━━━━━━━━━━
+9. BULK TRACKING API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/track-bulk-order
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"trackingNumber": [
+"CX-123456789",
+"CX-123456790"
+]
+}
+
+━━━━━━━━━━━━━━━━━━━
+10. AIRWAY BILL API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/get-invoice?trackingNumbers=CX-123456789,CX-123456790
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Requirements:
+• PDF labels
+• print labels
+• download labels
+• max 10 tracking numbers
+
+━━━━━━━━━━━━━━━━━━━
+11. SAVE SHIPPER ADVICE API
+━━━━━━━━━━━━━━━━━━━
+
+PUT
+https://api.postex.pk/service/integration/api/order/v2/save-shipper-advice
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"trackingNumber": "CX-123456789",
+"statusId": 1,
+"remarks": "Customer requested return"
+}
+
+statusId:
+1 = Mark Return Requested
+2 = Mark Retry Attempt
+
+━━━━━━━━━━━━━━━━━━━
+12. GET SHIPPER ADVICE API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/service/integration/api/order/v1/get-shipper-advice/CX-123456789
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+━━━━━━━━━━━━━━━━━━━
+13. CANCEL ORDER API
+━━━━━━━━━━━━━━━━━━━
+
+PUT
+https://api.postex.pk/services/integration/api/order/v1/cancel-order
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"trackingNumber": "CX-123456789"
+}
+
+━━━━━━━━━━━━━━━━━━━
+14. PAYMENT STATUS API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/payment-status/CX-123456789
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Expected Response:
+{
+"statusCode": "200",
+"statusMessage": "SUCCESSFULLY OPERATED",
+"dist": {
+"orderRefNumber": "ORD-1001",
+"trackingNumber": "CX-123456789",
+"settle": true
+}
+}
+
+━━━━━━━━━━━━━━━━━━━
+15. ORDER STATUS API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/get-order-status
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN"
+}
+
+Expected Statuses:
+• Unbooked
+• Booked
+• PostEx WareHouse
+• Out For Delivery
+• Delivered
+• Returned
+• Attempted
+• Delivery Under Review
+
+━━━━━━━━━━━━━━━━━━━
+16. LIST ORDERS API
+━━━━━━━━━━━━━━━━━━━
+
+GET
+https://api.postex.pk/services/integration/api/order/v1/get-all-order
+
+Headers:
+{
+"token": "YOUR_POSTEX_TOKEN",
+"Content-Type": "application/json"
+}
+
+Request JSON:
+{
+"orderStatusID": 0,
+"fromDate": "2025-05-01",
+"toDate": "2025-05-09"
+}
+
+━━━━━━━━━━━━━━━━━━━
+SHOPIFY INTEGRATION REQUIRED
+━━━━━━━━━━━━━━━━━━━
+
+Developer MUST:
+• auto create shipment
+• sync tracking numbers
+• sync order statuses
+• prevent duplicate booking
+• auto update fulfillment
+• sync cancellations
+• save PostEx logs
+
+━━━━━━━━━━━━━━━━━━━
+ERROR HANDLING REQUIRED
+━━━━━━━━━━━━━━━━━━━
+
+Implement:
+• request logs
+• response logs
+• retry logs
+• timeout logs
+• validation logs
+• webhook logs
+
+━━━━━━━━━━━━━━━━━━━
+POSTMAN TESTING REQUIRED
+━━━━━━━━━━━━━━━━━━━
+
+ALL APIs MUST be verified in Postman before deployment.
+
+Required Postman collection:
+• create-order
+• track-order
+• bulk-track
+• generate-load-sheet
+• get-invoice
+• cancel-order
+• payment-status
+• pickup-address
+• get-order-status
+
+━━━━━━━━━━━━━━━━━━━
+FINAL REQUIREMENT
+━━━━━━━━━━━━━━━━━━━
+
+This integration MUST now be completed professionally according to the official PostEx API documentation.
+
+No shortcuts.
+No fake implementation.
+No temporary fixes.
+No hardcoded responses.
+
+If this integration is not properly fixed this time, we will stop using your system and move to another development team.
