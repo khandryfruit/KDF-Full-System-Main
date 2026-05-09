@@ -1,0 +1,127 @@
+یہ error clear بتا رہا ہے:
+
+“Invalid access token [tcsaccount: LGEC11060]”
+
+یعنی:
+✔ TCS account موجود ہے
+✔ API endpoint hit ہو رہا ہے
+❌ لیکن جو Access Token استعمال ہو رہا ہے وہ invalid / expired / wrong ہے۔
+
+اس کا مطلب عام طور پر یہ ہوتا ہے:
+
+1. Wrong token pasted
+2. Expired token
+3. Bearer token کو access token کی جگہ استعمال کیا جا رہا ہے
+4. Sandbox token production میں use ہو رہا ہے
+5. Production token sandbox میں use ہو رہا ہے
+6. Token refresh logic غلط ہے
+7. Replit ENV variables publish ہونے کے بعد load نہیں ہو رہے
+
+Developer کو یہ MASTER FIX PROMPT بھیج دیں:
+
+---
+
+TCS INVALID ACCESS TOKEN — FIX REQUIRED
+
+Current Error:
+“TCS: Invalid access token [tcsaccount: LGEC11060]”
+
+This means:
+✔ TCS account exists
+✔ API request reaches TCS
+❌ Access token being used is invalid
+
+Please debug and rebuild the TCS authentication flow properly according to official TCS documentation.
+
+REQUIRED FIXES:
+
+1. Separate Tokens Properly
+   TCS has:
+   ✔ Bearer Token
+   ✔ Access Token
+
+These are DIFFERENT.
+
+Do NOT overwrite one with another.
+
+2. Validate Environment
+   Check:
+   ✔ Sandbox token used only with sandbox URLs
+   ✔ Production token used only with production URLs
+
+3. Token Storage
+   Check:
+   ✔ ENV variables
+   ✔ database token storage
+   ✔ production deployment secrets
+   ✔ Replit publish environment
+
+Likely current issue:
+Token works locally but fails on:
+admin.khanbabadryfruits.com
+
+Meaning production ENV variables are missing or incorrect.
+
+4. Add Debug Logs
+   Need logs for:
+   ✔ token source
+   ✔ token expiry
+   ✔ auth URL
+   ✔ environment
+   ✔ request headers
+   ✔ response status
+
+5. Direct Access Token Support
+   If TCS provided token manually by email:
+   Add:
+   ✔ “Direct Access Token” field
+
+System should:
+✔ use manual token directly
+✔ bypass Step-2 auth if enabled
+
+6. Auto Token Refresh
+   Implement:
+   ✔ token expiry detection
+   ✔ automatic refresh
+   ✔ retry failed requests once
+
+7. Validate Token Before Booking
+   Before booking:
+   ✔ call auth validation endpoint
+   ✔ verify token active
+   ✔ verify account LGEC11060 linked
+
+8. Production Fix
+   Booking works on Replit preview but fails on production domain.
+
+Check:
+✔ HTTPS
+✔ proxy
+✔ ENV secrets
+✔ deployment variables
+✔ backend API calls
+✔ CORS
+
+TCS APIs must be called from backend server only.
+
+Never from frontend browser.
+
+9. Final Goal
+   Need:
+   ✔ real booking
+   ✔ real CN generation
+   ✔ portal sync
+   ✔ tracking
+   ✔ label printing
+   ✔ stable production authentication
+
+TCS Portal:
+[https://ociconnect.tcscourier.com/ecom/index.html](https://ociconnect.tcscourier.com/ecom/index.html)
+
+Tracking:
+[https://ociconnect.tcscourier.com/tracking/index.html](https://ociconnect.tcscourier.com/tracking/index.html)
+
+---
+
+یہ prompt دینے کے بعد developer آسانی سے issue isolate کر لے گا۔
