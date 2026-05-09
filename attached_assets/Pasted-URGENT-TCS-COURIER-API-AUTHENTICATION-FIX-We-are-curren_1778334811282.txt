@@ -1,0 +1,153 @@
+URGENT TCS COURIER API AUTHENTICATION FIX
+
+We are currently facing a critical TCS Courier API issue:
+
+ERROR:
+Courier API Booking Failed
+
+TCS:
+"Invalid access token"
+
+Tracking URL:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+==================================================
+ISSUE ANALYSIS
+
+The TCS booking API request is failing because the authentication/access token is invalid, expired, missing, or incorrectly generated.
+
+Right now:
+
+- Shopify orders are not booking correctly
+- Courier bookings are failing
+- Tracking numbers are not generating
+- Fake local booking statuses may appear
+- Real TCS portal booking is not happening
+
+This must be fixed immediately and professionally.
+
+==================================================
+REQUIRED ACTIONS
+
+1. FULL TCS API AUTH AUDIT
+
+---
+
+Please fully audit:
+
+- TCS API credentials
+- Access token generation
+- OAuth/token endpoint
+- Token expiration handling
+- Sandbox/live environment
+- API headers
+- Authorization format
+
+Verify:
+
+- Client ID
+- Client Secret
+- Username
+- Password
+- Bearer token handling
+
+==================================================
+2. TOKEN REFRESH SYSTEM
+
+Implement automatic token refresh system.
+
+If token expires:
+
+- auto-generate new token
+- retry request automatically
+- avoid manual intervention
+
+Need:
+✔ token caching
+✔ expiry tracking
+✔ retry protection
+
+==================================================
+3. DEBUGGING PANEL
+
+Add professional debug logs showing:
+
+- Token request response
+- Token expiry time
+- API request headers
+- Booking payload
+- TCS response
+- HTTP status codes
+- Error details
+
+Need visible debugging in admin panel.
+
+==================================================
+4. VALIDATE REAL BOOKING
+
+DO NOT mark order booked unless:
+
+✔ TCS API returns SUCCESS
+✔ Tracking number generated
+✔ Shipment appears on TCS portal
+
+Current issue may be causing fake booking locally.
+
+==================================================
+5. TRACKING VALIDATION
+
+After booking:
+
+- verify shipment exists on:
+  https://ociconnect.tcscourier.com/tracking/index.html
+
+Need automatic tracking validation.
+
+==================================================
+6. SANDBOX vs LIVE CHECK
+
+Verify system is using correct:
+✔ LIVE credentials
+✔ LIVE endpoint
+
+OR
+✔ SANDBOX credentials
+✔ SANDBOX endpoint
+
+Do not mix environments.
+
+==================================================
+7. SHOPIFY INTEGRATION
+
+After successful booking:
+
+- update Shopify order
+- save tracking ID
+- sync courier status
+- send WhatsApp notification
+- update admin timeline
+
+==================================================
+8. ERROR HANDLING
+
+If booking fails:
+
+- show actual error
+- save logs
+- allow retry
+- do not create fake booking status
+
+==================================================
+9. IMPORTANT
+
+Please deeply audit the full TCS integration architecture.
+
+Need:
+✔ real API booking
+✔ real token validation
+✔ stable authentication
+✔ real shipment creation
+✔ proper debugging
+✔ production-ready integration
+
+This is a critical production issue affecting Shopify order fulfillment.
