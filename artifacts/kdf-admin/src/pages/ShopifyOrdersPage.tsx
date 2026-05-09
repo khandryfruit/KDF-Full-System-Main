@@ -619,9 +619,14 @@ function WaConfirmTab({ order }: { order: any }) {
   });
 
   const resendMutation = useMutation({
-    mutationFn: () => api(`/admin/logistics/confirmations/${conf?.id}/resend`, { method: "POST" }).then(r => r.json()),
+    mutationFn: () => api(`/admin/logistics/confirmations/${conf?.id}/resend`, { method: "POST" }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Resend failed");
+      if (!d.success) throw new Error(d.message ?? "WhatsApp send failed");
+      return d;
+    }),
     onSuccess: () => { toast({ title: "✅ WA confirmation resent!" }); refetch(); },
-    onError: () => toast({ title: "Resend failed", variant: "destructive" }),
+    onError: (e: any) => toast({ title: e.message ?? "Resend failed", variant: "destructive" }),
   });
 
   const forceBookMutation = useMutation({
@@ -781,9 +786,14 @@ function RiderTab({ order }: { order: any }) {
   });
 
   const waMutation = useMutation({
-    mutationFn: (deliveryId: number) => api(`/admin/riders/deliveries/${deliveryId}/send-wa`, { method: "POST" }).then(r => r.json()),
-    onSuccess: () => toast({ title: "✅ WA sent to rider!" }),
-    onError: () => toast({ title: "WA send failed", variant: "destructive" }),
+    mutationFn: (deliveryId: number) => api(`/admin/riders/deliveries/${deliveryId}/send-wa`, { method: "POST" }).then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "WA send failed");
+      if (!d.ok) throw new Error(d.message ?? "WhatsApp send failed — check WA settings");
+      return d;
+    }),
+    onSuccess: (d) => toast({ title: `✅ ${d.message ?? "WA sent to rider!"}` }),
+    onError: (e: any) => toast({ title: e.message ?? "WA send failed", variant: "destructive" }),
   });
 
   const statusMutation = useMutation({

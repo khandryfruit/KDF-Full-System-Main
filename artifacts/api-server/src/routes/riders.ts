@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
 import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -551,13 +552,13 @@ ${del.rider_name ? `🛵 Rider: ${del.rider_name}` : ""}
 router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
   try {
     const { shopify_order_db_id, rider_id, notes, cod_override, eta_minutes, send_customer_wa } = req.body;
-    if (!shopify_order_db_id) res.status(400).json({ error: "shopify_order_db_id required" });
+    if (!shopify_order_db_id) { res.status(400).json({ error: "shopify_order_db_id required" }); return; }
 
     // Get order
     const orderRows = await db.execute(sql`
       SELECT * FROM shopify_orders WHERE id = ${parseInt(shopify_order_db_id)} LIMIT 1
     `);
-    if (!orderRows.rows.length) res.status(404).json({ error: "Order not found" });
+    if (!orderRows.rows.length) { res.status(404).json({ error: "Order not found" }); return; }
     const order = orderRows.rows[0] as any;
 
     const addr = (() => {
@@ -614,21 +615,34 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
 
     res.json({ ok: true, delivery });
 
-    /* ── Non-blocking: Shopify sync + auto Customer WA ── */
+    /* ── Non-blocking: Shopify sync + auto Customer WA + auto Rider WA ── */
     if (delivery) {
       setImmediate(async () => {
         try {
           let rider: any = null;
           if (rider_id) {
-            const rr = await db.execute(sql`SELECT name, phone, whatsapp_number FROM riders WHERE id = ${parseInt(rider_id)} LIMIT 1`);
+            const rr = await db.execute(sql`SELECT * FROM riders WHERE id = ${parseInt(rider_id)} LIMIT 1`);
             rider = rr.rows[0];
           }
           await syncDeliveryToShopify(buildSyncPayload("assigned", delivery, rider, notes));
 
-          /* Auto customer WA — if auto mode or explicitly requested */
-          const shouldSendWa = send_customer_wa !== false && rider_id;
-          if (shouldSendWa) {
-            const settings = await getDeliverySettings();
+          const settings = await getDeliverySettings();
+
+          /* ── Auto WA to RIDER ── always send on assignment if rider has WA number */
+          if (rider_id && rider) {
+            const riderWaPhone = rider.whatsapp_number || rider.phone;
+            if (riderWaPhone) {
+              const riderMessage = buildRiderMessage(order, { ...delivery, rider_name: rider.name, rider_phone: rider.phone });
+              const riderSent = await sendWhatsAppMessage({ phone: normalisePhone(riderWaPhone), message: riderMessage }).catch(() => false);
+              if (riderSent) {
+                await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
+              }
+            }
+          }
+
+          /* ── Auto WA to CUSTOMER — if auto mode or explicitly requested ── */
+          const shouldSendCustomerWa = send_customer_wa !== false && rider_id;
+          if (shouldSendCustomerWa) {
             if (settings.auto_wa_on_assign || send_customer_wa === true) {
               const customerPhone = delivery.customer_phone || order.customer_phone;
               if (customerPhone) {
@@ -642,7 +656,9 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
               }
             }
           }
-        } catch {}
+        } catch (err: any) {
+          logger.error(err, "rider-assign setImmediate error");
+        }
       });
     }
   } catch (err: any) {
@@ -746,29 +762,29 @@ router.post("/admin/riders/deliveries/:id/send-wa", adminMiddleware, async (req,
   try {
     const id = parseInt(req.params["id"] as string);
     const delRows = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${id} LIMIT 1`);
-    if (!delRows.rows.length) res.status(404).json({ error: "Delivery not found" });
+    if (!delRows.rows.length) { res.status(404).json({ error: "Delivery not found" }); return; }
     const delivery = delRows.rows[0] as any;
 
-    if (!delivery.rider_id) res.status(400).json({ error: "No rider assigned to this delivery" });
+    if (!delivery.rider_id) { res.status(400).json({ error: "No rider assigned to this delivery" }); return; }
 
     const riderRows = await db.execute(sql`SELECT * FROM riders WHERE id = ${delivery.rider_id} LIMIT 1`);
-    if (!riderRows.rows.length) res.status(404).json({ error: "Rider not found" });
+    if (!riderRows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
     const rider = riderRows.rows[0] as any;
 
     const orderRows = await db.execute(sql`SELECT * FROM shopify_orders WHERE id = ${delivery.shopify_order_db_id} LIMIT 1`);
     const order = orderRows.rows?.[0] as any ?? {};
 
     const waPhone = rider.whatsapp_number || rider.phone;
-    if (!waPhone) res.status(400).json({ error: "Rider has no WhatsApp number" });
+    if (!waPhone) { res.status(400).json({ error: "Rider has no WhatsApp number configured" }); return; }
 
     const message = buildRiderMessage(order, delivery);
-    const sent = await sendWhatsAppMessage({ phone: waPhone, message });
+    const sent = await sendWhatsAppMessage({ phone: normalisePhone(waPhone), message });
 
     if (sent) {
       await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW(), updated_at = NOW() WHERE id = ${id}`);
     }
 
-    res.json({ ok: sent, message: sent ? "WhatsApp sent to rider!" : "WhatsApp send failed" });
+    res.json({ ok: sent, message: sent ? "WhatsApp sent to rider!" : "WhatsApp send failed — check WA settings" });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
@@ -780,21 +796,25 @@ router.post("/admin/riders/orders/:orderId/send-wa", adminMiddleware, async (req
   try {
     const orderId = parseInt(req.params["orderId"] as string);
     const delRows = await db.execute(sql`SELECT * FROM rider_deliveries WHERE shopify_order_db_id = ${orderId} LIMIT 1`);
-    if (!delRows.rows.length) res.status(404).json({ error: "No delivery record found — assign a rider first" });
+    if (!delRows.rows.length) { res.status(404).json({ error: "No delivery record found — assign a rider first" }); return; }
     const delivery = delRows.rows[0] as any;
 
-    if (!delivery.rider_id) res.status(400).json({ error: "No rider assigned" });
+    if (!delivery.rider_id) { res.status(400).json({ error: "No rider assigned" }); return; }
     const riderRows = await db.execute(sql`SELECT * FROM riders WHERE id = ${delivery.rider_id} LIMIT 1`);
+    if (!riderRows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
     const rider = riderRows.rows[0] as any;
+
     const orderRows = await db.execute(sql`SELECT * FROM shopify_orders WHERE id = ${orderId} LIMIT 1`);
     const order = orderRows.rows?.[0] as any ?? {};
 
     const waPhone = rider.whatsapp_number || rider.phone;
+    if (!waPhone) { res.status(400).json({ error: "Rider has no WhatsApp number" }); return; }
+
     const message = buildRiderMessage(order, delivery);
-    const sent = await sendWhatsAppMessage({ phone: waPhone, message });
+    const sent = await sendWhatsAppMessage({ phone: normalisePhone(waPhone), message });
 
     if (sent) await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
-    res.json({ ok: sent, message: sent ? "WhatsApp sent!" : "Send failed" });
+    res.json({ ok: sent, message: sent ? "WhatsApp sent to rider!" : "WhatsApp send failed — check WA settings" });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
