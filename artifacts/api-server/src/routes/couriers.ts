@@ -358,6 +358,388 @@ router.post("/admin/couriers/tcs/clear-cache", adminMiddleware as any, async (_r
   res.json({ ok: true, cleared: total, ecomCleared: ecomCount, simpleCleared: simpleCount, message: `Cleared ${total} cached token(s) (ECOM: ${ecomCount}, Simple: ${simpleCount}). Next booking will generate a fresh token.` });
 });
 
+/* ─── Admin: TCS – Live Request/Response Log ─────────── */
+router.get("/admin/couriers/tcs/request-log", adminMiddleware as any, async (_req: AuthRequest, res: Response): Promise<void> => {
+  res.json({ ok: true, count: tcsLiveLog.length, entries: tcsLiveLog.slice(0, 50) });
+});
+
+/* ─── Admin: TCS – Test Tracking API ─────────────────── */
+router.post("/admin/couriers/tcs/test-tracking", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  type StepStatus = "ok" | "fail" | "info" | "warn";
+  const steps: Array<{ step: string; status: StepStatus; detail: string; raw?: string }> = [];
+  try {
+    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
+    if (!courierRow) { res.status(404).json({ error: "TCS not configured" }); return; }
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const bearer = getTcsStaticBearer(settings);
+    const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    const { trackingNumber } = req.body ?? {};
+    const cn = (trackingNumber ?? "").toString().trim() || "TESTCN000000000";
+
+    steps.push({ step: "Config", status: bearer ? "ok" : "fail", detail: `Bearer: ${bearer ? `✅ (${bearer.length} chars)` : "❌ Missing"}\nEnvironment: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}\nBase URL: ${baseUrl}` });
+    if (!bearer) { res.json({ ok: false, steps }); return; }
+
+    /* Test tracking endpoint */
+    const trackUrl = `${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`;
+    const t0 = Date.now();
+    let httpStatus = 0; let rawText = "";
+    try {
+      const trackResp = await fetch(trackUrl, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ consignee: [cn] }),
+        signal: AbortSignal.timeout(12000),
+      });
+      httpStatus = trackResp.status;
+      rawText = await trackResp.text();
+      const durationMs = Date.now() - t0;
+      const authOk = httpStatus !== 401 && httpStatus !== 403;
+      pushTcsLog({ ts: new Date().toISOString(), type: "test_tracking", url: trackUrl, method: "POST", reqBody: JSON.stringify({ consignee: [cn] }), httpStatus, resBody: rawText.slice(0, 600), durationMs, success: authOk, error: authOk ? undefined : `HTTP ${httpStatus}` });
+      steps.push({
+        step: "Tracking API",
+        status: authOk ? "ok" : "fail",
+        detail: `URL: POST ${trackUrl}\nTracking Number: ${cn}\nHTTP Status: ${httpStatus}\nDuration: ${durationMs}ms\n${authOk ? "✅ API reachable — token accepted" : `❌ Token rejected (${httpStatus})`}`,
+        raw: rawText.slice(0, 600),
+      });
+      res.json({ ok: authOk, steps, httpStatus, durationMs, raw: rawText.slice(0, 600) });
+    } catch (e: any) {
+      const durationMs = Date.now() - t0;
+      pushTcsLog({ ts: new Date().toISOString(), type: "test_tracking", url: trackUrl, method: "POST", reqBody: JSON.stringify({ consignee: [cn] }), httpStatus: null, resBody: e.message, durationMs, success: false, error: e.message });
+      steps.push({ step: "Tracking API", status: "fail", detail: `Network error: ${e.message}\nDuration: ${durationMs}ms` });
+      res.json({ ok: false, steps, error: e.message });
+    }
+  } catch (err: any) {
+    steps.push({ step: "Fatal", status: "fail", detail: err.message });
+    res.status(500).json({ ok: false, steps, error: err.message });
+  }
+});
+
+/* ─── Admin: TCS – Test Booking (dry-run / sandbox safe) ─ */
+router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  type StepStatus = "ok" | "fail" | "info" | "warn";
+  const steps: Array<{ step: string; status: StepStatus; detail: string; raw?: string }> = [];
+  try {
+    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
+    if (!courierRow) { res.status(404).json({ error: "TCS not configured" }); return; }
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const bearer = getTcsStaticBearer(settings);
+    const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+
+    steps.push({
+      step: "Config Check",
+      status: "info",
+      detail: [
+        `Environment: ${settings.sandbox ? "🧪 SANDBOX (safe)" : "🚀 PRODUCTION — test booking will be REAL"}`,
+        `Base URL: ${baseUrl}`,
+        `Account: ${settings.tcsaccount || "❌ NOT SET"}`,
+        `Bearer Token: ${bearer ? `✅ (${bearer.length} chars)` : "❌ MISSING"}`,
+        `Username: ${settings.username || "❌ NOT SET"}`,
+        `Shipper City Code: ${settings.shipperCityCode || "(not set)"}`,
+      ].join("\n"),
+    });
+
+    if (!bearer) {
+      res.json({ ok: false, steps, error: "Bearer token not configured" }); return;
+    }
+
+    /* Get ECOM token */
+    let ecomToken = "";
+    try {
+      const t0 = Date.now();
+      ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
+      steps.push({ step: "ECOM Token", status: "ok", detail: `✅ Token obtained in ${Date.now() - t0}ms\nTail: ●●●●…${ecomToken.slice(-12)}` });
+    } catch (e: any) {
+      steps.push({ step: "ECOM Token", status: "fail", detail: `❌ ${e.message}` });
+      res.json({ ok: false, steps, error: e.message }); return;
+    }
+
+    /* Build test booking payload */
+    const testOrderNo = `KDFTEST-${Date.now()}`;
+    const bookingPayload = {
+      originCityName: settings.shipperCity || "Lahore",
+      originCityCode: settings.shipperCityCode || "LHE",
+      consigneeName: "KDF Test Customer",
+      consigneeMobNo: "03001234567",
+      destinationCityName: "Karachi",
+      destinationCityCode: "KHI",
+      senderName: settings.shipperName || "KDF Nuts",
+      senderMobNo: settings.shipperPhone || "03001234567",
+      senderAddress: settings.shipperAddress || "Test Pickup",
+      pickupAddress: settings.shipperAddress || "Test Pickup",
+      consigneeAddress: "Test Delivery Address, Karachi",
+      orderNo: testOrderNo,
+      goodsDescription: "Test Parcel - KDF Nuts",
+      pieces: 1,
+      weightInKg: "0.50",
+      tcsAccountNo: settings.tcsaccount || "",
+      costCenterCode: settings.costcentercode || "",
+      serviceTypeCode: settings.serviceCode || "O",
+      isFrg: false,
+      specialInstruction: "TEST BOOKING — DO NOT DELIVER",
+      accesstoken: ecomToken,
+    };
+
+    steps.push({
+      step: "Booking Payload",
+      status: "info",
+      detail: `Order No: ${testOrderNo}\nConsignee: KDF Test Customer\nDestination: Karachi\nWeight: 0.50 kg\n⚠ ${settings.sandbox ? "Sandbox — safe test" : "PRODUCTION — this creates a REAL shipment!"}`,
+      raw: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }, null, 2).slice(0, 800),
+    });
+
+    /* Try booking */
+    const bookUrls = [
+      `${baseUrl}/ecom/api/shipment/book`,
+      `${baseUrl}/ecom/api/booking/create`,
+    ];
+    let booked = false;
+    for (const bookUrl of bookUrls) {
+      const t0 = Date.now();
+      let httpStatus = 0; let rawText = "";
+      try {
+        const bookResp = await fetch(bookUrl, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${ecomToken}`, "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify(bookingPayload),
+          signal: AbortSignal.timeout(18000),
+        });
+        httpStatus = bookResp.status;
+        rawText = await bookResp.text();
+        const durationMs = Date.now() - t0;
+        let data: Record<string, any> = {};
+        try { data = JSON.parse(rawText); } catch { data = {}; }
+        const cn = data.consignmentNo ?? data.ConsignmentNo ?? data.trackingNumber ?? data.result?.consignmentNo;
+        const success = httpStatus === 200 && !!cn;
+        pushTcsLog({ ts: new Date().toISOString(), type: "test_booking", url: bookUrl, method: "POST", reqBody: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }), httpStatus, resBody: rawText.slice(0, 600), durationMs, success, error: success ? undefined : (data.message ?? data.statusMessage ?? `HTTP ${httpStatus}`) });
+        if (success) {
+          steps.push({ step: `Booking API (${bookUrl.split("/").pop()})`, status: "ok", detail: `✅ Booking SUCCESSFUL!\nHTTP Status: ${httpStatus}\nConsignment No: ${cn}\nDuration: ${durationMs}ms\nURL: POST ${bookUrl}`, raw: rawText.slice(0, 600) });
+          booked = true;
+          res.json({ ok: true, steps, consignmentNo: cn, bookUrl, httpStatus, durationMs, warning: settings.sandbox ? undefined : "⚠ PRODUCTION booking created — consignment exists in TCS system" });
+          return;
+        } else if (httpStatus === 404) {
+          steps.push({ step: `Booking URL (${bookUrl.split("/").pop()})`, status: "warn", detail: `HTTP 404 — endpoint not found, trying fallback\nURL: ${bookUrl}`, raw: rawText.slice(0, 200) });
+          continue;
+        } else {
+          const errMsg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${httpStatus}`;
+          steps.push({ step: `Booking API (${bookUrl.split("/").pop()})`, status: "fail", detail: `❌ Booking failed: ${errMsg}\nHTTP Status: ${httpStatus}\nDuration: ${durationMs}ms\nURL: POST ${bookUrl}`, raw: rawText.slice(0, 600) });
+          res.json({ ok: false, steps, error: errMsg, httpStatus, bookUrl, raw: rawText.slice(0, 400) });
+          return;
+        }
+      } catch (e: any) {
+        const durationMs = Date.now() - t0;
+        pushTcsLog({ ts: new Date().toISOString(), type: "test_booking", url: bookUrl, method: "POST", reqBody: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }), httpStatus: null, resBody: e.message, durationMs, success: false, error: e.message });
+        steps.push({ step: `Booking URL (${bookUrl.split("/").pop()})`, status: "warn", detail: `Network error: ${e.message}\nDuration: ${durationMs}ms` });
+      }
+    }
+    if (!booked) {
+      res.json({ ok: false, steps, error: "All booking URL variants failed — check debug steps above" });
+    }
+  } catch (err: any) {
+    steps.push({ step: "Fatal", status: "fail", detail: err.message });
+    res.status(500).json({ ok: false, steps, error: err.message });
+  }
+});
+
+/* ─── Admin: TCS – Full Diagnostics ─────────────────── */
+router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  type StepStatus = "ok" | "fail" | "info" | "warn";
+  const steps: Array<{ step: string; status: StepStatus; detail: string; raw?: string }> = [];
+  const startTs = Date.now();
+  try {
+    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
+    if (!courierRow) { res.status(404).json({ error: "TCS not configured" }); return; }
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const bearerPasted = (settings.bearerToken ?? "").trim();
+    const bearerEnv    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+    const bearer       = bearerPasted || bearerEnv;
+    const baseUrl      = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    const serverIp     = await getServerIp();
+
+    /* 1. Environment Check */
+    steps.push({
+      step: "1 · Environment",
+      status: "info",
+      detail: [
+        `Mode: ${settings.sandbox ? "🧪 SANDBOX (devconnect.tcscourier.com)" : "🚀 PRODUCTION (ociconnect.tcscourier.com)"}`,
+        `Base URL: ${baseUrl}`,
+        `Server IP: ${serverIp}`,
+        `Username: ${settings.username || "❌ NOT SET"}`,
+        `TCS Account: ${settings.tcsaccount || "❌ NOT SET"}`,
+        `Shipper: ${settings.shipperName || "not set"} · ${settings.shipperCity || "?"} (${settings.shipperCityCode || "?"})`,
+        `Service Code: ${settings.serviceCode || "O"} · Weight: ${settings.defaultWeight || "0.5"} kg`,
+        `API Variant: ${settings.tcsApiVariant || "ecom"}`,
+      ].join("\n"),
+    });
+
+    /* 2. Bearer Token */
+    if (!bearer) {
+      steps.push({ step: "2 · ENVO Bearer Token", status: "fail", detail: "❌ Not configured\nGet from: ENVO Portal → API Access → Bearer Token" });
+      res.json({ ok: false, steps, serverIp, totalMs: Date.now() - startTs });
+      return;
+    }
+    let bearerValid = true;
+    try {
+      const jwtPayload = JSON.parse(Buffer.from(bearer.split(".")[1], "base64url").toString());
+      const expMs    = typeof jwtPayload.exp === "number" ? jwtPayload.exp * 1000 : null;
+      const daysLeft = expMs ? Math.floor((expMs - Date.now()) / 86400000) : null;
+      bearerValid    = jwtIsValid(bearer);
+      steps.push({
+        step: "2 · ENVO Bearer Token",
+        status: bearerValid ? "ok" : "fail",
+        detail: [
+          `Source: ${bearerPasted ? "Settings field" : "TCS_STATIC_BEARER_TOKEN env var"}`,
+          `Length: ${bearer.length} chars`,
+          `Client ID: ${jwtPayload.clientid ?? "N/A"}`,
+          `Issuer: ${jwtPayload.iss ?? "N/A"}`,
+          `Issued: ${jwtPayload.iat ? new Date(jwtPayload.iat * 1000).toISOString() : "N/A"}`,
+          `Expiry: ${daysLeft != null ? `${daysLeft} days remaining` : "No exp claim"} — ${bearerValid ? "✅ VALID" : "❌ EXPIRED"}`,
+          `Tail: ●●●●…${bearer.slice(-12)}`,
+        ].join("\n"),
+      });
+      if (!bearerValid) { res.json({ ok: false, steps, serverIp, totalMs: Date.now() - startTs }); return; }
+    } catch {
+      steps.push({ step: "2 · ENVO Bearer Token", status: "info", detail: `Opaque token (not JWT) — ${bearer.length} chars. Will test live.\nSource: ${bearerPasted ? "Settings field" : "env var"}\nTail: ●●●●…${bearer.slice(-12)}` });
+    }
+
+    /* 3. Tracking API test (uses bearer) */
+    const trackUrl = `${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`;
+    const t0t = Date.now();
+    try {
+      const trackResp = await fetch(trackUrl, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ consignee: ["KDFTEST000001"] }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const trackText = await trackResp.text();
+      const durationMs = Date.now() - t0t;
+      const authOk = trackResp.status !== 401 && trackResp.status !== 403;
+      pushTcsLog({ ts: new Date().toISOString(), type: "diagnostics", url: trackUrl, method: "POST", reqBody: '{"consignee":["KDFTEST000001"]}', httpStatus: trackResp.status, resBody: trackText.slice(0, 400), durationMs, success: authOk });
+      steps.push({
+        step: "3 · Tracking API (Bearer test)",
+        status: authOk ? "ok" : "fail",
+        detail: `URL: POST ${trackUrl}\nHTTP Status: ${trackResp.status}\nDuration: ${durationMs}ms\n${authOk ? "✅ Bearer accepted by TCS API" : `❌ Bearer rejected (${trackResp.status})`}`,
+        raw: trackText.slice(0, 400),
+      });
+    } catch (e: any) {
+      steps.push({ step: "3 · Tracking API (Bearer test)", status: "warn", detail: `Network/timeout: ${e.message}\nDuration: ${Date.now() - t0t}ms` });
+    }
+
+    /* 4. Step-2 ECOM Token */
+    const manualToken = (settings.accessToken ?? "").trim();
+    const username    = (settings.username ?? "").trim();
+    const password    = (settings.password ?? "").trim();
+    let ecomToken     = "";
+    if (manualToken) {
+      ecomToken = manualToken;
+      steps.push({ step: "4 · ECOM Token (Step-2)", status: "ok", detail: `Mode: ✅ Manual Direct Token (bypasses Step-2)\nTail: ●●●●…${manualToken.slice(-12)}` });
+    } else if (username && password) {
+      const t0e = Date.now();
+      try {
+        /* Try all URL variants and report which one worked */
+        const attempts = [
+          { url: `${baseUrl}/ecom/api/authentication/token`,         body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`,         body: { Username: username, Password: password } },
+          { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { Username: username, Password: password } },
+          { url: `${baseUrl}/ecom/api/auth/token`,                   body: { username, password } },
+          { url: `${baseUrl}/ecom/api/auth/token`,                   body: { Username: username, Password: password } },
+        ];
+        let found = false;
+        const attemptResults: string[] = [];
+        for (let i = 0; i < attempts.length; i++) {
+          const { url: aUrl, body: aBody } = attempts[i];
+          const ta = Date.now();
+          try {
+            const aResp = await fetch(aUrl, {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+              body: JSON.stringify(aBody),
+              signal: AbortSignal.timeout(10000),
+            });
+            const aText = await aResp.text();
+            const aDuration = Date.now() - ta;
+            let aData: Record<string, any> = {};
+            try { aData = JSON.parse(aText); } catch { aData = {}; }
+            const aToken = aData.accessToken ?? aData.accesstoken ?? aData.token ?? aData.result?.accessToken ?? aData.data?.accessToken;
+            const fieldStyle = Object.keys(aBody).includes("Username") ? "PascalCase" : "lowercase";
+            attemptResults.push(`Attempt ${i + 1}: POST ${aUrl.split("/").slice(-2).join("/")} (${fieldStyle}) → HTTP ${aResp.status} (${aDuration}ms) ${aToken ? "✅ TOKEN OK" : `❌ no token: ${aData.message ?? aData.error ?? ""}`}`);
+            pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: aUrl, method: "POST", reqBody: JSON.stringify({ ...aBody, password: "●●●" }), httpStatus: aResp.status, resBody: aText.slice(0, 400), durationMs: aDuration, success: !!aToken, attempt: i + 1 });
+            if (aToken) {
+              ecomToken = aToken;
+              found = true;
+              tcsEcomCache.set(`${settings.tcsaccount}:${username}`, { token: aToken, expiresAt: Date.now() + 55 * 60 * 1000 });
+              break;
+            }
+            if (aResp.status !== 405 && aResp.status !== 404) break;
+          } catch (ae: any) {
+            attemptResults.push(`Attempt ${i + 1}: POST ${aUrl.split("/").slice(-2).join("/")} → Network error: ${ae.message}`);
+          }
+        }
+        steps.push({
+          step: "4 · ECOM Token (Step-2)",
+          status: found ? "ok" : "fail",
+          detail: [
+            found ? `✅ Token obtained in ${Date.now() - t0e}ms` : "❌ All Step-2 URL variants failed",
+            found ? `Tail: ●●●●…${ecomToken.slice(-12)}` : "Fix: Check Username/Password or paste Direct ECOM Token",
+            "",
+            "URL Probe Results:",
+            ...attemptResults,
+          ].join("\n"),
+        });
+        if (!found) { res.json({ ok: false, steps, serverIp, totalMs: Date.now() - startTs }); return; }
+      } catch (e: any) {
+        steps.push({ step: "4 · ECOM Token (Step-2)", status: "fail", detail: `Error: ${e.message}` });
+        res.json({ ok: false, steps, serverIp, totalMs: Date.now() - startTs }); return;
+      }
+    } else {
+      steps.push({ step: "4 · ECOM Token (Step-2)", status: "warn", detail: "No Username/Password set — cannot test Step-2 auto-generation.\nFix: Add credentials in Settings, or paste a Direct ECOM Token." });
+    }
+
+    /* 5. Booking URL probe (no actual booking — just HEAD/OPTIONS check) */
+    const bookUrls = [`${baseUrl}/ecom/api/shipment/book`, `${baseUrl}/ecom/api/booking/create`];
+    for (const bUrl of bookUrls) {
+      const t0b = Date.now();
+      try {
+        const bResp = await fetch(bUrl, {
+          method: "OPTIONS",
+          headers: { "Authorization": `Bearer ${ecomToken || bearer}` },
+          signal: AbortSignal.timeout(6000),
+        });
+        const durationMs = Date.now() - t0b;
+        const reachable = bResp.status !== 404;
+        pushTcsLog({ ts: new Date().toISOString(), type: "diagnostics", url: bUrl, method: "OPTIONS", reqBody: "", httpStatus: bResp.status, resBody: "", durationMs, success: reachable });
+        steps.push({ step: `5 · Booking URL Probe (${bUrl.split("/").pop()})`, status: reachable ? "ok" : "warn", detail: `URL: OPTIONS ${bUrl}\nHTTP: ${bResp.status} — ${reachable ? "✅ Endpoint reachable" : "❌ 404 Not Found"}\nDuration: ${durationMs}ms` });
+      } catch (e: any) {
+        steps.push({ step: `5 · Booking URL Probe (${bUrl.split("/").pop()})`, status: "warn", detail: `Network error: ${e.message}\nDuration: ${Date.now() - t0b}ms` });
+      }
+    }
+
+    /* 6. Summary */
+    const ok = steps.every(s => s.status !== "fail");
+    const totalMs = Date.now() - startTs;
+    steps.push({
+      step: "6 · Summary",
+      status: ok ? "ok" : "fail",
+      detail: [
+        ok ? "✅ All checks passed — TCS is ready for booking!" : "❌ Some checks failed — see steps above",
+        `Server IP: ${serverIp} (share with TCS if needed for whitelisting)`,
+        `Total time: ${totalMs}ms`,
+        "",
+        "Next steps if booking fails:",
+        "  1. Ensure server IP is whitelisted with TCS",
+        "  2. Verify ENVO Bearer Token is not expired",
+        "  3. Try Test Booking button to simulate a real booking call",
+        `  4. Portal: ${baseUrl}/ecom/index.html`,
+      ].join("\n"),
+    });
+
+    res.json({ ok, steps, serverIp, totalMs });
+  } catch (err: any) {
+    steps.push({ step: "Fatal Error", status: "fail", detail: err.message });
+    res.status(500).json({ ok: false, steps, error: err.message, totalMs: Date.now() - startTs });
+  }
+});
+
 /* ─── Admin: TCS – CN / Label Print ─────────────────── */
 router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1836,6 +2218,22 @@ const tcsEcomCache = new Map<string, TcsEcomCacheEntry>();
 const TCS_SIMPLE_URL = "https://api.tcscourier.com";
 const tcsSimpleCache = new Map<string, TcsEcomCacheEntry>();
 
+/* ── TCS Live Request/Response Log — last 100 calls, in-memory ── */
+interface TcsLogEntry {
+  id: number; ts: string;
+  type: "auth_step2" | "booking" | "tracking" | "label" | "test_booking" | "test_tracking" | "test_label" | "diagnostics" | "auth_step1" | "clear_cache";
+  url: string; method: string;
+  reqBody: string; httpStatus: number | null;
+  resBody: string; durationMs: number;
+  success: boolean; error?: string; attempt?: number;
+}
+let tcsLogSeq = 0;
+const tcsLiveLog: TcsLogEntry[] = [];
+function pushTcsLog(e: Omit<TcsLogEntry, "id">) {
+  tcsLiveLog.unshift({ ...e, id: ++tcsLogSeq });
+  if (tcsLiveLog.length > 100) tcsLiveLog.splice(100);
+}
+
 /**
  * TCS Simple API single-step auth:
  *   POST https://api.tcscourier.com/auth  {username, password, accountNo}
@@ -2025,43 +2423,100 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     return cached.token;
   }
 
-  /* Priority 3: Call Step-2 auth endpoint */
-  const url = `${baseUrl}/ecom/api/authentication/token`;
-  logger.info({ url, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — calling Step-2 auth");
+  /* Priority 3: Try multiple Step-2 URL / payload combinations to handle HTTP 405 / field naming variations */
+  const STEP2_ATTEMPTS = [
+    /* Primary URL — lowercase field names */
+    { url: `${baseUrl}/ecom/api/authentication/token`,         body: { username, password } },
+    /* Primary URL — PascalCase field names (some TCS versions require this) */
+    { url: `${baseUrl}/ecom/api/authentication/token`,         body: { Username: username, Password: password } },
+    /* Alternative endpoint — lowercase */
+    { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { username, password } },
+    /* Alternative endpoint — PascalCase */
+    { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { Username: username, Password: password } },
+    /* Alternate auth path */
+    { url: `${baseUrl}/ecom/api/auth/token`,                   body: { username, password } },
+    { url: `${baseUrl}/ecom/api/auth/token`,                   body: { Username: username, Password: password } },
+  ];
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-    signal: AbortSignal.timeout(15000),
-  });
+  let lastError = "";
+  let lastStatus = 0;
+  let lastRaw = "";
 
-  let data: Record<string, any> = {};
-  try { data = await resp.json(); } catch { data = {}; }
+  for (let i = 0; i < STEP2_ATTEMPTS.length; i++) {
+    const { url: attemptUrl, body: attemptBody } = STEP2_ATTEMPTS[i];
+    const t0 = Date.now();
+    logger.info({ url: attemptUrl, attempt: i + 1, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — Step-2 attempt");
 
-  const token =
-    data.accessToken ?? data.accesstoken ??
-    data.token ??
-    data.result?.accessToken ?? data.result?.accesstoken ??
-    data.data?.accessToken ?? data.data?.token;
+    let resp: Response;
+    let data: Record<string, any> = {};
+    let rawText = "";
+    try {
+      resp = await fetch(attemptUrl, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+        body: JSON.stringify(attemptBody),
+        signal: AbortSignal.timeout(12000),
+      });
+      rawText = await resp.text();
+      try { data = JSON.parse(rawText); } catch { data = {}; }
+    } catch (netErr: any) {
+      const durationMs = Date.now() - t0;
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: null, resBody: netErr.message, durationMs, success: false, error: netErr.message, attempt: i + 1 });
+      lastError = `Network error: ${netErr.message}`;
+      continue;
+    }
 
-  if (!token) {
+    const durationMs = Date.now() - t0;
+    lastStatus = resp.status;
+    lastRaw = rawText.slice(0, 400);
+
+    /* 405 = Method Not Allowed — this URL doesn't accept POST, try next */
+    if (resp.status === 405) {
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: 405, resBody: rawText.slice(0, 200), durationMs, success: false, error: "405 Method Not Allowed — trying next URL", attempt: i + 1 });
+      logger.warn({ url: attemptUrl, attempt: i + 1 }, "TCS Step-2 — HTTP 405, trying next URL variant");
+      lastError = `HTTP 405 on ${attemptUrl}`;
+      continue;
+    }
+
+    /* 404 = endpoint doesn't exist, try next */
+    if (resp.status === 404) {
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: 404, resBody: rawText.slice(0, 200), durationMs, success: false, error: "404 Not Found — trying next URL", attempt: i + 1 });
+      lastError = `HTTP 404 on ${attemptUrl}`;
+      continue;
+    }
+
+    const token =
+      data.accessToken ?? data.accesstoken ??
+      data.token ??
+      data.result?.accessToken ?? data.result?.accesstoken ??
+      data.data?.accessToken ?? data.data?.token;
+
+    if (token) {
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
+      /* Cache with 55-min TTL */
+      const ttlMs = typeof data.expiresIn === "number"
+        ? Math.min(data.expiresIn * 1000, 55 * 60 * 1000)
+        : 55 * 60 * 1000;
+      tcsEcomCache.set(cacheKey, { token, expiresAt: Date.now() + ttlMs });
+      logger.info({ tcsaccount: settings.tcsaccount, username, attempt: i + 1, url: attemptUrl, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
+      return token;
+    }
+
+    /* Got a response but no token in it */
     const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status}`;
-    throw new Error(
-      `TCS ECOM token (Step-2) failed: ${msg}. ` +
-      `Verify Username/Password in TCS settings, or paste a Direct ECOM Access Token to skip Step-2.`
-    );
+    pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
+    lastError = msg;
+    lastStatus = resp.status;
+    lastRaw = rawText.slice(0, 300);
+    /* Non-405/404 — this URL works but auth failed (wrong creds etc) — stop trying other URLs */
+    break;
   }
 
-  /* Cache with 55-min TTL (or API-provided expiresIn if shorter) */
-  const ttlMs = typeof data.expiresIn === "number"
-    ? Math.min(data.expiresIn * 1000, 55 * 60 * 1000)
-    : 55 * 60 * 1000;
-
-  tcsEcomCache.set(cacheKey, { token, expiresAt: Date.now() + ttlMs });
-  logger.info({ tcsaccount: settings.tcsaccount, username, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
-
-  return token;
+  throw new Error(
+    `TCS ECOM token (Step-2) failed: ${lastError} (HTTP ${lastStatus}). ` +
+    `Verify Username/Password in TCS settings, or paste a Direct ECOM Access Token to skip Step-2. ` +
+    `Raw: ${lastRaw.slice(0, 150)}`
+  );
 }
 
 /**

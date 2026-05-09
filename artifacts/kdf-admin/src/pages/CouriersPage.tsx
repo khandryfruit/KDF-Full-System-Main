@@ -6,7 +6,7 @@ import {
   RefreshCw, TrendingUp, BarChart2, Search, Bell, DollarSign, Wallet,
   ChevronDown, Loader2, ArrowUpRight, ArrowDownRight, Printer, Sparkles,
   Users, Settings, Wifi, WifiOff, Eye, EyeOff, AlertCircle, MapPin,
-  Filter, BookOpen, Star, FileText, Zap,
+  Filter, BookOpen, Star, FileText, Zap, Terminal, Activity, FlaskConical, ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +144,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const [debugOk, setDebugOk]       = useState<boolean | null>(null);
   const [debugServerIp, setDebugServerIp] = useState<string>("");
   const [tokenStatus, setTokenStatus] = useState<"idle" | "ok" | "fail">("idle");
+  /* ── Debug Console state ── */
+  const [showDebugConsole, setShowDebugConsole]         = useState(false);
+  const [debugConsoleSteps, setDebugConsoleSteps]       = useState<DebugStep[]>([]);
+  const [debugConsoleOk, setDebugConsoleOk]             = useState<boolean | null>(null);
+  const [debugConsoleTitle, setDebugConsoleTitle]       = useState("");
+  const [requestLog, setRequestLog]                     = useState<any[]>([]);
+  const [showRequestLog, setShowRequestLog]             = useState(false);
+  const [trackingInput, setTrackingInput]               = useState("");
 
   const { data: serverIpData } = useQuery({
     queryKey: ["/api/admin/couriers/server-ip"],
@@ -227,6 +235,55 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
       toast({ title: "🗑 Token Cache Cleared", description: d.message ?? "Next booking will auto-generate a fresh ECOM token via Step-2" });
     },
     onError: (e: any) => toast({ variant: "destructive", title: "Clear failed", description: e.message }),
+  });
+
+  /* ── Debug Console Mutations ── */
+  const openConsoleWith = (title: string, d: any) => {
+    setDebugConsoleTitle(title);
+    setDebugConsoleSteps(d.steps ?? []);
+    setDebugConsoleOk(d.ok ?? false);
+    setShowDebugConsole(true);
+    setShowDebug(false);
+  };
+
+  const fullDiagnostics = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/full-diagnostics", { method: "POST" }),
+    onSuccess: (d: any) => {
+      openConsoleWith("Full Diagnostics", d);
+      if (d.ok) { setTokenStatus("ok"); toast({ title: "✅ All diagnostics passed!" }); }
+      else { setTokenStatus("fail"); toast({ variant: "destructive", title: "Diagnostics — issues found", description: "See Debug Console for details" }); }
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Diagnostics failed", description: e.message }),
+  });
+
+  const testBooking = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/test-booking", { method: "POST" }),
+    onSuccess: (d: any) => {
+      openConsoleWith("Test Booking", d);
+      if (d.ok) toast({ title: "✅ Test booking successful!", description: d.consignmentNo ? `CN: ${d.consignmentNo}` : undefined });
+      else toast({ variant: "destructive", title: "Test booking failed", description: d.error?.slice(0, 120) });
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Test Booking error", description: e.message }),
+  });
+
+  const testTracking = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/test-tracking", { method: "POST", body: JSON.stringify({ trackingNumber: trackingInput || undefined }) }),
+    onSuccess: (d: any) => {
+      openConsoleWith("Test Tracking", d);
+      if (d.ok) toast({ title: "✅ Tracking API reachable" });
+      else toast({ variant: "destructive", title: "Tracking test failed" });
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Tracking test error", description: e.message }),
+  });
+
+  const fetchLog = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/request-log"),
+    onSuccess: (d: any) => {
+      setRequestLog(d.entries ?? []);
+      setShowRequestLog(true);
+      setShowDebugConsole(true);
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Log fetch failed", description: e.message }),
   });
 
   const toggleActive = useMutation({
@@ -451,30 +508,256 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Action Buttons ── */}
           {config && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs"
-                onClick={() => testConn.mutate()} disabled={testConn.isPending}>
-                {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                Test Connection
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs"
-                onClick={() => refreshToken.mutate()} disabled={refreshToken.isPending}>
-                {refreshToken.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Run Auth Debug
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs text-red-700 border-red-200 hover:bg-red-50"
-                onClick={() => clearCache.mutate()} disabled={clearCache.isPending}>
-                {clearCache.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Clear Token Cache
-              </Button>
-              <a href="https://ociconnect.tcscourier.com" target="_blank" rel="noopener noreferrer"
-                className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
-                <Zap className="w-3.5 h-3.5 text-amber-500" /> TCS Portal
-              </a>
-              <a href="https://ociconnect.tcscourier.com/tracking/index.html" target="_blank" rel="noopener noreferrer"
-                className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
-                <MapPin className="w-3.5 h-3.5 text-blue-500" /> Track Shipment
-              </a>
+            <div className="space-y-2">
+              {/* Row 1: primary actions */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                  onClick={() => testConn.mutate()} disabled={testConn.isPending}>
+                  {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                  Test Connection
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                  onClick={() => refreshToken.mutate()} disabled={refreshToken.isPending}>
+                  {refreshToken.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Auth Debug
+                </Button>
+              </div>
+
+              {/* Row 2: TCS Debug Console button — full width */}
+              <button
+                type="button"
+                onClick={() => setShowDebugConsole(v => !v)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-xs font-semibold transition-all ${showDebugConsole ? "border-purple-500 bg-purple-50 text-purple-800" : "border-border bg-white hover:border-purple-300 hover:bg-purple-50/50 text-slate-700"}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-base">🖥</span>
+                  TCS Debug Console
+                  <span className="font-normal text-muted-foreground text-[10px]">— Test Auth · Booking · Tracking · Full Diagnostics</span>
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform text-muted-foreground ${showDebugConsole ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════ */}
+          {/* ──  TCS DEBUG CONSOLE  ─────────────────────── */}
+          {/* ════════════════════════════════════════════════ */}
+          {showDebugConsole && config && (
+            <div className="border-2 border-purple-300 rounded-xl overflow-hidden bg-white shadow-md">
+
+              {/* Console header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-900 to-purple-950 text-white">
+                <span className="flex items-center gap-2 text-sm font-bold">
+                  <Terminal className="w-4 h-4 text-purple-300" />
+                  TCS Debug Console
+                  <span className="text-[10px] font-normal text-purple-300 bg-purple-900/50 rounded px-1.5 py-0.5">
+                    {form.sandbox ? "🧪 SANDBOX" : "🚀 PRODUCTION"}
+                  </span>
+                </span>
+                <button onClick={() => setShowDebugConsole(false)} className="text-purple-300 hover:text-white text-xs transition-colors">✕ Close</button>
+              </div>
+
+              <div className="p-3 space-y-3 bg-slate-50">
+
+                {/* ── Test buttons row ── */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Full Diagnostics */}
+                  <button
+                    type="button"
+                    onClick={() => { setShowRequestLog(false); fullDiagnostics.mutate(); }}
+                    disabled={fullDiagnostics.isPending || testBooking.isPending || testTracking.isPending}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 transition-all"
+                  >
+                    {fullDiagnostics.isPending
+                      ? <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
+                      : <ListChecks className="w-4 h-4 text-emerald-700" />}
+                    <span className="text-[11px] font-bold text-emerald-800">Full Diagnostics</span>
+                    <span className="text-[9px] text-emerald-600">Bearer · Token · APIs</span>
+                  </button>
+
+                  {/* Test Auth */}
+                  <button
+                    type="button"
+                    onClick={() => { setShowRequestLog(false); refreshToken.mutate(); }}
+                    disabled={refreshToken.isPending || fullDiagnostics.isPending}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 hover:bg-blue-100 disabled:opacity-60 transition-all"
+                  >
+                    {refreshToken.isPending
+                      ? <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                      : <Activity className="w-4 h-4 text-blue-700" />}
+                    <span className="text-[11px] font-bold text-blue-800">Test Auth</span>
+                    <span className="text-[9px] text-blue-600">Step-1 + Step-2</span>
+                  </button>
+
+                  {/* Test Booking */}
+                  <button
+                    type="button"
+                    onClick={() => { setShowRequestLog(false); testBooking.mutate(); }}
+                    disabled={testBooking.isPending || fullDiagnostics.isPending}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 disabled:opacity-60 transition-all"
+                  >
+                    {testBooking.isPending
+                      ? <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                      : <FlaskConical className="w-4 h-4 text-orange-700" />}
+                    <span className="text-[11px] font-bold text-orange-800">Test Booking</span>
+                    <span className="text-[9px] text-orange-600">{form.sandbox ? "Safe sandbox" : "⚠ Creates real CN"}</span>
+                  </button>
+
+                  {/* Test Tracking */}
+                  <button
+                    type="button"
+                    onClick={() => { setShowRequestLog(false); testTracking.mutate(); }}
+                    disabled={testTracking.isPending || fullDiagnostics.isPending}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-60 transition-all"
+                  >
+                    {testTracking.isPending
+                      ? <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
+                      : <MapPin className="w-4 h-4 text-sky-700" />}
+                    <span className="text-[11px] font-bold text-sky-800">Test Tracking</span>
+                    <span className="text-[9px] text-sky-600">Bearer token check</span>
+                  </button>
+                </div>
+
+                {/* Tracking number input */}
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={trackingInput}
+                    onChange={e => setTrackingInput(e.target.value)}
+                    placeholder="Optional CN# for Test Tracking (e.g. 1234567890)"
+                    className="text-xs h-7 flex-1 font-mono"
+                  />
+                </div>
+
+                {/* Utility buttons */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => clearCache.mutate()}
+                    disabled={clearCache.isPending}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[11px] font-medium text-red-700 transition-all disabled:opacity-60"
+                  >
+                    {clearCache.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    Clear Token Cache
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fetchLog.mutate()}
+                    disabled={fetchLog.isPending}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 transition-all disabled:opacity-60"
+                  >
+                    {fetchLog.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Terminal className="w-3 h-3" />}
+                    {showRequestLog ? "Refresh Log" : "View Request Log"} {requestLog.length > 0 && `(${requestLog.length})`}
+                  </button>
+                  <a href={`https://${form.sandbox ? "devconnect" : "ociconnect"}.tcscourier.com`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-[11px] font-medium text-amber-700 transition-all">
+                    <Zap className="w-3 h-3" /> Portal
+                  </a>
+                </div>
+
+                {/* ── Test Results Panel ── */}
+                {debugConsoleSteps.length > 0 && (
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-100 border-b">
+                      <span className="text-[11px] font-bold flex items-center gap-1.5 text-slate-700">
+                        {debugConsoleOk
+                          ? <><CheckCircle2 className="w-3.5 h-3.5 text-green-600" /><span className="text-green-700">{debugConsoleTitle} — PASSED</span></>
+                          : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">{debugConsoleTitle} — CHECK FAILED STEPS</span></>
+                        }
+                      </span>
+                      <button onClick={() => setDebugConsoleSteps([])} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+                    </div>
+                    <div className="divide-y max-h-96 overflow-y-auto">
+                      {debugConsoleSteps.map((s, i) => {
+                        const icon   = s.status === "ok" ? "✅" : s.status === "fail" ? "❌" : s.status === "warn" ? "⚠️" : "ℹ️";
+                        const bg     = s.status === "ok" ? "bg-green-50" : s.status === "fail" ? "bg-red-50" : s.status === "warn" ? "bg-amber-50" : "bg-gray-50";
+                        const border = s.status === "ok" ? "border-l-2 border-green-400" : s.status === "fail" ? "border-l-2 border-red-400" : s.status === "warn" ? "border-l-2 border-amber-400" : "";
+                        return (
+                          <details key={i} open={s.status === "fail" || s.status === "warn"} className={`${bg} ${border}`}>
+                            <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer list-none select-none">
+                              <span className="text-sm">{icon}</span>
+                              <span className="text-xs font-medium flex-1">{s.step}</span>
+                              <span className="text-[10px] text-muted-foreground">▼</span>
+                            </summary>
+                            <div className="px-3 pb-2.5 space-y-1.5">
+                              <pre className="text-[10px] text-gray-700 whitespace-pre-wrap leading-relaxed font-mono bg-white/70 rounded p-2 border">{s.detail}</pre>
+                              {s.raw && (
+                                <details className="text-[10px]">
+                                  <summary className="text-muted-foreground cursor-pointer hover:text-foreground font-medium">Raw HTTP Response →</summary>
+                                  <pre className="mt-1 bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-[10px]">{s.raw}</pre>
+                                </details>
+                              )}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Live Request/Response Log ── */}
+                {showRequestLog && (
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-slate-900 text-white">
+                      <span className="text-[11px] font-bold flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5 text-green-400" />
+                        Live TCS Request Log
+                        <span className="text-[9px] text-slate-400">({requestLog.length} entries, last 50)</span>
+                      </span>
+                      <button onClick={() => setShowRequestLog(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+                    </div>
+                    {requestLog.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-muted-foreground">No requests logged yet — run a test above to capture API calls</div>
+                    ) : (
+                      <div className="divide-y max-h-80 overflow-y-auto font-mono text-[10px]">
+                        {requestLog.map((entry: any) => {
+                          const statusOk = entry.success;
+                          const statusColor = statusOk ? "text-green-400" : "text-red-400";
+                          const httpColor = !entry.httpStatus ? "text-gray-400"
+                            : entry.httpStatus < 300 ? "text-green-400"
+                            : entry.httpStatus < 400 ? "text-yellow-400"
+                            : "text-red-400";
+                          const typeColors: Record<string, string> = {
+                            auth_step2: "text-blue-300", booking: "text-orange-300", tracking: "text-sky-300",
+                            test_booking: "text-orange-300", test_tracking: "text-sky-300", diagnostics: "text-emerald-300",
+                            label: "text-purple-300", test_label: "text-purple-300",
+                          };
+                          return (
+                            <details key={entry.id} className="bg-slate-900 hover:bg-slate-800 transition-colors">
+                              <summary className="flex items-center gap-2 px-3 py-1.5 cursor-pointer list-none">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusOk ? "bg-green-400" : "bg-red-400"}`} />
+                                <span className={`${statusColor} font-bold w-2`}>{statusOk ? "✓" : "✗"}</span>
+                                <span className={httpColor}>{entry.httpStatus ?? "—"}</span>
+                                <span className={typeColors[entry.type] ?? "text-slate-300"}>[{entry.type}]</span>
+                                <span className="text-slate-400 truncate flex-1">{entry.url?.split("/").slice(-3).join("/")}</span>
+                                <span className="text-slate-500 shrink-0">{entry.durationMs}ms</span>
+                                <span className="text-slate-600 shrink-0">{new Date(entry.ts).toLocaleTimeString()}</span>
+                              </summary>
+                              <div className="px-3 pb-2 space-y-1">
+                                <div className="text-slate-400">→ <span className="text-slate-200">{entry.method} {entry.url}</span></div>
+                                {entry.reqBody && (
+                                  <details>
+                                    <summary className="text-slate-500 cursor-pointer">Request body</summary>
+                                    <pre className="text-green-300 bg-black/30 rounded p-1.5 mt-0.5 whitespace-pre-wrap overflow-x-auto">{(() => { try { return JSON.stringify(JSON.parse(entry.reqBody), null, 2); } catch { return entry.reqBody; } })()}</pre>
+                                  </details>
+                                )}
+                                {entry.resBody && (
+                                  <details>
+                                    <summary className="text-slate-500 cursor-pointer">Response body</summary>
+                                    <pre className="text-amber-300 bg-black/30 rounded p-1.5 mt-0.5 whitespace-pre-wrap overflow-x-auto">{(() => { try { return JSON.stringify(JSON.parse(entry.resBody), null, 2); } catch { return entry.resBody; } })()}</pre>
+                                  </details>
+                                )}
+                                {entry.error && <div className="text-red-400">Error: {entry.error}</div>}
+                                {entry.attempt && <div className="text-slate-500">Attempt #{entry.attempt}</div>}
+                              </div>
+                            </details>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
             </div>
           )}
 

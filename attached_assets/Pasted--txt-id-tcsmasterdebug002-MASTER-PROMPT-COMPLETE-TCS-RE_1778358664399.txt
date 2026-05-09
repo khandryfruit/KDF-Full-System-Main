@@ -1,0 +1,214 @@
+```txt id="tcsmasterdebug002"
+MASTER PROMPT — COMPLETE TCS REBUILD + LIVE TESTING + DEBUGGING SYSTEM
+
+IMPORTANT:
+While rebuilding the NEW TCS system, please create a COMPLETE enterprise-grade testing + debugging environment before enabling live shipment booking.
+
+This system must be professionally tested and validated before production use.
+
+═══════════════════════════════════════
+REQUIRED TCS CREDENTIALS
+═══════════════════════════════════════
+
+The system will require:
+
+✔ TCS Username
+✔ TCS Password
+✔ TCS Account Number
+✔ Bearer Token / Access Token
+✔ Sandbox Credentials (if available)
+✔ Production Credentials
+✔ Official TCS API Documentation
+
+Developer must properly support ALL these credentials inside settings.
+
+═══════════════════════════════════════
+NEW TCS SETTINGS PANEL
+═══════════════════════════════════════
+
+Create professional:
+Courier → TCS Settings
+
+Fields Required:
+
+✔ TCS Username
+✔ TCS Password
+✔ TCS Account Number
+✔ Client ID
+✔ Client Secret
+✔ Direct Access Token
+✔ Bearer Token
+✔ Sandbox URL
+✔ Production URL
+
+═══════════════════════════════════════
+REQUIRED BUTTONS
+═══════════════════════════════════════
+
+Add:
+
+✔ Test Authentication
+✔ Test Booking
+✔ Test Tracking
+✔ Test Label Printing
+✔ Refresh Token
+✔ Verify Credentials
+✔ Run Full Diagnostics
+
+═══════════════════════════════════════
+MASTER DEBUGGING SYSTEM
+═══════════════════════════════════════
+
+Need COMPLETE original debugging system.
+
+Developer must add:
+Courier → TCS Debug Console
+
+Show EVERYTHING:
+
+✔ Auth Request
+✔ Auth Response
+✔ Booking Request
+✔ Booking Response
+✔ Tracking Request
+✔ Tracking Response
+✔ Label API Request
+✔ Label API Response
+✔ Environment Status
+✔ HTTP Status Codes
+✔ Token Status
+✔ Token Expiry
+✔ Payload Logs
+✔ Trace IDs
+✔ Errors
+✔ Warning Messages
+
+═══════════════════════════════════════
+LIVE TESTING SYSTEM
+═══════════════════════════════════════
+
+Need dedicated:
+“TCS Live Testing”
+
+Before production booking:
+
+System must test:
+
+✔ Authentication
+✔ Token Validation
+✔ Booking Endpoint
+✔ Tracking Endpoint
+✔ Label Endpoint
+✔ HTTPS
+✔ SSL/TLS
+✔ Production Connectivity
+
+═══════════════════════════════════════
+TEST BOOKING BUTTON
+═══════════════════════════════════════
+
+Add:
+✔ “Run Test Booking”
+
+This should:
+✔ create test shipment
+✔ validate response
+✔ verify tracking generated
+✔ verify shipment exists
+✔ verify label generated
+
+WITHOUT affecting real orders.
+
+═══════════════════════════════════════
+TEST TRACKING BUTTON
+═══════════════════════════════════════
+
+Add:
+✔ “Test Tracking”
+
+System should:
+✔ validate tracking API
+✔ validate shipment lookup
+✔ verify delivery statuses
+
+═══════════════════════════════════════
+TEST LABEL PRINTING
+═══════════════════════════════════════
+
+Need:
+✔ test PDF label
+✔ test thermal label
+✔ preview label
+✔ verify barcode generation
+
+═══════════════════════════════════════
+FULL SYSTEM VALIDATION
+═══════════════════════════════════════
+
+Before enabling production:
+
+System must automatically validate:
+
+✔ Credentials
+✔ API URLs
+✔ Environment
+✔ Tokens
+✔ SSL
+✔ Production domain
+✔ Outbound requests
+✔ Firewall restrictions
+
+═══════════════════════════════════════
+SHOPIFY + ECOMMERCE TESTING
+═══════════════════════════════════════
+
+Testing must verify BOTH:
+
+✔ Shopify Orders
+✔ Ecommerce Orders
+
+using SAME courier engine.
+
+═══════════════════════════════════════
+NO FAKE BOOKINGS
+═══════════════════════════════════════
+
+The testing system must detect:
+
+❌ fake tracking
+❌ fake CN
+❌ invalid bookings
+❌ duplicate bookings
+
+ONLY real TCS responses accepted.
+
+═══════════════════════════════════════
+PRODUCTION TESTING
+═══════════════════════════════════════
+
+Current issue:
+Local works
+Production fails.
+
+Need:
+✔ live production testing
+✔ domain testing
+✔ Replit deployment testing
+✔ HTTPS validation
+✔ backend-only request validation
+
+═══════════════════════════════════════
+IMPORTANT
+═══════════════════════════════════════
+
+The new TCS system must be:
+
+✔ fully rebuilt
+✔ fully tested
+✔ fully debugged
+✔ production-safe
+✔ scalable
+✔ enterprise-grade
+
+before enabling live courier booking.
+```
