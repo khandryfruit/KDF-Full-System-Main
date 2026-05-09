@@ -1701,9 +1701,9 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
     return { bearerToken: directToken, accessToken: directToken, mode: "direct" };
   }
 
-  /* ── Step 1 credentials: clientId + clientSecret ── */
-  const clientId     = (settings.clientId     || settings.username || "").trim();
-  const clientSecret = (settings.clientSecret || settings.password || "").trim();
+  /* ── Step 1 credentials: clientId + clientSecret (ONLY if explicitly set — never fall back to username) ── */
+  const clientId     = (settings.clientId ?? "").trim();
+  const clientSecret = (settings.clientSecret ?? "").trim();
 
   /* ── Step 2 credentials: TCS E-COM username + password ── */
   const username = (settings.username || "").trim();
@@ -1716,7 +1716,9 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   const cacheKey = [
     settings.tcsaccount || "anon",
     settings.sandbox ? "sb" : "live",
-    staticBearerToken ? staticBearerToken.slice(-8) : (clientId.slice(-6) ?? ""),
+    staticBearerToken ? staticBearerToken.slice(-8)
+      : clientId ? clientId.slice(-6)
+      : username.slice(-6),
   ].join(":");
 
   const cached = tcsTokenCache.get(cacheKey);
@@ -1725,36 +1727,36 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   }
 
   /* Validate we have enough to proceed */
-  if (!staticBearerToken && !clientId) {
+  if (!staticBearerToken && !clientId && !username) {
     throw new Error(
-      "TCS not configured. Choose one option:\n" +
-      "① Paste a Direct Access Token (from TCS E-COM portal) in the 'Direct Access Token' field\n" +
-      "② Enter Client ID + Client Secret (for Step 1) AND Username + Password (for Step 2)\n" +
-      "③ Paste a Static Bearer Token + enter Username + Password (Step 2 only)"
+      "TCS not configured. Enter Username + Password in Courier Settings → TCS, then Save."
     );
   }
 
   /* ── Step 1: get Bearer Token from Authorization API ── */
   let bearerToken: string;
+  let mode = "fresh";
   if (staticBearerToken) {
+    /* Mode B — pre-supplied bearer, skip Step 1 */
     bearerToken = staticBearerToken;
-  } else {
-    if (!clientId || !clientSecret) {
-      throw new Error(
-        "TCS Step 1 requires Client ID and Client Secret. " +
-        "Add them in TCS settings, or paste a Static Bearer Token / Direct Access Token instead."
-      );
-    }
+    mode = "static-bearer";
+  } else if (clientId && clientSecret) {
+    /* Mode C — full 2-step: explicit clientId+clientSecret → bearer token */
     const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
     bearerToken = result.bearerToken;
+    mode = "full-2step";
+  } else {
+    /* Mode D — username+password only: skip Step 1, authenticate directly at Step 2.
+       IMPORTANT: Do NOT use username as clientId — they are different credential sets.
+       getTcsAccessToken will POST {username,password} directly to the E-COM auth endpoint. */
+    bearerToken = "";
+    mode = "direct-creds";
   }
 
   /* ── Step 2: get E-COM Access Token ── */
   if (!username || !password) {
     throw new Error(
-      "TCS Step 2 requires TCS Username and Password. " +
-      "Add them in Courier Settings → TCS → Username / Password fields. " +
-      "Or paste a Direct Access Token to skip both steps."
+      "TCS Username and Password are required. Add them in Courier Settings → TCS."
     );
   }
 
@@ -1763,15 +1765,14 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
     accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
   } catch (step2Err: any) {
     throw new Error(
-      `TCS Step 2 (E-COM Authentication) failed: ${step2Err.message ?? "unknown error"}. ` +
-      "The Step 1 Bearer Token ≠ Step 2 Access Token — they are separate tokens. " +
-      "Check that TCS Username + Password are correct, OR paste a Direct Access Token instead."
+      `TCS authentication failed: ${step2Err.message ?? "unknown error"}. ` +
+      "Check that TCS Username and Password are correct in Courier Settings."
     );
   }
 
   /* Cache 50 minutes */
   tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + 50 * 60 * 1000 });
-  return { bearerToken, accessToken, mode: "fresh" };
+  return { bearerToken, accessToken, mode };
 }
 
 function generateTrackingId(slug: string): string {
@@ -1835,21 +1836,34 @@ async function getTcsAccessToken(bearerToken: string, username: string, password
   if (!username || !password) throw new Error("TCS username and password are required in settings");
   const baseUrl = sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
 
+  /* Build auth header conditionally — omit Bearer header entirely when no Step 1 token available */
+  const authHeader = bearerToken ? { "Authorization": `Bearer ${bearerToken}` } : {};
+
   const attempts: Array<() => Promise<Response>> = [
+    /* Attempt 1: POST with body {username, password} — works with or without Step 1 bearer */
     () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
+      headers: { ...authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
       signal: AbortSignal.timeout(10000),
     }),
+    /* Attempt 2: GET with query params — some TCS environments prefer this */
     () => fetch(`${baseUrl}/ecom/api/authentication/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
       method: "GET",
-      headers: { "Authorization": `Bearer ${bearerToken}` },
+      headers: { ...authHeader },
       signal: AbortSignal.timeout(10000),
     }),
+    /* Attempt 3: GET with credentials in custom headers */
     () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
       method: "GET",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "username": username, "password": password, "Content-Type": "application/json" },
+      headers: { ...authHeader, "username": username, "password": password, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10000),
+    }),
+    /* Attempt 4 (fallback): POST without any Authorization header — pure username/password */
+    () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
       signal: AbortSignal.timeout(10000),
     }),
   ];
