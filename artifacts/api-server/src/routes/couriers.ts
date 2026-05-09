@@ -2126,50 +2126,118 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       tcsTokenCache.clear();   /* Invalidate any cached tokens immediately */
       const username = (settings.username ?? "").trim();
       const password = (settings.password ?? "").trim();
+      const acct = settings.tcsaccount || "(empty)";
 
-      if (username && password) {
+      /* ──────────────────────────────────────────────────────────────────────
+         Recovery strategy (3 attempts):
+
+         Attempt R1 — NO bearer header, same accessToken in body.
+           Rationale: the accessToken was generated with LGEC11060 credentials.
+           TCS may accept it without validating the bearer-to-account linkage,
+           especially when clientid of the bearer differs from the tcsaccount.
+
+         Attempt R2 — Mode F: username as Step 1 clientId → fresh bearer →
+           Step 2 with fresh bearer → booking with fresh bearer + fresh token.
+
+         Attempt R3 — No bearer anywhere, fresh Step 2 without bearer.
+         ────────────────────────────────────────────────────────────────────── */
+
+      const isBookingSuccess = (d: Record<string, any>, r: Response) =>
+        d.message?.toUpperCase() === "SUCCESS" ||
+        d.code === "200" || d.code === 200 ||
+        d.status === true || d.status === "SUCCESS" ||
+        (r.ok && !d.message?.toUpperCase().startsWith("FAIL") && !isMismatch(d));
+
+      /* ── R1: Same accessToken, NO bearer in header ── */
+      {
+        const r1 = await doBooking(payload, null);  /* null = no Authorization header */
+        if (isBookingSuccess(r1.data, r1.resp)) {
+          bookResp = r1.resp; bookText = r1.text; bookData = r1.data;
+          goto_success: ;
+        } else if (!isMismatch(r1.data)) {
+          /* A real booking error (not an auth error) — stop recovery and surface it */
+          const errMsg = r1.data.message ?? r1.text.slice(0, 300);
+          throw new Error(`TCS booking error (R1): ${errMsg} [tcsaccount: ${acct}]`);
+        }
+        /* still a mismatch → continue to R2 */
+        if (!username || !password) {
+          throw new Error(
+            `TCS bearer mismatch. Add TCS Username + Password in Courier Settings → TCS. [tcsaccount: ${acct}]`
+          );
+        }
+
+        /* ── R2: Mode F — username as Step 1 clientId → fresh bearer → Step 2 → booking ── */
         let freshBearer = "";
         let freshToken: string | null = null;
-
-        /* Mode F: username as clientId → Step 1 → fresh bearer specific to this account */
         try {
           const step1 = await getTcsBearerToken(username, password, settings.sandbox);
           freshBearer = step1.bearerToken;
-        } catch { /* Step 1 via credentials failed — try Step 2 without bearer */ }
+        } catch { /* Step 1 via user credentials failed */ }
 
-        /* Step 2: get accessToken using fresh bearer (or empty if Step 1 failed) */
         try {
           freshToken = await getTcsAccessToken(freshBearer, username, password, settings.sandbox);
-        } catch { /* will report below */ }
+        } catch { /* will fall through to R3 */ }
 
         if (freshToken) {
-          const freshPayload = { ...payload, accesstoken: freshToken };
-          const retry = await doBooking(freshPayload, freshBearer || null);
-          if (
-            retry.data.message?.toUpperCase() === "SUCCESS" ||
-            retry.data.code === "200" || retry.data.code === 200 ||
-            retry.data.status === true || retry.data.status === "SUCCESS" ||
-            (retry.resp.ok && !retry.data.message?.toUpperCase().startsWith("FAIL") && !isMismatch(retry.data))
-          ) {
-            bookResp = retry.resp; bookText = retry.text; bookData = retry.data;
+          const r2payload = { ...payload, accesstoken: freshToken };
+          const r2 = await doBooking(r2payload, freshBearer || null);
+          if (isBookingSuccess(r2.data, r2.resp)) {
+            bookResp = r2.resp; bookText = r2.text; bookData = r2.data;
+          } else if (!isMismatch(r2.data)) {
+            throw new Error(`TCS booking error (R2): ${r2.data.message ?? r2.text.slice(0, 300)} [tcsaccount: ${acct}]`);
           } else {
-            const acct = settings.tcsaccount || "(empty)";
-            throw new Error(
-              `TCS booking failed after recovery. ` +
-              `1st attempt: "${bookData.message ?? bookText.slice(0, 120)}" | ` +
-              `Recovery attempt: "${retry.data.message ?? retry.text.slice(0, 200)}" ` +
-              `[tcsaccount: ${acct}]`
-            );
+            /* R2 still mismatch → R3: fresh Step 2 without bearer, no bearer in header */
+            let r3Token: string | null = null;
+            try { r3Token = await getTcsAccessToken("", username, password, settings.sandbox); } catch {}
+
+            if (r3Token) {
+              const r3payload = { ...payload, accesstoken: r3Token };
+              const r3 = await doBooking(r3payload, null);
+              if (isBookingSuccess(r3.data, r3.resp)) {
+                bookResp = r3.resp; bookText = r3.text; bookData = r3.data;
+              } else {
+                throw new Error(
+                  `TCS booking failed (all 3 recovery attempts). ` +
+                  `Original: "${bookData.message ?? bookText.slice(0, 80)}" | ` +
+                  `R1 (no-bearer): "${r1.data.message ?? r1.text.slice(0, 80)}" | ` +
+                  `R2 (mode-F): "${r2.data.message ?? r2.text.slice(0, 80)}" | ` +
+                  `R3 (no-bearer+fresh): "${r3.data.message ?? r3.text.slice(0, 80)}" ` +
+                  `[tcsaccount: ${acct}]`
+                );
+              }
+            } else {
+              throw new Error(
+                `TCS booking blocked (bearer mismatch + auth recovery failed). ` +
+                `LGEC11060 is not linked to clientid=215627768 in TCS ENVO Portal. ` +
+                `Ask TCS support to link account ${acct} to your API client. ` +
+                `Original error: "${bookData.message ?? bookText.slice(0, 100)}" [tcsaccount: ${acct}]`
+              );
+            }
           }
         } else {
-          const acct = settings.tcsaccount || "(empty)";
-          throw new Error(
-            `TCS auth failed: "${bookData.message ?? bookText.slice(0, 200)}". ` +
-            `Recovery (Mode F: username-as-clientId + Step 2) also failed. ` +
-            `Check TCS Username + Password in Courier Settings → TCS. [tcsaccount: ${acct}]`
-          );
+          /* R2 auth failed (no fresh token) → R3: no bearer at all */
+          let r3Token: string | null = null;
+          try { r3Token = await getTcsAccessToken("", username, password, settings.sandbox); } catch {}
+          if (r3Token) {
+            const r3payload = { ...payload, accesstoken: r3Token };
+            const r3 = await doBooking(r3payload, null);
+            if (isBookingSuccess(r3.data, r3.resp)) {
+              bookResp = r3.resp; bookText = r3.text; bookData = r3.data;
+            } else {
+              throw new Error(
+                `TCS booking failed (R3 no-bearer). "${r3.data.message ?? r3.text.slice(0, 200)}" [tcsaccount: ${acct}]`
+              );
+            }
+          } else {
+            throw new Error(
+              `TCS bearer mismatch and auth recovery failed for ${acct}. ` +
+              `Check Username/Password or contact TCS to link account to ENVO Portal. ` +
+              `Hint: use Advanced Settings → paste the TCS ENVO Portal Bearer Token + Client ID/Secret.`
+            );
+          }
         }
       }
+      goto_success: ;
     }
 
     const isSuccess =
