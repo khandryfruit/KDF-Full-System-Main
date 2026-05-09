@@ -2964,6 +2964,7 @@ router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, asyn
         updatedAt: waLog.updated_at,
         rawResponse: waLog.response,
       } : null,
+      waSentCount: recentWaLogs.length,
       rider: rider ? {
         id: rider.id,
         riderName: rider.rider_name,

@@ -892,6 +892,7 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
 
                 /* Map rider status → template trigger event */
                 const TEMPLATE_STATUS: Record<string, string> = {
+                  assigned:         "processing",
                   picked:           "processing",
                   out_for_delivery: "out_for_delivery",
                   near_customer:    "out_for_delivery",

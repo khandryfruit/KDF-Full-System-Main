@@ -776,37 +776,51 @@ const WA_EVENT_LABELS: Record<string, { emoji: string; label: string; color: str
 };
 
 function WaStatusProgress({ status, sentAt }: { status?: string | null; sentAt?: string | null }) {
-  const steps = [
-    { key: "pending", label: "Pending",   icon: <Clock className="w-3.5 h-3.5" /> },
-    { key: "sent",    label: "Sent",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
-    { key: "delivered", label: "Delivered", icon: <CheckCheck className="w-3.5 h-3.5" /> },
-    { key: "read",    label: "Read",      icon: <CheckCheck className="w-3.5 h-3.5" /> },
+  const steps: { key: string; label: string; Icon: React.ElementType }[] = [
+    { key: "queued",    label: "Queued",    Icon: Clock },
+    { key: "sent",      label: "Sent ✓",   Icon: CheckCircle },
+    { key: "delivered", label: "Delivered", Icon: CheckCheck },
+    { key: "read",      label: "Read ✓✓",  Icon: CheckCheck },
   ];
-  const order = ["pending", "sent", "delivered", "read"];
-  const currentIdx = status ? Math.max(order.indexOf(status), 0) : (sentAt ? 1 : 0);
+  const ORDER = ["queued", "sent", "delivered", "read"];
+
+  if (status === "failed") {
+    return (
+      <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
+        <XCircle className="w-4 h-4 shrink-0" />
+        <span>Message delivery failed — Meta error 131047. Use an approved template below to re-engage.</span>
+      </div>
+    );
+  }
+
+  const currentIdx = status ? Math.max(ORDER.indexOf(status), sentAt ? 1 : 0) : (sentAt ? 1 : 0);
+  const fillPct = steps.length > 1 ? (currentIdx / (steps.length - 1)) * 100 : 0;
 
   return (
-    <div className="flex items-center justify-between gap-1 py-1">
+    <div className="relative flex items-start justify-between py-2 px-1">
+      {/* Base connector line */}
+      <div className="absolute top-[22px] left-[18px] right-[18px] h-0.5 bg-border" />
+      {/* Animated fill */}
+      <div
+        className="absolute top-[22px] left-[18px] h-0.5 bg-green-400 transition-all duration-700"
+        style={{ width: `calc(${fillPct}% * (1 - 36px / 100%))` }}
+      />
       {steps.map((step, i) => {
-        const done    = i < currentIdx;
-        const active  = i === currentIdx;
-        const isRead  = step.key === "read";
+        const done   = i < currentIdx;
+        const active = i === currentIdx;
+        const { Icon } = step;
         return (
-          <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+          <div key={step.key} className="relative flex flex-col items-center gap-1.5 z-10 flex-1">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all
-              ${done || active
-                ? isRead && active ? "bg-blue-500 border-blue-500 text-white"
-                : active ? "bg-green-500 border-green-500 text-white"
-                : "bg-green-500 border-green-500 text-white"
-                : "bg-muted border-border text-muted-foreground"}`}>
-              {step.icon}
+              ${done   ? "bg-green-500 border-green-500 text-white"
+              : active ? "bg-blue-500  border-blue-500  text-white"
+              :          "bg-white     border-border     text-muted-foreground"}`}>
+              <Icon className="w-3.5 h-3.5" />
             </div>
-            <span className={`text-[10px] font-medium ${done || active ? "text-foreground" : "text-muted-foreground"}`}>
+            <span className={`text-[10px] font-medium text-center leading-tight
+              ${done || active ? "text-foreground" : "text-muted-foreground"}`}>
               {step.label}
             </span>
-            {i < steps.length - 1 && (
-              <div className={`absolute mt-3.5 h-0.5 w-full ${done ? "bg-green-400" : "bg-border"}`} style={{ left: "50%", right: "-50%", display: "none" }} />
-            )}
           </div>
         );
       })}
