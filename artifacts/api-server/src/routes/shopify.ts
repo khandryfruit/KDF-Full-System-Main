@@ -1963,7 +1963,7 @@ router.post("/admin/shopify/orders/:id/book-courier", adminMiddleware, async (re
 
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
     const hasApiCreds = courierSlug === "tcs"
-      ? !!(settings.bearerToken || (settings.username && settings.password))
+      ? !!(settings.accessToken || settings.bearerToken || (settings.username && settings.password))
       : !!(courierRow.apiKey && courierRow.apiEndpoint);
 
     /* ── STRICT: Never fake a booking. If no API creds, tell the admin. ── */
@@ -1991,6 +1991,10 @@ router.post("/admin/shopify/orders/:id/book-courier", adminMiddleware, async (re
         apiCallDurationMs: Date.now() - apiStart,
         bookedAt: new Date().toISOString(),
         courier: courierSlug,
+        trackingUrl: result.trackingUrl,
+        customerName: resolvedName,
+        customerPhone: resolvedPhone,
+        customerCity: resolvedCity,
       };
     } catch (apiErr: any) {
       /* Real API failed — return the actual error, never fake a tracking ID */
@@ -2048,14 +2052,26 @@ router.post("/admin/shopify/orders/:id/book-courier", adminMiddleware, async (re
       }
     } catch { /* non-fatal */ }
 
-    /* WhatsApp notification */
+    /* WhatsApp notification — use order_shipped template, fallback to plain text */
     if (notifyWhatsapp && resolvedPhone) {
       try {
         const phone = normalizePhone(resolvedPhone);
-        const courierNames: Record<string, string> = { tcs: "TCS Couriers", postex: "PostEx", leopards: "Leopards", trax: "Trax" };
-        const cName = courierNames[courierSlug] ?? courierSlug.toUpperCase();
-        const msg = `Hi ${resolvedName}! 📦 Your KDF NUTS order *${order.orderNumber}* has been shipped via *${cName}*.\n\n🔍 Tracking ID: *${trackingId}*\n\nYou can track your parcel with this tracking number. Thank you for shopping with us! 🌿`;
-        await sendWhatsAppMessage({ phone, message: msg });
+        const { sendOrderStatusUpdate } = await import("../lib/whatsapp.js");
+        const templateSent = await sendOrderStatusUpdate({
+          phone,
+          orderNumber: order.orderNumber ?? "",
+          status: "shipped",
+          trackingId,
+        }).catch(() => false);
+
+        if (!templateSent) {
+          const courierNames: Record<string, string> = { tcs: "TCS Couriers", postex: "PostEx", leopards: "Leopards", trax: "Trax" };
+          const cName = courierNames[courierSlug] ?? courierSlug.toUpperCase();
+          const trackingUrl = (rawResponse as any).trackingUrl ?? "";
+          const trackLine = trackingUrl ? `\n\n🔗 Track Live: ${trackingUrl}` : "";
+          const msg = `Hi ${resolvedName}! 📦 Your KDF NUTS order *${order.orderNumber}* has been shipped via *${cName}*.\n\n🔍 Tracking ID: *${trackingId}*${trackLine}\n\n⏱ Expected delivery: 2-5 business days\n\nThank you for shopping with KDF NUTS! 🌿`;
+          await sendWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
       } catch { /* non-fatal */ }
     }
 
@@ -2918,6 +2934,26 @@ router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, asyn
     `);
     const templates = (tplRes.rows ?? []) as any[];
 
+    /* Active shipments for this order */
+    const activeShipments = await db.select().from(shipmentsTable)
+      .where(eq(shipmentsTable.orderId, id))
+      .orderBy(desc(shipmentsTable.createdAt))
+      .limit(5);
+
+    /* All recent WA logs for this phone (last 20 messages) */
+    let recentWaLogs: any[] = [];
+    const phone = (order.shippingAddress as any)?.phone ?? order.customerPhone;
+    if (phone) {
+      const normP = phone.replace(/\D/g, "").replace(/^0/, "92").replace(/^(?!92)/, "92");
+      const recentRes = await db.execute(sql`
+        SELECT message_id, delivery_status, template_name, response, created_at, updated_at
+        FROM whatsapp_logs
+        WHERE phone = ${normP} OR phone = ${"+" + normP}
+        ORDER BY created_at DESC LIMIT 10
+      `).catch(() => ({ rows: [] }));
+      recentWaLogs = (recentRes.rows ?? []) as any[];
+    }
+
     res.json({
       order: { id: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt },
       confirmation: conf ?? null,
@@ -2942,6 +2978,8 @@ router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, asyn
         codAmount: rider.cod_amount,
       } : null,
       templates,
+      shipments: activeShipments,
+      recentWaLogs,
     });
   } catch (err: any) {
     req.log.error(err);

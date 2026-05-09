@@ -1,0 +1,198 @@
+MASTER PROMPT — TCS WORKS ON REPLIT DOMAIN BUT FAILS ON CUSTOM DOMAIN
+
+We found a critical production deployment issue in the courier system.
+
+==================================================
+CURRENT ISSUE
+
+When running on:
+✔ Replit default domain
+(example: *.replit.dev)
+
+TCS booking works.
+
+BUT
+
+When deployed on our real production domain:
+❌ admin.khanbabadryfruits.com
+
+TCS authentication fails with:
+HTTP 403
+
+==================================================
+ERROR
+
+“TCS Step 2 auth failed
+(TCS Authentication failed — HTTP 403)”
+
+This means:
+✔ TCS API is reachable
+✔ Connection exists
+
+BUT:
+❌ production/custom domain requests are being rejected
+
+==================================================
+IMPORTANT ANALYSIS
+
+This is likely caused by:
+
+❌ Domain/IP whitelisting issue
+❌ Production hostname restriction
+❌ CORS issue
+❌ SSL/TLS mismatch
+❌ Missing production callback URL
+❌ Firewall/security rule
+❌ Wrong environment variables on production
+❌ Bearer token mismatch on production
+❌ Proxy/reverse proxy headers issue
+
+==================================================
+REQUIRED FULL INVESTIGATION
+
+Please deeply debug BOTH environments:
+
+1. 
+
+WORKING:
+✔ replit.dev domain
+
+2. 
+
+FAILING:
+❌ admin.khanbabadryfruits.com
+
+Compare EVERYTHING.
+
+==================================================
+
+1. FULL REQUEST COMPARISON
+   ==================================================
+
+Compare:
+✔ headers
+✔ auth headers
+✔ bearer token
+✔ cookies
+✔ origin
+✔ referer
+✔ TLS
+✔ user-agent
+✔ payload
+✔ request body
+✔ response body
+
+Need raw logs for both environments.
+
+==================================================
+2. VERIFY SERVER IP
+
+Check:
+✔ Replit outbound IP
+✔ Production domain outbound IP
+
+TCS may whitelist one IP only.
+
+Need:
+✔ production server IP verification
+✔ TCS IP whitelisting confirmation
+
+==================================================
+3. VERIFY SSL/TLS
+
+Check production domain:
+✔ SSL certificate
+✔ TLS version
+✔ HTTPS handshake
+✔ certificate chain
+✔ reverse proxy config
+
+Production HTTPS may be failing secure auth.
+
+==================================================
+4. VERIFY ENV VARIABLES
+
+Production may not be loading correct:
+
+✔ TCS username
+✔ password
+✔ bearer token
+✔ direct token
+✔ API URL
+✔ environment mode
+
+Check:
+✔ .env
+✔ deployment secrets
+✔ build variables
+✔ runtime variables
+
+==================================================
+5. VERIFY CUSTOM DOMAIN SECURITY
+
+Check:
+✔ Cloudflare
+✔ reverse proxy
+✔ nginx
+✔ hosting firewall
+✔ bot protection
+✔ WAF rules
+
+These may block outbound auth requests.
+
+==================================================
+6. DEBUGGING PANEL
+
+Need enterprise debugging panel showing:
+
+✔ active environment
+✔ current domain
+✔ outbound IP
+✔ token status
+✔ TCS response
+✔ auth step
+✔ HTTP codes
+✔ TLS status
+✔ API request logs
+
+==================================================
+7. REMOVE FAKE SUCCESS STATES
+
+DO NOT show:
+✔ active
+✔ connected
+✔ booked
+
+unless:
+✔ real TCS auth success
+✔ real booking success
+✔ real tracking generated
+
+==================================================
+8. PRODUCTION-SAFE ARCHITECTURE
+
+Need stable courier architecture where:
+
+✔ Replit domain
+✔ Production domain
+✔ Custom domain
+
+all behave IDENTICALLY.
+
+No environment-specific failures.
+
+==================================================
+9. IMPORTANT
+
+The issue ONLY happens after publishing to:
+admin.khanbabadryfruits.com
+
+This means deployment/configuration/security differences must be audited deeply.
+
+Need:
+✔ stable production deployment
+✔ proper TCS authentication
+✔ real booking
+✔ proper debugging
+✔ no HTTP 403
+✔ production-safe courier integration

@@ -985,7 +985,12 @@ function SmartTestMessage() {
 export default function WhatsAppPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>("settings");
+  const [tab, setTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab");
+    const valid: Tab[] = ["settings","recovery","chatbot","conversations","templates","logs","automations","campaigns","debug","qr","analytics","rules","flows"];
+    return (valid.includes(t as Tab) ? t : "settings") as Tab;
+  });
   const [connMethod, setConnMethod] = useState<"meta" | "manual">("manual");
   const [showToken, setShowToken] = useState(false);
   const [testPhone, setTestPhone] = useState("");

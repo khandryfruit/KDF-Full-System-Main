@@ -138,17 +138,28 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     log.push(`[${ts()}] Tracking endpoint HTTP status: ${trackResp.status}`);
     log.push(`[${ts()}] Tracking response: ${trackText.slice(0, 200)}`);
 
+    /* Fetch server outbound IP — helps diagnose TCS 403 IP whitelist issues */
+    let serverIp = "unknown";
+    try {
+      const ipResp = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(4000) });
+      const ipData = await ipResp.json() as { ip?: string };
+      serverIp = ipData.ip ?? "unknown";
+    } catch { /* non-fatal */ }
+    log.push(`[${ts()}] Server outbound IP: ${serverIp}`);
+
     res.json({
       ok: true,
       mode: resolvedMode,
       accessTokenLength: accessToken.length,
       sandbox: !!(settings.sandbox),
+      serverIp,
       log,
       hint: resolvedMode === "direct"
         ? "Using Direct Access Token — no auto-refresh. Paste a new token if it expires."
         : resolvedMode === "cached"
         ? "Token served from cache (< 50 min old)."
         : "Fresh token obtained via 2-step auth — will be cached for 50 min.",
+      ipHint: `If TCS returns HTTP 403, ask TCS to whitelist this server IP: ${serverIp}`,
     });
     return;
   } catch (err: any) {
@@ -313,13 +324,13 @@ router.post("/admin/shipments", adminMiddleware as any, async (req: AuthRequest,
     if (courierRow) {
       const settings = (courierRow.settings ?? {}) as Record<string, any>;
       const hasApiCreds = courierRow.slug === "tcs"
-        ? !!(settings.bearerToken || (settings.username && settings.password))
+        ? !!(settings.accessToken || settings.bearerToken || (settings.username && settings.password))
         : !!(courierRow.apiKey && courierRow.apiEndpoint);
       if (hasApiCreds) {
         try {
           const result = await callCourierApi(courierRow, order, service);
           trackingId = result.trackingId;
-          rawResponse = result.rawResponse;
+          rawResponse = { ...result.rawResponse, trackingUrl: result.trackingUrl };
         } catch (apiErr: any) {
           req.log.warn({ err: apiErr }, "Courier API failed");
           res.status(502).json({ error: apiErr.message ?? "Courier booking failed" });
@@ -406,14 +417,14 @@ router.post("/admin/couriers/manual-book", adminMiddleware as any, async (req: A
 
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
     const hasApiCreds = courierRow.slug === "tcs"
-      ? !!(settings.bearerToken || (settings.username && settings.password))
+      ? !!(settings.accessToken || settings.bearerToken || (settings.username && settings.password))
       : !!(courierRow.apiKey && courierRow.apiEndpoint);
 
     if (hasApiCreds) {
       try {
         const result = await callCourierApi(courierRow, fakeOrder, serviceCode);
         trackingId = result.trackingId;
-        rawResponse = result.rawResponse;
+        rawResponse = { ...result.rawResponse, trackingUrl: result.trackingUrl };
       } catch (apiErr: any) {
         res.status(502).json({ error: apiErr.message ?? "Booking failed" });
         return;
@@ -1559,6 +1570,18 @@ const TCS_SANDBOX_URL = "https://devconnect.tcscourier.com";
 const TCS_PROD_URL = "https://ociconnect.tcscourier.com";
 
 /* In-memory TCS token cache — 50-min TTL, auto-refreshes on next request */
+/* ─── Courier tracking URLs ──────────────────────────── */
+function getTrackingUrl(slug: string, trackingId: string): string {
+  const id = encodeURIComponent(trackingId);
+  const urls: Record<string, string> = {
+    tcs:      `https://ociconnect.tcscourier.com/tracking/index.html?cg=${id}`,
+    postex:   `https://postex.pk/tracking/${id}`,
+    leopards: `https://leopardscourier.com/leopards-tracking/?title=leopards&tracking_number=${id}`,
+    trax:     `https://traxpk.com/tracking/${id}`,
+  };
+  return urls[slug] ?? `https://track.kdfnuts.com/?id=${id}&courier=${slug}`;
+}
+
 const tcsTokenCache = new Map<string, { bearerToken: string; accessToken: string; expiresAt: number }>();
 
 /**
@@ -1732,7 +1755,7 @@ function mapTcsStatusToInternal(raw: string): string {
   return "in_transit";
 }
 
-async function callCourierApi(courier: any, order: any, service?: string): Promise<{ trackingId: string; rawResponse: Record<string, any> }> {
+async function callCourierApi(courier: any, order: any, service?: string): Promise<{ trackingId: string; trackingUrl: string; rawResponse: Record<string, any> }> {
   const address = order.shippingAddress ?? {};
 
   if (courier.slug === "tcs") {
@@ -1861,7 +1884,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       bookData.data?.bookingNo ??
       bookData.result?.consignmentNo ??
       generateTrackingId("tcs");
-    return { trackingId, rawResponse: bookData };
+    return { trackingId, trackingUrl: getTrackingUrl("tcs", trackingId), rawResponse: bookData };
   }
 
   /* ── Leopards ── */
@@ -1904,7 +1927,8 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       throw new Error(`Leopards booking failed: ${raw.status_message ?? raw.error_message ?? raw.message ?? JSON.stringify(raw).slice(0, 200)}`);
     }
     const trackId = raw.track_number ?? raw.cn_number ?? raw.CN ?? raw.packet_cn ?? generateTrackingId("leopards");
-    return { trackingId: String(trackId), rawResponse: raw };
+    const tId = String(trackId);
+    return { trackingId: tId, trackingUrl: getTrackingUrl("leopards", tId), rawResponse: raw };
   }
 
   /* ── PostEx ── */
@@ -2003,7 +2027,8 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       throw new Error(`PostEx booking failed: ${raw?.statusMessage ?? raw?.message ?? `HTTP ${resp.status}`}`);
     }
     const trackId = raw.dist?.trackingNumber ?? raw.dist?.orderRefNumber ?? raw.orderRefNumber ?? generateTrackingId("postex");
-    return { trackingId: String(trackId), rawResponse: raw };
+    const pId = String(trackId);
+    return { trackingId: pId, trackingUrl: getTrackingUrl("postex", pId), rawResponse: raw };
   }
 
   /* ── Trax ── */
@@ -2034,7 +2059,8 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     const raw = await resp.json() as Record<string, any>;
     if (!resp.ok) throw new Error(`Trax booking failed: ${raw.message ?? raw.error ?? `HTTP ${resp.status}`}`);
     const trackId = raw.tracking_id ?? raw.trackingId ?? raw.id ?? generateTrackingId("trax");
-    return { trackingId: String(trackId), rawResponse: raw };
+    const tId = String(trackId);
+    return { trackingId: tId, trackingUrl: getTrackingUrl("trax", tId), rawResponse: raw };
   }
 
   throw new Error(`No API implementation for courier: ${courier.slug}`);
@@ -2299,6 +2325,7 @@ router.post("/admin/shipments/:id/retry-booking", adminMiddleware as any, async 
         apiCallDurationMs: Date.now() - apiStart,
         bookedAt: new Date().toISOString(),
         courier: courierRow.slug,
+        trackingUrl: result.trackingUrl,
         retryOf: id,
       };
     } catch (apiErr: any) {

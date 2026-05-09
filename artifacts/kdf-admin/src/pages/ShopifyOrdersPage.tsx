@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   RefreshCw, Search, MessageCircle, Package, ChevronLeft, ChevronRight,
   X, Truck, CheckCircle, Clock, XCircle, AlertCircle, MapPin, Phone,
@@ -7,7 +8,7 @@ import {
   ChevronDown, ArrowRight, Ban, Bell, Copy, ExternalLink, Boxes,
   Zap, Weight, Star, Info, ShieldCheck, UserCheck, Bike, FileText,
   Navigation, CalendarCheck, TriangleAlert, CircleCheck, Loader2,
-  Settings, AlertTriangle, Code2,
+  Settings, AlertTriangle, Code2, CheckCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -602,6 +603,20 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
         </div>
       )}
 
+      {/* Track Shipment button */}
+      {(shipment.rawResponse as any)?.trackingUrl && (
+        <a
+          href={(shipment.rawResponse as any).trackingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-100 transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+          Track Shipment — {shipment.courierName ?? shipment.courierSlug?.toUpperCase()}
+          <span className="ml-auto font-mono font-normal text-blue-500">{shipment.trackingId}</span>
+        </a>
+      )}
+
       {/* Timeline toggle */}
       <button onClick={() => setShowTimeline(v => !v)}
         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
@@ -649,6 +664,11 @@ function ApiResponseLog({ rawResponse }: { rawResponse: any }) {
   const duration = rawResponse.apiCallDurationMs as number | undefined;
   const bookedAt = rawResponse.bookedAt as string | undefined;
 
+  const customerName  = rawResponse.customerName  as string | undefined;
+  const customerPhone = rawResponse.customerPhone as string | undefined;
+  const customerCity  = rawResponse.customerCity  as string | undefined;
+  const trackingUrl   = rawResponse.trackingUrl   as string | undefined;
+
   const displayData = { ...rawResponse };
   delete displayData.realApiBooking;
   delete displayData.localTracking;
@@ -657,6 +677,10 @@ function ApiResponseLog({ rawResponse }: { rawResponse: any }) {
   delete displayData.bookedAt;
   delete displayData.courier;
   delete displayData.triggeredBy;
+  delete displayData.trackingUrl;
+  delete displayData.customerName;
+  delete displayData.customerPhone;
+  delete displayData.customerCity;
 
   return (
     <div className="text-xs">
@@ -676,6 +700,22 @@ function ApiResponseLog({ rawResponse }: { rawResponse: any }) {
             {duration != null && <span className="bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{duration}ms</span>}
             {bookedAt && <span className="text-muted-foreground">{new Date(bookedAt).toLocaleString()}</span>}
           </div>
+          {/* Customer details sent to courier */}
+          {(customerName || customerPhone || customerCity) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 space-y-0.5">
+              <p className="font-semibold text-blue-800 mb-1">📦 Courier Booking Payload</p>
+              {customerName  && <p className="text-blue-700"><span className="font-medium">Receiver Name:</span> {customerName}</p>}
+              {customerPhone && <p className="text-blue-700"><span className="font-medium">Phone:</span> {customerPhone}</p>}
+              {customerCity  && <p className="text-blue-700"><span className="font-medium">City:</span> {customerCity}</p>}
+            </div>
+          )}
+          {/* Tracking URL */}
+          {trackingUrl && (
+            <a href={trackingUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-blue-700 hover:underline font-medium">
+              <ExternalLink className="w-3 h-3" /> {trackingUrl}
+            </a>
+          )}
           {note && <p className="text-muted-foreground italic">{note}</p>}
           {Object.keys(displayData).length > 0 && (
             <pre className="text-[10px] font-mono bg-black/5 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all leading-relaxed">
@@ -725,13 +765,64 @@ function TimelineStep({ done, active, label, ts, sub, last }: { done: boolean; a
 }
 
 /* ─── WA Confirmation Tab ───────────────────────────────── */
+const WA_EVENT_LABELS: Record<string, { emoji: string; label: string; color: string }> = {
+  order_confirmation:     { emoji: "✅", label: "Order Confirmation",   color: "text-blue-700" },
+  order_processing:       { emoji: "⚙️", label: "Order Processing",     color: "text-indigo-700" },
+  order_shipped:          { emoji: "📦", label: "Order Shipped",        color: "text-purple-700" },
+  order_out_for_delivery: { emoji: "🚚", label: "Out for Delivery",     color: "text-orange-700" },
+  order_delivered:        { emoji: "🎉", label: "Order Delivered",      color: "text-green-700" },
+  order_cancelled:        { emoji: "❌", label: "Order Cancelled",      color: "text-red-700" },
+  abandoned_cart_recovery:{ emoji: "🛒", label: "Cart Recovery",        color: "text-amber-700" },
+};
+
+function WaStatusProgress({ status, sentAt }: { status?: string | null; sentAt?: string | null }) {
+  const steps = [
+    { key: "pending", label: "Pending",   icon: <Clock className="w-3.5 h-3.5" /> },
+    { key: "sent",    label: "Sent",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
+    { key: "delivered", label: "Delivered", icon: <CheckCheck className="w-3.5 h-3.5" /> },
+    { key: "read",    label: "Read",      icon: <CheckCheck className="w-3.5 h-3.5" /> },
+  ];
+  const order = ["pending", "sent", "delivered", "read"];
+  const currentIdx = status ? Math.max(order.indexOf(status), 0) : (sentAt ? 1 : 0);
+
+  return (
+    <div className="flex items-center justify-between gap-1 py-1">
+      {steps.map((step, i) => {
+        const done    = i < currentIdx;
+        const active  = i === currentIdx;
+        const isRead  = step.key === "read";
+        return (
+          <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all
+              ${done || active
+                ? isRead && active ? "bg-blue-500 border-blue-500 text-white"
+                : active ? "bg-green-500 border-green-500 text-white"
+                : "bg-green-500 border-green-500 text-white"
+                : "bg-muted border-border text-muted-foreground"}`}>
+              {step.icon}
+            </div>
+            <span className={`text-[10px] font-medium ${done || active ? "text-foreground" : "text-muted-foreground"}`}>
+              {step.label}
+            </span>
+            {i < steps.length - 1 && (
+              <div className={`absolute mt-3.5 h-0.5 w-full ${done ? "bg-green-400" : "bg-border"}`} style={{ left: "50%", right: "-50%", display: "none" }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function WaConfirmTab({ order }: { order: any }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const addr = order.shippingAddress ?? {};
   const city = (addr.city ?? "").toLowerCase();
   const isLahore = city.includes("lahore");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [showRecentLogs, setShowRecentLogs] = useState(false);
 
   /* ── Full WA status + timeline data (auto-refreshes every 15s) ── */
   const { data, isLoading, refetch } = useQuery({
@@ -741,11 +832,37 @@ function WaConfirmTab({ order }: { order: any }) {
     retry: false,
   });
 
-  const conf      = data?.confirmation ?? null;
-  const waStatus  = data?.waDelivery ?? null;
-  const rider     = data?.rider ?? null;
+  const conf          = data?.confirmation ?? null;
+  const waStatus      = data?.waDelivery ?? null;
+  const rider         = data?.rider ?? null;
   const templates: any[] = data?.templates ?? [];
+  const shipments: any[] = data?.shipments ?? [];
+  const recentWaLogs: any[] = data?.recentWaLogs ?? [];
+
   const approvedTemplates = templates.filter((t: any) => t.approval_status === "approved");
+
+  /* Group approved templates by trigger_event */
+  const templatesByEvent = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const t of approvedTemplates) {
+      const ev = t.trigger_event ?? "other";
+      if (!groups[ev]) groups[ev] = [];
+      groups[ev].push(t);
+    }
+    return groups;
+  }, [approvedTemplates]);
+
+  const eventOrder = ["order_confirmation","order_shipped","order_out_for_delivery","order_delivered","order_processing","order_cancelled","abandoned_cart_recovery","other"];
+
+  /* Recommended template based on order state */
+  const isConfirmed = conf?.status === "confirmed" || conf?.status === "booked";
+  const isBooked    = conf?.status === "booked" || !!order.trackingNumber || shipments.some((s: any) => !s.isCancelled);
+  const isDelivered = rider?.status === "delivered";
+
+  const recommendedEvent = isDelivered ? "order_delivered"
+    : isBooked ? "order_shipped"
+    : isConfirmed ? "order_shipped"
+    : "order_confirmation";
 
   /* ── Send initial WA confirmation ── */
   const sendMutation = useMutation({
@@ -791,7 +908,8 @@ function WaConfirmTab({ order }: { order: any }) {
       if (!tpl) throw new Error("Select a template first");
       const phone = (addr.phone ?? order.customerPhone ?? "").replace(/\D/g, "");
       if (!phone) throw new Error("No phone number for this order");
-      const r = await api("/admin/whatsapp/conversations/" + (phone.startsWith("92") ? "+" + phone : "+92" + phone.slice(phone.startsWith("0") ? 1 : 0)) + "/send-template", {
+      const normPhone = phone.startsWith("92") ? "+" + phone : "+92" + phone.slice(phone.startsWith("0") ? 1 : 0);
+      const r = await api(`/admin/whatsapp/conversations/${normPhone}/send-template`, {
         method: "POST",
         body: JSON.stringify({
           templateId: tpl.id,
@@ -812,10 +930,8 @@ function WaConfirmTab({ order }: { order: any }) {
     </div>
   );
 
-  /* ── Timeline steps ── */
-  const isConfirmed = conf?.status === "confirmed" || conf?.status === "booked";
-  const isBooked    = conf?.status === "booked" || !!order.trackingNumber;
-  const isDelivered = rider?.status === "delivered";
+  /* Active shipment */
+  const activeShipment = shipments.find((s: any) => !s.isCancelled);
 
   return (
     <div className="space-y-4">
@@ -828,17 +944,44 @@ function WaConfirmTab({ order }: { order: any }) {
         </div>
       )}
 
-      {/* ── Meta Delivery Status Panel ── */}
+      {/* ── No confirmation sent yet ── */}
+      {!conf?.id && (
+        <div className="text-center py-6 space-y-3 border border-dashed border-border rounded-xl">
+          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto" />
+          <div>
+            <p className="font-medium">No WA confirmation sent yet</p>
+            <p className="text-sm text-muted-foreground mt-1">Send a confirmation to start the delivery workflow.</p>
+          </div>
+          <Button onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}
+            className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
+            <MessageCircle className="w-4 h-4" />
+            {sendMutation.isPending ? "Sending..." : "Send WA Confirmation"}
+          </Button>
+        </div>
+      )}
+
+      {/* ── WA Delivery Status Panel ── */}
       {conf?.id && (
         <div className="border border-border rounded-xl overflow-hidden">
+          {/* Header */}
           <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border">
-            <span className="text-sm font-semibold">WA Confirmation Status</span>
+            <span className="text-sm font-semibold flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-green-600" />
+              WA Message Status
+            </span>
             <div className="flex items-center gap-2">
               <WaDeliveryBadge status={waStatus?.status ?? (conf?.last_sent_at ? "sent" : undefined)} />
               <span className="text-xs text-muted-foreground">{conf.retry_count > 0 ? `Sent ${conf.retry_count + 1}×` : "Sent once"}</span>
             </div>
           </div>
-          <div className="px-4 py-3 space-y-1.5 text-xs text-muted-foreground">
+
+          {/* WA Progress Bar */}
+          <div className="px-4 pt-3 pb-2">
+            <WaStatusProgress status={waStatus?.status} sentAt={conf?.last_sent_at} />
+          </div>
+
+          {/* Details */}
+          <div className="px-4 pb-3 space-y-1.5 text-xs text-muted-foreground border-t border-border/50 pt-2">
             <div className="flex justify-between">
               <span>Customer</span>
               <strong className="text-foreground">{conf.customer_phone}</strong>
@@ -864,15 +1007,16 @@ function WaConfirmTab({ order }: { order: any }) {
             {conf.confirmation_reply && (
               <div className="flex justify-between">
                 <span>Reply</span>
-                <span className="font-medium text-foreground">"{conf.confirmation_reply}"</span>
+                <span className="font-medium text-foreground italic">"{conf.confirmation_reply}"</span>
               </div>
             )}
             {waStatus?.status === "failed" && (
               <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                ⚠ Meta error 131047 — Customer hasn't replied in 24h. Use an approved template.
+                ⚠ Meta error 131047 — Customer hasn't replied in 24h. Use an approved template below.
               </div>
             )}
           </div>
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-3">
             {conf.status !== "cancelled" && (
@@ -889,23 +1033,11 @@ function WaConfirmTab({ order }: { order: any }) {
                 {forceBookMutation.isPending ? "Booking..." : "Force Book Courier"}
               </Button>
             )}
+            <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground ml-auto"
+              onClick={() => refetch()}>
+              <RefreshCw className="w-3 h-3" /> Refresh
+            </Button>
           </div>
-        </div>
-      )}
-
-      {/* ── No confirmation sent yet ── */}
-      {!conf?.id && (
-        <div className="text-center py-6 space-y-3 border border-dashed border-border rounded-xl">
-          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto" />
-          <div>
-            <p className="font-medium">No WA confirmation sent yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Send a confirmation to start the delivery workflow.</p>
-          </div>
-          <Button onClick={() => sendMutation.mutate()} disabled={sendMutation.isPending}
-            className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
-            <MessageCircle className="w-4 h-4" />
-            {sendMutation.isPending ? "Sending..." : "Send WA Confirmation"}
-          </Button>
         </div>
       )}
 
@@ -920,7 +1052,7 @@ function WaConfirmTab({ order }: { order: any }) {
             done={!!conf?.last_sent_at} active={!conf?.last_sent_at}
             label="WA Confirmation Sent"
             ts={conf?.last_sent_at}
-            sub={conf ? `Status: ${waStatus?.status ?? "sent"} · Sent ${(conf.retry_count ?? 0) + 1}×` : undefined}
+            sub={conf ? `Meta status: ${waStatus?.status ?? "sent"} · Sent ${(conf.retry_count ?? 0) + 1}×` : undefined}
           />
           <TimelineStep
             done={isConfirmed} active={!!conf?.last_sent_at && !isConfirmed}
@@ -932,15 +1064,20 @@ function WaConfirmTab({ order }: { order: any }) {
             done={isLahore ? !!rider?.assignedAt : isBooked}
             active={isConfirmed && !isBooked && !rider?.assignedAt}
             label={isLahore ? "Rider Assigned" : "Courier Booked"}
-            ts={rider?.assignedAt ?? (order.trackingNumber ? order.updatedAt : null)}
-            sub={rider?.riderName ? `Rider: ${rider.riderName}` : (order.trackingNumber ? `Tracking: ${order.trackingNumber}` : undefined)}
+            ts={rider?.assignedAt ?? activeShipment?.createdAt ?? (order.trackingNumber ? order.updatedAt : null)}
+            sub={
+              rider?.riderName ? `Rider: ${rider.riderName}`
+              : activeShipment ? `${activeShipment.courierSlug?.toUpperCase()} · ${activeShipment.trackingId}`
+              : order.trackingNumber ? `Tracking: ${order.trackingNumber}`
+              : undefined
+            }
           />
           {isLahore && (
             <TimelineStep
               done={!!rider?.pickedAt} active={!!rider?.assignedAt && !rider?.pickedAt}
               label="Picked Up"
               ts={rider?.pickedAt}
-              sub={rider?.waToRiderAt ? `WA sent to rider: ${new Date(rider.waToRiderAt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" })}` : undefined}
+              sub={rider?.waToRiderAt ? `WA sent to rider at ${new Date(rider.waToRiderAt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" })}` : undefined}
             />
           )}
           {isLahore && (
@@ -948,7 +1085,7 @@ function WaConfirmTab({ order }: { order: any }) {
               done={!!rider?.outForDeliveryAt} active={!!rider?.pickedAt && !rider?.outForDeliveryAt}
               label="Out for Delivery"
               ts={rider?.outForDeliveryAt}
-              sub={rider?.waToCustomerAt ? `Customer notified` : undefined}
+              sub={rider?.waToCustomerAt ? "Customer notified via WA" : undefined}
             />
           )}
           <TimelineStep
@@ -967,28 +1104,65 @@ function WaConfirmTab({ order }: { order: any }) {
           className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 text-sm font-semibold hover:bg-muted/50 transition-colors">
           <span className="flex items-center gap-2">
             <Send className="w-4 h-4 text-green-600" />
-            Send Template Message
+            Send WA Template
+            {approvedTemplates.length > 0 && (
+              <span className="text-xs font-normal text-muted-foreground">({approvedTemplates.length} approved)</span>
+            )}
           </span>
           <ChevronDown className={`w-4 h-4 transition-transform ${showTemplatePanel ? "rotate-180" : ""}`} />
         </button>
+
         {showTemplatePanel && (
           <div className="p-4 space-y-3">
             {approvedTemplates.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-2">No approved templates. Go to <strong>WA Templates</strong> in the sidebar to add templates.</p>
+              <div className="text-center py-3 space-y-2">
+                <p className="text-sm text-muted-foreground">No approved WA templates found.</p>
+                <Button size="sm" variant="outline" className="gap-1.5 text-green-700 border-green-300"
+                  onClick={() => navigate("/whatsapp?tab=templates")}>
+                  <FileText className="w-3.5 h-3.5" /> Manage Templates
+                </Button>
+              </div>
             ) : (
               <>
+                {/* Recommended badge */}
+                {recommendedEvent && templatesByEvent[recommendedEvent] && (
+                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
+                    <Zap className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                    <span>Recommended for this order: <strong>{WA_EVENT_LABELS[recommendedEvent]?.emoji} {WA_EVENT_LABELS[recommendedEvent]?.label ?? recommendedEvent}</strong></span>
+                  </div>
+                )}
+
+                {/* Event-grouped template selector */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Select Template</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Select Template</label>
+                    <button
+                      onClick={() => navigate("/whatsapp?tab=templates")}
+                      className="text-xs text-green-700 hover:underline flex items-center gap-1">
+                      <ExternalLink className="w-3 h-3" /> Manage Templates
+                    </button>
+                  </div>
                   <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background">
                     <option value="">Choose template...</option>
-                    {approvedTemplates.map((t: any) => (
-                      <option key={t.id} value={String(t.id)}>
-                        {t.name} {t.trigger_event ? `(${t.trigger_event.replace(/_/g," ")})` : ""} · {t.param_count} vars
-                      </option>
-                    ))}
+                    {eventOrder.map(ev => {
+                      const group = templatesByEvent[ev];
+                      if (!group?.length) return null;
+                      const evMeta = WA_EVENT_LABELS[ev] ?? { emoji: "📄", label: ev.replace(/_/g, " ") };
+                      return (
+                        <optgroup key={ev} label={`${evMeta.emoji} ${evMeta.label}`}>
+                          {group.map((t: any) => (
+                            <option key={t.id} value={String(t.id)}>
+                              {t.name} · {t.param_count ?? 0} vars{recommendedEvent === ev ? " ★" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </div>
+
+                {/* Template preview */}
                 {selectedTemplate && (() => {
                   const tpl = approvedTemplates.find((t: any) => String(t.id) === selectedTemplate);
                   if (!tpl) return null;
@@ -996,13 +1170,24 @@ function WaConfirmTab({ order }: { order: any }) {
                     .replace("{{1}}", order.orderNumber ?? "#—")
                     .replace("{{2}}", order.totalPrice ?? "0")
                     .replace("{{3}}", addr.name ?? order.customerName ?? "Customer")
-                    .replace("{{4}}", order.financialStatus === "paid" ? "Paid Online" : "COD");
+                    .replace("{{4}}", activeShipment?.trackingId ?? order.trackingNumber ?? "N/A")
+                    .replace("{{5}}", order.financialStatus === "paid" ? "Paid Online" : "COD");
+                  const evKey = tpl.trigger_event;
+                  const evMeta = evKey ? WA_EVENT_LABELS[evKey] : null;
                   return (
-                    <div className="bg-[#dcf8c6] rounded-xl p-3 text-sm text-gray-800 border border-green-200 font-mono text-xs whitespace-pre-wrap max-h-36 overflow-y-auto">
-                      {preview}
+                    <div className="space-y-1.5">
+                      {evMeta && (
+                        <div className={`text-xs font-medium flex items-center gap-1.5 ${evMeta.color}`}>
+                          <span>{evMeta.emoji}</span><span>{evMeta.label}</span>
+                        </div>
+                      )}
+                      <div className="bg-[#dcf8c6] rounded-xl p-3 text-gray-800 border border-green-200 font-mono text-xs whitespace-pre-wrap max-h-36 overflow-y-auto">
+                        {preview}
+                      </div>
                     </div>
                   );
                 })()}
+
                 <Button size="sm" className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => templateSendMutation.mutate()} disabled={!selectedTemplate || templateSendMutation.isPending}>
                   <Send className="w-3.5 h-3.5" />
@@ -1013,6 +1198,34 @@ function WaConfirmTab({ order }: { order: any }) {
           </div>
         )}
       </div>
+
+      {/* ── Recent WA Logs ── */}
+      {recentWaLogs.length > 0 && (
+        <div className="border border-border rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowRecentLogs(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 text-sm font-semibold hover:bg-muted/50 transition-colors">
+            <span className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              Recent WA Messages ({recentWaLogs.length})
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showRecentLogs ? "rotate-180" : ""}`} />
+          </button>
+          {showRecentLogs && (
+            <div className="divide-y divide-border">
+              {recentWaLogs.map((log: any, i: number) => (
+                <div key={i} className="px-4 py-2.5 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-muted-foreground shrink-0">{new Date(log.created_at).toLocaleString("en-PK", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="truncate font-mono text-muted-foreground">{log.template_name ?? log.message_id?.slice(-8) ?? "—"}</span>
+                  </div>
+                  <WaDeliveryBadge status={log.delivery_status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
