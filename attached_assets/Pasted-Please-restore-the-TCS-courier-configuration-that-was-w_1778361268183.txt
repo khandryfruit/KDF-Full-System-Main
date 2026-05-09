@@ -1,0 +1,177 @@
+Please restore the TCS courier configuration that was working correctly between approximately 11 AM to 1 AM. During that time:
+
+* booking flow was working better
+* production errors were less
+* development mode was correctly creating bookings
+* auth/token flow was more stable
+
+Current system became unstable after recent changes.
+
+==================================================
+RESTORE + IMPROVE CURRENT SYSTEM
+================================
+
+Please restore the previous working setup first, then improve it carefully instead of breaking existing working logic.
+
+Current issue:
+
+* Test Connection shows ACTIVE
+* but actual booking fails
+* this creates confusion
+
+If booking is failing then:
+
+* Test button should also fail
+* OR show partial success status clearly
+
+Example:
+
+✅ Bearer Token Working
+✅ Access Token Working
+❌ Booking API Failed
+❌ Payload Validation Failed
+
+Do NOT show full ACTIVE if booking endpoint is failing.
+
+==================================================
+REQUIRED SETTINGS FIELDS
+========================
+
+Add these 3 fields clearly in TCS settings:
+
+1. TCS Username
+2. TCS Password
+3. Direct Access Token / Bearer Token
+
+Keep them properly separated.
+
+Do NOT mix:
+
+* bearer token
+* access token
+* username
+* password
+
+==================================================
+RESTORE OLD WORKING FLOW
+========================
+
+The old flow was closer to working in development mode.
+
+Please:
+
+* compare old commit/version
+* restore old working auth logic
+* restore old booking structure
+* restore old headers if needed
+* compare dev vs production differences
+
+==================================================
+IMPORTANT PRODUCTION ISSUE
+==========================
+
+Development mode works but production fails on:
+
+```txt id="nqg5ui"
+admin.khanbabadryfruits.com
+```
+
+Please debug:
+
+* production ENV
+* deployment secrets
+* proxy headers
+* CORS
+* SSL
+* Cloudflare
+* token storage
+* production cache
+* API URL mismatch
+
+Production and development should behave SAME.
+
+==================================================
+TEST MODE SHOULD BE REALISTIC
+=============================
+
+Current problem:
+
+* Test Connection says success
+* but booking fails
+
+Fix this.
+
+Test button must check ALL:
+
+✅ auth
+✅ token generation
+✅ booking payload validation
+✅ booking API
+✅ tracking API
+
+Only then show ACTIVE.
+
+==================================================
+ADD BETTER STATUS UI
+====================
+
+Show statuses like:
+
+🟢 Authentication Connected
+🟢 Token Generated
+🟢 Tracking Connected
+🔴 Booking Failed
+🔴 Payload Invalid
+
+instead of fake “Connected”.
+
+==================================================
+KEEP DEBUGGING ENABLED
+======================
+
+Keep complete debug logs:
+
+* request payload
+* booking response
+* headers
+* trace id
+* token expiry
+* API errors
+
+inside:
+
+```txt id="8m0k7n"
+Courier > API Logs
+```
+
+==================================================
+DO NOT BREAK WORKING FEATURES
+=============================
+
+Very important:
+
+When fixing one thing:
+
+* do NOT break another module
+* do NOT break Shopify
+* do NOT break Ecommerce bookings
+* do NOT break tracking
+* do NOT break labels
+
+Please use modular fixes carefully.
+
+==================================================
+FINAL GOAL
+==========
+
+We need:
+
+✅ stable production booking
+✅ same behavior in dev + production
+✅ proper test connection system
+✅ proper token handling
+✅ proper booking validation
+✅ clear debug logs
+✅ real booking only
+✅ no fake active status
+✅ stable courier integration
