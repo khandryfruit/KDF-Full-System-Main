@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import { db, productsTable, syncJobsTable } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
 import { eq, desc } from "drizzle-orm";
-import { ensureUniqueSlug } from "../lib/slugify";
+import { generateSlugFromName } from "../lib/slugify";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -93,7 +93,8 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
         const stock = parseInt(row["stock"] ?? row["Stock"] ?? row["quantity"] ?? "0") || 0;
         const originalPrice = parseFloat(row["original_price"] ?? row["originalPrice"] ?? row["compare_price"] ?? "") || undefined;
         const description = (row["description"] ?? row["Description"] ?? "").trim() || undefined;
-        const slug = await ensureUniqueSlug(name);
+        const slugRaw = (row["slug"] ?? row["Slug"] ?? "").trim();
+        const slug = slugRaw || generateSlugFromName(name);
 
         let variants: any[] = [];
         if (row["variants"]) {
@@ -114,6 +115,18 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
           images,
           variants,
           active: true,
+        }).onConflictDoUpdate({
+          target: productsTable.slug,
+          set: {
+            name,
+            price: String(price),
+            originalPrice: originalPrice ? String(originalPrice) : undefined,
+            stock,
+            description,
+            images,
+            variants,
+            updatedAt: new Date(),
+          },
         });
         successCount++;
       } catch (err: unknown) {

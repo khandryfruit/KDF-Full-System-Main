@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, integrationsTable, shopifyIntegrationsTable, woocommerceIntegrationsTable, marketingIntegrationsTable, syncJobsTable, productsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
-import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
+import { generateSlugFromName } from "../lib/slugify";
 
 const router = Router();
 
@@ -101,16 +101,29 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
             const price = sp.variants?.[0]?.price ?? "0";
             const stock = sp.variants?.reduce((sum: number, v: any) => sum + (parseInt(v.inventory_quantity) || 0), 0) ?? 0;
             const images = (sp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slugBase = sp.handle ?? generateSlugFromName(sp.title ?? "untitled");
-            const slug = await ensureUniqueSlug(slugBase);
+            const slug = sp.handle ?? generateSlugFromName(sp.title ?? "untitled");
+            const name = sp.title ?? "Untitled";
+            const description = sp.body_html?.replace(/<[^>]*>/g, "").trim() || undefined;
+            const active = sp.status === "active";
             await db.insert(productsTable).values({
-              name: sp.title ?? "Untitled",
+              name,
               slug,
-              description: sp.body_html?.replace(/<[^>]*>/g, "").trim() || undefined,
+              description,
               price: String(price),
               stock,
               images,
-              active: sp.status === "active",
+              active,
+            }).onConflictDoUpdate({
+              target: productsTable.slug,
+              set: {
+                name,
+                description,
+                price: String(price),
+                stock,
+                images,
+                active,
+                updatedAt: new Date(),
+              },
             });
             successCount++;
           } catch { failedCount++; }
@@ -187,17 +200,31 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
             const originalPrice = wp.regular_price && wp.sale_price ? wp.regular_price : undefined;
             const stock = wp.stock_quantity ?? 0;
             const images = (wp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slugBase = wp.slug ?? generateSlugFromName(wp.name ?? "untitled");
-            const slug = await ensureUniqueSlug(slugBase);
+            const slug = wp.slug ?? generateSlugFromName(wp.name ?? "untitled");
+            const name = wp.name ?? "Untitled";
+            const description = wp.description?.replace(/<[^>]*>/g, "").trim() || undefined;
+            const active = wp.status === "publish";
             await db.insert(productsTable).values({
-              name: wp.name ?? "Untitled",
+              name,
               slug,
-              description: wp.description?.replace(/<[^>]*>/g, "").trim() || undefined,
+              description,
               price: String(price),
               originalPrice: originalPrice ? String(originalPrice) : undefined,
               stock,
               images,
-              active: wp.status === "publish",
+              active,
+            }).onConflictDoUpdate({
+              target: productsTable.slug,
+              set: {
+                name,
+                description,
+                price: String(price),
+                originalPrice: originalPrice ? String(originalPrice) : undefined,
+                stock,
+                images,
+                active,
+                updatedAt: new Date(),
+              },
             });
             successCount++;
           } catch { failedCount++; }
