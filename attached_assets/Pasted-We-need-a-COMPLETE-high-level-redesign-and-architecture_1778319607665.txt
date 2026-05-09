@@ -1,0 +1,361 @@
+We need a COMPLETE high-level redesign and architecture improvement of the entire Admin Dashboard system.
+
+This is not a small UI update.
+Please deeply analyze the full platform structure, workflows, business operations, Shopify flow, logistics flow, WhatsApp automation flow, and real-time operational needs before implementing anything.
+
+The goal is to transform this into a PREMIUM ENTERPRISE OPERATIONS DASHBOARD similar to:
+
+* Shopify Admin
+* HubSpot
+* Slack
+* Zendesk
+* Linear
+* Intercom
+* Meta Business Suite
+
+====================================================
+
+1. MAIN DASHBOARD RESTRUCTURE (VERY IMPORTANT)
+   ====================================================
+
+The main dashboard should become a COMPLETE BUSINESS COMMAND CENTER.
+
+Currently the system feels disconnected.
+
+We need ONE unified dashboard where:
+
+* Shopify
+* Logistics
+* WhatsApp
+* Courier
+* Campaigns
+* Analytics
+* Notifications
+* AI
+  all work together in one centralized operational interface.
+
+====================================================
+2. SHOPIFY MODULE MUST MOVE TO TOP
+==================================
+
+Shopify is our most important daily workflow.
+
+Move the Shopify module directly below the Main Dashboard in the sidebar.
+
+Current sidebar hierarchy is weak and not optimized.
+
+Required:
+
+* Better spacing
+* Better alignment
+* Better active states
+* Better hover effects
+* Modern icons
+* Nested expandable menus
+* Smooth animations
+
+The Shopify section should behave like a professional collapsible sidebar:
+
+* Click Shopify → expand all Shopify tools
+* Click again → collapse
+* Auto expand when user is inside Shopify pages
+
+Use premium SaaS-level UI/UX.
+
+====================================================
+3. LOGISTICS / COURIER MODULE MUST ALSO MOVE HIGHER
+===================================================
+
+Logistics is also a critical business operation.
+
+Move the Logistics / Courier module near the top of the sidebar as well.
+
+Logistics data must also appear on the MAIN dashboard.
+
+Show:
+
+* Active Deliveries
+* Pending Shipments
+* Rider Status
+* Delivered Orders
+* COD Pending
+* Failed Deliveries
+* Return Requests
+* Dispatch Queue
+* Courier Performance
+* Rider Live Activity
+
+We want logistics fully connected with:
+
+* Shopify Orders
+* WhatsApp Notifications
+* Order Status Updates
+* Courier Assignments
+
+====================================================
+4. MAIN DASHBOARD LIVE DATA SYSTEM
+==================================
+
+The main dashboard should show LIVE operational data from all systems.
+
+Required dashboard cards:
+
+* Orders Today
+* Pending Orders
+* Processing Orders
+* Delivered Orders
+* COD Orders
+* Revenue Today
+* WhatsApp Messages
+* AI Replies
+* Active Visitors
+* Live Chats
+* Abandoned Carts
+* Courier Dispatches
+* Rider Activity
+* Failed Payments
+* Refund Requests
+* Campaign Results
+
+Everything should update LIVE without refresh.
+
+Use:
+
+* WebSockets
+  OR
+* Optimized polling
+
+====================================================
+5. REAL-TIME ACTIVITY FEED
+==========================
+
+Add a live operational activity feed.
+
+Examples:
+
+* New order received
+* Order dispatched
+* Rider assigned
+* WhatsApp customer replied
+* AI sent auto-reply
+* Payment received
+* Customer created
+* Campaign completed
+* Refund requested
+* Delivery completed
+
+This should update instantly in real-time.
+
+====================================================
+6. PROFESSIONAL NOTIFICATION CENTER
+===================================
+
+Implement a FULL notification system.
+
+Required:
+
+* Real-time toast notifications
+* Sound alerts
+* Browser notifications
+* Mobile-ready push architecture
+
+Notifications for:
+
+* New Shopify Orders
+* Payment Success
+* Failed Payments
+* Courier Assigned
+* Delivery Completed
+* WhatsApp Messages
+* AI Failures
+* Campaign Completion
+* Support Replies
+
+Add:
+Notification Settings
+
+Where admin can:
+
+* Enable/Disable sounds
+* Select notification tone
+* Enable desktop alerts
+* Configure quiet hours
+* Configure priority alerts
+
+====================================================
+7. WHATSAPP + AI SYSTEM IMPROVEMENTS
+====================================
+
+Deeply improve WhatsApp system architecture.
+
+Current issues:
+
+* Some chats not syncing
+* Website chat not appearing in inbox
+* AI workflow instability
+* Stuck forms
+* Popup freeze issues
+* Weak UX
+* Meta template testing confusion
+
+Required:
+
+* Stable real-time sync
+* Unified inbox
+* Better chat rendering
+* Website + WhatsApp merged conversations
+* AI auto-reply monitoring
+* Better escalation handling
+* Proper fallback systems
+* Smart template testing system
+* Auto-fetch Meta templates
+* Dynamic variable detection
+* WhatsApp-style live preview
+
+====================================================
+8. TEST TEMPLATE PAGE REDESIGN
+==============================
+
+The Meta template test page must become automated and premium.
+
+Currently:
+
+* Template name is manual
+* Variable count is manual
+* Errors are confusing
+
+Required:
+
+* Auto fetch approved Meta templates
+* Searchable dropdown
+* Auto detect variables {{1}} {{2}}
+* Dynamic input generation
+* Live preview
+* Friendly errors
+* Template sync button
+* Save favorite templates
+* Recent templates history
+
+This should feel like a professional WhatsApp Business Suite.
+
+====================================================
+9. SIDEBAR COMPLETE REDESIGN
+============================
+
+Completely redesign sidebar UI.
+
+Requirements:
+
+* Enterprise-level design
+* Better spacing
+* Soft shadows
+* Smooth transitions
+* Premium animations
+* Responsive mobile behavior
+* Better typography
+* Better icon consistency
+* Modern collapse behavior
+
+The sidebar should feel:
+FAST
+CLEAN
+PREMIUM
+MODERN
+
+====================================================
+10. MOBILE + TABLET EXPERIENCE
+==============================
+
+The dashboard must work beautifully on:
+
+* Desktop
+* Laptop
+* Tablet
+* Mobile
+
+Need:
+
+* Responsive sidebar
+* Mobile drawer
+* Touch optimized interactions
+* Smooth scrolling
+* Better spacing
+
+====================================================
+11. PERFORMANCE OPTIMIZATION
+============================
+
+Even after redesign:
+
+* Dashboard must remain FAST
+* No lag
+* No freezing
+* No sidebar rendering issues
+* No heavy unnecessary re-renders
+
+Optimize:
+
+* API calls
+* Websocket updates
+* React rendering
+* State management
+* Lazy loading
+* Data caching
+
+====================================================
+12. IMPORTANT SYSTEM SAFETY
+===========================
+
+VERY IMPORTANT:
+
+Do NOT break any existing functionality.
+
+All current systems must continue working:
+
+* Shopify Sync
+* WhatsApp Messaging
+* Meta API
+* Courier APIs
+* AI Chatbot
+* Campaigns
+* Orders
+* Customer Data
+* Notifications
+* Existing integrations
+
+Only improve:
+
+* Architecture
+* UI/UX
+* Stability
+* Real-time systems
+* Automation
+* Dashboard experience
+
+====================================================
+13. FINAL GOAL
+==============
+
+The final system should feel like:
+A world-class enterprise commerce operating system.
+
+It should NOT feel like a basic Laravel admin panel anymore.
+
+It should feel like:
+
+* Shopify Enterprise
+* HubSpot
+* Intercom
+* Meta Business Suite
+* Modern SaaS Platform
+
+Please deeply analyze the current architecture first before implementing changes.
+
+We need:
+
+* Professional engineering
+* Stable integrations
+* Premium UI/UX
+* Real-time infrastructure
+* Production-ready experience
+* Enterprise-grade operations dashboard
