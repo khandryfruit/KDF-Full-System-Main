@@ -571,7 +571,10 @@ router.post("/admin/couriers/manual-book", adminMiddleware as any, async (req: A
 
     if (hasApiCreds) {
       try {
-        const result = await callCourierApi(courierRow, fakeOrder, serviceCode);
+        /* PostEx does NOT use serviceCode (that's TCS-specific: "O","P","C").
+           Pass undefined so callCourierApi uses postexOrderType from fakeOrder instead. */
+        const serviceParam = courierSlug === "postex" ? undefined : serviceCode;
+        const result = await callCourierApi(courierRow, fakeOrder, serviceParam);
         trackingId = result.trackingId;
         rawResponse = { ...result.rawResponse, trackingUrl: result.trackingUrl };
       } catch (apiErr: any) {
@@ -2048,7 +2051,15 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     const settings = (courier.settings ?? {}) as Record<string, any>;
     if (!courier.apiKey) throw new Error("PostEx: API Token is required in settings");
 
-    const orderType = service ?? order.postexOrderType ?? settings.orderType ?? "Normal";
+    /* Valid PostEx orderType values per official API docs.
+       The `service` param is courier-generic and may carry TCS codes ("O","P","C") —
+       those are NOT valid PostEx order types. Always validate and default to "Normal". */
+    const VALID_POSTEX_ORDER_TYPES = ["Normal", "Reversed", "Replacement"];
+    const rawOrderType = order.postexOrderType ?? settings.orderType ?? service ?? "Normal";
+    const orderType = VALID_POSTEX_ORDER_TYPES.includes(rawOrderType) ? rawOrderType : "Normal";
+    if (rawOrderType !== orderType) {
+      logger.warn({ rawOrderType, resolvedTo: orderType }, "PostEx: invalid orderType — clamped to Normal");
+    }
     const items: any[] = Array.isArray(order.items) ? order.items : [];
     const isCod = order.paymentMethod === "cod";
 
@@ -2128,6 +2139,19 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       }
     }
 
+    /* ── Full payload debug log before API call ── */
+    logger.info({
+      postex_endpoint: `${courier.apiEndpoint}/v3/create-order`,
+      orderRefNumber:    payload.orderRefNumber,
+      orderType:         payload.orderType,
+      cityName:          payload.cityName,
+      invoicePayment:    payload.invoicePayment,
+      items:             payload.items,
+      pickupAddressCode: payload.pickupAddressCode,
+      customerPhone:     payload.customerPhone,
+      transactionNotes:  payload.transactionNotes,
+    }, "PostEx booking — full payload");
+
     const resp = await fetch(`${courier.apiEndpoint}/v3/create-order`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "token": courier.apiKey },
@@ -2135,6 +2159,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       signal: AbortSignal.timeout(15000),
     });
     const raw = await resp.json() as Record<string, any>;
+    logger.info({ httpStatus: resp.status, statusCode: raw?.statusCode, statusMessage: raw?.statusMessage }, "PostEx booking — API response");
     if (raw?.statusCode !== "200" && raw?.statusCode !== 200) {
       throw new Error(`PostEx booking failed: ${raw?.statusMessage ?? raw?.message ?? `HTTP ${resp.status}`}`);
     }
@@ -2428,7 +2453,9 @@ router.post("/admin/shipments/:id/retry-booking", adminMiddleware as any, async 
     let newRawResponse: Record<string, any>;
 
     try {
-      const result = await callCourierApi(courierRow, retryOrder, s.serviceCode ?? "O");
+      /* PostEx does NOT use serviceCode — use postexOrderType already set in retryOrder */
+      const retryService = courierRow.slug === "postex" ? undefined : (s.serviceCode ?? "O");
+      const result = await callCourierApi(courierRow, retryOrder, retryService);
       newTrackingId = result.trackingId;
       newRawResponse = {
         ...result.rawResponse,
