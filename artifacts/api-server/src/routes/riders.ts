@@ -897,12 +897,11 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
                   out_for_delivery: "out_for_delivery",
                   near_customer:    "out_for_delivery",
                   delivered:        "delivered",
-                  failed:           "cancelled",
-                  returned:         "cancelled",
                 };
-                const templateStatus = TEMPLATE_STATUS[status];
 
                 let sent = false;
+                const templateStatus = TEMPLATE_STATUS[status];
+
                 if (templateStatus) {
                   /* Template-first: uses approved WA template, falls back to plain text */
                   sent = await sendOrderStatusUpdate({
@@ -910,6 +909,21 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
                     orderNumber,
                     status: templateStatus as any,
                     trackingId: order?.tracking_number ?? undefined,
+                  }).catch(() => false) as boolean;
+                } else if (status === "failed") {
+                  /* Dedicated failed delivery template (not generic "cancelled") */
+                  sent = await sendFailedDeliveryNotification({
+                    phone: normPhone,
+                    orderNumber,
+                    customerName: del.customer_name ?? undefined,
+                  }).catch(() => false) as boolean;
+                } else if (status === "returned") {
+                  /* Return notification with type="return" */
+                  sent = await sendReturnRefundNotification({
+                    phone: normPhone,
+                    orderNumber,
+                    customerName: del.customer_name ?? undefined,
+                    type: "return",
                   }).catch(() => false) as boolean;
                 } else {
                   /* Plain text for statuses without a template mapping */

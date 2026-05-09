@@ -838,6 +838,15 @@ function WaConfirmTab({ order }: { order: any }) {
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [showRecentLogs, setShowRecentLogs] = useState(false);
 
+  /* Auto-select recommended template when panel first opens */
+  useEffect(() => {
+    if (!showTemplatePanel || selectedTemplate) return;
+    const approvedTpls = (data?.templates ?? []).filter((t: any) => t.approval_status === "approved");
+    const rec = approvedTpls.find((t: any) => t.trigger_event === recommendedEvent)
+      ?? approvedTpls[0];
+    if (rec) setSelectedTemplate(String(rec.id));
+  }, [showTemplatePanel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── Full WA status + timeline data (auto-refreshes every 15s) ── */
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["order-wa-status", order.id],
