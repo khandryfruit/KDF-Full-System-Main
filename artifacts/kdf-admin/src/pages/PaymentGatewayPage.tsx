@@ -528,12 +528,41 @@ function TransactionsTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTxn, setSelectedTxn] = useState<MeezanTxn | null>(null);
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
+  const [refundingId, setRefundingId] = useState<number | null>(null);
+
+  /* Date range: default to last 30 days */
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dateTo, setDateTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   const { data, isLoading, refetch } = useQuery<{ transactions: MeezanTxn[]; total: number }>({
-    queryKey: ["meezan-txns", statusFilter],
-    queryFn:  () => apiFetch(`/api/admin/meezan/transactions?status=${statusFilter}&limit=100`),
+    queryKey: ["meezan-txns", statusFilter, dateFrom, dateTo],
+    queryFn:  () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo)   params.set("to",   dateTo);
+      return apiFetch(`/api/admin/meezan/transactions?${params.toString()}`);
+    },
     refetchInterval: 30000,
   });
+
+  const refundTxn = async (t: MeezanTxn) => {
+    if (t.status !== "paid") { toast({ title: "Only paid transactions can be refunded", variant: "destructive" }); return; }
+    setRefundingId(t.id);
+    try {
+      await apiFetch(`/api/admin/meezan/transactions/${t.id}/refund`, { method: "POST", body: JSON.stringify({ reason: "Admin refund" }) });
+      toast({ title: "Refund issued successfully" });
+      qc.invalidateQueries({ queryKey: ["meezan-txns"] });
+      qc.invalidateQueries({ queryKey: ["meezan-stats"] });
+    } catch (e: any) {
+      toast({ title: "Refund failed", description: e.message, variant: "destructive" });
+    } finally {
+      setRefundingId(null);
+    }
+  };
 
   const txns = data?.transactions ?? [];
   const filtered = search.trim()
@@ -586,6 +615,15 @@ function TransactionsTab() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Meezan ID, invoice, customer…" className="pl-9 h-9 text-sm" />
+          </div>
+          {/* Date range filters */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">From</label>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 text-xs w-36" max={dateTo || undefined} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">To</label>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 text-xs w-36" min={dateFrom || undefined} />
           </div>
           <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={() => refetch()}>
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} /> Refresh
@@ -648,10 +686,21 @@ function TransactionsTab() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setSelectedTxn(t)}><Eye className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => verifyTxn(t.id)} disabled={verifyingId === t.id} title="Re-verify from bank">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setSelectedTxn(t)} title="View details"><Eye className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => verifyTxn(t.id)} disabled={verifyingId === t.id} title="Re-verify from Meezan Bank">
                             {verifyingId === t.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                           </Button>
+                          {t.status === "paid" && (
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => refundTxn(t)}
+                              disabled={refundingId === t.id}
+                              title="Issue refund"
+                            >
+                              {refundingId === t.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ArrowDownLeft className="w-3.5 h-3.5" />}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

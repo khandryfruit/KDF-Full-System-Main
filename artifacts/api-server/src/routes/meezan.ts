@@ -8,6 +8,7 @@ import {
   probeMeezanConnectivity, getServerIp, ORDER_STATUS_LABELS,
 } from "../lib/meezan";
 import { sendWhatsAppMessage } from "../lib/whatsapp";
+import { logger } from "../lib/logger";
 import type { Request, Response } from "express";
 
 /* ═══════════════════════════════════════════════════════════
@@ -68,55 +69,81 @@ async function audit(
    sends a WhatsApp confirmation to the customer.
 ═══════════════════════════════════════════════════════════ */
 async function postPaymentSync(txnId: number): Promise<void> {
-  try {
-    const txns = await db.select().from(meezanTransactionsTable)
-      .where(eq(meezanTransactionsTable.id, txnId)).limit(1);
-    if (!txns.length) return;
-    const txn = txns[0];
+  /* ── Load transaction ── */
+  const txns = await db.select().from(meezanTransactionsTable)
+    .where(eq(meezanTransactionsTable.id, txnId)).limit(1).catch(e => { logger.error({ err: e, txnId }, "postPaymentSync: failed to load txn"); return [] as typeof meezanTransactionsTable.$inferSelect[]; });
+  if (!txns.length) return;
+  const txn = txns[0];
 
-    /* ── 1. Update Shopify order financial_status to "paid" ── */
-    const shopifyRef = txn.externalRef ?? txn.invoiceNumber ?? "";
-    if (shopifyRef) {
-      try {
-        const stores = await db.select().from(shopifyStoresTable)
-          .where(eq(shopifyStoresTable.isActive, true)).limit(1);
-        if (stores.length) {
-          const store = stores[0];
-          const apiBase = `https://${store.shopDomain}/admin/api/2024-04`;
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (store.accessToken) headers["X-Shopify-Access-Token"] = store.accessToken;
+  /* ── 1. Update Shopify order financial_status to "paid" ── */
+  const shopifyRef = txn.externalRef ?? txn.invoiceNumber ?? "";
+  if (shopifyRef) {
+    try {
+      const stores = await db.select().from(shopifyStoresTable)
+        .where(eq(shopifyStoresTable.isConnected, true)).limit(1);
+      if (stores.length) {
+        const store = stores[0];
+        const apiBase = `https://${store.shopDomain}/admin/api/2024-04`;
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (store.accessToken) headers["X-Shopify-Access-Token"] = store.accessToken;
 
-          /* Try by order name (e.g. "#1234") or numeric ID */
-          const isNumericId = /^\d+$/.test(shopifyRef);
-          if (isNumericId) {
-            await fetch(`${apiBase}/orders/${shopifyRef}/transactions.json`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                transaction: { kind: "capture", status: "success", amount: txn.amount, currency: "PKR", source: "meezan_epg" },
-              }),
-            }).catch(() => {});
+        /* Look up local order by shopifyOrderId OR orderNumber to get numeric ID */
+        const localOrders = await db.select({ shopifyOrderId: shopifyOrdersTable.shopifyOrderId })
+          .from(shopifyOrdersTable)
+          .where(or(
+            eq(shopifyOrdersTable.shopifyOrderId, shopifyRef),
+            eq(shopifyOrdersTable.orderNumber, shopifyRef)
+          ))
+          .limit(1);
+
+        const numericId = localOrders.length ? localOrders[0].shopifyOrderId : (/^\d+$/.test(shopifyRef) ? shopifyRef : null);
+
+        if (numericId) {
+          /* Post a capture transaction to Shopify */
+          const shopifyRes = await fetch(`${apiBase}/orders/${numericId}/transactions.json`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              transaction: { kind: "capture", status: "success", amount: txn.amount, currency: "PKR", source: "meezan_epg" },
+            }),
+          });
+          if (!shopifyRes.ok) {
+            logger.warn({ txnId, numericId, status: shopifyRes.status }, "postPaymentSync: Shopify capture API non-2xx");
           }
-
-          /* Update local DB order record to "paid" */
-          await db.update(shopifyOrdersTable)
-            .set({ financialStatus: "paid", updatedAt: new Date() } as any)
-            .where(eq(shopifyOrdersTable.shopifyOrderId, shopifyRef))
-            .catch(() => {});
+        } else {
+          logger.warn({ txnId, shopifyRef }, "postPaymentSync: could not resolve numeric Shopify order ID — skipping remote capture");
         }
-      } catch { /* non-critical */ }
-    }
 
-    /* ── 2. Send WhatsApp confirmation ── */
-    const phone = txn.customerPhone ?? "";
-    if (phone) {
-      const name   = txn.customerName ?? "Customer";
-      const amt    = `Rs. ${Number(txn.amount).toLocaleString("en-PK")}`;
-      const ref    = txn.invoiceNumber ?? txn.meezanOrderId ?? String(txnId);
-      const msg    = `✅ *Payment Confirmed — KDF NUTS*\n\nSalam ${name}!\n\nYour payment of *${amt}* has been received successfully.\n\nReference: *${ref}*\n\nShukria for shopping with KDF NUTS! 🥜`;
-      await sendWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        /* Always update local DB record when we have a ref match */
+        if (localOrders.length) {
+          await db.update(shopifyOrdersTable)
+            .set({ financialStatus: "paid", updatedAt: new Date() })
+            .where(or(
+              eq(shopifyOrdersTable.shopifyOrderId, shopifyRef),
+              eq(shopifyOrdersTable.orderNumber, shopifyRef)
+            ));
+          logger.info({ txnId, shopifyRef }, "postPaymentSync: local Shopify order marked paid");
+        }
+      }
+    } catch (shopifyErr) {
+      logger.error({ err: shopifyErr, txnId, shopifyRef }, "postPaymentSync: Shopify sync error (non-fatal)");
     }
-  } catch { /* fire-and-forget — swallow all errors */ }
+  }
+
+  /* ── 2. Send WhatsApp confirmation ── */
+  const phone = txn.customerPhone ?? "";
+  if (phone) {
+    try {
+      const name = txn.customerName ?? "Customer";
+      const amt  = `Rs. ${Number(txn.amount).toLocaleString("en-PK")}`;
+      const ref  = txn.invoiceNumber ?? txn.meezanOrderId ?? String(txnId);
+      const msg  = `✅ *Payment Confirmed — KDF NUTS*\n\nSalam ${name}!\n\nYour payment of *${amt}* has been received successfully.\n\nReference: *${ref}*\n\nShukria for shopping with KDF NUTS! 🥜`;
+      await sendWhatsAppMessage({ phone, message: msg });
+      logger.info({ txnId, phone }, "postPaymentSync: WA confirmation sent");
+    } catch (waErr) {
+      logger.error({ err: waErr, txnId, phone }, "postPaymentSync: WA send error (non-fatal)");
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
