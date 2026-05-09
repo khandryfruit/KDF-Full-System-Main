@@ -117,7 +117,6 @@ const fmt = (n: number) => {
 interface TcsFormState {
   /* ── 3 required fields ── */
   bearerToken: string;
-  clientId:    string;
   username:    string;
   password:    string;
   /* ── Optional booking ── */
@@ -167,7 +166,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   });
 
   const blankForm = (): TcsFormState => ({
-    bearerToken: "", clientId: "", username: "", password: "",
+    bearerToken: "", username: "", password: "",
     costCenterCode: "",
     serviceCode: "O", defaultWeight: "0.5", fragile: false, defaultRemarks: "KDF NUTS Order",
     shipperCity: "Lahore", shipperName: "", shipperAddress: "", shipperPhone: "",
@@ -180,7 +179,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     const s = (config?.settings ?? {}) as any;
     setForm({
       bearerToken:    s.bearerToken ?? "",
-      clientId:       s.clientId ?? "",
       username:       s.username ?? "",
       password:       s.password ?? "",
       costCenterCode: s.costCenterCode ?? "",
@@ -411,13 +409,13 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <p className="text-yellow-300 font-bold text-xs">TCS COD API — Simple Flow</p>
             <p className="text-slate-500 text-[10px]">── Booking ───────────────────────────────────────────</p>
             <p><span className="text-green-300">HEADER</span>  Authorization: Bearer <span className="text-blue-300">{"{bearerToken}"}</span></p>
-            <p><span className="text-green-300">HEADER</span>  X-IBM-Client-Id: <span className="text-pink-300">{"{clientId}"}</span></p>
+            <p><span className="text-green-300">HEADER</span>  X-IBM-Client-Id: <span className="text-pink-300">auto (username)</span></p>
             <p><span className="text-purple-300">POST</span>    /production/v1/cod/create-order</p>
             <p className="text-slate-400 pl-2">body: <span className="text-orange-300">{"{ userName, password, consignee… }"}</span></p>
             <p className="text-slate-400 pl-2">→ <span className="text-green-300">bookingReply.CN</span> = consignment number</p>
             <p className="text-slate-500 text-[10px] mt-0.5">── Tracking ──────────────────────────────────────────</p>
             <p><span className="text-cyan-300">GET</span>     /production/track/v1/shipments/detail?consignmentNo=CN</p>
-            <p className="text-amber-300 mt-1">✅ Find Bearer Token + Client ID in TCS ENVO Portal → My APIs.</p>
+            <p className="text-amber-300 mt-1">✅ 3 fields only: Bearer Token + Username + Password.</p>
           </div>
 
           {/* ── Required Fields ── */}
@@ -451,21 +449,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → paste the full JWT. Valid ~10 years.</p>
-            </div>
-
-            {/* X-IBM-Client-Id */}
-            <div>
-              <Label className="text-xs font-medium">X-IBM-Client-Id <span className="text-slate-400 font-normal">(optional — auto-fills from username)</span></Label>
-              <Input
-                value={form.clientId}
-                onChange={f("clientId")}
-                placeholder={form.username ? `Default: ${form.username}` : "Leave blank to use your TCS username"}
-                autoComplete="off"
-                className="mt-1 font-mono text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                TCS uses your <strong>username</strong> (e.g. LGEC11060) as the X-IBM-Client-Id header. Leave blank to auto-use username, or override with a specific value from TCS ENVO Portal → My APIs → Subscriptions.
-              </p>
             </div>
 
             {/* Username + Password */}
