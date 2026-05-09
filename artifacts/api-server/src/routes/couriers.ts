@@ -2007,49 +2007,71 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       },
     };
 
-    /* ── Attempt booking with Step 1 bearer in Authorization header ──
-       TCS dual-auth: Authorization = Step 1 JWT (application), body.accesstoken = Step 2 token.
-       If Step 1 JWT is from a different TCS client account than tcsaccount, TCS returns
-       "Mismatch configuration". In that case we retry WITHOUT the Authorization header. */
-    const doBooking = async (authBearer: string | null) => {
+    /* ── Booking helper: send payload with optional Authorization header ── */
+    const doBooking = async (bodyPayload: typeof payload, authBearer: string | null) => {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (authBearer) headers["Authorization"] = `Bearer ${authBearer}`;
-      return fetch(`${baseUrl}/ecom/api/booking/create`, {
+      const resp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
         method: "POST", headers,
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bodyPayload),
         signal: AbortSignal.timeout(15000),
       });
+      const text = await resp.text();
+      let data: Record<string, any> = {};
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      return { resp, text, data };
     };
 
-    let bookResp = await doBooking(bearerToken || null);
-    let bookText = await bookResp.text();
-    let bookData: Record<string, any> = {};
-    try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
+    let { resp: bookResp, text: bookText, data: bookData } = await doBooking(payload, bearerToken || null);
 
-    /* Auto-retry WITHOUT Authorization header if mismatch — env JWT may be for a different TCS account */
-    const isMismatch = (bookData.message ?? "").toLowerCase().includes("mismatch") ||
-                       (bookData.message ?? "").toLowerCase().includes("invalid bearer");
-    if (!bookResp.ok || isMismatch) {
-      if (bearerToken && isMismatch) {
-        /* Retry: username+password Step 2 token in body only, no Authorization header */
-        const retryResp = await doBooking(null);
-        const retryText = await retryResp.text();
-        let retryData: Record<string, any> = {};
-        try { retryData = JSON.parse(retryText); } catch { retryData = { raw: retryText }; }
-        const retryOk =
-          retryData.message?.toUpperCase() === "SUCCESS" ||
-          retryData.code === "200" || retryData.code === 200 ||
-          retryData.status === true || retryData.status === "SUCCESS" ||
-          (retryResp.ok && !retryData.message?.toUpperCase().startsWith("FAIL"));
-        if (retryOk) {
-          /* Retry succeeded — bust the cache so future calls use no-header mode */
-          tcsTokenCache.clear();
-          bookData = retryData; bookText = retryText; bookResp = retryResp;
+    /* ── Auto-recovery on "Mismatch configuration" ──────────────────────────────
+       Root cause: the Step 1 env JWT (clientid=215627768) produced a Step 2 token
+       scoped to THAT client, not to tcsaccount LGEC11060. Both the wrong token and
+       the wrong Authorization header must be replaced.
+       Recovery: re-run Step 2 with NO bearer → get a fresh LGEC11060-scoped token
+       → retry booking with updated payload and no Authorization header.           */
+    const isMismatch = (d: Record<string, any>) =>
+      (d.message ?? "").toLowerCase().includes("mismatch") ||
+      (d.message ?? "").toLowerCase().includes("invalid bearer");
+
+    if (isMismatch(bookData)) {
+      const username = (settings.username ?? "").trim();
+      const password = (settings.password ?? "").trim();
+
+      if (username && password) {
+        /* Fresh Step 2: no bearer → token scoped to the account's own credentials */
+        let freshToken: string | null = null;
+        try {
+          freshToken = await getTcsAccessToken("", username, password, settings.sandbox);
+        } catch { /* leave null — will report combined error below */ }
+
+        if (freshToken) {
+          const freshPayload = { ...payload, accesstoken: freshToken };
+          const retry = await doBooking(freshPayload, null);  /* no Authorization header */
+          if (
+            retry.data.message?.toUpperCase() === "SUCCESS" ||
+            retry.data.code === "200" || retry.data.code === 200 ||
+            retry.data.status === true || retry.data.status === "SUCCESS" ||
+            (retry.resp.ok && !retry.data.message?.toUpperCase().startsWith("FAIL"))
+          ) {
+            /* Success — clear cache so future bookings skip the env bearer path */
+            tcsTokenCache.clear();
+            bookResp = retry.resp; bookText = retry.text; bookData = retry.data;
+          } else {
+            const acct = settings.tcsaccount || "(empty)";
+            throw new Error(
+              `TCS booking failed (both attempts). ` +
+              `Original: "${bookData.message ?? bookText.slice(0, 120)}" | ` +
+              `Retry (fresh Step2, no-auth): "${retry.data.message ?? retry.text.slice(0, 120)}" ` +
+              `[tcsaccount: ${acct}]`
+            );
+          }
         } else {
-          /* Both attempts failed — report combined error */
-          const retryMsg = retryData.message ?? retryText.slice(0, 200);
           const acct = settings.tcsaccount || "(empty)";
-          throw new Error(`TCS booking failed. Original: "${bookData.message ?? bookText.slice(0, 150)}" | Retry (no-auth): "${retryMsg}" [tcsaccount: ${acct}]`);
+          throw new Error(
+            `TCS: Invalid Bearer token. Mismatch configuration — and fresh Step 2 auth also failed. ` +
+            `Check TCS username/password in Courier Settings. [tcsaccount: ${acct}]`
+          );
         }
       }
     }
