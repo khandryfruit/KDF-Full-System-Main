@@ -1,0 +1,223 @@
+====================================================
+16. AI IMAGE GENERATION SYSTEM (GEMINI + MULTI AI)
+==================================================
+
+We also want FULL AI image generation support integrated deeply into the entire platform.
+
+If Gemini API or any supported AI provider offers image generation, then the system should automatically generate professional visuals everywhere across the platform.
+
+This should NOT be a separate limited feature.
+
+It should work across:
+
+* Products
+* Blogs
+* Categories
+* Email campaigns
+* WhatsApp campaigns
+* Marketing campaigns
+* Push notifications
+* Homepage banners
+* Landing pages
+* Ad creatives
+* SEO pages
+* Social media content
+
+====================================================
+17. AI PRODUCT IMAGE GENERATION
+===============================
+
+When generating product content:
+
+* AI should generate matching product images automatically
+* AI should generate premium product mockups
+* AI should generate lifestyle images
+* AI should generate ecommerce-ready backgrounds
+* AI should generate thumbnails
+* AI should generate promotional banners
+
+Example:
+If product = Almonds
+AI should generate:
+
+* White background product image
+* Premium dry fruit banner
+* Offer image
+* Social media creative
+* Mobile app banner
+* Shopify-ready promotional image
+
+====================================================
+18. BLOG IMAGE & SEO VISUAL GENERATION
+======================================
+
+When generating blogs:
+
+* Automatically generate blog featured image
+* Generate SEO-friendly banner
+* Generate article illustrations
+* Generate category graphics
+* Generate infographics (future-ready)
+
+The AI should understand the blog topic and generate matching visuals automatically.
+
+====================================================
+19. EMAIL & CAMPAIGN IMAGE GENERATION
+=====================================
+
+Inside Email Campaigns:
+
+* Generate email hero banners
+* Offer graphics
+* Product creatives
+* CTA images
+* Festival sale banners
+* Discount visuals
+
+Inside WhatsApp Campaigns:
+
+* Generate campaign image automatically
+* Generate WhatsApp-friendly dimensions
+* Generate clickable offer creatives
+
+Inside Marketing Campaigns:
+
+* Generate Meta ad creatives
+* Google ad banners
+* Story-size images
+* Reel thumbnails
+* Promotional creatives
+
+====================================================
+20. CHARACTER & BRAND VISUAL GENERATION
+=======================================
+
+Add AI-generated brand characters/mascots.
+
+Example:
+
+* Dry fruit cartoon mascot
+* AI sales assistant character
+* Shopping assistant avatar
+* Promotional characters
+
+These should be reusable throughout:
+
+* Campaigns
+* Blogs
+* Emails
+* Landing pages
+* Website banners
+
+====================================================
+21. AUTO IMAGE GENERATION TOGGLE
+================================
+
+Add settings like:
+
+* Auto-generate image with content
+* Generate multiple variations
+* Select image style
+* Regenerate image
+* Brand-color consistency
+* HD mode
+* Transparent background mode
+
+====================================================
+22. IMAGE STYLE PRESETS
+=======================
+
+Add styles:
+
+* Realistic
+* Premium Ecommerce
+* Luxury
+* Minimal
+* 3D Render
+* Cartoon
+* Modern Brand
+* Shopify Style
+* Instagram Style
+* Food Photography
+* Hyper-realistic
+
+====================================================
+23. SMART BRAND CONSISTENCY
+===========================
+
+The AI should understand our brand colors and style automatically.
+
+Brand colors:
+
+* Green (#5FA800)
+* Orange (#F58300)
+
+Generated images should maintain:
+
+* Consistent branding
+* Premium UI/UX
+* Modern ecommerce aesthetics
+
+====================================================
+24. MULTI-PROVIDER IMAGE SUPPORT
+================================
+
+Support image generation providers:
+
+* Gemini
+* OpenAI Image API
+* Stability AI
+* Flux
+* DeepAI
+* Future provider support
+
+Admin should select:
+
+* Preferred image provider
+* Quality mode
+* Speed mode
+* Resolution
+* Cost optimization
+
+====================================================
+25. AI IMAGE OPTIMIZATION
+=========================
+
+Automatically optimize generated images for:
+
+* Web performance
+* Shopify
+* Mobile apps
+* WhatsApp
+* SEO
+* CDN delivery
+
+Generate:
+
+* WebP versions
+* Responsive sizes
+* Lazy-load ready images
+
+====================================================
+26. FINAL GOAL
+==============
+
+We want the AI system to become a COMPLETE AI CONTENT + AI DESIGN ENGINE.
+
+Not only text generation.
+
+The platform should intelligently generate:
+
+* Human-like content
+* SEO content
+* Marketing copy
+* Product visuals
+* Campaign banners
+* Blog images
+* Email creatives
+* WhatsApp creatives
+* Ecommerce graphics
+
+All automatically from AI.
+
+This should feel like a complete AI-powered ecommerce operating system.
