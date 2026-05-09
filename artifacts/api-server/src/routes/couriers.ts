@@ -1948,11 +1948,25 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       },
     };
 
-    /* ── Booking request — Static Bearer Token ONLY ─────────────────────────
-       Header: Authorization: Bearer <bearer>  (ENVO Portal static token)
-       Body:   NO accesstoken field — static bearer is the only auth.           */
+    /* ── Booking request ────────────────────────────────────────────────────
+       TCS requires BOTH:
+         1. Header:  Authorization: Bearer <bearerToken>  (ENVO Portal static token)
+         2. Body:    accesstoken: <ecomToken>             (ECOM access token)
+       If a dedicated accessToken is saved in settings, use it in the body.
+       Otherwise fall back to the same bearer token (works when TCS issued one
+       token that serves both roles, as confirmed via the debug endpoint).        */
+    const bodyAccessToken = settings.accessToken?.trim() || bearer;
+    const bookingPayload = { ...payload, accesstoken: bodyAccessToken };
+
     const finalWeight = payload.shipmentinfo.weightinkg;
-    logger.info({ finalWeight, tcsaccount: settings.tcsaccount }, "TCS booking — final weightinkg");
+    logger.info({
+      finalWeight,
+      tcsaccount:       settings.tcsaccount,
+      hasBodyAccessTok: !!bodyAccessToken,
+      bodyTokSrc:       settings.accessToken?.trim() ? "settings.accessToken" : "bearer (fallback)",
+      sandbox:          !!settings.sandbox,
+      baseUrl,
+    }, "TCS booking — payload summary");
 
     const bookHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -1962,7 +1976,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
       method: "POST",
       headers: bookHeaders,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(bookingPayload),
       signal: AbortSignal.timeout(15000),
     });
     const bookText = await bookResp.text();

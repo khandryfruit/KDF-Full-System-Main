@@ -527,8 +527,12 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                     Direct ECOM Access Token
                     <span className="ml-1 font-normal text-muted-foreground">(optional — skip Step 2)</span>
                   </Label>
-                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use ECOM token (bypasses username/password auth)" className="text-xs font-mono" />
-                  <p className="text-[10px] text-muted-foreground">Only set this if TCS gave you a ready-to-use token. Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>. Leave blank to use Username/Password (recommended).</p>
+                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ECOM Access Token from TCS (separate from Bearer Token above)" className="text-xs font-mono" />
+                  <p className="text-[10px] text-muted-foreground">
+                    Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>.
+                    If left blank, the Bearer Token above is used as fallback (works when TCS issues one token for both roles).
+                    If TCS gave you a separate "Access Token" via email — paste it here.
+                  </p>
                 </div>
 
                 {/* Shipping Defaults */}
