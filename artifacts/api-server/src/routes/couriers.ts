@@ -2111,12 +2111,16 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
          1. Try Step 1 using username as clientId + password as clientSecret → fresh bearer
          2. Run Step 2 with that fresh bearer → fresh accessToken for the correct account
          3. Retry booking with both the fresh bearer and fresh accessToken.              */
-    const isMismatch = (d: Record<string, any>) =>
-      (d.message ?? "").toLowerCase().includes("mismatch") ||
-      (d.message ?? "").toLowerCase().includes("invalid bearer") ||
-      (d.message ?? "").toLowerCase().includes("token") ||
-      (d.message ?? "").toLowerCase().includes("unauthorized") ||
-      (d.message ?? "").toLowerCase().includes("authentication");
+    const isMismatch = (d: Record<string, any>) => {
+      const msg = (d.message ?? d.error ?? "").toLowerCase();
+      return (
+        msg.includes("mismatch") ||
+        msg.includes("invalid bearer") ||
+        msg.includes("invalid token") ||
+        msg.includes("bearer token") ||
+        (d.code === 401 || d.code === "401" || d.httpStatusCode === 401)
+      );
+    };
 
     if (isMismatch(bookData)) {
       tcsTokenCache.clear();   /* Invalidate any cached tokens immediately */

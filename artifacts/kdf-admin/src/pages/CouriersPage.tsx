@@ -202,16 +202,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     onSuccess: (d: any) => {
       setDebugLog(d.log ?? []);
       setDebugResult({ serverIp: d.serverIp, ok: d.ok, mode: d.mode });
+      setShowDebug(true); /* always show debug log — success or failure */
       if (d.ok) {
         setTokenStatus("ok");
-        toast({ title: "✅ Token refreshed", description: `Mode: ${d.mode} · Auth cache cleared` });
+        toast({ title: "✅ Auth debug complete", description: `Mode: ${d.mode} · See logs below` });
       } else {
         setTokenStatus("fail");
-        setShowDebug(true);
-        toast({ variant: "destructive", title: "Token refresh failed", description: d.error ?? "Check Debug Logs below" });
+        toast({ variant: "destructive", title: "Auth failed — see debug logs below", description: d.error?.slice(0, 120) ?? "Check logs for TCS raw response" });
       }
     },
-    onError: (e: any) => toast({ variant: "destructive", title: "Refresh failed", description: e.message }),
+    onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
   });
 
   const toggleActive = useMutation({
@@ -424,7 +424,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
               <Button variant="outline" size="sm" className="gap-1.5 text-xs"
                 onClick={() => refreshToken.mutate()} disabled={refreshToken.isPending}>
                 {refreshToken.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Refresh Token
+                Run Auth Debug
               </Button>
               <a href="https://ociconnect.tcscourier.com" target="_blank" rel="noopener noreferrer"
                 className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
@@ -453,30 +453,37 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
             {showAdvanced && (
               <div className="border-t bg-gray-50/80 p-4 space-y-3">
-                <p className="text-[11px] text-muted-foreground">
-                  These fields are optional. The system auto-handles token generation from Username + Password.
-                  Only fill these if TCS support specifically provides them.
-                </p>
+
+                {/* Step-by-step guide */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5 text-[11px] text-blue-900">
+                  <p className="font-semibold">TCS API Auth Flow (3 steps)</p>
+                  <p><strong>Step 1</strong> — Generate Bearer Token via TCS ENVO Portal login (clientId + clientSecret).</p>
+                  <p><strong>Step 2</strong> — Use Bearer + TCS Username/Password → get ECOM Access Token.</p>
+                  <p><strong>Step 3</strong> — Booking: <code className="bg-blue-100 px-0.5 rounded">Authorization: Bearer …</code> in header + accessToken in body.</p>
+                  <p className="text-blue-700 mt-1">💡 If you see "Mismatch configuration": paste your ENVO Portal Bearer Token in the field below, then click <strong>Run Auth Debug</strong>.</p>
+                </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label className="text-xs">Client ID <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
+                    <Label className="text-xs">ENVO Portal Client ID <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
                     <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 205659575" className="text-xs mt-1" />
                   </div>
                   <div>
-                    <Label className="text-xs">Client Secret <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
+                    <Label className="text-xs">ENVO Portal Client Secret <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
                     <Input type="password" value={form.clientSecret} onChange={f("clientSecret")} placeholder="TCS client secret" className="text-xs mt-1" />
                   </div>
                 </div>
 
                 <div>
-                  <Label className="text-xs">Direct Access Token <span className="text-muted-foreground font-normal">(bypasses both steps)</span></Label>
-                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use access token" className="text-xs mt-1 font-mono" />
+                  <Label className="text-xs">ENVO Portal Bearer Token <span className="text-muted-foreground font-normal">(Step 1 output — paste from TCS portal)</span></Label>
+                  <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste Bearer Token from TCS ENVO Portal" className="text-xs mt-1 font-mono" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Get this from TCS ENVO Portal → API Access → Bearer Token. This goes in the Authorization header.</p>
                 </div>
 
                 <div>
-                  <Label className="text-xs">Static Bearer Token <span className="text-muted-foreground font-normal">(skips Step 1 only)</span></Label>
-                  <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste bearer token" className="text-xs mt-1 font-mono" />
+                  <Label className="text-xs">Direct ECOM Access Token <span className="text-muted-foreground font-normal">(bypasses both steps)</span></Label>
+                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use ECOM access token" className="text-xs mt-1 font-mono" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Only use this if TCS directly gives you a ready-to-use token. Goes in the booking body.</p>
                 </div>
 
                 <div className="pt-1 border-t border-border/50 space-y-2">
