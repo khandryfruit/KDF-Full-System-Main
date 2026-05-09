@@ -1,0 +1,321 @@
+MASTER PROMPT — COMPLETE TCS AUTH + BOOKING FIX (NEW SWAGGER API)
+
+IMPORTANT — We now have these credentials:
+
+==================================================
+CURRENT TCS CREDENTIALS
+==================================================
+
+TCS Username:
+LGEC11060
+
+TCS Password:
+Qadr786@@
+
+Bearer Token:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRpZCI6IjIxNTYyNzc2OCIsInNlcnZpY2VzIjoiMTAzLDE1NSwxNjEsMTY0LDIyNSwyNDcsMjQ4LDI0OSwyNTAsMjUxLDI3NywyOTMsMzY3LDM3MywzNzcsMzg4LDQ0OCw0NDksNDUwLDQ1MSw0NTIsNDUzLDQ1NCw0NzIsNDczIiwiZXhjbHVkZWQtc2VydmljZXMiOiIiLCJpc3MiOiJjb25uZWN0LnRjc2NvdXJpZXIuY29tIiwianRpIjoiMTgwNTBlMjMtZTg0Yi00YjQ4LTkwMWQtM2Q3YWJhNDkzNTc0IiwibmJmIjoxNzc4MzQ1OTYwLCJleHAiOjE4NjQ3NDU5NjAsImlhdCI6MTc3ODM0NTk2MH0.MZZ4pnCZw9lm2d1FVYspCq45dXWS0KyR1chSRLeZ-JI
+
+==================================================
+VERY IMPORTANT
+==================================================
+
+The Bearer Token payload already contains:
+
+```json id="6v7m5n"
+"clientid":"215627768"
+
+Please decode and verify the token properly.
+
+==================================================
+CURRENT PROBLEM
+
+System is now reaching the NEW TCS Swagger/COD APIs correctly.
+
+But authentication and booking flow is still unstable.
+
+Errors we previously received:
+
+❌ HTTP 404
+❌ HTTP 405
+❌ Invalid Access Token
+❌ Invalid Bearer Token
+❌ Stale Token
+❌ Fake Booking
+❌ Wrong Endpoint
+❌ Wrong Weight Format
+❌ Wrong SKU Format
+
+==================================================
+IMPORTANT
+
+STOP using ALL old systems:
+
+❌ old ECOM auth flow
+❌ generateToken endpoints
+❌ stale token cache
+❌ old bearer logic
+❌ fake booking logic
+❌ old undocumented APIs
+
+==================================================
+USE ONLY NEW SWAGGER/COD API
+
+Official Base URL:
+
+https://api.tcscourier.com/production/v1/cod
+==================================================
+OFFICIAL ENDPOINTS
+
+Countries:
+
+/countries
+
+Cities:
+
+/cities
+
+Create Order:
+
+/create-order
+
+Track Order:
+
+/track-order
+
+Cancel Order:
+
+/cancel-order
+==================================================
+AUTHENTICATION TESTING REQUIRED
+
+Please test BOTH authentication methods in Postman.
+
+METHOD 1 — BEARER ONLY
+
+Headers:
+
+Authorization: Bearer {TOKEN}
+Content-Type: application/json
+METHOD 2 — IBM HEADERS
+
+Headers:
+
+Authorization: Bearer {TOKEN}
+X-IBM-Client-Id: 215627768
+Content-Type: application/json
+
+IF required:
+
+X-IBM-Client-Secret: CLIENT_SECRET
+==================================================
+IMPORTANT
+
+Do NOT guess auth flow.
+
+Verify ACTUAL working production auth using:
+✅ Swagger docs
+✅ Postman
+✅ Production API response
+
+==================================================
+BOOKING PAYLOAD FIXES
+
+Correct payload format:
+
+{
+  "userName": "LGEC11060",
+  "password": "Qadr786@@",
+  "costCenterCode": "CCC01",
+  "consigneeName": "Ahmed Ali",
+  "consigneeAddress": "Lahore Pakistan",
+  "consigneeMobNo": "03001234567",
+  "consigneeEmail": "test@test.com",
+  "originCityName": "Lahore",
+  "destinationCityName": "Karachi",
+  "weight": 0.5,
+  "pieces": 1,
+  "codAmount": "2500",
+  "customerReferenceNo": "ORDER123",
+  "services": "O",
+  "productDetails": "Dry Fruits",
+  "fragile": "Yes"
+}
+==================================================
+IMPORTANT VALIDATIONS
+
+Fix these permanently:
+
+✅ weight must be decimal
+Example:
+
+0.5
+
+NOT:
+❌ "500g"
+❌ "1kg"
+
+SKU/UOM:
+
+KG
+
+uppercase only.
+
+==================================================
+REMOVE FAKE BOOKINGS
+
+Current issue:
+Fake bookings are being saved.
+
+NEW RULE:
+
+Booking should save ONLY IF:
+✅ real TCS success response received
+✅ real consignment number generated
+✅ tracking created successfully
+
+Otherwise:
+❌ DO NOT SAVE BOOKING
+❌ DO NOT GENERATE TRACKING
+
+==================================================
+DUPLICATE BOOKING PROTECTION
+
+Prevent double bookings.
+
+If:
+
+order.courierBooked === true
+
+Then:
+✅ disable re-booking
+✅ disable duplicate API calls
+✅ disable duplicate tracking
+
+==================================================
+TRACKING SYSTEM
+
+Tracking URL:
+
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Implement:
+✅ live tracking
+✅ shipment history
+✅ delivery timeline
+✅ tracking sync
+
+==================================================
+LABEL SYSTEM
+
+Implement:
+✅ thermal labels
+✅ PDF labels
+✅ barcode
+✅ COD amount
+✅ customer details
+✅ order ID
+✅ tracking number
+
+==================================================
+TEST CONNECTION BUTTON
+
+Current issue:
+Fake ACTIVE status appears.
+
+Fix this.
+
+Test button must validate:
+
+✅ authentication
+✅ countries API
+✅ cities API
+✅ booking API
+✅ tracking API
+✅ payload validation
+
+Only then show:
+🟢 ACTIVE
+
+Otherwise show exact failure.
+
+==================================================
+DEBUGGING SYSTEM
+
+Inside:
+Courier → API Logs
+
+show:
+
+✅ request URL
+✅ headers
+✅ payload
+✅ response
+✅ status code
+✅ auth mode
+✅ production URL
+✅ trace ID
+✅ validation errors
+
+==================================================
+PRODUCTION DOMAIN CHECK
+
+Verify:
+
+admin.khanbabadryfruits.com
+
+AND
+
+khanbabadryfruits.com
+
+are NOT blocking outgoing requests.
+
+Check:
+✅ SSL
+✅ Cloudflare
+✅ Replit deployment
+✅ ENV variables
+✅ CORS
+✅ reverse proxy
+✅ production cache
+
+==================================================
+IMPORTANT
+
+Development and Production MUST behave SAME.
+
+Previously:
+
+dev worked
+production failed
+
+Fix permanently.
+
+==================================================
+POSTMAN TESTING REQUIRED
+
+Before deployment test ALL:
+
+✅ /countries
+✅ /cities
+✅ /create-order
+✅ /track-order
+✅ /cancel-order
+
+using REAL production credentials.
+
+==================================================
+FINAL GOAL
+
+Need:
+
+✅ stable production booking
+✅ correct Swagger integration
+✅ real tracking
+✅ real labels
+✅ real TCS booking
+✅ no fake booking
+✅ no stale tokens
+✅ no old ECOM auth
+✅ no duplicate bookings
+✅ production-safe courier system
+✅ professional debugging system

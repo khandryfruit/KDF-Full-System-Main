@@ -115,22 +115,20 @@ const fmt = (n: number) => {
 
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
-  /* Step 1 — ENVO Auth: POST /auth/api/auth → bearerToken (auto-generated, cached) */
-  clientId: string;
-  clientSecret: string;
-  /* Step 2 — ECOM Auth: GET /ecom/api/authentication/token → accessToken (auto-generated, cached) */
+  /* COD API auth headers */
+  bearerToken: string;  /* Long-lived JWT from TCS ENVO Portal — paste directly */
+  clientId: string;     /* X-IBM-Client-Id (embedded in JWT payload, e.g. "215627768") */
+  /* Booking body credentials — go directly in booking request body */
   username: string;
   password: string;
-  /* Tracking API — IBM API Gateway (completely separate from booking) */
+  /* Tracking API — IBM API Gateway */
   trackingClientId: string;
-  /* Booking fields */
-  tcsAccountNo: string;
+  /* Booking config */
   costcentercode: string;
-  /* Pickup / shipper address */
+  /* Pickup / shipper info */
   shipperName: string;
   shipperAddress: string;
   shipperCity: string;
-  shipperCityCode: string;
   shipperPhone: string;
   /* Environment */
   sandbox: boolean;
@@ -139,7 +137,6 @@ interface TcsFormState {
   serviceCode: string;
   fragile: boolean;
   defaultRemarks: string;
-  /** Prevent re-booking if shipment already exists for this order */
   preventDuplicateBookings: boolean;
 }
 
@@ -152,12 +149,12 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   type DebugStep = { step: string; status: "ok" | "fail" | "info" | "warn"; detail: string; raw?: string };
   const [editing, setEditing]             = useState(false);
   const [showPw, setShowPw]               = useState(false);
-  const [showSecret, setShowSecret]       = useState(false);
   const [showAdvanced, setShowAdvanced]   = useState(false);
   const [showDebug, setShowDebug]         = useState(false);
   const [debugSteps, setDebugSteps]       = useState<DebugStep[]>([]);
   const [debugOk, setDebugOk]             = useState<boolean | null>(null);
   const [debugServerIp, setDebugServerIp] = useState<string>("");
+  const [showBearer, setShowBearer]       = useState(false);
   const [tokenStatus, setTokenStatus]     = useState<"idle" | "ok" | "fail">("idle");
   const [showDebugConsole, setShowDebugConsole]   = useState(false);
   const [debugConsoleSteps, setDebugConsoleSteps] = useState<DebugStep[]>([]);
@@ -174,11 +171,11 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   });
 
   const blankForm = (): TcsFormState => ({
-    clientId: "", clientSecret: "",
+    bearerToken: "", clientId: "",
     username: "", password: "",
     trackingClientId: "",
-    tcsAccountNo: "", costcentercode: "",
-    shipperName: "", shipperAddress: "", shipperCity: "", shipperCityCode: "", shipperPhone: "",
+    costcentercode: "",
+    shipperName: "", shipperAddress: "", shipperCity: "", shipperPhone: "",
     sandbox: false,
     defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
     preventDuplicateBookings: true,
@@ -189,20 +186,22 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const loadForm = () => {
     const s = (config?.settings ?? {}) as any;
     setForm({
-      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
+      bearerToken: s.bearerToken ?? "",
+      clientId: s.clientId ?? "",
       username: s.username ?? "", password: s.password ?? "",
       trackingClientId: s.trackingClientId ?? "",
-      tcsAccountNo: s.tcsAccountNo ?? s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
+      costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
-      shipperCity: s.shipperCity ?? "", shipperCityCode: s.shipperCityCode ?? "",
+      shipperCity: s.shipperCity ?? "",
       shipperPhone: s.shipperPhone ?? "", sandbox: s.sandbox ?? false,
-      defaultWeight: s.defaultWeight ?? "0.5", serviceCode: s.serviceCode ?? "O",
+      defaultWeight: String(s.defaultWeight ?? "0.5"), serviceCode: s.serviceCode ?? "O",
       fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
       preventDuplicateBookings: s.preventDuplicateBookings !== false,
     });
     setEditing(true);
     setShowAdvanced(false);
     setTokenStatus("idle");
+    setShowBearer(false);
   };
 
   /* ── Mutations ── */
@@ -294,7 +293,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const f = (k: keyof TcsFormState) => (e: any) => setForm(p => ({ ...p, [k]: e.target.value }));
   const isActive = config?.isActive ?? false;
   const cs = (config?.settings ?? {}) as any;
-  const isConfigured = !!(cs.clientId || cs.username);
+  const isConfigured = !!(cs.bearerToken || cs.username);
 
   const connPill = tokenStatus === "ok"
     ? <span className="flex items-center gap-1 text-xs text-green-700 font-medium"><CheckCircle2 className="w-3 h-3" />Connected</span>
@@ -335,8 +334,8 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
         {isConfigured && (
           <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
             {cs.username && <span>User: <strong className="text-foreground">{cs.username}</strong></span>}
-            {(cs.tcsAccountNo || cs.tcsaccount) && <span>Account: <strong className="text-foreground">{cs.tcsAccountNo || cs.tcsaccount}</strong></span>}
             {cs.clientId && <span>Client ID: <strong className="text-foreground">{cs.clientId}</strong></span>}
+            {cs.bearerToken && <span className="text-green-700 font-medium">✓ Bearer token set</span>}
             <span className={`font-medium ${cs.sandbox ? "text-amber-600" : "text-green-700"}`}>
               {cs.sandbox ? "🧪 Sandbox" : "🚀 Production"}
             </span>
@@ -412,60 +411,77 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Architecture Guide ── */}
           <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
-            <p className="text-yellow-300 font-bold text-xs">TCS API Architecture</p>
-            <p className="text-slate-500 text-[10px]">── Booking (ociconnect.tcscourier.com) ─────────────</p>
-            <p><span className="text-blue-300">STEP 1</span> · POST /auth/api/auth</p>
-            <p className="text-slate-400 pl-2">→ Body: clientId + clientSecret → <span className="text-green-300">bearerToken</span></p>
-            <p><span className="text-orange-300">STEP 2</span> · GET /ecom/api/authentication/token</p>
-            <p className="text-slate-400 pl-2">→ Bearer header + username/password → <span className="text-orange-300">accesstoken</span></p>
-            <p><span className="text-purple-300">STEP 3</span> · POST /ecom/api/booking/create</p>
-            <p className="text-slate-400 pl-2">→ Header: Bearer · Body includes: <span className="text-orange-300">accesstoken</span></p>
-            <p className="text-slate-500 text-[10px] mt-1">── Tracking (api.tcscourier.com — IBM API Gateway) ──</p>
-            <p><span className="text-cyan-300">TRACK</span> · GET /production/track/v1/shipments/detail</p>
-            <p className="text-slate-400 pl-2">→ Header: <span className="text-cyan-300">X-IBM-Client-Id</span> · Query: consignmentNo</p>
-            <p className="text-slate-400 pl-2">→ <strong className="text-red-300">Separate credential</strong> from booking — different portal</p>
-            <p className="text-amber-300 mt-1">✅ All booking tokens auto-generated + cached.</p>
+            <p className="text-yellow-300 font-bold text-xs">TCS COD API — Official Flow</p>
+            <p className="text-slate-500 text-[10px]">── Booking (api.tcscourier.com/production/v1/cod) ────</p>
+            <p><span className="text-green-300">AUTH</span> · Header: <span className="text-blue-300">Authorization: Bearer {"{bearerToken}"}</span></p>
+            <p><span className="text-green-300">    </span> · Header: <span className="text-cyan-300">X-IBM-Client-Id: {"{clientId}"}</span></p>
+            <p><span className="text-purple-300">BOOK</span> · POST /create-order</p>
+            <p className="text-slate-400 pl-2">→ Body: userName + password + consignee + weight + COD amount</p>
+            <p className="text-slate-400 pl-2">→ Response: <span className="text-green-300">bookingReply.CN</span> = consignment number</p>
+            <p className="text-slate-500 text-[10px] mt-1">── Tracking (api.tcscourier.com/production/track/v1) ─</p>
+            <p><span className="text-cyan-300">TRACK</span> · GET /shipments/detail?consignmentNo=CN</p>
+            <p className="text-slate-400 pl-2">→ Header: X-IBM-Client-Id (same clientId or trackingClientId)</p>
+            <p className="text-amber-300 mt-1">✅ Bearer token is long-lived (~10yr) — paste once, no refresh needed.</p>
           </div>
 
-          {/* ── Step 1: ENVO App Credentials ── */}
+          {/* ── Step 1: Bearer Token ── */}
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">1</span>
-              ENVO App Credentials
-              <span className="text-xs font-normal text-muted-foreground">(Step 1 — required)</span>
+              Bearer Token
+              <span className="text-xs font-normal text-muted-foreground">(from TCS ENVO Portal — required)</span>
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs font-medium">Client ID</Label>
-                <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 215627768" autoComplete="off" className="mt-1 text-xs font-mono" />
-                <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → API Access</p>
+            <div>
+              <Label className="text-xs font-medium">Bearer Token <span className="text-red-500">*</span></Label>
+              <div className="relative mt-1">
+                <textarea
+                  rows={3}
+                  value={form.bearerToken}
+                  onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[10px] font-mono resize-none shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  style={{ display: showBearer ? "block" : "none" }}
+                />
+                {!showBearer && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-xs text-muted-foreground font-mono">
+                      {form.bearerToken ? `${form.bearerToken.slice(0, 30)}…` : <span className="text-red-400">Not set — required</span>}
+                    </div>
+                    <button type="button" onClick={() => setShowBearer(true)} className="text-xs text-blue-600 hover:underline whitespace-nowrap">Edit Token</button>
+                  </div>
+                )}
+                {showBearer && (
+                  <button type="button" onClick={() => setShowBearer(false)} className="mt-1 text-xs text-blue-600 hover:underline">Hide</button>
+                )}
               </div>
-              <div>
-                <Label className="text-xs font-medium">Client Secret</Label>
-                <div className="relative mt-1">
-                  <Input type={showSecret ? "text" : "password"} value={form.clientSecret} onChange={f("clientSecret")} placeholder="Client Secret" autoComplete="new-password" className="pr-9 text-xs font-mono" />
-                  <button type="button" onClick={() => setShowSecret(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                From <strong>TCS ENVO Portal</strong> → API Access → copy the JWT token. It is valid for ~10 years — paste it once.
+                Sent as <code className="bg-muted px-0.5 rounded">Authorization: Bearer</code> header on every request.
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">X-IBM-Client-Id <span className="text-red-500">*</span></Label>
+              <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 215627768" autoComplete="off" className="mt-1 text-xs font-mono" />
+              <p className="text-[10px] text-muted-foreground mt-0.5">Embedded inside the JWT payload — typically 9 digits. Sent as <code className="bg-muted px-0.5 rounded">X-IBM-Client-Id</code> header.</p>
             </div>
           </div>
 
-          {/* ── Step 2: TCS Credentials ── */}
+          {/* ── Step 2: Booking Credentials ── */}
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">2</span>
-              TCS Credentials
-              <span className="text-xs font-normal text-muted-foreground">(Step 2 — required)</span>
+              Booking Credentials
+              <span className="text-xs font-normal text-muted-foreground">(go in booking request body)</span>
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs font-medium">Username</Label>
-                <Input value={form.username} onChange={f("username")} placeholder="TCS username" autoComplete="off" className="mt-1" />
+                <Label className="text-xs font-medium">Username <span className="text-red-500">*</span></Label>
+                <Input value={form.username} onChange={f("username")} placeholder="e.g. LGEC11060" autoComplete="off" className="mt-1" />
               </div>
               <div>
-                <Label className="text-xs font-medium">Password</Label>
+                <Label className="text-xs font-medium">Password <span className="text-red-500">*</span></Label>
                 <div className="relative mt-1">
                   <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="TCS password" autoComplete="new-password" className="pr-9" />
                   <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -480,54 +496,38 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">T</span>
-              Tracking API Client ID
-              <span className="text-xs font-normal text-muted-foreground">(separate IBM portal)</span>
+              Tracking Client ID
+              <span className="text-xs font-normal text-muted-foreground">(optional — defaults to X-IBM-Client-Id above)</span>
             </p>
             <div>
-              <Label className="text-xs font-medium">X-IBM-Client-Id</Label>
+              <Label className="text-xs font-medium">Tracking X-IBM-Client-Id</Label>
               <Input
                 value={form.trackingClientId}
                 onChange={f("trackingClientId")}
-                placeholder="e.g. a1b2c3d4-e5f6-…"
+                placeholder="Leave blank to use same clientId as booking"
                 autoComplete="off"
                 className="mt-1 text-xs font-mono"
               />
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                From <strong>TCS Developer Portal</strong> (developer.tcscourier.com) → My Apps → Credentials → Client ID.
-                This is <strong>different</strong> from the ENVO Portal Client ID above.
-                Used for: <code className="bg-muted px-0.5 rounded">GET /shipments/detail?consignmentNo=CN</code>
+                Only fill if TCS gave you a <strong>separate</strong> clientId for the tracking API.
+                Used for: <code className="bg-muted px-0.5 rounded">GET /track/v1/shipments/detail?consignmentNo=CN</code>
               </p>
             </div>
-            {!form.trackingClientId && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                Without this, shipment tracking will return <em>in_transit</em> without real data. Booking still works.
-              </div>
-            )}
           </div>
 
-          {/* ── Account Info ── */}
+          {/* ── Cost Center ── */}
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold">3</span>
-              Account Details
+              Booking Config
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs font-medium">TCS Account Number</Label>
-                <Input value={form.tcsAccountNo} onChange={f("tcsAccountNo")} placeholder="e.g. 04011K1" className="mt-1" />
-                <p className="text-[10px] text-muted-foreground mt-0.5">From your TCS contract — NOT the username</p>
-              </div>
-              <div>
-                <Label className="text-xs font-medium">Cost Center <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="Leave blank if none" className="mt-1" />
+                <Label className="text-xs font-medium">Cost Center Code <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="e.g. CCC01" className="mt-1" />
+                <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → Cost Centers</p>
               </div>
             </div>
-            {form.tcsAccountNo && form.username && form.tcsAccountNo.trim() === form.username.trim() && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
-                <p className="font-semibold">⛔ Account Number = Username — this is incorrect</p>
-                <p className="mt-0.5">TCS Account Number and Username are <strong>different fields</strong>. Your username is <code className="bg-red-100 px-0.5 rounded">{form.username}</code>. Enter the real account number from your TCS contract letter.</p>
-              </div>
-            )}
           </div>
 
           {/* ── Pickup Address ── */}
@@ -541,15 +541,9 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
               <Label className="text-xs font-medium">Pickup Address</Label>
               <Input value={form.shipperAddress} onChange={f("shipperAddress")} placeholder="Street address" className="mt-1" />
             </div>
-            <div className="grid grid-cols-5 gap-2">
-              <div className="col-span-3">
-                <Label className="text-xs font-medium">City</Label>
-                <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="mt-1" />
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs font-medium">City Code</Label>
-                <Input value={form.shipperCityCode} onChange={f("shipperCityCode")} placeholder="LHE" maxLength={5} className="mt-1" />
-              </div>
+            <div>
+              <Label className="text-xs font-medium">Origin City <span className="font-normal text-muted-foreground">(used as originCityName in booking)</span></Label>
+              <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="mt-1" />
             </div>
             <div>
               <Label className="text-xs font-medium">Pickup Phone</Label>

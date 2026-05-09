@@ -137,8 +137,10 @@ router.get("/admin/couriers/server-ip", adminMiddleware as any, async (_req: Aut
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
- * TCS COURIER ROUTES — Clean rebuild (May 2026)
- * Official 2-step auth: Step 1 (clientId+clientSecret→Bearer) + Step 2 (Bearer+credentials→accesstoken)
+ * TCS COURIER ROUTES — COD API rebuild (May 2026)
+ * Official COD API: api.tcscourier.com/production/v1/cod
+ * Auth: Authorization: Bearer {storedToken} + X-IBM-Client-Id: {clientId}
+ * Booking body contains userName + password directly — NO 3-step ECOM flow.
  * All TCS logic lives in src/lib/tcs.ts
  * ══════════════════════════════════════════════════════════════════════════ */
 
@@ -148,55 +150,23 @@ async function getTcsSettings(): Promise<Tcs.TcsSettings | null> {
   return row ? (row.settings ?? {}) as Tcs.TcsSettings : null;
 }
 
-/* ─── POST /admin/couriers/tcs/test — 3-step connection test ─── */
+/* ─── POST /admin/couriers/tcs/test — COD API connection test ─── */
 router.post("/admin/couriers/tcs/test", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
-  type S = "ok" | "fail" | "info" | "warn";
-  const steps: Array<{ step: string; status: S; detail: string; raw?: string }> = [];
   try {
     const s = await getTcsSettings();
-    if (!s) { res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured — go to Couriers → TCS and save settings first" }] }); return; }
-
-    const missing: string[] = [];
-    if (!s.clientId)    missing.push("clientId (Step 1)");
-    if (!s.clientSecret) missing.push("clientSecret (Step 1)");
-    if (!s.username)    missing.push("username (Step 2)");
-    if (!s.password)    missing.push("password (Step 2)");
-    if (missing.length > 0) {
-      steps.push({ step: "Missing fields", status: "fail", detail: `Required fields empty: ${missing.join(", ")}\nAdd them in Couriers → TCS Settings.` });
-      res.json({ ok: false, steps }); return;
+    if (!s) {
+      res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured — go to Couriers → TCS and save settings first" }] });
+      return;
     }
-    if (!s.tcsAccountNo) steps.push({ step: "Account Number", status: "warn", detail: "tcsAccountNo is empty — booking will fail. Add your TCS account number from your contract (different from username)." });
-    steps.push({ step: "Config check", status: "ok", detail: `clientId: ${s.clientId} | username: ${s.username} | tcsAccountNo: ${s.tcsAccountNo || "(EMPTY — required)"} | mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"}` });
-
-    const baseUrl = s.sandbox ? Tcs.TCS_SANDBOX_URL : Tcs.TCS_PROD_URL;
-
-    let bearerToken: string;
-    try {
-      bearerToken = await Tcs.getBearerToken(s, baseUrl);
-      steps.push({ step: "Step 1 — Bearer Token", status: "ok", detail: `✅ Bearer token generated | endpoint: ${baseUrl}/auth/api/auth` });
-    } catch (e: any) {
-      steps.push({ step: "Step 1 — Bearer Token", status: "fail", detail: e.message });
-      res.json({ ok: false, steps, error: e.message }); return;
-    }
-
-    let ecomToken: string;
-    try {
-      ecomToken = await Tcs.getEcomToken(s, bearerToken, baseUrl);
-      steps.push({ step: "Step 2 — ECOM Access Token", status: "ok", detail: `✅ ECOM token generated | endpoint: ${baseUrl}/ecom/api/authentication/token` });
-    } catch (e: any) {
-      steps.push({ step: "Step 2 — ECOM Access Token", status: "fail", detail: e.message });
-      res.json({ ok: false, steps, error: e.message }); return;
-    }
-
-    steps.push({ step: "Ready", status: "ok", detail: `All auth steps passed. Booking endpoint: ${baseUrl}/ecom/api/booking/create | Authorization: Bearer {bearerToken} | accesstoken in body` });
-    res.json({ ok: true, steps, message: "TCS connection validated — Step 1 (Bearer) + Step 2 (ECOM) both passed" });
+    const result = await Tcs.testConnection(s);
+    res.json({ ...result, message: result.ok ? "TCS COD API connection validated — Bearer token + X-IBM-Client-Id working" : undefined });
   } catch (err: any) {
     req.log.error(err);
-    res.json({ ok: false, steps, error: err.message });
+    res.json({ ok: false, steps: [{ step: "Error", status: "fail", detail: err.message }], error: err.message });
   }
 });
 
-/* ─── POST /admin/couriers/tcs/debug-auth — step-by-step auth debug ─── */
+/* ─── POST /admin/couriers/tcs/debug-auth — COD API auth debug ─── */
 router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   type S = "ok" | "fail" | "info" | "warn";
   const steps: Array<{ step: string; status: S; detail: string; raw?: string }> = [];
@@ -204,41 +174,44 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     const s = await getTcsSettings();
     if (!s) { res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured" }] }); return; }
 
-    const baseUrl = s.sandbox ? Tcs.TCS_SANDBOX_URL : Tcs.TCS_PROD_URL;
-    steps.push({ step: "Config", status: "info", detail: `clientId: ${s.clientId || "(empty)"} | clientSecret: ${s.clientSecret ? "●●●" : "(empty)"} | username: ${s.username || "(empty)"} | password: ${s.password ? "●●●" : "(empty)"} | tcsAccountNo: ${s.tcsAccountNo || "(EMPTY)"} | mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"}` });
-    steps.push({ step: "Server IP", status: "info", detail: (await getServerIp().catch(() => "unavailable")) });
+    const baseUrl = s.sandbox ? Tcs.TCS_COD_SANDBOX_URL : Tcs.TCS_COD_URL;
+    const serverIp = await getServerIp().catch(() => "unavailable");
 
-    const cacheStatus = Tcs.getCacheStatus();
-    steps.push({ step: "Token Cache Status", status: "info", detail: `Bearer cache entries: ${cacheStatus.bearer.length} | ECOM cache entries: ${cacheStatus.ecom.length}` });
+    steps.push({ step: "Server IP", status: "info", detail: serverIp });
+    steps.push({
+      step:   "Config",
+      status: "info",
+      detail: [
+        `bearerToken: ${s.bearerToken ? `${s.bearerToken.slice(0, 20)}…` : "(EMPTY — required)"}`,
+        `clientId: ${s.clientId || "(empty)"}`,
+        `username: ${s.username || "(empty)"}`,
+        `password: ${s.password ? "●●●" : "(empty)"}`,
+        `mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"}`,
+      ].join(" | "),
+    });
 
-    let bearerToken: string;
-    try {
-      Tcs.clearCache();
-      steps.push({ step: "Cache cleared", status: "info", detail: "Forcing fresh token generation for debug" });
-      bearerToken = await Tcs.getBearerToken(s, baseUrl);
-      steps.push({ step: "Step 1 — Bearer Token", status: "ok", detail: `✅ Bearer token generated successfully\nEndpoint: POST ${baseUrl}/auth/api/auth\nInput: {clientid: "${s.clientId}", clientsecret: "●●●"}` });
-    } catch (e: any) {
-      steps.push({ step: "Step 1 — Bearer Token FAILED", status: "fail", detail: e.message + "\n\nACTION: Verify clientId and clientSecret in TCS Settings. Get them from TCS ENVO Portal." });
-      res.json({ ok: false, steps, error: e.message }); return;
+    const missing = Tcs.validateSettings(s);
+    if (missing.length > 0) {
+      steps.push({ step: "Missing required fields", status: "fail", detail: missing.join("\n") });
+      res.json({ ok: false, steps, error: missing.join("; "), serverIp }); return;
     }
 
-    let ecomToken: string;
-    try {
-      ecomToken = await Tcs.getEcomToken(s, bearerToken, baseUrl);
-      steps.push({ step: "Step 2 — ECOM Token", status: "ok", detail: `✅ ECOM access token generated\nEndpoint: GET ${baseUrl}/ecom/api/authentication/token\nInput: username="${s.username}", credentials via query params` });
-    } catch (e: any) {
-      steps.push({ step: "Step 2 — ECOM Token FAILED", status: "fail", detail: e.message + "\n\nACTION: Verify TCS username and password in Settings." });
-      res.json({ ok: false, steps, error: e.message }); return;
-    }
+    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken!.length} chars)\nHeader: Authorization: Bearer {token}` });
+    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId: ${s.clientId}\nHeader: X-IBM-Client-Id: ${s.clientId}` });
 
-    if (!s.tcsAccountNo) {
-      steps.push({ step: "Account Number", status: "warn", detail: "tcsAccountNo is EMPTY — booking will fail!\nAdd your TCS account number (from TCS contract letter) — it is different from your username." });
-    } else {
-      steps.push({ step: "Account Number", status: "ok", detail: `tcsAccountNo: ${s.tcsAccountNo}\n⚠ IMPORTANT: This must be the ACCOUNT NUMBER from your TCS contract — NOT the username (${s.username})` });
-    }
+    /* Test the live COD API */
+    const testResult = await Tcs.testConnection(s);
+    steps.push(...(testResult.steps as any[]));
 
-    steps.push({ step: "All Auth Steps Passed", status: "ok", detail: `Ready to book.\nBooking endpoint: POST ${baseUrl}/ecom/api/booking/create\nAuth: Authorization: Bearer {bearerToken}\nBody includes: accesstoken (ECOM token)` });
-    res.json({ ok: true, steps, serverIp: await getServerIp().catch(() => "unavailable") });
+    steps.push({
+      step:   "Booking ready",
+      status: testResult.ok ? "ok" : "warn",
+      detail: testResult.ok
+        ? `✅ Ready to book.\nEndpoint: POST ${baseUrl}/create-order\nAuth: Authorization: Bearer + X-IBM-Client-Id\nBody: userName + password + order details`
+        : "API test failed — check bearer token and clientId",
+    });
+
+    res.json({ ok: testResult.ok, steps, serverIp });
   } catch (err: any) {
     req.log.error(err);
     res.json({ ok: false, steps, error: err.message });
@@ -248,7 +221,7 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
 /* ─── POST /admin/couriers/tcs/clear-cache ─── */
 router.post("/admin/couriers/tcs/clear-cache", adminMiddleware as any, async (_req: AuthRequest, res: Response): Promise<void> => {
   const result = Tcs.clearCache();
-  res.json({ ok: true, message: `Cleared ${result.bearerCleared} bearer + ${result.ecomCleared} ECOM cache entries. Next booking will generate fresh tokens.`, ...result });
+  res.json({ ok: true, message: "TCS COD API uses a stored bearer token — no in-memory cache. Token is read fresh from DB settings on every request.", ...result });
 });
 
 /* ─── GET /admin/couriers/tcs/request-log ─── */
@@ -309,12 +282,13 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
   try {
     const s = await getTcsSettings();
     if (!s) { res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured" }] }); return; }
-    if (!s.tcsAccountNo) {
-      steps.push({ step: "Account Number", status: "fail", detail: "tcsAccountNo is EMPTY. Add your TCS account number in Settings before testing booking. It is different from your username!" });
+    const configErrs = Tcs.validateSettings(s);
+    if (configErrs.length > 0) {
+      steps.push({ step: "Config validation", status: "fail", detail: configErrs.join("\n") });
       res.json({ ok: false, steps }); return;
     }
 
-    steps.push({ step: "Config", status: "ok", detail: `tcsAccountNo: ${s.tcsAccountNo} | username: ${s.username} | mode: ${s.sandbox ? "SANDBOX ✅ Safe" : "⚠ PRODUCTION — real shipment will be created"}` });
+    steps.push({ step: "Config", status: "ok", detail: `username: ${s.username} | clientId: ${s.clientId} | mode: ${s.sandbox ? "SANDBOX ✅ Safe" : "⚠ PRODUCTION — real shipment will be created"}` });
 
     const testOrder = {
       id: "TEST001",
@@ -360,13 +334,14 @@ router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (re
     const s = await getTcsSettings();
     if (!s) { res.status(404).json({ error: "TCS courier not configured" }); return; }
 
-    const { bearerToken, baseUrl } = await Tcs.getTcsTokens(s);
+    const headers = Tcs.getAuthHeaders(s);
     const cnList: string[] = consignmentNumber ? [String(consignmentNumber)] : shipmentIds.map((id: any) => String(id));
+    const baseUrl = s.sandbox ? Tcs.TCS_COD_SANDBOX_URL : Tcs.TCS_COD_URL;
 
-    const printResp = await fetch(`${baseUrl}/ecom/api/print/label`, {
+    const printResp = await fetch(`${baseUrl}/shipment-label`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ consignmentNo: cnList[0], consignmentno: cnList }),
+      headers,
+      body: JSON.stringify({ userName: s.username, password: s.password, consignmentNo: cnList[0], consignmentno: cnList }),
       signal: AbortSignal.timeout(20000),
     });
 
@@ -984,18 +959,20 @@ router.post("/admin/shipments/:id/cancel", adminMiddleware as any, async (req: A
     }
 
     const settings = (courierRow.settings ?? {}) as Tcs.TcsSettings;
-    const { bearerToken, baseUrl } = await Tcs.getTcsTokens(settings);
+    const cancelHeaders = Tcs.getAuthHeaders(settings);
+    const cancelBaseUrl = settings.sandbox ? Tcs.TCS_COD_SANDBOX_URL : Tcs.TCS_COD_URL;
 
-    const cancelResp = await fetch(`${baseUrl}/ecom/api/booking/cancel`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ consignmentNumber: shipment.trackingId }),
+    const cancelResp = await fetch(`${cancelBaseUrl}/cancel-order`, {
+      method: "PUT",
+      headers: cancelHeaders,
+      body: JSON.stringify({ userName: settings.username, password: settings.password, consignmentNumber: shipment.trackingId }),
       signal: AbortSignal.timeout(10000),
     });
     const cancelData = await cancelResp.json() as Record<string, any>;
 
-    if (cancelData.message !== "SUCCESS") {
-      throw new Error(cancelData.message ?? "TCS cancel failed");
+    const cancelOk = cancelData?.returnStatus?.code === "0200" || cancelData?.returnStatus?.status === "SUCCESS" || cancelData.message === "SUCCESS";
+    if (!cancelOk) {
+      throw new Error(cancelData?.returnStatus?.message ?? cancelData.message ?? "TCS cancel failed");
     }
 
     const history = [...(shipment.statusHistory ?? []), {
