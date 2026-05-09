@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, integrationsTable, shopifyIntegrationsTable, woocommerceIntegrationsTable, marketingIntegrationsTable, syncJobsTable, productsTable } from "@workspace/db";
-import { eq, desc, or, sql } from "drizzle-orm";
+import { and, eq, desc, or, sql } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { generateSlugFromName } from "../lib/slugify";
 import { logger } from "../lib/logger";
@@ -71,14 +71,30 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
     const [config] = await db.select().from(shopifyIntegrationsTable).limit(1);
     if (!config) { res.status(404).json({ error: "Shopify integration not configured" }); return; }
 
-    await db.update(shopifyIntegrationsTable).set({ syncStatus: "syncing", updatedAt: new Date() }).where(eq(shopifyIntegrationsTable.id, config.id));
+    const locked = await db
+      .update(shopifyIntegrationsTable)
+      .set({ syncStatus: "syncing", updatedAt: new Date() })
+      .where(and(eq(shopifyIntegrationsTable.id, config.id), sql`${shopifyIntegrationsTable.syncStatus} IS DISTINCT FROM 'syncing'`))
+      .returning({ id: shopifyIntegrationsTable.id });
 
-    const [job] = await db.insert(syncJobsTable).values({
-      integrationType: "shopify",
-      status: "running",
-      logs: [`Starting Shopify sync from ${config.storeUrl}`],
-      meta: { storeUrl: config.storeUrl },
-    }).returning();
+    if (locked.length === 0) {
+      res.status(409).json({ error: "A Shopify sync is already in progress. Please wait for it to finish before starting another." });
+      return;
+    }
+
+    let job: typeof syncJobsTable.$inferSelect;
+    try {
+      const [inserted] = await db.insert(syncJobsTable).values({
+        integrationType: "shopify",
+        status: "running",
+        logs: [`Starting Shopify sync from ${config.storeUrl}`],
+        meta: { storeUrl: config.storeUrl },
+      }).returning();
+      job = inserted!;
+    } catch (insertErr) {
+      await db.update(shopifyIntegrationsTable).set({ syncStatus: "failed", errorMessage: "Failed to create sync job", updatedAt: new Date() }).where(eq(shopifyIntegrationsTable.id, config.id));
+      throw insertErr;
+    }
 
     res.json({ jobId: job.id, message: "Sync started" });
 
@@ -234,14 +250,30 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
     const [config] = await db.select().from(woocommerceIntegrationsTable).limit(1);
     if (!config) { res.status(404).json({ error: "WooCommerce integration not configured" }); return; }
 
-    await db.update(woocommerceIntegrationsTable).set({ syncStatus: "syncing", updatedAt: new Date() }).where(eq(woocommerceIntegrationsTable.id, config.id));
+    const locked = await db
+      .update(woocommerceIntegrationsTable)
+      .set({ syncStatus: "syncing", updatedAt: new Date() })
+      .where(and(eq(woocommerceIntegrationsTable.id, config.id), sql`${woocommerceIntegrationsTable.syncStatus} IS DISTINCT FROM 'syncing'`))
+      .returning({ id: woocommerceIntegrationsTable.id });
 
-    const [job] = await db.insert(syncJobsTable).values({
-      integrationType: "woocommerce",
-      status: "running",
-      logs: [`Starting WooCommerce sync from ${config.storeUrl}`],
-      meta: { storeUrl: config.storeUrl },
-    }).returning();
+    if (locked.length === 0) {
+      res.status(409).json({ error: "A WooCommerce sync is already in progress. Please wait for it to finish before starting another." });
+      return;
+    }
+
+    let job: typeof syncJobsTable.$inferSelect;
+    try {
+      const [inserted] = await db.insert(syncJobsTable).values({
+        integrationType: "woocommerce",
+        status: "running",
+        logs: [`Starting WooCommerce sync from ${config.storeUrl}`],
+        meta: { storeUrl: config.storeUrl },
+      }).returning();
+      job = inserted!;
+    } catch (insertErr) {
+      await db.update(woocommerceIntegrationsTable).set({ syncStatus: "failed", errorMessage: "Failed to create sync job", updatedAt: new Date() }).where(eq(woocommerceIntegrationsTable.id, config.id));
+      throw insertErr;
+    }
 
     res.json({ jobId: job.id, message: "Sync started" });
 
