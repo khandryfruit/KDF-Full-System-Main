@@ -670,6 +670,13 @@ function SmartTestMessage() {
   const handleSend = async () => {
     if (!phone.trim()) { toast({ title: "Phone number required", variant: "destructive" }); return; }
     if (mode === "template" && !selectedTpl) { toast({ title: "Select a template first", variant: "destructive" }); return; }
+    if (mode === "template" && vars.length > 0) {
+      const emptyIdx = vars.findIndex(v => !v.trim());
+      if (emptyIdx !== -1) {
+        toast({ title: `Fill in {{${emptyIdx + 1}}}`, description: `All ${vars.length} variable${vars.length > 1 ? "s" : ""} must be filled before sending.`, variant: "destructive" });
+        return;
+      }
+    }
     setIsSending(true); setResult(null);
     try {
       const payload = mode === "template" && selectedTpl
@@ -874,8 +881,12 @@ function SmartTestMessage() {
                             </span>
                             <input type="text" value={val}
                               onChange={e => { const n = [...vars]; n[i] = e.target.value; setVars(n); }}
-                              placeholder={`Value for {{${i + 1}}}`}
-                              className="flex-1 h-8 rounded-lg border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 focus:border-[#25D366] transition-colors"
+                              placeholder={`Value for {{${i + 1}}} (required)`}
+                              className={`flex-1 h-8 rounded-lg border bg-background px-3 text-xs focus:outline-none focus:ring-2 transition-colors ${
+                                val.trim() === ""
+                                  ? "border-red-300 focus:ring-red-200 focus:border-red-400"
+                                  : "border-border focus:ring-[#25D366]/40 focus:border-[#25D366]"
+                              }`}
                             />
                           </div>
                         ))}

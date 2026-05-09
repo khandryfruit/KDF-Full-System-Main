@@ -1465,8 +1465,10 @@ router.post("/admin/whatsapp/test", adminMiddleware as any, async (req, res) => 
     const { phone, message, useTemplate, templateName: tplName, languageCode, templateParams } = req.body;
     if (!phone) return res.status(400).json({ error: "phone required" });
     if (useTemplate && tplName) {
-      // Build body components from parameter values
-      const params: string[] = Array.isArray(templateParams) ? templateParams.filter((v: string) => typeof v === "string" && v.trim() !== "") : [];
+      // Keep ALL params (do NOT filter empty strings — count must exactly match template variable count)
+      const params: string[] = Array.isArray(templateParams)
+        ? templateParams.map((v: any) => (typeof v === "string" && v.trim() !== "") ? v.trim() : "—")
+        : [];
       const components = params.length
         ? [{ type: "body", parameters: params.map((v: string) => ({ type: "text", text: v })) }]
         : [];
