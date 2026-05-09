@@ -63,12 +63,21 @@ async function audit(
 }
 
 /* ═══════════════════════════════════════════════════════════
+   POST-PAYMENT SYNC — in-memory telemetry
+═══════════════════════════════════════════════════════════ */
+const syncTelemetry = { attempts: 0, shopifyOk: 0, shopifyFail: 0, waOk: 0, waFail: 0 };
+
+/* Expose counters via GET /api/admin/meezan/sync-telemetry (mounted later) */
+export function getSyncTelemetry() { return { ...syncTelemetry }; }
+
+/* ═══════════════════════════════════════════════════════════
    POST-PAYMENT SYNC
    Fire-and-forget helper: after a Meezan transaction goes to
    "paid" status, this updates the matching Shopify order and
    sends a WhatsApp confirmation to the customer.
 ═══════════════════════════════════════════════════════════ */
 async function postPaymentSync(txnId: number): Promise<void> {
+  syncTelemetry.attempts++;
   /* ── Load transaction ── */
   const txns = await db.select().from(meezanTransactionsTable)
     .where(eq(meezanTransactionsTable.id, txnId)).limit(1).catch(e => { logger.error({ err: e, txnId }, "postPaymentSync: failed to load txn"); return [] as typeof meezanTransactionsTable.$inferSelect[]; });
@@ -107,10 +116,15 @@ async function postPaymentSync(txnId: number): Promise<void> {
               transaction: { kind: "capture", status: "success", amount: txn.amount, currency: "PKR", source: "meezan_epg" },
             }),
           });
-          if (!shopifyRes.ok) {
+          if (shopifyRes.ok) {
+            syncTelemetry.shopifyOk++;
+            logger.info({ txnId, numericId }, "postPaymentSync: Shopify capture posted");
+          } else {
+            syncTelemetry.shopifyFail++;
             logger.warn({ txnId, numericId, status: shopifyRes.status }, "postPaymentSync: Shopify capture API non-2xx");
           }
         } else {
+          syncTelemetry.shopifyFail++;
           logger.warn({ txnId, shopifyRef }, "postPaymentSync: could not resolve numeric Shopify order ID — skipping remote capture");
         }
 
@@ -126,6 +140,7 @@ async function postPaymentSync(txnId: number): Promise<void> {
         }
       }
     } catch (shopifyErr) {
+      syncTelemetry.shopifyFail++;
       logger.error({ err: shopifyErr, txnId, shopifyRef }, "postPaymentSync: Shopify sync error (non-fatal)");
     }
   }
@@ -139,8 +154,10 @@ async function postPaymentSync(txnId: number): Promise<void> {
       const ref  = txn.invoiceNumber ?? txn.meezanOrderId ?? String(txnId);
       const msg  = `✅ *Payment Confirmed — KDF NUTS*\n\nSalam ${name}!\n\nYour payment of *${amt}* has been received successfully.\n\nReference: *${ref}*\n\nShukria for shopping with KDF NUTS! 🥜`;
       await sendWhatsAppMessage({ phone, message: msg });
+      syncTelemetry.waOk++;
       logger.info({ txnId, phone }, "postPaymentSync: WA confirmation sent");
     } catch (waErr) {
+      syncTelemetry.waFail++;
       logger.error({ err: waErr, txnId, phone }, "postPaymentSync: WA send error (non-fatal)");
     }
   }

@@ -296,7 +296,7 @@ function LiveFeedPanel() {
           ? <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2"><RefreshCw className="w-3.5 h-3.5 animate-spin" />Loading…</div>
           : items.length > 0
             ? items.map(item => <FeedItem key={item.id} item={item} />)
-            : fallback.map(item => <FeedItem key={item.id} item={item} />)
+            : <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2"><Activity className="w-5 h-5 opacity-30" /><p className="text-xs">No transactions yet</p></div>
         }
       </div>
       <div className="px-5 py-3 border-t border-border"><Button variant="ghost" size="sm" className="w-full text-xs gap-1">View all activity <ChevronRight className="w-3 h-3" /></Button></div>
@@ -542,8 +542,9 @@ function TransactionsTab() {
     queryFn:  () => {
       const params = new URLSearchParams({ limit: "100" });
       if (statusFilter !== "all") params.set("status", statusFilter);
-      if (dateFrom) params.set("from", dateFrom);
-      if (dateTo)   params.set("to",   dateTo);
+      if (dateFrom) params.set("from", `${dateFrom}T00:00:00`);
+      /* Include the full "to" day — send end-of-day so lte() captures all txns */
+      if (dateTo)   params.set("to",   `${dateTo}T23:59:59`);
       return apiFetch(`/api/admin/meezan/transactions?${params.toString()}`);
     },
     refetchInterval: 30000,
