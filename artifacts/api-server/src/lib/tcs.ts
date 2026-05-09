@@ -236,7 +236,15 @@ export async function testConnection(
     });
     if (!ok) return { ok: false, steps };
   } catch (e: any) {
-    steps.push({ step: "GET /cities", status: "fail", detail: `Network error: ${e.message}` });
+    const isSandbox = settings.sandbox;
+    const econnreset = String(e.message).includes("ECONNRESET") || String(e.message).includes("ECONNREFUSED") || String(e.message).includes("timeout");
+    steps.push({
+      step: "GET /cities",
+      status: "fail",
+      detail: econnreset && isSandbox
+        ? `Sandbox server is not responding (${e.message}).\n\n⚠️ TCS Sandbox may be offline or unavailable.\n✅ ACTION: In Couriers → TCS Settings → scroll down → disable Sandbox Mode → Save → Test again.`
+        : `Network error: ${e.message}`,
+    });
     return { ok: false, steps };
   }
 

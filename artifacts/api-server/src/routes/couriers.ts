@@ -278,6 +278,56 @@ router.post("/admin/couriers/tcs/test-tracking", adminMiddleware as any, async (
   }
 });
 
+/* ─── POST /admin/couriers/tcs/full-diagnostics ─── */
+router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  type S = "ok" | "fail" | "info" | "warn";
+  const steps: Array<{ step: string; status: S; detail: string; raw?: string }> = [];
+  try {
+    const s = await getTcsSettings();
+    if (!s) {
+      res.json({ ok: false, steps: [{ step: "Config", status: "fail", detail: "TCS not configured — go to Couriers → TCS and save settings first" }] });
+      return;
+    }
+    const serverIp = await getServerIp().catch(() => "unavailable");
+    steps.push({ step: "Server IP", status: "info", detail: serverIp });
+    steps.push({
+      step: "Mode", status: "info",
+      detail: s.sandbox ? "🧪 SANDBOX mode — bookings are NOT real" : "🚀 PRODUCTION mode — bookings are real",
+    });
+    const missing = Tcs.validateSettings(s);
+    if (missing.length > 0) {
+      steps.push({ step: "Missing fields", status: "fail", detail: missing.join("\n") });
+      res.json({ ok: false, steps }); return;
+    }
+    const clientId = Tcs.extractClientIdFromJwt(s.bearerToken);
+    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken.length} chars)` });
+    steps.push({
+      step: "X-IBM-Client-Id (auto-decoded)",
+      status: clientId ? "ok" : "warn",
+      detail: clientId
+        ? `✅ clientId=${clientId} decoded from JWT payload — sent as X-IBM-Client-Id header`
+        : "⚠️ clientId not found in JWT — IBM API Gateway may reject requests",
+    });
+    /* Run connection test */
+    const testResult = await Tcs.testConnection(s);
+    steps.push(...(testResult.steps as any[]));
+    const baseUrl = s.sandbox ? Tcs.TCS_COD_SANDBOX_URL : Tcs.TCS_COD_URL;
+    steps.push({
+      step: "Summary",
+      status: testResult.ok ? "ok" : "fail",
+      detail: testResult.ok
+        ? `✅ All checks passed.\nBooking endpoint: POST ${baseUrl}/create-order\nAuth: Authorization: Bearer + X-IBM-Client-Id (auto)\nBody: { userName, password, consignee details, codAmount… }`
+        : s.sandbox
+          ? "❌ Test failed in Sandbox mode.\n⚠️ TCS Sandbox may be offline.\n✅ ACTION: Open TCS Settings → disable Sandbox Mode → Save → Test again."
+          : "❌ Test failed. Check bearer token, username, and password.",
+    });
+    res.json({ ok: testResult.ok, steps, serverIp });
+  } catch (err: any) {
+    req.log.error(err);
+    res.json({ ok: false, steps: [...steps, { step: "Error", status: "fail", detail: err.message }], error: err.message });
+  }
+});
+
 /* ─── POST /admin/couriers/tcs/test-booking ─── */
 router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   type S = "ok" | "fail" | "info" | "warn";
@@ -291,7 +341,8 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
       res.json({ ok: false, steps }); return;
     }
 
-    steps.push({ step: "Config", status: "ok", detail: `username: ${s.username} | clientId: ${s.clientId} | mode: ${s.sandbox ? "SANDBOX ✅ Safe" : "⚠ PRODUCTION — real shipment will be created"}` });
+    const autoClientId = Tcs.extractClientIdFromJwt(s.bearerToken);
+    steps.push({ step: "Config", status: "ok", detail: `username: ${s.username} | clientId: ${autoClientId ?? "(not decoded)"} | mode: ${s.sandbox ? "🧪 SANDBOX — safe to test" : "⚠ PRODUCTION — real shipment will be created"}` });
 
     const testOrder = {
       id: "TEST001",
