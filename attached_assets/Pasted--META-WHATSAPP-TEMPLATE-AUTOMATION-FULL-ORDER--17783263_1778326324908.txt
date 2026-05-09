@@ -1,0 +1,321 @@
+====================================================
+META WHATSAPP TEMPLATE AUTOMATION — FULL ORDER FLOW INTEGRATION
+===============================================================
+
+Please fully redesign and properly integrate the WhatsApp Meta template system inside the Shopify Orders automation module.
+
+Right now:
+
+* WA messages are inconsistent
+* Templates are not properly connected
+* Order statuses are not syncing correctly
+* Meta callback/webhook automation is incomplete
+
+We already have APPROVED Meta WhatsApp templates created inside Meta Business Manager.
+
+These templates must now be fully integrated into the admin automation system.
+
+====================================================
+CURRENT REQUIREMENT
+===================
+
+Inside:
+Shopify Orders → WA & Confirm
+
+We need a professional:
+“Meta Template Automation System”
+
+====================================================
+
+1. AUTO LOAD APPROVED META TEMPLATES
+   ====================================================
+
+System should automatically fetch and show approved templates from Meta API.
+
+Examples:
+
+* Order Confirmation
+* Order Cancelled
+* Order Shipped
+* Order Dispatched
+* Rider Assigned
+* Out for Delivery
+* Tracking Update
+* Abandoned Cart
+* Payment Reminder
+* COD Confirmation
+* Delivery Confirmation
+* Thank You Message
+
+Templates already exist in Meta.
+
+Please fetch and show them dynamically.
+
+====================================================
+2. TEMPLATE MAPPING SYSTEM
+==========================
+
+Add a settings panel where admin can map templates to automation events.
+
+Example:
+
+## EVENT → TEMPLATE
+
+Order Created
+→ order_confirmation
+
+Order Confirmed
+→ order_confirmed
+
+Order Cancelled
+→ order_cancelled
+
+Order Shipped
+→ order_shipped
+
+Order Dispatched
+→ order_dispatched
+
+Rider Assigned
+→ rider_assigned
+
+Tracking Update
+→ tracking_update
+
+Abandoned Checkout
+→ abandoned_cart
+
+Delivered
+→ thank_you_message
+
+====================================================
+3. AUTOMATIC STATUS UPDATES FROM META CALLBACKS
+===============================================
+
+When customer clicks:
+
+* Confirm
+* Cancel
+* CTA buttons
+
+or Meta webhook returns callback response,
+
+System should automatically:
+
+* Update order status
+* Update Shopify tags
+* Update admin panel
+* Update automation timeline
+* Trigger next automation step
+
+====================================================
+4. DYNAMIC TEMPLATE VARIABLES
+=============================
+
+Templates should automatically inject:
+
+* Customer name
+* Order ID
+* Products
+* Amount
+* Rider name
+* Tracking link
+* COD amount
+* ETA
+* Store name
+
+Variables should auto-fill dynamically.
+
+====================================================
+5. TEMPLATE PREVIEW SYSTEM
+==========================
+
+Inside WA & Confirm tab show:
+
+* Template preview
+* Header preview
+* Body preview
+* CTA preview
+* Variables preview
+
+Before sending.
+
+====================================================
+6. AUTOMATION TIMELINE IMPROVEMENT
+==================================
+
+Current automation timeline is incomplete.
+
+Need full live automation flow:
+
+✔ Order Created
+✔ WA Confirmation Sent
+✔ Customer Confirmed
+✔ Rider Assigned
+✔ Out for Delivery
+✔ Delivered
+✔ Feedback Requested
+
+Each stage should:
+
+* Update live
+* Show timestamps
+* Show Meta delivery status
+* Show webhook response
+
+====================================================
+7. META WEBHOOK EVENT SYSTEM
+============================
+
+Audit and fully fix Meta webhooks.
+
+Need proper handling for:
+
+* message_sent
+* message_delivered
+* message_read
+* button_clicked
+* interactive_reply
+* message_failed
+
+These should instantly update the order timeline.
+
+====================================================
+8. ORDER STATUS AUTOMATION
+==========================
+
+Required flow:
+
+Customer receives:
+Order Confirmation Template
+
+Customer clicks:
+CONFIRM
+
+Then:
+
+* order automatically confirmed
+* admin notified
+* Shopify updated
+* rider workflow activated
+
+Customer clicks:
+CANCEL
+
+Then:
+
+* order automatically cancelled
+* Shopify tag updated
+* inventory restored
+* admin notified
+
+====================================================
+9. RIDER & TRACKING AUTOMATION
+==============================
+
+When rider assigned:
+
+* rider gets WhatsApp message
+* customer gets rider details
+* customer gets ETA
+* tracking link sent automatically
+
+====================================================
+10. ABANDONED ORDER AUTOMATION
+==============================
+
+Add automation for:
+
+* abandoned checkout
+* unpaid COD
+* inactive checkout
+
+Send:
+
+* reminder templates
+* coupon offers
+* follow-up messages
+
+====================================================
+11. LIVE META DELIVERY STATUS
+=============================
+
+Inside order modal show:
+
+* Sent
+* Delivered
+* Read
+* Failed
+* Replied
+* Button Clicked
+
+with timestamps.
+
+====================================================
+12. TEMPLATE MANAGEMENT PAGE
+============================
+
+Create dedicated:
+“Meta Template Manager”
+
+Features:
+
+* Sync templates from Meta
+* Enable/disable templates
+* Assign templates to events
+* Preview templates
+* Test templates
+* Variable mapping
+* Multi-language support
+
+====================================================
+13. MULTI-LANGUAGE SUPPORT
+==========================
+
+Support:
+
+* English
+* Urdu
+
+Admin should select language per template.
+
+====================================================
+14. COST OPTIMIZATION
+=====================
+
+Optimize Meta API usage:
+
+* avoid duplicate sends
+* avoid repeated retries
+* queue-based processing
+* webhook-driven updates
+
+Keep operational costs LOW.
+
+====================================================
+15. IMPORTANT — CURRENT ISSUE
+=============================
+
+Please audit why:
+
+* WA messages stuck on Pending
+* resend sends duplicate attempts
+* rider messages failing
+* automation stops midway
+* callbacks not updating statuses
+
+====================================================
+16. FINAL GOAL
+==============
+
+The complete Shopify + Meta WhatsApp automation should work like a world-class ecommerce CRM.
+
+Everything should become:
+
+* automatic
+* reliable
+* real-time
+* production-ready
+* easy to monitor
+
+# with proper Meta template integration and callback automation.
