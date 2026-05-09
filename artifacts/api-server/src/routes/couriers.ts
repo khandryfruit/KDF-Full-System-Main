@@ -18,18 +18,18 @@ function httpJsonRequest(
   url: string,
   method: string,
   headers: Record<string, string>,
-  body: Record<string, any>,
+  body: Record<string, any> | null,
   timeoutMs = 15000,
 ): Promise<{ status: number; text: string; data: Record<string, any> }> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const isHttps = parsed.protocol === "https:";
-    const bodyStr = JSON.stringify(body);
-    const reqHeaders = {
-      ...headers,
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(bodyStr).toString(),
-    };
+    const bodyStr = body !== null ? JSON.stringify(body) : null;
+    const reqHeaders: Record<string, string> = { ...headers };
+    if (bodyStr !== null) {
+      reqHeaders["Content-Type"] = "application/json";
+      reqHeaders["Content-Length"] = Buffer.byteLength(bodyStr).toString();
+    }
     const opts = {
       hostname: parsed.hostname,
       port: parsed.port || (isHttps ? 443 : 80),
@@ -51,7 +51,7 @@ function httpJsonRequest(
     });
     req.setTimeout(timeoutMs, () => { req.destroy(new Error(`Timeout after ${timeoutMs}ms`)); });
     req.on("error", reject);
-    req.write(bodyStr);
+    if (bodyStr !== null) req.write(bodyStr);
     req.end();
   });
 }
@@ -849,10 +849,13 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
       const t0e = Date.now();
       try {
         /* CONFIRMED by live curl (May 2026): only GET /token is valid.
-         * POST /token → 405. GET/POST generateToken → 404. */
-        const attempts: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
-          { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { Username: username, Password: password } },
+         * Query params work best (no Content-Length confusion for GET).
+         * POST /token → 405. generateToken → 404. */
+        const qpUrlD = `${baseUrl}/ecom/api/authentication/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+        const attempts: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> | null }> = [
+          { url: qpUrlD,                                            method: "GET", body: null },
+          { url: `${baseUrl}/ecom/api/authentication/token`,        method: "GET", body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`,        method: "GET", body: { Username: username, Password: password } },
         ];
         let found = false;
         const attemptResults: string[] = [];
@@ -2646,17 +2649,21 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
   }
 
   /* Priority 3: Step-2 — GET /ecom/api/authentication/token
-   * CONFIRMED by live curl test on ociconnect.tcscourier.com (May 2026):
-   *   GET  /ecom/api/authentication/token → 401 (exists, needs valid bearer + credentials)
-   *   POST /ecom/api/authentication/token → 405 (Method Not Allowed — POST is WRONG)
-   *   GET  /ecom/api/authentication/generateToken → 404 (endpoint does not exist)
-   * Per official TCS Node.js guide: axios.get() with { data: {username,password} }
-   * Response: { message: "success", accesstoken: "...", expiry: "..." }             */
-  const STEP2_ATTEMPTS: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
-    /* ✅ Official: GET with lowercase body fields */
-    { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { username, password } },
-    /* Fallback: PascalCase field names */
-    { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { Username: username, Password: password } },
+   * CONFIRMED by live curl tests on ociconnect.tcscourier.com (May 2026):
+   *   GET  /token?username=X&password=Y  → 401 valid bearer needed (query params WORK)
+   *   GET  /token  + JSON body           → 401 valid bearer needed (body ALSO works)
+   *   POST /token                        → 405 (Method Not Allowed)
+   *   GET  /generateToken                → 404 (endpoint does not exist)
+   * Strategy: try query-params first (no body = no Content-Length issue), then body.
+   * Response: { message: "success", accesstoken: "...", expiry: "..." }            */
+  const qpUrl = `${baseUrl}/ecom/api/authentication/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  const STEP2_ATTEMPTS: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> | null }> = [
+    /* ✅ Primary: GET + query params (no body = no Content-Length confusion) */
+    { url: qpUrl,                                             method: "GET", body: null },
+    /* Fallback: GET + lowercase JSON body */
+    { url: `${baseUrl}/ecom/api/authentication/token`,        method: "GET", body: { username, password } },
+    /* Fallback: GET + PascalCase JSON body */
+    { url: `${baseUrl}/ecom/api/authentication/token`,        method: "GET", body: { Username: username, Password: password } },
   ];
 
   let lastError = "";
