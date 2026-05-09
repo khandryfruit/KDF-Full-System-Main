@@ -1014,6 +1014,15 @@ export default function ProductsPage() {
                           {product.active ? "Active" : "Inactive"}
                         </Badge>
                         {product.featured && <Badge variant="default" className="w-fit text-xs">Featured</Badge>}
+                        {product.source && product.source !== "manual" && (() => {
+                          const map: Record<string, { label: string; cls: string }> = {
+                            shopify: { label: "Shopify", cls: "bg-green-100 text-green-800 border-green-200" },
+                            woocommerce: { label: "WooCommerce", cls: "bg-purple-100 text-purple-800 border-purple-200" },
+                            csv: { label: "CSV", cls: "bg-blue-100 text-blue-800 border-blue-200" },
+                          };
+                          const cfg = map[product.source] ?? { label: product.source, cls: "bg-gray-100 text-gray-700 border-gray-200" };
+                          return <Badge variant="outline" className={`w-fit text-xs ${cfg.cls}`}>{cfg.label}</Badge>;
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">

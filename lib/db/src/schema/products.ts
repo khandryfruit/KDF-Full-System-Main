@@ -37,6 +37,8 @@ export const productsTable = pgTable("products", {
   metaTitle: text("meta_title"),
   metaDescription: text("meta_description"),
   altText: text("alt_text"),
+  source: text("source").$type<"shopify" | "woocommerce" | "csv" | "manual">().default("manual"),
+  externalId: text("external_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

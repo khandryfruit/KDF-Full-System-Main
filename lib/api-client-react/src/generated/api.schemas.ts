@@ -116,6 +116,8 @@ export interface ProductVariant {
   sku?: string;
 }
 
+export type ProductSource = 'shopify' | 'woocommerce' | 'csv' | 'manual';
+
 export interface Product {
   id: number;
   categoryId?: number;
@@ -135,6 +137,8 @@ export interface Product {
   featured: boolean;
   rating?: string;
   reviewCount: number;
+  source?: ProductSource;
+  externalId?: string;
   createdAt?: string;
 }
 

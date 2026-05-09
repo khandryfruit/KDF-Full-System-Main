@@ -169,6 +169,8 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
                 active,
                 shopifyProductId,
                 shopifyHandle: candidateSlug,
+                source: "shopify",
+                externalId: shopifyProductId,
                 updatedAt: new Date(),
               }).where(eq(productsTable.id, existing.id));
             } else {
@@ -183,6 +185,8 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
                 stock,
                 images,
                 active,
+                source: "shopify",
+                externalId: shopifyProductId,
               });
             }
             successCount++;
@@ -292,6 +296,8 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
                 images,
                 active,
                 woocommerceProductId,
+                source: "woocommerce",
+                externalId: woocommerceProductId,
                 updatedAt: new Date(),
               }).where(eq(productsTable.id, existing.id));
             } else {
@@ -306,6 +312,8 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
                 stock,
                 images,
                 active,
+                source: "woocommerce",
+                externalId: woocommerceProductId,
               });
             }
             successCount++;

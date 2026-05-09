@@ -95,6 +95,8 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
         const description = (row["description"] ?? row["Description"] ?? "").trim() || undefined;
         const slugRaw = (row["slug"] ?? row["Slug"] ?? "").trim();
         const slug = slugRaw || generateSlugFromName(name);
+        const externalIdRaw = row["external_id"] ?? row["externalId"] ?? row["id"];
+        const externalId = externalIdRaw != null ? String(externalIdRaw).trim() || undefined : undefined;
 
         let variants: any[] = [];
         if (row["variants"]) {
@@ -115,6 +117,8 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
           images,
           variants,
           active: true,
+          source: "csv",
+          externalId,
         }).onConflictDoUpdate({
           target: productsTable.slug,
           set: {
@@ -125,6 +129,8 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
             description,
             images,
             variants,
+            source: "csv",
+            externalId,
             updatedAt: new Date(),
           },
         });
