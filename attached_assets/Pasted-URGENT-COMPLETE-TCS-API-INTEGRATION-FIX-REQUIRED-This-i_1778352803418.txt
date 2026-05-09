@@ -1,0 +1,434 @@
+URGENT — COMPLETE TCS API INTEGRATION FIX REQUIRED
+
+This is the FINAL warning regarding the TCS courier integration.
+
+We have already invested significant time and money into this system, but the TCS integration is still incomplete, unstable, and improperly implemented.
+
+You are REQUIRED to fully review the COMPLETE official TCS API User Guide (34 Pages) and professionally implement the entire system according to the official documentation. 
+
+━━━━━━━━━━━━━━━━━━━
+LIVE TCS ACCOUNT DETAILS
+━━━━━━━━━━━━━━━━━━━
+
+TCS Username:
+
+```text
+LGEC11060
+```
+
+TCS Password:
+
+```text
+Qadr786@@
+```
+
+Bearer Token:
+
+```text
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRpZCI6IjIxNTYyNzc2OCIsInNlcnZpY2VzIjoiMTAzLDE1NSwxNjEsMTY0LDIyNSwyNDcsMjQ4LDI0OSwyNTAsMjUxLDI3NywyOTMsMzY3LDM3MywzNzcsMzg4LDQ0OCw0NDksNDUwLDQ1MSw0NTIsNDUzLDQ1NCw0NzIsNDczIiwiZXhjbHVkZWQtc2VydmljZXMiOiIiLCJpc3MiOiJjb25uZWN0LnRjc2NvdXJpZXIuY29tIiwianRpIjoiMTgwNTBlMjMtZTg0Yi00YjQ4LTkwMWQtM2Q3YWJhNDkzNTc0IiwibmJmIjoxNzc4MzQ1OTYwLCJleHAiOjE4NjQ3NDU5NjAsImlhdCI6MTc3ODM0NTk2MH0.MZZ4pnCZw9lm2d1FVYspCq45dXWS0KyR1chSRLeZ-JI
+```
+
+━━━━━━━━━━━━━━━━━━━
+VERY IMPORTANT
+━━━━━━━━━━━━━━━━━━━
+
+Developer is currently using the authentication flow incorrectly.
+
+TCS APIs use TWO TOKENS:
+
+1. Bearer Token
+   → Used in Authorization Header
+
+2. ECOM Access Token
+   → Returned after Authentication API
+   → Used INSIDE booking JSON payload
+
+Current system is mixing both tokens incorrectly.
+
+That is why errors are coming:
+
+❌ Invalid Bearer token
+❌ Invalid access token
+❌ Mismatch configuration
+❌ 401 Unauthorized
+❌ 405 Method Not Allowed
+❌ shipmentinfo.weightinkg invalid
+
+━━━━━━━━━━━━━━━━━━━
+STEP 1 — AUTHORIZATION API
+━━━━━━━━━━━━━━━━━━━
+
+API:
+
+```text
+GET https://ociconnect.tcscourier.com/auth/api/auth
+```
+
+Headers:
+
+```json id="t9d7yy"
+{
+  "Accept": "application/json",
+  "Content-Type": "application/json"
+}
+```
+
+RAW JSON BODY:
+
+```json id="5sm4t0"
+{
+  "clientid": "215627768",
+  "clientsecret": "YOUR_CLIENT_SECRET"
+}
+```
+
+IMPORTANT:
+• Body type MUST be RAW JSON
+• NOT form-data
+• NOT x-www-form-urlencoded
+
+SUCCESS RESPONSE:
+
+```json id="e62p16"
+{
+  "result": {
+    "accessToken": "JWT_BEARER_TOKEN",
+    "expiry": "2027-01-04T05:08:47Z"
+  },
+  "status": true,
+  "code": "0200"
+}
+```
+
+━━━━━━━━━━━━━━━━━━━
+STEP 2 — AUTHENTICATION TOKEN API
+━━━━━━━━━━━━━━━━━━━
+
+API:
+
+```text
+GET https://ociconnect.tcscourier.com/ecom/api/authentication/token
+```
+
+Headers:
+
+```json id="d0nquf"
+{
+  "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRpZCI6IjIxNTYyNzc2OCIsInNlcnZpY2VzIjoiMTAzLDE1NSwxNjEsMTY0LDIyNSwyNDcsMjQ4LDI0OSwyNTAsMjUxLDI3NywyOTMsMzY3LDM3MywzNzcsMzg4LDQ0OCw0NDksNDUwLDQ1MSw0NTIsNDUzLDQ1NCw0NzIsNDczIiwiZXhjbHVkZWQtc2VydmljZXMiOiIiLCJpc3MiOiJjb25uZWN0LnRjc2NvdXJpZXIuY29tIiwianRpIjoiMTgwNTBlMjMtZTg0Yi00YjQ4LTkwMWQtM2Q3YWJhNDkzNTc0IiwibmJmIjoxNzc4MzQ1OTYwLCJleHAiOjE4NjQ3NDU5NjAsImlhdCI6MTc3ODM0NTk2MH0.MZZ4pnCZw9lm2d1FVYspCq45dXWS0KyR1chSRLeZ-JI",
+  "Accept": "application/json",
+  "Content-Type": "application/json"
+}
+```
+
+RAW JSON BODY:
+
+```json id="4s1h0v"
+{
+  "username": "LGEC11060",
+  "password": "Qadr786@@"
+}
+```
+
+SUCCESS RESPONSE:
+
+```json id="nfxqhi"
+{
+  "accesstoken": "LONG_ECOM_ACCESS_TOKEN",
+  "expiry": "2027-06-08T09:01:25Z",
+  "message": "success"
+}
+```
+
+IMPORTANT:
+The returned accesstoken is REQUIRED in ALL booking APIs.
+
+━━━━━━━━━━━━━━━━━━━
+WRONG IMPLEMENTATION
+━━━━━━━━━━━━━━━━━━━
+
+❌ WRONG:
+
+```json id="84mkd3"
+{
+  "Authorization": "Bearer ECOM_ACCESS_TOKEN"
+}
+```
+
+❌ WRONG:
+
+```json id="oz97dz"
+{
+  "Authorization": "JWT_TOKEN_INSIDE_JSON"
+}
+```
+
+❌ WRONG:
+
+```json id="nq49ux"
+"weightinkg": "0.5 KG"
+```
+
+❌ WRONG:
+
+```json id="8xsyne"
+"weightinkg": ""
+```
+
+━━━━━━━━━━━━━━━━━━━
+CORRECT IMPLEMENTATION
+━━━━━━━━━━━━━━━━━━━
+
+✅ CORRECT:
+
+```json id="w6o3lv"
+"weightinkg": 0.5
+```
+
+✅ CORRECT:
+
+```json id="sh0qnl"
+"pieces": 1
+```
+
+✅ CORRECT:
+
+```json id="5c3p2s"
+"fragile": false
+```
+
+━━━━━━━━━━━━━━━━━━━
+COMPLETE BOOKING API
+━━━━━━━━━━━━━━━━━━━
+
+API:
+
+```text
+POST https://ociconnect.tcscourier.com/ecom/api/booking/create
+```
+
+Headers:
+
+```json id="bfw0gx"
+{
+  "Authorization": "Bearer JWT_BEARER_TOKEN",
+  "Accept": "application/json",
+  "Content-Type": "application/json"
+}
+```
+
+COMPLETE RAW JSON BODY:
+
+```json id="glln7s"
+{
+  "accesstoken": "LONG_ECOM_ACCESS_TOKEN",
+  "consignmentno": "",
+  "shipperinfo": {
+    "tcsaccount": "LGEC11060",
+    "shippername": "Khan Dry Fruits",
+    "address1": "Khan Dry Fruits Warehouse Karachi",
+    "address2": "",
+    "address3": "",
+    "zip": "75800",
+    "countrycode": "PK",
+    "countryname": "Pakistan",
+    "citycode": "KHI",
+    "cityname": "Karachi",
+    "mobile": "03001234567"
+  },
+  "consigneeinfo": {
+    "consigneecode": "C103",
+    "firstname": "Ahmed",
+    "middlename": "Ali",
+    "lastname": "Khan",
+    "address1": "House 12 Street 5 Karachi",
+    "address2": "",
+    "address3": "",
+    "zip": "75800",
+    "countrycode": "PK",
+    "countryname": "Pakistan",
+    "citycode": "KHI",
+    "cityname": "Karachi",
+    "email": "customer@test.com",
+    "areacode": "KHI00001",
+    "areaname": "Gulshan",
+    "blockcode": "",
+    "blockname": "",
+    "lat": "24.920733",
+    "lng": "67.088162",
+    "landmark": "Near Hospital",
+    "mobile": "03001234567"
+  },
+  "vendorinfo": {
+    "name": "Khan Dry Fruits",
+    "address1": "Karachi Warehouse",
+    "address2": "",
+    "address3": "",
+    "citycode": "KHI",
+    "cityname": "Karachi",
+    "mobile": "03001234567"
+  },
+  "shipmentinfo": {
+    "costcentercode": "Test-01",
+    "referenceno": "ORDER-1001",
+    "contentdesc": "Dry Fruits Order",
+    "servicecode": "O",
+    "parametertype": "Normal",
+    "shipmentdate": "09/05/2026 10:00:00",
+    "shippingtype": "",
+    "currency": "PKR",
+    "codamount": 2500,
+    "declaredvalue": null,
+    "insuredvalue": null,
+    "transactiontype": "",
+    "dsflag": "",
+    "carrierslug": "",
+    "weightinkg": 0.5,
+    "pieces": 1,
+    "fragile": false,
+    "remarks": "Handle Carefully",
+    "skus": [
+      {
+        "description": "Dry Fruits",
+        "quantity": 1,
+        "weight": 0.5,
+        "uom": "KG",
+        "unitprice": 2500,
+        "declaredvalue": null,
+        "insuredvalue": null
+      }
+    ]
+  }
+}
+```
+
+━━━━━━━━━━━━━━━━━━━
+MOST IMPORTANT FIX
+━━━━━━━━━━━━━━━━━━━
+
+Current Error:
+
+```text
+TCS: shipmentinfo.weightinkg: Insert valid Decimal number
+```
+
+ROOT CAUSE:
+Developer is sending invalid datatype.
+
+CORRECT:
+
+```json id="y3p4m7"
+"weightinkg": 0.5
+```
+
+WRONG:
+
+```json id="d9h57u"
+"weightinkg": "0.5 KG"
+```
+
+WRONG:
+
+```json id="u6e2b2"
+"weightinkg": "half"
+```
+
+WRONG:
+
+```json id="mgo3g6"
+"weightinkg": ""
+```
+
+━━━━━━━━━━━━━━━━━━━
+POSTMAN SETTINGS
+━━━━━━━━━━━━━━━━━━━
+
+Developer MUST configure Postman exactly like this:
+
+Method:
+
+```text
+POST
+```
+
+Body:
+
+```text
+raw → JSON
+```
+
+Headers:
+
+```json id="6m78ix"
+{
+  "Accept": "application/json",
+  "Content-Type": "application/json",
+  "Authorization": "Bearer JWT_BEARER_TOKEN"
+}
+```
+
+DO NOT USE:
+❌ form-data
+❌ x-www-form-urlencoded
+❌ Text body
+❌ Invalid JSON
+❌ Wrong Authorization format
+
+━━━━━━━━━━━━━━━━━━━
+REQUIRED APIs TO IMPLEMENT
+━━━━━━━━━━━━━━━━━━━
+
+Developer MUST fully implement and test ALL these APIs from official documentation:
+
+✅ Authentication
+✅ Booking Create
+✅ Booking Cancel
+✅ Reverse Booking
+✅ CN Print
+✅ Tracking
+✅ Payment Status
+✅ Payment Detail
+✅ Area Code
+✅ Block Code
+✅ Country List
+✅ City List
+✅ Route List
+✅ Delivery Status List
+✅ Cost Center Inquiry
+
+Reference:
+Pages 1–34 
+
+━━━━━━━━━━━━━━━━━━━
+SHOPIFY INTEGRATION REQUIRED
+━━━━━━━━━━━━━━━━━━━
+
+Developer MUST:
+
+• auto create shipment
+• sync tracking numbers
+• auto fulfill Shopify orders
+• sync shipment status
+• prevent duplicate bookings
+• save TCS logs
+• validate mobile numbers
+• validate weight datatype
+• validate city codes
+• validate cost center codes
+• save request/response logs
+• retry failed requests
+• implement proper error handling
+
+━━━━━━━━━━━━━━━━━━━
+FINAL WARNING
+━━━━━━━━━━━━━━━━━━━
+
+This integration MUST now be completed professionally according to the official TCS API documentation.
+
+No shortcuts.
+No fake implementation.
+No temporary fixes.
+No hardcoded responses.
+
+ALL APIs MUST first be tested successfully in Postman before deployment to production.
+
+If this integration is not properly fixed this time, we will stop using your system and move to another development team.
