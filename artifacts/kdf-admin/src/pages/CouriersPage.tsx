@@ -133,12 +133,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const { data: couriers = [] } = useQuery({ queryKey: ["/api/admin/couriers"], queryFn: () => apiFetch("/api/admin/couriers") });
   const config = (couriers as any[]).find((c: any) => c.slug === "tcs");
 
+  type DebugStep = { step: string; status: "ok" | "fail" | "info" | "warn"; detail: string; raw?: string };
   const [editing, setEditing]       = useState(false);
   const [showPw, setShowPw]         = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDebug, setShowDebug]   = useState(false);
-  const [debugLog, setDebugLog]     = useState<string[]>([]);
-  const [debugResult, setDebugResult] = useState<{ serverIp?: string; ok?: boolean; mode?: string } | null>(null);
+  const [debugSteps, setDebugSteps] = useState<DebugStep[]>([]);
+  const [debugOk, setDebugOk]       = useState<boolean | null>(null);
+  const [debugServerIp, setDebugServerIp] = useState<string>("");
   const [tokenStatus, setTokenStatus] = useState<"idle" | "ok" | "fail">("idle");
 
   const { data: serverIpData } = useQuery({
@@ -200,15 +202,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const refreshToken = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/debug-auth", { method: "POST" }),
     onSuccess: (d: any) => {
-      setDebugLog(d.log ?? []);
-      setDebugResult({ serverIp: d.serverIp, ok: d.ok, mode: d.mode });
-      setShowDebug(true); /* always show debug log — success or failure */
+      setDebugSteps(d.steps ?? []);
+      setDebugOk(d.ok ?? false);
+      setDebugServerIp(d.serverIp ?? "");
+      setShowDebug(true);
       if (d.ok) {
         setTokenStatus("ok");
-        toast({ title: "✅ Auth debug complete", description: `Mode: ${d.mode} · See logs below` });
+        toast({ title: "✅ TCS Auth Debug Complete", description: `Mode: ${d.mode} · All checks passed` });
       } else {
         setTokenStatus("fail");
-        toast({ variant: "destructive", title: "Auth failed — see debug logs below", description: d.error?.slice(0, 120) ?? "Check logs for TCS raw response" });
+        toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error?.slice(0, 120) ?? "See debug panel below" });
       }
     },
     onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
@@ -292,38 +295,50 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
           </div>
         )}
 
-        {/* 403 error banner */}
-        {debugResult && !debugResult.ok && (
-          <div className="mt-2.5 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
-            <p className="text-xs font-semibold text-red-800">⛔ Auth failed — IP may not be whitelisted with TCS</p>
-            {debugResult.serverIp && (
-              <p className="text-xs text-red-700">
-                Email TCS: <em>"Whitelist IP <strong>{debugResult.serverIp}</strong> for account {cs.tcsaccount || "—"}"</em>
-                <button onClick={() => { navigator.clipboard.writeText(debugResult.serverIp!); toast({ title: "IP copied" }); }}
-                  className="ml-1.5 underline hover:no-underline">Copy IP</button>
-              </p>
-            )}
-            <button onClick={() => setShowDebug(v => !v)} className="text-xs text-red-600 hover:underline">
-              {showDebug ? "Hide" : "Show"} debug logs →
-            </button>
-          </div>
-        )}
-
-        {/* Debug log terminal */}
-        {showDebug && debugLog.length > 0 && (
-          <div className="mt-2.5 bg-gray-950 text-green-400 rounded-lg p-3 text-[11px] font-mono max-h-56 overflow-y-auto space-y-0.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-gray-400">Debug Logs {debugResult?.ok ? "✅" : "❌"}</span>
-              <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-white">✕</button>
+        {/* Professional debug panel */}
+        {showDebug && debugSteps.length > 0 && (
+          <div className="mt-2.5 border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+              <span className="text-xs font-semibold flex items-center gap-1.5">
+                {debugOk
+                  ? <><CheckCircle2 className="w-3.5 h-3.5 text-green-600" /><span className="text-green-700">Auth Debug — All Passed</span></>
+                  : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">Auth Debug — Check Failed Steps</span></>
+                }
+              </span>
+              <button onClick={() => setShowDebug(false)} className="text-muted-foreground hover:text-foreground text-xs">✕ Close</button>
             </div>
-            {debugLog.map((line, i) => (
-              <div key={i} className={
-                line.includes("✅") ? "text-green-400"
-                : line.includes("❌") ? "text-red-400"
-                : line.includes("──") ? "text-yellow-300 font-semibold mt-1"
-                : "text-gray-300"
-              }>{line}</div>
-            ))}
+            <div className="divide-y">
+              {debugSteps.map((s, i) => {
+                const icon = s.status === "ok" ? "✅" : s.status === "fail" ? "❌" : s.status === "warn" ? "⚠️" : "ℹ️";
+                const bg   = s.status === "ok" ? "bg-green-50" : s.status === "fail" ? "bg-red-50" : s.status === "warn" ? "bg-amber-50" : "bg-gray-50";
+                const border = s.status === "ok" ? "border-l-2 border-green-400" : s.status === "fail" ? "border-l-2 border-red-400" : s.status === "warn" ? "border-l-2 border-amber-400" : "";
+                return (
+                  <details key={i} open={s.status === "fail" || s.status === "warn"} className={`${bg} ${border}`}>
+                    <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer list-none select-none">
+                      <span className="text-sm">{icon}</span>
+                      <span className="text-xs font-medium flex-1">{s.step}</span>
+                      <span className="text-[10px] text-muted-foreground">▼</span>
+                    </summary>
+                    <div className="px-3 pb-2.5 space-y-1.5">
+                      <pre className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed font-mono bg-white/60 rounded p-2">{s.detail}</pre>
+                      {s.raw && (
+                        <details className="text-[10px]">
+                          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">Raw response →</summary>
+                          <pre className="mt-1 bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap">{s.raw}</pre>
+                        </details>
+                      )}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+            {debugServerIp && (
+              <div className="px-3 py-2 bg-blue-50 border-t text-xs text-blue-800 flex items-center gap-2">
+                <span>Server IP: <strong className="font-mono">{debugServerIp}</strong></span>
+                <button onClick={() => { navigator.clipboard.writeText(debugServerIp); toast({ title: "IP copied" }); }}
+                  className="underline hover:no-underline">Copy</button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -452,42 +467,73 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             </button>
 
             {showAdvanced && (
-              <div className="border-t bg-gray-50/80 p-4 space-y-3">
+              <div className="border-t bg-gray-50/80 p-4 space-y-4">
 
-                {/* Step-by-step guide */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5 text-[11px] text-blue-900">
-                  <p className="font-semibold">TCS API Auth Flow (3 steps)</p>
-                  <p><strong>Step 1</strong> — Generate Bearer Token via TCS ENVO Portal login (clientId + clientSecret).</p>
-                  <p><strong>Step 2</strong> — Use Bearer + TCS Username/Password → get ECOM Access Token.</p>
-                  <p><strong>Step 3</strong> — Booking: <code className="bg-blue-100 px-0.5 rounded">Authorization: Bearer …</code> in header + accessToken in body.</p>
-                  <p className="text-blue-700 mt-1">💡 If you see "Mismatch configuration": paste your ENVO Portal Bearer Token in the field below, then click <strong>Run Auth Debug</strong>.</p>
+                {/* Auth architecture guide */}
+                <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
+                  <p className="text-yellow-300 font-bold text-xs">TCS API — 2-Token Architecture</p>
+                  <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+                  <p><span className="text-blue-300">TOKEN 1</span> · ENVO Bearer Token</p>
+                  <p className="text-slate-400 pl-2">→ From TCS ENVO Portal (paste below)</p>
+                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">Authorization: Bearer …</span> header</p>
+                  <p className="text-slate-400 pl-2">→ Used for: ALL TCS API calls</p>
+                  <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+                  <p><span className="text-orange-300">TOKEN 2</span> · ECOM Access Token</p>
+                  <p className="text-slate-400 pl-2">→ Generated: POST /ecom/api/authentication/token</p>
+                  <p className="text-slate-400 pl-2">→ Using: Bearer (above) + Username + Password</p>
+                  <p className="text-slate-400 pl-2">→ Sent in: <span className="text-green-300">body.accesstoken</span> field</p>
+                  <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
+                  <p className="text-amber-300">⚠ These are DIFFERENT tokens. Do NOT mix them.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">ENVO Portal Client ID <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
-                    <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 205659575" className="text-xs mt-1" />
+                {/* ENVO Bearer Token — primary field */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-blue-800">
+                    ENVO Portal Bearer Token
+                    <span className="ml-1 font-normal text-muted-foreground">(goes in Authorization header)</span>
+                  </Label>
+                  <textarea
+                    value={form.bearerToken}
+                    onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
+                    placeholder="Paste your ENVO Portal Bearer Token here (eyJhbGci...)"
+                    rows={3}
+                    className="w-full border rounded-lg px-2.5 py-2 text-[10px] font-mono bg-white resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Get from: TCS ENVO Portal → API Access → Bearer Token.
+                    If ENV var <code className="bg-muted px-0.5 rounded">TCS_STATIC_BEARER_TOKEN</code> is set, it is used as fallback.
+                  </p>
+                </div>
+
+                {/* Client ID + Secret — for Step 1 auto-generation (future use) */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    ENVO Portal Client ID &amp; Secret
+                    <span className="ml-1 font-normal">(optional — for auto Step 1 refresh in future)</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Input value={form.clientId} onChange={f("clientId")} placeholder="Client ID (e.g. 215627768)" className="text-xs" />
+                    </div>
+                    <div>
+                      <Input type="password" value={form.clientSecret} onChange={f("clientSecret")} placeholder="Client Secret" className="text-xs" />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">ENVO Portal Client Secret <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
-                    <Input type="password" value={form.clientSecret} onChange={f("clientSecret")} placeholder="TCS client secret" className="text-xs mt-1" />
-                  </div>
                 </div>
 
-                <div>
-                  <Label className="text-xs">ENVO Portal Bearer Token <span className="text-muted-foreground font-normal">(Step 1 output — paste from TCS portal)</span></Label>
-                  <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste Bearer Token from TCS ENVO Portal" className="text-xs mt-1 font-mono" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Get this from TCS ENVO Portal → API Access → Bearer Token. This goes in the Authorization header.</p>
+                {/* Direct ECOM Access Token — bypass shortcut */}
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <Label className="text-xs font-medium text-orange-800">
+                    Direct ECOM Access Token
+                    <span className="ml-1 font-normal text-muted-foreground">(optional — skip Step 2)</span>
+                  </Label>
+                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use ECOM token (bypasses username/password auth)" className="text-xs font-mono" />
+                  <p className="text-[10px] text-muted-foreground">Only set this if TCS gave you a ready-to-use token. Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>. Leave blank to use Username/Password (recommended).</p>
                 </div>
 
-                <div>
-                  <Label className="text-xs">Direct ECOM Access Token <span className="text-muted-foreground font-normal">(bypasses both steps)</span></Label>
-                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use ECOM access token" className="text-xs mt-1 font-mono" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Only use this if TCS directly gives you a ready-to-use token. Goes in the booking body.</p>
-                </div>
-
+                {/* Shipping Defaults */}
                 <div className="pt-1 border-t border-border/50 space-y-2">
-                  <p className="text-[11px] font-medium text-muted-foreground">Shipping Defaults</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">Shipping Defaults</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs">Default Weight (KG)</Label>
@@ -510,15 +556,15 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   </div>
                 </div>
 
-                {/* Debug log toggle */}
-                {debugLog.length > 0 && (
+                {/* Debug panel toggle */}
+                {debugSteps.length > 0 && (
                   <div className="pt-1 border-t border-border/50">
                     <button
                       type="button"
                       onClick={() => setShowDebug(v => !v)}
                       className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5">
                       <BookOpen className="w-3.5 h-3.5" />
-                      {showDebug ? "Hide" : "Show"} Debug Logs ({debugLog.length} lines)
+                      {showDebug ? "Hide" : "Show"} Auth Debug Results ({debugSteps.length} steps)
                     </button>
                   </div>
                 )}

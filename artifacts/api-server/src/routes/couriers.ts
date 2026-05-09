@@ -285,7 +285,8 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
         signal: AbortSignal.timeout(10000),
       });
       const trackText = await trackResp.text();
-      const trackOk = trackResp.ok || trackResp.status === 400 || trackResp.status === 404;
+      /* 400/404 = auth ok, bad test CN. 405 = method not allowed (endpoint reachable, wrong method for test). */
+      const trackOk = trackResp.ok || trackResp.status === 400 || trackResp.status === 404 || trackResp.status === 405;
       steps.push({
         step: "Tracking API Validation",
         status: trackOk ? "ok" : "fail",
@@ -300,7 +301,8 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
         raw: trackText.slice(0, 500),
       });
     } catch (e: any) {
-      steps.push({ step: "Tracking API Validation", status: "fail", detail: `Network error: ${e.message}` });
+      /* Timeout/network errors on tracking are non-fatal — auth can still be working */
+      steps.push({ step: "Tracking API Validation", status: "warn", detail: `Network issue (non-fatal): ${e.message}\n\nThis does not indicate auth failure — it may be a firewall/IP restriction on the tracking endpoint.\nBooking API uses a different endpoint and may still work.` });
     }
 
     /* ── Step 6: Server IP ── */
@@ -1837,10 +1839,14 @@ function jwtIsValid(token: string): boolean {
 async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   bearerToken: string; accessToken: string; mode: string;
 }> {
-  /* Shortcut: Direct ECOM Access Token pasted in settings */
+  /* Shortcut: Direct ECOM Access Token pasted in settings.
+     Still include the ENVO bearer so it goes in the Authorization header. */
   const directToken = (settings.accessToken ?? "").trim();
   if (directToken) {
-    return { bearerToken: "", accessToken: directToken, mode: "direct-access-token" };
+    const bearerPasted = (settings.bearerToken ?? "").trim();
+    const bearerEnv    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+    const bearerToken  = bearerPasted || bearerEnv;
+    return { bearerToken, accessToken: directToken, mode: "direct-access-token" };
   }
 
   const username = (settings.username ?? "").trim();
