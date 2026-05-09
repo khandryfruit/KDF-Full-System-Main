@@ -34,6 +34,7 @@ export interface TcsSettings {
   password:    string;   /* TCS password — sent in booking body as "password" */
 
   /* ── Optional booking defaults ── */
+  costCenterCode?: string;   /* Required by COD API — TCS account cost center code */
   serviceCode?:    string;   /* O=Overnight (default), S=SameDay, E=Economy */
   defaultWeight?:  number;   /* kg, e.g. 0.5 */
   fragile?:        boolean;
@@ -80,13 +81,36 @@ export function getCacheStatus() {
   return { note: "No cache — bearer token is read directly from settings on every request." };
 }
 
+/* ─── Decode clientId from JWT payload ────────────────────────────────────
+ * IBM API Gateway requires the X-IBM-Client-Id header on every request.
+ * TCS embeds "clientid" inside the Bearer JWT payload — extract it automatically
+ * so the user never has to enter it separately.
+ */
+export function extractClientIdFromJwt(token: string): string | null {
+  try {
+    const parts = token.trim().split(".");
+    if (parts.length < 2) return null;
+    const pad   = (s: string) => s + "=".repeat((4 - (s.length % 4)) % 4);
+    const json  = Buffer.from(pad(parts[1].replace(/-/g, "+").replace(/_/g, "/")), "base64").toString("utf8");
+    const decoded = JSON.parse(json) as Record<string, unknown>;
+    const cid = decoded.clientid ?? decoded.client_id ?? decoded.clientId ?? decoded.sub;
+    return cid != null ? String(cid).trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
 /* ─── Auth headers ───────────────────────────────────────────────────────── */
 export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     "Authorization": `Bearer ${settings.bearerToken.trim()}`,
     "Content-Type":  "application/json",
     "Accept":        "application/json",
   };
+  // IBM API Gateway requires X-IBM-Client-Id — auto-decoded from JWT payload
+  const clientId = extractClientIdFromJwt(settings.bearerToken);
+  if (clientId) headers["X-IBM-Client-Id"] = clientId;
+  return headers;
 }
 
 /* ─── Validate — only 3 required fields ─────────────────────────────────── */
@@ -175,24 +199,38 @@ export async function testConnection(
     return { ok: false, steps };
   }
 
+  const clientId = extractClientIdFromJwt(settings.bearerToken);
   steps.push({
     step: "Config", status: "info",
-    detail: `username: ${settings.username} | token: ${settings.bearerToken.slice(0, 20)}… | mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`,
+    detail: `username: ${settings.username} | token: ${settings.bearerToken.slice(0, 20)}… | clientId: ${clientId ?? "(not found in JWT)"} | mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`,
   });
+
+  if (!clientId) {
+    steps.push({
+      step: "X-IBM-Client-Id",
+      status: "warn",
+      detail: "Could not decode clientId from Bearer JWT payload — IBM API Gateway may reject requests.\nCheck that your bearer token is the full JWT (eyJ…) from TCS ENVO Portal.",
+    });
+  } else {
+    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId=${clientId} auto-decoded from JWT — will be sent as X-IBM-Client-Id header` });
+  }
 
   const baseUrl = settings.sandbox ? TCS_COD_SANDBOX_URL : TCS_COD_URL;
   const headers = getAuthHeaders(settings);
   const t0 = Date.now();
 
+  /* Test GET /cities — exists in COD API swagger */
   try {
-    const { status, text, data } = await httpReq(`${baseUrl}/cities`, "GET", headers, undefined, 12000);
-    const cities: any[] = Array.isArray(data?.city) ? data.city : [];
-    const ok = status < 300 && cities.length > 0;
+    const { status, text, data } = await httpReq(`${baseUrl}/cities`, "GET", headers, undefined, 15000);
+    /* COD API returns { city: [...] } or { returnStatus: { code: "0200" }, city: [...] } */
+    const cities: any[] = Array.isArray(data?.city) ? data.city
+      : Array.isArray(data) ? data : [];
+    const ok = status < 300 && (cities.length > 0 || status === 200);
     steps.push({
       step: "GET /cities",
       status: ok ? "ok" : "fail",
       detail: ok
-        ? `✅ ${cities.length} cities returned (${Date.now() - t0}ms) — Bearer token is working`
+        ? `✅ ${cities.length > 0 ? cities.length + " cities" : "Response OK"} (${Date.now() - t0}ms) — Bearer + X-IBM-Client-Id accepted`
         : `HTTP ${status} — ${text.slice(0, 300)}`,
       raw: ok ? undefined : text.slice(0, 500),
     });
@@ -202,7 +240,7 @@ export async function testConnection(
     return { ok: false, steps };
   }
 
-  steps.push({ step: "Ready", status: "ok", detail: "✅ Auth working. Booking endpoint: POST /create-order" });
+  steps.push({ step: "Ready", status: "ok", detail: "✅ Auth working. POST /create-order is ready for bookings." });
   return { ok: true, steps };
 }
 
@@ -267,7 +305,7 @@ export async function createBooking(
   const payload: Record<string, any> = {
     userName:            settings.username,
     password:            settings.password,
-    costCenterCode:      "",
+    costCenterCode:      (settings.costCenterCode ?? "").trim(),
     consigneeName:       fullName.slice(0, 100),
     consigneeAddress:    addr.slice(0, 200),
     consigneeMobNo:      mobNo,

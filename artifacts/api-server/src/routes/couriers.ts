@@ -194,7 +194,15 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       res.json({ ok: false, steps, error: missing.join("; "), serverIp }); return;
     }
 
-    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken.length} chars)\nHeader: Authorization: Bearer {token}\nContent-Type: application/json` });
+    const clientId = Tcs.extractClientIdFromJwt(s.bearerToken);
+    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken.length} chars)` });
+    steps.push({
+      step: "X-IBM-Client-Id",
+      status: clientId ? "ok" : "warn",
+      detail: clientId
+        ? `✅ clientId=${clientId} auto-decoded from JWT — will be sent as X-IBM-Client-Id header automatically`
+        : "⚠️ Could not decode clientId from JWT payload — IBM API Gateway may reject requests",
+    });
 
     const testResult = await Tcs.testConnection(s);
     steps.push(...(testResult.steps as any[]));

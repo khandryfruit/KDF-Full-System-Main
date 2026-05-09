@@ -119,7 +119,8 @@ interface TcsFormState {
   bearerToken: string;
   username:    string;
   password:    string;
-  /* ── Optional shipping defaults ── */
+  /* ── Optional booking ── */
+  costCenterCode: string;   /* TCS Cost Center Code — required by COD API */
   serviceCode:    string;
   defaultWeight:  string;
   fragile:        boolean;
@@ -166,6 +167,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const blankForm = (): TcsFormState => ({
     bearerToken: "", username: "", password: "",
+    costCenterCode: "",
     serviceCode: "O", defaultWeight: "0.5", fragile: false, defaultRemarks: "KDF NUTS Order",
     shipperCity: "Lahore", shipperName: "", shipperAddress: "", shipperPhone: "",
     sandbox: false, preventDuplicateBookings: true,
@@ -179,6 +181,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
       bearerToken:    s.bearerToken ?? "",
       username:       s.username ?? "",
       password:       s.password ?? "",
+      costCenterCode: s.costCenterCode ?? "",
       serviceCode:    s.serviceCode ?? "O",
       defaultWeight:  String(s.defaultWeight ?? "0.5"),
       fragile:        s.fragile ?? false,
@@ -474,6 +477,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             </button>
             {showAdvanced && (
               <div className="space-y-3 pl-1 border-l-2 border-muted ml-1">
+                {/* Cost Center Code */}
+                <div>
+                  <Label className="text-xs font-medium">Cost Center Code</Label>
+                  <Input value={form.costCenterCode} onChange={f("costCenterCode")} placeholder="e.g. CCC01 (from TCS ENVO Portal)" autoComplete="off" className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    From TCS ENVO Portal → Cost Centers. Required by COD API — leave blank if not provided by TCS.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-xs font-medium">Service Code</Label>
