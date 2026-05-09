@@ -116,6 +116,154 @@ function TestAIReply() {
   );
 }
 
+/* ─── Meta App Health Check ───────────────────────────── */
+type DiagCheck = {
+  id: string; label: string;
+  status: "pass" | "fail" | "warn" | "unknown";
+  detail: string; fixUrl?: string; fixLabel?: string;
+};
+type DiagResult = {
+  success: boolean; error?: string;
+  appId?: string; appName?: string; appStatus?: string;
+  mainIssue?: string;
+  summary?: { total: number; pass: number; fail: number; warn: number; unknown: number };
+  checks: DiagCheck[];
+};
+
+function MetaAppHealthCheck() {
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [running, setRunning] = React.useState(false);
+  const [result, setResult] = React.useState<DiagResult | null>(null);
+
+  const runDiagnostic = async () => {
+    setRunning(true);
+    setOpen(true);
+    try {
+      const data = await apiFetch("/api/admin/whatsapp/meta-app-diagnostic");
+      setResult(data);
+    } catch (e: any) {
+      setResult({ success: false, error: e.message, checks: [] });
+      toast({ title: "Diagnostic failed", description: e.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const statusIcon = (s: DiagCheck["status"]) => {
+    if (s === "pass") return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />;
+    if (s === "fail") return <XCircle className="w-4 h-4 text-red-500 shrink-0" />;
+    if (s === "warn") return <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />;
+    return <Info className="w-4 h-4 text-slate-400 shrink-0" />;
+  };
+  const statusBg = (s: DiagCheck["status"]) =>
+    s === "pass" ? "border-emerald-200 bg-emerald-50/50" :
+    s === "fail" ? "border-red-200 bg-red-50/50" :
+    s === "warn" ? "border-amber-200 bg-amber-50/50" :
+    "border-border bg-muted/20";
+
+  const failCount  = result?.summary?.fail    ?? 0;
+  const warnCount  = result?.summary?.warn    ?? 0;
+  const passCount  = result?.summary?.pass    ?? 0;
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 flex items-center justify-between gap-3 border-b border-border">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+            <Bug className="w-5 h-5 text-red-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm">Meta App Health Check</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Diagnoses "Facebook Login unavailable" errors — checks app mode, missing fields, permissions, and OAuth config</p>
+          </div>
+        </div>
+        <button
+          onClick={runDiagnostic}
+          disabled={running}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-semibold rounded-xl text-sm transition-colors shrink-0"
+        >
+          {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          {running ? "Running…" : result ? "Re-run" : "Run Diagnostic"}
+        </button>
+      </div>
+
+      {/* Main issue banner */}
+      {result && open && (
+        <div className="border-b border-border">
+          {!result.success ? (
+            <div className="px-5 py-3 bg-red-50 flex items-start gap-2.5">
+              <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">Diagnostic Error</p>
+                <p className="text-xs text-red-700 mt-0.5">{result.error}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* App identity row */}
+              <div className="px-5 py-3 bg-slate-50 flex items-center gap-4 flex-wrap text-xs">
+                <span className="text-muted-foreground">App: <strong className="text-foreground">{result.appName}</strong></span>
+                <span className={`font-bold px-2 py-0.5 rounded-full ${result.appStatus === "LIVE" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                  {result.appStatus ?? "UNKNOWN"}
+                </span>
+                <span className="text-muted-foreground font-mono">ID: {result.appId}</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-emerald-700 font-semibold">{passCount} passed</span>
+                  {failCount > 0 && <span className="text-red-700 font-semibold">{failCount} failed</span>}
+                  {warnCount > 0 && <span className="text-amber-700 font-semibold">{warnCount} warnings</span>}
+                </div>
+              </div>
+              {/* Main issue */}
+              {result.mainIssue && (
+                <div className={`px-5 py-3 flex items-start gap-2.5 ${failCount > 0 ? "bg-red-50 border-b border-red-100" : "bg-emerald-50 border-b border-emerald-100"}`}>
+                  {failCount > 0
+                    ? <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    : <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />}
+                  <p className={`text-sm font-medium ${failCount > 0 ? "text-red-800" : "text-emerald-800"}`}>{result.mainIssue}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Checklist */}
+      {result?.checks && result.checks.length > 0 && open && (
+        <div className="px-5 py-4 space-y-2">
+          {result.checks.map(check => (
+            <div key={check.id} className={`rounded-xl border px-4 py-3 ${statusBg(check.status)}`}>
+              <div className="flex items-start gap-2.5">
+                {statusIcon(check.status)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold leading-snug">{check.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed whitespace-pre-line">{check.detail}</p>
+                  {check.fixUrl && check.status !== "pass" && (
+                    <a
+                      href={check.fixUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {check.fixLabel ?? "Fix this"} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsed state hint */}
+      {!running && !result && (
+        <div className="px-5 py-4 text-xs text-muted-foreground">
+          Click "Run Diagnostic" to automatically check: App Mode (Live/Dev), Privacy Policy URL, App Icon, Data Deletion URL, App Domains, Business Verification, Token validity, Permission scopes, and OAuth redirect configuration — with direct links to fix each issue.
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── System User Permanent Token Guide ───────────────── */
 const SYSTEM_USER_STEPS = [
   {
@@ -1844,6 +1992,9 @@ export default function WhatsAppPage() {
               )}
             </div>
           </div>
+
+          {/* ══ META APP HEALTH CHECK ══ */}
+          <MetaAppHealthCheck />
 
           {/* ══ META CLOUD API SETUP GUIDE ══ */}
           <MetaSetupGuide />

@@ -2120,6 +2120,279 @@ router.get("/admin/whatsapp/meta-config", adminMiddleware as any, (req, res) => 
   return res.json({ appId, configId, isConfigured: !!(appId && configId) });
 });
 
+/* ─── Admin: Meta App Health Diagnostic ────────────────── */
+router.get("/admin/whatsapp/meta-app-diagnostic", adminMiddleware as any, async (req, res) => {
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  const GV = "v20.0";
+
+  if (!appId || !appSecret) {
+    return res.json({
+      success: false,
+      error: "META_APP_ID and META_APP_SECRET environment secrets are not configured.",
+      checks: [],
+    });
+  }
+
+  const checks: Array<{
+    id: string;
+    label: string;
+    status: "pass" | "fail" | "warn" | "unknown";
+    detail: string;
+    fixUrl?: string;
+    fixLabel?: string;
+  }> = [];
+
+  try {
+    /* Step 1: Get App Access Token via client_credentials */
+    const tokenRes = await fetch(
+      `https://graph.facebook.com/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&grant_type=client_credentials`
+    );
+    const tokenData = await tokenRes.json() as any;
+    const appToken: string | null = tokenData.access_token ?? null;
+
+    if (!appToken) {
+      return res.json({
+        success: false,
+        error: `Could not get App Access Token: ${tokenData.error?.message ?? "Unknown error"}. Check that META_APP_ID and META_APP_SECRET match your Meta App exactly.`,
+        checks: [],
+      });
+    }
+
+    /* Step 2: Fetch App fields */
+    const appRes = await fetch(
+      `https://graph.facebook.com/${GV}/${appId}?fields=name,status,privacy_policy_url,terms_of_service_url,icon_url,user_support_url,data_deletion_request_url,data_deletion_data_url,app_domains,business,social_discovery&access_token=${appToken}`
+    );
+    const app = await appRes.json() as any;
+
+    const appName: string = app.name ?? "Unknown App";
+    const appStatus: string = app.status ?? "UNKNOWN"; // "LIVE" | "DEVELOPMENT" | "STAGING"
+
+    /* Check 1: App Mode */
+    checks.push({
+      id: "app_mode",
+      label: "App Mode: Live (not Development)",
+      status: appStatus === "LIVE" ? "pass" : "fail",
+      detail: appStatus === "LIVE"
+        ? `App "${appName}" is LIVE — Facebook Login works for all users.`
+        : `App "${appName}" is in ${appStatus} mode. This causes "Facebook Login is currently unavailable" for users who are not app developers/testers. Switch to LIVE mode in Meta Developer Portal → App Review → Status.`,
+      fixUrl: `https://developers.facebook.com/apps/${appId}/dashboard/`,
+      fixLabel: "Open App Dashboard → Switch to Live",
+    });
+
+    /* Check 2: Privacy Policy URL */
+    const hasPrivacy = !!(app.privacy_policy_url);
+    checks.push({
+      id: "privacy_policy",
+      label: "Privacy Policy URL",
+      status: hasPrivacy ? "pass" : "fail",
+      detail: hasPrivacy
+        ? `Set: ${app.privacy_policy_url}`
+        : "Missing. Required to go Live. Add it in: Meta App Dashboard → Settings → Basic → Privacy Policy URL.",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/settings/basic/`,
+      fixLabel: "Open Basic Settings",
+    });
+
+    /* Check 3: Terms of Service URL */
+    const hasTerms = !!(app.terms_of_service_url);
+    checks.push({
+      id: "terms_of_service",
+      label: "Terms of Service URL",
+      status: hasTerms ? "pass" : "warn",
+      detail: hasTerms
+        ? `Set: ${app.terms_of_service_url}`
+        : "Not set. Recommended for Live apps. Add it in: Meta App Dashboard → Settings → Basic → Terms of Service URL.",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/settings/basic/`,
+      fixLabel: "Open Basic Settings",
+    });
+
+    /* Check 4: App Icon */
+    const hasIcon = !!(app.icon_url);
+    checks.push({
+      id: "app_icon",
+      label: "App Icon",
+      status: hasIcon ? "pass" : "fail",
+      detail: hasIcon
+        ? "App icon is set."
+        : "No app icon. Required for Live mode. Upload a 1024×1024 PNG in: Meta App Dashboard → Settings → Basic → App Icon.",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/settings/basic/`,
+      fixLabel: "Open Basic Settings → Upload Icon",
+    });
+
+    /* Check 5: Data Deletion Callback URL */
+    const hasDataDeletion = !!(app.data_deletion_request_url || app.data_deletion_data_url);
+    checks.push({
+      id: "data_deletion",
+      label: "Data Deletion Callback URL",
+      status: hasDataDeletion ? "pass" : "fail",
+      detail: hasDataDeletion
+        ? "Data Deletion URL is configured."
+        : "Missing. Required for Facebook Login apps. Set in: Meta App Dashboard → Settings → Basic → Data Deletion Request → provide a URL or instructions.",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/settings/basic/`,
+      fixLabel: "Open Basic Settings → Data Deletion",
+    });
+
+    /* Check 6: App Domains */
+    const domains: string[] = app.app_domains ?? [];
+    const requiredDomains = ["khanbabadryfruits.com", "admin.khanbabadryfruits.com"];
+    const missingDomains = requiredDomains.filter(d => !domains.some((ad: string) => ad.includes(d)));
+    checks.push({
+      id: "app_domains",
+      label: "App Domains (khanbabadryfruits.com)",
+      status: missingDomains.length === 0 ? "pass" : "fail",
+      detail: missingDomains.length === 0
+        ? `Configured domains: ${domains.join(", ")}`
+        : `Missing domains: ${missingDomains.join(", ")}. Current domains: [${domains.join(", ") || "none"}]. Add missing domains in: Meta App Dashboard → Settings → Basic → App Domains. Also add them to: Facebook Login for Business → Settings → Allowed Domains for JavaScript SDK.`,
+      fixUrl: `https://developers.facebook.com/apps/${appId}/settings/basic/`,
+      fixLabel: "Open Basic Settings → App Domains",
+    });
+
+    /* Check 7: Business Verification */
+    const hasBusiness = !!(app.business?.id);
+    checks.push({
+      id: "business_verification",
+      label: "Business Verification",
+      status: hasBusiness ? "pass" : "warn",
+      detail: hasBusiness
+        ? `Linked to business: ${app.business?.name ?? app.business?.id}`
+        : "App does not have a verified business linked. Business Verification is required for Advanced Access to WhatsApp permissions. Go to: Meta Business Manager → Settings → Business Info → Start Verification.",
+      fixUrl: "https://business.facebook.com/settings/info",
+      fixLabel: "Open Business Manager → Verification",
+    });
+
+    /* Step 3: Check permissions via stored system user token if available */
+    let systemToken: string | null = null;
+    try {
+      const [settings] = await db.select({ accessToken: whatsappSettingsTable.accessToken })
+        .from(whatsappSettingsTable).limit(1);
+      systemToken = settings?.accessToken ?? null;
+    } catch { /* non-critical */ }
+
+    const permissionsToCheck = [
+      { name: "whatsapp_business_messaging", label: "whatsapp_business_messaging (send messages)" },
+      { name: "whatsapp_business_management", label: "whatsapp_business_management (manage templates/WABAs)" },
+      { name: "business_management", label: "business_management (access Business Manager)" },
+    ];
+
+    if (systemToken) {
+      /* Check token info */
+      const debugRes = await fetch(
+        `https://graph.facebook.com/${GV}/debug_token?input_token=${systemToken}&access_token=${appToken}`
+      );
+      const debugData = await debugRes.json() as any;
+      const tokenInfo = debugData.data ?? {};
+
+      /* Token validity */
+      const isTokenValid = tokenInfo.is_valid === true;
+      const tokenExpiry = tokenInfo.expires_at === 0 ? "Never (permanent)" : tokenInfo.expires_at
+        ? new Date(tokenInfo.expires_at * 1000).toLocaleDateString()
+        : "Unknown";
+      const grantedScopes: string[] = tokenInfo.scopes ?? [];
+
+      checks.push({
+        id: "token_valid",
+        label: "System User Token — Valid",
+        status: isTokenValid ? "pass" : "fail",
+        detail: isTokenValid
+          ? `Token is valid. Type: ${tokenInfo.type ?? "unknown"}. Expires: ${tokenExpiry}. App: ${tokenInfo.application ?? "unknown"}.`
+          : `Token is INVALID or expired. ${tokenInfo.error?.message ?? "Generate a new permanent System User token in Meta Business Manager → System Users."}`,
+        fixUrl: "https://business.facebook.com/settings/system-users",
+        fixLabel: "Open System Users → Regenerate Token",
+      });
+
+      for (const perm of permissionsToCheck) {
+        const hasScope = grantedScopes.includes(perm.name);
+        checks.push({
+          id: `perm_${perm.name}`,
+          label: `Permission: ${perm.label}`,
+          status: isTokenValid ? (hasScope ? "pass" : "fail") : "unknown",
+          detail: !isTokenValid
+            ? "Cannot check — token is invalid."
+            : hasScope
+              ? `Granted on this token.`
+              : `NOT granted on this token. Go to: Meta Business Manager → System Users → your System User → Generate New Token → enable this permission.`,
+          fixUrl: "https://business.facebook.com/settings/system-users",
+          fixLabel: "Open System Users → Regenerate Token with correct permissions",
+        });
+      }
+
+      /* Check token app binding */
+      const tokenAppId = tokenInfo.app_id;
+      if (tokenAppId && tokenAppId !== appId) {
+        checks.push({
+          id: "token_app_mismatch",
+          label: "Token App ID matches META_APP_ID",
+          status: "fail",
+          detail: `Token was generated for App ID ${tokenAppId}, but META_APP_ID is ${appId}. Regenerate the System User token and select the correct app (${appId}).`,
+          fixUrl: "https://business.facebook.com/settings/system-users",
+          fixLabel: "Open System Users → Regenerate Token",
+        });
+      }
+    } else {
+      for (const perm of permissionsToCheck) {
+        checks.push({
+          id: `perm_${perm.name}`,
+          label: `Permission: ${perm.label}`,
+          status: "unknown",
+          detail: "No System User token saved yet — save credentials first, then re-run diagnostic to verify permission scopes.",
+        });
+      }
+    }
+
+    /* Check 8: OAuth Redirect URIs (informational — can't verify via API) */
+    checks.push({
+      id: "oauth_redirect",
+      label: "OAuth Redirect URIs (manual check required)",
+      status: "warn",
+      detail: "Cannot auto-verify. Ensure these are listed under: Meta App → Facebook Login for Business → Settings → Valid OAuth Redirect URIs:\n• https://admin.khanbabadryfruits.com\n• https://admin.khanbabadryfruits.com/admin/whatsapp",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/fb-login-for-business/settings/`,
+      fixLabel: "Open Facebook Login for Business → Settings",
+    });
+
+    /* Check 9: Embedded Signup Config ID */
+    const configId = process.env.META_CONFIG_ID;
+    checks.push({
+      id: "config_id",
+      label: "META_CONFIG_ID (Embedded Signup Config)",
+      status: configId ? "pass" : "warn",
+      detail: configId
+        ? `META_CONFIG_ID is set: ${configId}. Embedded Signup popup will use this configuration.`
+        : "META_CONFIG_ID is not set. Embedded Signup requires a Config ID from: Meta App → WhatsApp → Embedded Signup Configuration. Note: For self-owned WABAs, use Manual API Setup instead.",
+      fixUrl: `https://developers.facebook.com/apps/${appId}/whatsapp-business/wa-dev-console/`,
+      fixLabel: "Open WhatsApp → Embedded Signup Config",
+    });
+
+    const failCount = checks.filter(c => c.status === "fail").length;
+    const warnCount = checks.filter(c => c.status === "warn").length;
+
+    return res.json({
+      success: true,
+      appId,
+      appName,
+      appStatus,
+      checks,
+      summary: {
+        total: checks.length,
+        pass: checks.filter(c => c.status === "pass").length,
+        fail: failCount,
+        warn: warnCount,
+        unknown: checks.filter(c => c.status === "unknown").length,
+      },
+      mainIssue: appStatus !== "LIVE"
+        ? `App is in ${appStatus} mode — this is the primary cause of "Facebook Login is currently unavailable". Switch to LIVE mode in Meta Developer Portal.`
+        : failCount > 0
+          ? `${failCount} check(s) failed. Fix them to restore full functionality.`
+          : "All critical checks passed.",
+    });
+  } catch (e: any) {
+    return res.json({
+      success: false,
+      error: `Diagnostic failed: ${e.message}`,
+      checks,
+    });
+  }
+});
+
 /* ─── Admin: Existing WABA pre-check (before opening signup) ── */
 router.get("/admin/whatsapp/meta-existing-waba", adminMiddleware as any, async (req, res) => {
   try {
