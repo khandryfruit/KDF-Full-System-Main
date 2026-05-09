@@ -2,45 +2,13 @@ import { Router } from "express";
 import { db, productsTable } from "@workspace/db";
 import { eq, ilike, and, desc, asc, sql } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
+import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
 const router = Router();
-
-/**
- * Converts any string into a clean, SEO-friendly slug.
- * Rules: lowercase, alphanumeric + hyphens only, no leading/trailing hyphens,
- * no consecutive hyphens. e.g. "Cashews nuts 250g" → "cashews-nuts-250g"
- */
-export function generateSlugFromName(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 /** Returns true if the slug is already in its canonical clean form */
 function isCleanSlug(slug: string): boolean {
   return generateSlugFromName(slug) === slug;
-}
-
-async function ensureUniqueSlug(base: string, excludeId?: number): Promise<string> {
-  const cleanBase = generateSlugFromName(base);
-  let candidate = cleanBase;
-  let suffix = 2;
-  while (true) {
-    const existing = await db
-      .select({ id: productsTable.id })
-      .from(productsTable)
-      .where(eq(productsTable.slug, candidate))
-      .limit(1);
-    if (existing.length === 0 || (excludeId && existing[0].id === excludeId)) {
-      return candidate;
-    }
-    candidate = `${cleanBase}-${suffix}`;
-    suffix++;
-  }
 }
 
 router.get("/products", async (req, res) => {
@@ -87,6 +55,47 @@ router.get("/products/check-slug", adminMiddleware as any, async (req, res) => {
     res.status(500).json({ error: "Failed" });
   }
 });
+
+/**
+ * POST /api/admin/products/backfill-slugs
+ * One-time migration: sanitizes all existing product slugs.
+ * Safe to run multiple times (idempotent).
+ * Must be registered before /products/:id to avoid route collision.
+ */
+router.post("/admin/products/backfill-slugs", adminMiddleware as any, backfillSlugsHandler);
+
+/**
+ * POST /api/products/fix-slugs (legacy alias, kept for backward compat)
+ */
+router.post("/products/fix-slugs", adminMiddleware as any, backfillSlugsHandler);
+
+async function backfillSlugsHandler(req: any, res: any) {
+  try {
+    const allProducts = await db
+      .select({ id: productsTable.id, name: productsTable.name, slug: productsTable.slug })
+      .from(productsTable)
+      .orderBy(asc(productsTable.id));
+
+    let fixed = 0;
+    let skipped = 0;
+    const log: { id: number; old: string; new: string }[] = [];
+
+    for (const p of allProducts) {
+      const clean = generateSlugFromName(p.slug);
+      if (clean === p.slug) { skipped++; continue; }
+
+      const newSlug = await ensureUniqueSlug(clean, p.id);
+      await db.update(productsTable).set({ slug: newSlug, updatedAt: new Date() }).where(eq(productsTable.id, p.id));
+      log.push({ id: p.id, old: p.slug, new: newSlug });
+      fixed++;
+    }
+
+    res.json({ success: true, fixed, skipped, log });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to fix slugs" });
+  }
+}
 
 /**
  * GET /products/:id
@@ -187,37 +196,5 @@ router.delete("/products/:id", adminMiddleware as any, async (req, res) => {
   }
 });
 
-/**
- * POST /api/admin/products/fix-slugs
- * One-time migration: sanitizes all existing product slugs.
- * Safe to run multiple times (idempotent).
- */
-router.post("/products/fix-slugs", adminMiddleware as any, async (req, res) => {
-  try {
-    const allProducts = await db
-      .select({ id: productsTable.id, name: productsTable.name, slug: productsTable.slug })
-      .from(productsTable)
-      .orderBy(asc(productsTable.id));
-
-    let fixed = 0;
-    let skipped = 0;
-    const log: { id: number; old: string; new: string }[] = [];
-
-    for (const p of allProducts) {
-      const clean = generateSlugFromName(p.slug);
-      if (clean === p.slug) { skipped++; continue; }
-
-      const newSlug = await ensureUniqueSlug(clean, p.id);
-      await db.update(productsTable).set({ slug: newSlug, updatedAt: new Date() }).where(eq(productsTable.id, p.id));
-      log.push({ id: p.id, old: p.slug, new: newSlug });
-      fixed++;
-    }
-
-    res.json({ success: true, fixed, skipped, log });
-  } catch (err) {
-    req.log.error(err);
-    res.status(500).json({ error: "Failed to fix slugs" });
-  }
-});
-
+export { generateSlugFromName };
 export default router;

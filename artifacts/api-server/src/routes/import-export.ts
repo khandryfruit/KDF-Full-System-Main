@@ -5,13 +5,10 @@ import ExcelJS from "exceljs";
 import { db, productsTable, syncJobsTable } from "@workspace/db";
 import { adminMiddleware } from "../lib/auth";
 import { eq, desc } from "drizzle-orm";
+import { ensureUniqueSlug } from "../lib/slugify";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-
-function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
-}
 
 async function parseWorksheet(
   buffer: Buffer,
@@ -96,7 +93,7 @@ router.post("/admin/import/products", adminMiddleware as any, upload.single("fil
         const stock = parseInt(row["stock"] ?? row["Stock"] ?? row["quantity"] ?? "0") || 0;
         const originalPrice = parseFloat(row["original_price"] ?? row["originalPrice"] ?? row["compare_price"] ?? "") || undefined;
         const description = (row["description"] ?? row["Description"] ?? "").trim() || undefined;
-        const slug = slugify(name);
+        const slug = await ensureUniqueSlug(name);
 
         let variants: any[] = [];
         if (row["variants"]) {

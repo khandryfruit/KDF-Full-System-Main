@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 
+const BASE_URL = import.meta.env.BASE_URL ?? "/";
+
 type TabKey = "description" | "reviews" | "shipping";
 
 /* ── Star picker ── */
@@ -339,7 +341,10 @@ export default function ProductDetailPage() {
     if (!slug) return;
     const decodedParam = decodeURIComponent(param);
     if (decodedParam !== slug) {
-      window.history.replaceState(null, "", `/products/${slug}`);
+      // window.location.replace causes a permanent navigation so the browser
+      // back-button skips the broken URL and future shares use the clean one.
+      const base = (BASE_URL || "/").replace(/\/$/, "");
+      window.location.replace(`${base}/products/${slug}`);
     }
   }, [product, param]);
 

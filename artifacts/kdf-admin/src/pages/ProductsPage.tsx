@@ -409,8 +409,18 @@ export default function ProductsPage() {
       return;
     }
     const effectiveStock = form.variants.length > 0 ? totalVariantStock : form.stock;
+    // Sanitize slug before submission — same rules as generateSlugFromName on the server
+    const rawSlug = form.slug || form.name;
+    const cleanSlug = rawSlug
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
     const payload = {
       ...form,
+      slug: cleanSlug,
       stock: effectiveStock,
       originalPrice: form.originalPrice || undefined,
       weight: form.weight || undefined,
@@ -560,6 +570,18 @@ export default function ProductsPage() {
                           value={form.slug}
                           placeholder="auto-generated"
                           onChange={(e) => setForm(f => ({ ...f, slug: e.target.value }))}
+                          onBlur={(e) => {
+                            const raw = e.target.value;
+                            if (!raw) return;
+                            const clean = raw
+                              .toLowerCase()
+                              .trim()
+                              .replace(/[^a-z0-9\s-]/g, "")
+                              .replace(/\s+/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-|-$/g, "");
+                            setForm(f => ({ ...f, slug: clean }));
+                          }}
                         />
                       </div>
                     </div>

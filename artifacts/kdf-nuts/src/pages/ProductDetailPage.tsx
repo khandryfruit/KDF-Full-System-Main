@@ -491,7 +491,11 @@ export function ProductDetailPage() {
     // Decode any %20-style encoding from the current URL for comparison
     const decodedParam = decodeURIComponent(param);
     if (decodedParam !== slug) {
-      window.history.replaceState(null, "", `/products/${slug}`);
+      // Use BASE_URL (e.g. /kdf-nuts/) to build the correct canonical path.
+      // window.location.replace causes the browser to navigate to the clean URL
+      // so back-button skips the broken URL and future shares use the clean one.
+      const base = (BASE_URL || "/").replace(/\/$/, "");
+      window.location.replace(`${base}/products/${slug}`);
     }
   }, [product, param]);
 

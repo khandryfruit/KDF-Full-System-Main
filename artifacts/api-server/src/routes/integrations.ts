@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, integrationsTable, shopifyIntegrationsTable, woocommerceIntegrationsTable, marketingIntegrationsTable, syncJobsTable, productsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
+import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
 const router = Router();
 
@@ -100,7 +101,8 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
             const price = sp.variants?.[0]?.price ?? "0";
             const stock = sp.variants?.reduce((sum: number, v: any) => sum + (parseInt(v.inventory_quantity) || 0), 0) ?? 0;
             const images = (sp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slug = (sp.handle ?? sp.title?.toLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "") + "-" + Date.now();
+            const slugBase = sp.handle ?? generateSlugFromName(sp.title ?? "untitled");
+            const slug = await ensureUniqueSlug(slugBase);
             await db.insert(productsTable).values({
               name: sp.title ?? "Untitled",
               slug,
@@ -185,7 +187,8 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
             const originalPrice = wp.regular_price && wp.sale_price ? wp.regular_price : undefined;
             const stock = wp.stock_quantity ?? 0;
             const images = (wp.images ?? []).map((img: any) => img.src).filter(Boolean);
-            const slug = (wp.slug ?? wp.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") ?? "") + "-" + Date.now();
+            const slugBase = wp.slug ?? generateSlugFromName(wp.name ?? "untitled");
+            const slug = await ensureUniqueSlug(slugBase);
             await db.insert(productsTable).values({
               name: wp.name ?? "Untitled",
               slug,
