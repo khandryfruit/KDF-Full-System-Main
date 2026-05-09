@@ -1017,8 +1017,29 @@ router.post("/admin/shopify/customers/campaign/whatsapp", adminMiddleware, async
       phone: shopifyCustomersTable.phone,
     }).from(shopifyCustomersTable).where(where);
 
+    /* Auto-create a shopify_campaigns record so this campaign can be tracked */
+    const segmentLabels: Record<string, string> = {
+      all: "All Customers", vip: "VIP", high_value: "High Value", repeat: "Repeat Buyers",
+      new: "New Customers", inactive: "Inactive (90d+)", marketing: "Marketing Opt-in",
+      with_phone: "Has WhatsApp", with_email: "Has Email", csv: "CSV Imported",
+      one_time: "One-Time Buyers", at_risk: "At Risk", lost: "Lost Customers",
+      inactive_60d: "Inactive 60d+",
+    };
+    const segLabel = segmentLabels[segment ?? "all"] ?? (segment ?? "All");
+    const cityLabel = Array.isArray(cities) && cities.length > 0 ? ` · ${cities.join(", ")}` : "";
+    const campaignName = `WA Campaign — ${segLabel}${cityLabel} · ${new Date().toLocaleDateString("en-PK", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+
+    const [campaign] = await db.insert(shopifyCampaignsTable).values({
+      name: campaignName,
+      message,
+      targetSegment: segment ?? "all",
+      status: "running",
+      startedAt: new Date(),
+    }).returning();
+
     /* Enqueue messages via queue (gradual send, respects rate limits) */
     const queued = await enqueueCampaignMessages({
+      campaignId: campaign.id,
       campaignType: "whatsapp",
       spreadHours: spreadHours ?? 0,
       messages: customers.map(c => ({
@@ -1031,8 +1052,12 @@ router.post("/admin/shopify/customers/campaign/whatsapp", adminMiddleware, async
       })),
     });
 
-    req.log.info({ queued, segment, cities }, "Campaign messages enqueued");
-    res.json({ success: true, targeting: customers.length, queued });
+    await db.update(shopifyCampaignsTable)
+      .set({ status: "queued", updatedAt: new Date() })
+      .where(eq(shopifyCampaignsTable.id, campaign.id));
+
+    req.log.info({ queued, segment, cities, campaignId: campaign.id }, "Campaign messages enqueued");
+    res.json({ success: true, targeting: customers.length, queued, campaignId: campaign.id });
   } catch (err) {
     req.log.error(err);
     if (!res.headersSent) res.status(500).json({ error: String(err) });
@@ -1168,6 +1193,118 @@ router.get("/admin/shopify/campaigns", adminMiddleware, async (req, res) => {
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to fetch campaigns" });
+  }
+});
+
+/* ── Live campaign monitor — per-campaign queue stats + orphaned (no campaign_id) ── */
+router.get("/admin/shopify/campaigns/live", adminMiddleware, async (req, res) => {
+  try {
+    const [campaignRows, orphanedRow] = await Promise.all([
+      db.execute<{
+        id: number; name: string; status: string; target_segment: string;
+        total_sent: number; total_failed: number;
+        started_at: string | null; created_at: string; updated_at: string; completed_at: string | null;
+        pending_count: string; sending_count: string; sent_count: string; failed_count: string; total_queued: string;
+      }>(sql`
+        SELECT
+          sc.id, sc.name, sc.status, sc.target_segment, sc.total_sent, sc.total_failed,
+          sc.started_at, sc.created_at, sc.updated_at, sc.completed_at,
+          COALESCE(q.pending_count, 0)  AS pending_count,
+          COALESCE(q.sending_count, 0)  AS sending_count,
+          COALESCE(q.sent_count, 0)     AS sent_count,
+          COALESCE(q.failed_count, 0)   AS failed_count,
+          COALESCE(q.total_queued, 0)   AS total_queued
+        FROM shopify_campaigns sc
+        LEFT JOIN (
+          SELECT
+            campaign_id,
+            COUNT(*) FILTER (WHERE status = 'pending')  AS pending_count,
+            COUNT(*) FILTER (WHERE status = 'sending')  AS sending_count,
+            COUNT(*) FILTER (WHERE status = 'sent')     AS sent_count,
+            COUNT(*) FILTER (WHERE status = 'failed')   AS failed_count,
+            COUNT(*)                                     AS total_queued
+          FROM campaign_message_queue
+          WHERE campaign_id IS NOT NULL
+          GROUP BY campaign_id
+        ) q ON q.campaign_id = sc.id
+        WHERE sc.created_at > NOW() - INTERVAL '7 days'
+           OR sc.status IN ('running', 'queued')
+        ORDER BY sc.created_at DESC
+        LIMIT 30
+      `),
+      /* Orphaned messages (no campaign_id) — legacy campaigns started before tracking */
+      db.execute<{
+        pending_count: string; sending_count: string; sent_count: string;
+        failed_count: string; total_queued: string; oldest_created: string;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'pending')  AS pending_count,
+          COUNT(*) FILTER (WHERE status = 'sending')  AS sending_count,
+          COUNT(*) FILTER (WHERE status = 'sent')     AS sent_count,
+          COUNT(*) FILTER (WHERE status = 'failed')   AS failed_count,
+          COUNT(*)                                     AS total_queued,
+          MIN(created_at)                              AS oldest_created
+        FROM campaign_message_queue
+        WHERE campaign_id IS NULL
+          AND created_at > NOW() - INTERVAL '7 days'
+      `),
+    ]);
+
+    const orphaned = ((orphanedRow.rows ?? orphanedRow) as any[])[0] ?? {};
+    const campaigns = (campaignRows.rows ?? campaignRows) as any[];
+
+    res.json({
+      campaigns,
+      orphaned: {
+        pending: Number(orphaned.pending_count ?? 0),
+        sending: Number(orphaned.sending_count ?? 0),
+        sent: Number(orphaned.sent_count ?? 0),
+        failed: Number(orphaned.failed_count ?? 0),
+        total: Number(orphaned.total_queued ?? 0),
+        oldestCreated: orphaned.oldest_created ?? null,
+      },
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to fetch live campaign stats" });
+  }
+});
+
+/* ── Campaign message logs (per campaign) ── */
+router.get("/admin/shopify/campaigns/:id/logs", adminMiddleware, async (req, res) => {
+  try {
+    const campaignId = parseInt(req.params.id);
+    if (isNaN(campaignId)) return res.status(400).json({ error: "Invalid campaign id" });
+    const [campaign] = await db.select().from(shopifyCampaignsTable)
+      .where(eq(shopifyCampaignsTable.id, campaignId)).limit(1);
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    const logs = await db.execute<{
+      id: number; status: string; customer_name: string | null; phone: string | null;
+      email: string | null; sent_at: string | null; error_message: string | null;
+      created_at: string; retries: number; campaign_type: string;
+    }>(sql`
+      SELECT id, status, customer_name, phone, email, sent_at, error_message, created_at, retries, campaign_type
+      FROM campaign_message_queue
+      WHERE campaign_id = ${campaignId}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `);
+
+    res.json({
+      campaign,
+      logs: (logs.rows ?? logs) as any[],
+      summary: {
+        total: Number((logs.rows ?? logs as any[]).length),
+        sent: (logs.rows ?? logs as any[]).filter((r: any) => r.status === "sent").length,
+        failed: (logs.rows ?? logs as any[]).filter((r: any) => r.status === "failed").length,
+        pending: (logs.rows ?? logs as any[]).filter((r: any) => r.status === "pending").length,
+        sending: (logs.rows ?? logs as any[]).filter((r: any) => r.status === "sending").length,
+      },
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to fetch campaign logs" });
   }
 });
 

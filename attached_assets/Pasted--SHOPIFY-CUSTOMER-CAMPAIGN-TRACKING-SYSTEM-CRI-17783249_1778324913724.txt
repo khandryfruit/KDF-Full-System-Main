@@ -1,0 +1,278 @@
+====================================================
+SHOPIFY CUSTOMER CAMPAIGN TRACKING SYSTEM — CRITICAL IMPROVEMENTS
+=================================================================
+
+I tested the customer campaigns module inside:
+Customers → Inactive Customers → Send Campaign
+
+Currently there is a MAJOR UX and tracking issue.
+
+The campaign starts, but there is NO proper visibility or monitoring system.
+
+I cannot understand:
+
+* Is the campaign actually running?
+* How many messages were sent?
+* How many delivered?
+* How many failed?
+* How many pending?
+* Which customers received messages?
+* Is WhatsApp Meta responding correctly or not?
+
+This entire campaign tracking system must be redesigned professionally.
+
+====================================================
+
+1. LIVE CAMPAIGN TRACKING PANEL
+   ====================================================
+
+Add a real-time campaign monitoring section at the TOP of the Customers page and Campaign page.
+
+When a campaign starts, it should immediately appear in a:
+“Running Campaigns” section.
+
+====================================================
+REQUIRED LIVE DATA
+==================
+
+Each running campaign must show:
+
+* Campaign Name
+* Segment Name
+  (Inactive / VIP / Repeat / New Customers etc.)
+* Channel
+  (WhatsApp / Email / SMS)
+* Start Time
+* Running Duration Timer
+* Progress Percentage
+* Total Customers
+* Sent Count
+* Delivered Count
+* Read Count
+* Failed Count
+* Pending Count
+* Retry Count
+* Estimated Completion Time
+
+Everything should update LIVE in real-time.
+
+====================================================
+2. BEAUTIFUL LIVE PROGRESS UI
+=============================
+
+Create a professional campaign progress card.
+
+Example features:
+
+* Animated progress bar
+* Live counters
+* Delivery animation
+* Sending speed
+* Queue status
+* Status badges
+
+Statuses:
+
+* Running
+* Queued
+* Paused
+* Completed
+* Failed
+* Partially Failed
+
+====================================================
+3. REAL-TIME WHATSAPP DELIVERY TRACKING
+=======================================
+
+Integrate proper Meta webhook tracking.
+
+We need LIVE status updates from Meta:
+
+* Sent
+* Delivered
+* Read
+* Failed
+* Rejected
+
+This data must sync instantly into admin dashboard.
+
+====================================================
+4. MESSAGE LOG VIEWER
+=====================
+
+Add:
+“View Campaign Logs”
+
+When opened, show:
+
+* Customer name
+* Phone number
+* Template used
+* Delivery status
+* Error message
+* Send timestamp
+* Read timestamp
+* Retry history
+
+====================================================
+5. CAMPAIGN ANALYTICS DASHBOARD
+===============================
+
+Create advanced analytics:
+
+* Open rate
+* Read rate
+* Click rate
+* Conversion rate
+* Orders generated
+* Revenue generated
+* Failed delivery rate
+* Response rate
+
+====================================================
+6. LIVE TIMER SYSTEM
+====================
+
+Every running campaign should show:
+
+* Live running timer
+* Time elapsed
+* Estimated remaining time
+
+Example:
+Running for:
+00:14:22
+
+Estimated completion:
+08 minutes remaining
+
+====================================================
+7. BACKGROUND JOB / QUEUE SYSTEM
+================================
+
+Please audit the backend queue system.
+
+Current issue:
+Campaign starts but admin has no visibility.
+
+Need:
+
+* Proper queue workers
+* Retry logic
+* Batch sending
+* Rate limit handling
+* Meta API throttling handling
+* Queue monitoring
+
+====================================================
+8. NOTIFICATION SYSTEM
+======================
+
+Admin should receive notifications:
+
+* Campaign started
+* Campaign completed
+* Campaign partially failed
+* Meta API disconnected
+* WhatsApp template rejected
+* Delivery rate dropped
+
+Add:
+
+* Sound notifications
+* Toast notifications
+* Notification center
+
+====================================================
+9. CAMPAIGN HISTORY PAGE
+========================
+
+Add dedicated:
+Campaign History
+
+Show:
+
+* Previous campaigns
+* Performance
+* Delivery stats
+* Revenue stats
+* Conversion stats
+
+====================================================
+10. UI/UX IMPROVEMENTS
+======================
+
+Current campaign UX feels incomplete.
+
+Need:
+
+* World-class admin UI
+* Professional campaign cards
+* Better spacing
+* Better typography
+* Better active indicators
+* Real-time animations
+* Live updating stats
+* Responsive design
+
+====================================================
+11. IMPORTANT — CHECK CURRENT RUNNING CAMPAIGN
+==============================================
+
+Please inspect the campaign I already started for:
+Inactive Customers
+
+Check:
+
+* Is it actually running?
+* Are messages being sent?
+* Is Meta API responding?
+* Are queue workers functioning?
+* Are webhook events coming back?
+* Are failed requests being logged?
+
+Currently there is NO visibility.
+
+====================================================
+12. META WEBHOOK STATUS INTEGRATION
+===================================
+
+Need full Meta webhook integration for:
+
+* message_sent
+* message_delivered
+* message_read
+* message_failed
+
+These statuses should instantly update inside admin dashboard.
+
+====================================================
+13. SYSTEM SHOULD FEEL LIKE ENTERPRISE SOFTWARE
+===============================================
+
+The goal is to make this:
+
+* Enterprise-grade
+* Real-time
+* Transparent
+* Reliable
+* Easy to monitor
+
+Admin should NEVER feel confused about:
+
+* Whether campaign is running
+* Whether messages are going
+* Whether Meta API is working
+
+Everything should be visible clearly.
+
+Please fully audit:
+
+* Backend
+* Queue system
+* Meta integration
+* UI/UX
+* Real-time updates
+* Campaign tracking architecture
+
+# and redesign this professionally.

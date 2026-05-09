@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { CampaignLiveMonitor } from "@/components/CampaignLiveMonitor";
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -607,6 +608,9 @@ export default function ShopifyCustomersPage() {
 
   return (
     <div className="space-y-5">
+      {/* ── Campaign Live Monitor ── */}
+      <CampaignLiveMonitor />
+
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

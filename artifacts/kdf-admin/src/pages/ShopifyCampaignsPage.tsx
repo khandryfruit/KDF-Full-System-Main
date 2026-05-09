@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { CampaignLiveMonitor } from "@/components/CampaignLiveMonitor";
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -107,6 +108,9 @@ export default function ShopifyCampaignsPage() {
 
   return (
     <div className="space-y-6">
+      {/* ── Campaign Live Monitor ── */}
+      <CampaignLiveMonitor showAlways />
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Shopify WA Campaigns</h1>

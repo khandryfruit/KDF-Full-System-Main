@@ -124,6 +124,32 @@ async function processQueue() {
     }
 
     logger.info({ count: pending.length }, "Campaign queue: batch done");
+
+    /* Auto-complete campaigns that have no more pending/sending messages */
+    try {
+      const activeRows = await db.execute<{ id: number }>(sql`
+        SELECT id FROM shopify_campaigns
+        WHERE status IN ('running', 'queued')
+      `);
+      const activeIds = (activeRows.rows ?? activeRows as any[]).map((r: any) => Number(r.id));
+      for (const cid of activeIds) {
+        const remaining = await db.execute<{ cnt: string }>(sql`
+          SELECT COUNT(*) AS cnt FROM campaign_message_queue
+          WHERE campaign_id = ${cid} AND status IN ('pending', 'sending')
+        `);
+        const cnt = Number(((remaining.rows ?? remaining as any[])[0] as any)?.cnt ?? 1);
+        if (cnt === 0) {
+          await db.execute(sql`
+            UPDATE shopify_campaigns
+            SET status = 'completed', completed_at = now(), updated_at = now()
+            WHERE id = ${cid}
+          `);
+          logger.info({ campaignId: cid }, "Campaign auto-completed");
+        }
+      }
+    } catch (autoErr) {
+      logger.warn({ err: autoErr }, "Campaign auto-complete check failed");
+    }
   } catch (err) {
     logger.error({ err }, "Campaign queue processor error");
   }
