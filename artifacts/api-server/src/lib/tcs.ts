@@ -456,6 +456,10 @@ export async function createBooking(
     "Accept":       "application/json",
   };
   if (clientId) headers["X-IBM-Client-Id"] = clientId;
+  /* IBM API Connect gateway requires Bearer on booking endpoint too */
+  if (settings.bearerToken?.trim()) {
+    headers["Authorization"] = `Bearer ${settings.bearerToken.trim()}`;
+  }
 
   const t0 = Date.now();
   logger.info({ bookUrl, username: settings.username, orderRef, weightKg, codAmount, originCity, destCity }, "TCS ECOM — booking");
