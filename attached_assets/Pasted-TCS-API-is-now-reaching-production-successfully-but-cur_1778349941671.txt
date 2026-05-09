@@ -1,0 +1,134 @@
+TCS API is now reaching production successfully, but current response is:
+
+“TCS: Invalid access token”
+
+This means:
+
+• Request is reaching TCS
+• Authorization header is being sent
+• Token format is correct
+• But TCS server is rejecting the token
+
+IMPORTANT:
+This is no longer a frontend/UI issue.
+
+Now properly verify the following:
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 1 — TOKEN TYPE
+━━━━━━━━━━━━━━━━━━━
+
+Current system is mixing:
+• Bearer Token
+• Access Token
+• Username/Password auth
+
+TCS APIs require correct token type for each endpoint.
+
+Verify:
+Is this token:
+• Direct Access Token?
+OR
+• Bearer Token only?
+
+Do NOT use wrong token type on booking APIs.
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 2 — TOKEN ACCOUNT MATCH
+━━━━━━━━━━━━━━━━━━━
+
+Current TCS account:
+LGEC11060
+
+Verify token belongs to SAME production account.
+
+Mismatch between:
+• token account
+• booking account
+
+causes:
+“Invalid access token”
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 3 — PRODUCTION VS SANDBOX
+━━━━━━━━━━━━━━━━━━━
+
+Verify token environment:
+
+• Production token
+• Production endpoint
+
+NOT:
+sandbox token + production endpoint
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 4 — POSTMAN TESTING
+━━━━━━━━━━━━━━━━━━━
+
+Test booking API directly in Postman FIRST.
+
+Headers:
+
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+Accept: application/json
+
+If Postman also returns:
+“Invalid access token”
+
+then issue is from:
+• TCS token
+• TCS account linking
+• TCS permissions
+• TCS portal configuration
+
+NOT from our application.
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 5 — TCS ENVO PORTAL
+━━━━━━━━━━━━━━━━━━━
+
+Please verify from TCS:
+
+• Is API access enabled?
+• Is booking API enabled?
+• Is production activated?
+• Is account linked correctly?
+• Is token active?
+• Does token allow booking APIs?
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 6 — REMOVE OLD TOKENS
+━━━━━━━━━━━━━━━━━━━
+
+Clear:
+• cached tokens
+• fallback tokens
+• old auth tokens
+• previous bearer tokens
+
+Use ONLY ONE token.
+
+━━━━━━━━━━━━━━━━━━━
+CHECK 7 — DEBUG LOGS
+━━━━━━━━━━━━━━━━━━━
+
+Show:
+
+• Exact booking endpoint
+• Authorization header presence
+• Token first/last characters
+• Response body
+• Response headers
+• HTTP status
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANT
+━━━━━━━━━━━━━━━━━━━
+
+Current issue is now MOST LIKELY:
+TCS-side configuration/token mismatch.
+
+Application is already reaching API correctly.
+
+Need proper production token validation from TCS side.

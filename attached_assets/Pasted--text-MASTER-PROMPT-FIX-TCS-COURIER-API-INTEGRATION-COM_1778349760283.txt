@@ -1,0 +1,205 @@
+```text
+MASTER PROMPT — FIX TCS COURIER API INTEGRATION COMPLETELY
+
+This issue has been pending for a long time and must now be fixed properly and professionally.
+
+The system is currently failing with:
+
+• Invalid Bearer token
+• Mismatch configuration
+• HTTP 401
+• HTTP 403
+• HTTP 405
+• Fallback auth loops
+• Fake booking issues
+• Production booking failures
+
+A large amount of time and money has already been spent on this integration, so please stop using trial-and-error methods and properly debug the complete TCS integration using Postman and production-level API testing.
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANT — CURRENT ROOT CAUSE
+━━━━━━━━━━━━━━━━━━━
+
+The current system is incorrectly mixing multiple authentication methods together:
+
+• Static Bearer Token
+• Username/Password auth
+• Step 1 auth
+• Step 2 fallback auth
+• GET auth attempts
+• POST auth attempts
+
+This is causing:
+
+“Invalid Bearer token. Mismatch configuration.”
+
+The system must use ONLY ONE authentication method.
+
+━━━━━━━━━━━━━━━━━━━
+USE THIS AUTH METHOD ONLY
+━━━━━━━━━━━━━━━━━━━
+
+STATIC DIRECT BEARER TOKEN MODE
+
+Bearer Token:
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRpZCI6IjIxNTYyNzc2OCIsInNlcnZpY2VzIjoiMTAzLDE1NSwxNjEsMTY0LDIyNSwyNDcsMjQ4LDI0OSwyNTAsMjUxLDI3NywyOTMsMzY3LDM3MywzNzcsMzg4LDQ0OCw0NDksNDUwLDQ1MSw0NTIsNDUzLDQ1NCw0NzIsNDczIiwiZXhjbHVkZWQtc2VydmljZXMiOiIiLCJpc3MiOiJjb25uZWN0LnRjc2NvdXJpZXIuY29tIiwianRpIjoiMTgwNTBlMjMtZTg0Yi00YjQ4LTkwMWQtM2Q3YWJhNDkzNTc0IiwibmJmIjoxNzc4MzQ1OTYwLCJleHAiOjE4NjQ3NDU5NjAsImlhdCI6MTc3ODM0NTk2MH0.MZZ4pnCZw9lm2d1FVYspCq45dXWS0KyR1chSRLeZ-JI
+
+━━━━━━━━━━━━━━━━━━━
+REMOVE THESE COMPLETELY
+━━━━━━━━━━━━━━━━━━━
+
+DELETE:
+• resolveTcsTokens()
+• Step 1 auth flow
+• Step 2 auth flow
+• GET auth methods
+• Auto token refresh
+• Auth recovery attempts
+• Fallback auth logic
+• Mixed token mode
+• Username/password runtime auth
+
+The runtime booking flow must NEVER attempt auth recovery again.
+
+━━━━━━━━━━━━━━━━━━━
+REQUIRED IMPLEMENTATION
+━━━━━━━━━━━━━━━━━━━
+
+1. Store token securely in ENV:
+
+TCS_STATIC_BEARER_TOKEN=xxxxx
+
+2. Every request must send:
+
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+3. Use token directly with:
+• Booking API
+• Tracking API
+• Label API
+
+4. Use Production Mode only.
+
+5. Ensure REAL booking only.
+No fake bookings.
+
+6. Save:
+• Tracking number
+• Shipment ID
+• Booking response
+• Label URL
+• Courier status
+
+7. Prevent duplicate booking.
+
+If already booked:
+Disable booking button or show:
+“Shipment already booked.”
+
+8. Shopify integration requirements:
+• Auto fetch customer name
+• Auto fetch address
+• Auto fetch city
+• Auto fetch phone
+• Auto fetch COD amount
+• Auto fetch products
+• Auto fetch weight
+
+9. Customer name from Shopify MUST exactly match courier booking customer name.
+
+10. Add proper label printing support.
+
+11. Add tracking support:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+12. Debug logs required:
+
+Show:
+• Endpoint URL
+• Request headers
+• Request payload
+• Response body
+• HTTP status
+• Booking response
+• Tracking response
+• Label response
+
+13. If booking fails:
+Show ONLY actual courier API error.
+Do not show fallback auth spam.
+
+━━━━━━━━━━━━━━━━━━━
+POSTMAN TESTING REQUIRED
+━━━━━━━━━━━━━━━━━━━
+
+Before coding changes into production:
+
+FIRST test APIs properly in Postman.
+
+Required Postman setup:
+
+Method:
+POST
+
+Headers:
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer <TOKEN>
+
+Body:
+raw → JSON
+
+Use production booking payload.
+
+Developer MUST verify:
+
+✅ Booking API works in Postman
+✅ Tracking API works in Postman
+✅ Label API works in Postman
+
+ONLY AFTER successful Postman testing:
+integrate into production system.
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANT PRODUCTION ISSUE
+━━━━━━━━━━━━━━━━━━━
+
+Booking sometimes works locally but fails after deployment on:
+
+admin.khanbabadryfruits.com
+
+Please debug:
+
+• Production ENV variables
+• Authorization headers
+• Proxy/CDN issues
+• CORS issues
+• SSL issues
+• Server outbound IP
+• Hidden auth rewriting
+• Deployment environment mismatch
+
+Ensure production environment sends EXACT same headers as local environment.
+
+━━━━━━━━━━━━━━━━━━━
+GOAL
+━━━━━━━━━━━━━━━━━━━
+
+Final system must provide:
+
+✅ Real TCS shipment booking
+✅ Stable production booking
+✅ No auth mismatch
+✅ No fallback auth loops
+✅ Shopify order integration
+✅ Tracking support
+✅ Label printing
+✅ Duplicate prevention
+✅ Clean logs
+✅ Reliable booking flow
+✅ Production-ready courier management system
+
+Please debug this properly and fix the complete TCS integration professionally.
+```

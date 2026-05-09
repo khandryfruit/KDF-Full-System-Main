@@ -78,9 +78,8 @@ router.post("/admin/couriers/tcs/test", adminMiddleware as any, async (req: Auth
   try {
     const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
     const settings = (courierRow?.settings ?? {}) as Record<string, any>;
-    const { accessToken, mode } = await resolveTcsTokens(settings);
-    const modeLabel = mode === "direct" ? "Direct Access Token" : mode === "cached" ? "Cached token (valid)" : "Fresh 2-step auth";
-    res.json({ ok: true, message: `TCS connection successful — ${modeLabel}`, accessTokenLength: accessToken.length, mode });
+    const bearer = getTcsStaticBearer(settings);
+    res.json({ ok: true, message: "TCS connection ready — Static Bearer Token configured", bearerLength: bearer.length, mode: "static-bearer" });
     return;
   } catch (err: any) {
     req.log.error(err);
@@ -133,193 +132,120 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     if (!courierRow) { res.status(404).json({ error: "TCS courier not configured in admin yet" }); return; }
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
 
-    const username       = (settings.username     ?? "").trim();
-    const password       = (settings.password     ?? "").trim();
-    const bearerPasted   = (settings.bearerToken  ?? "").trim();
-    const bearerEnv      = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
-    const directToken    = (settings.accessToken  ?? "").trim();
-    const bearerToken    = bearerPasted || bearerEnv;
-    const baseUrl        = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+    const bearerPasted = (settings.bearerToken ?? "").trim();
+    const bearerEnv    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+    const bearer       = bearerPasted || bearerEnv;
+    const baseUrl      = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
 
-    /* ── Step 1: Configuration overview ── */
+    /* ── Step 1: Configuration ── */
     steps.push({
       step: "Configuration",
-      status: "info",
+      status: bearer ? "info" : "fail",
       detail: [
-        `Mode: ${settings.sandbox ? "🧪 SANDBOX" : "🚀 PRODUCTION"}`,
+        `Auth Mode: STATIC BEARER TOKEN ONLY`,
+        `Environment: ${settings.sandbox ? "🧪 SANDBOX" : "🚀 PRODUCTION"}`,
         `TCS Account (tcsaccount): ${settings.tcsaccount || "❌ NOT SET"}`,
         `Shipper City Code: ${settings.shipperCityCode || "(default: LHE)"}`,
         `Default Weight: ${settings.defaultWeight || "(default: 0.5 kg)"}`,
-        `Username: ${username || "❌ NOT SET"}`,
-        `Password: ${password ? "✅ Set" : "❌ NOT SET"}`,
-        `ENVO Bearer Token: ${bearerPasted ? `✅ Pasted in Settings (${bearerPasted.length} chars)` : bearerEnv ? `✅ From ENV variable (${bearerEnv.length} chars)` : "❌ NOT SET"}`,
-        `Direct ECOM Token: ${directToken ? `✅ Set (${directToken.length} chars) — Step 2 will be skipped` : "Not set"}`,
+        `ENVO Bearer Token: ${bearerPasted
+          ? `✅ Pasted in Settings (${bearerPasted.length} chars)`
+          : bearerEnv
+            ? `✅ From TCS_STATIC_BEARER_TOKEN env var (${bearerEnv.length} chars)`
+            : "❌ NOT SET — add it in Advanced Settings → ENVO Portal Bearer Token"}`,
       ].join("\n"),
     });
 
-    /* ── Step 2: Bearer token analysis ── */
-    if (bearerToken) {
-      try {
-        const jwtPayload = JSON.parse(Buffer.from(bearerToken.split(".")[1], "base64url").toString());
-        const expMs   = typeof jwtPayload.exp === "number" ? jwtPayload.exp * 1000 : null;
-        const daysLeft = expMs ? Math.floor((expMs - Date.now()) / 86400000) : null;
-        const valid    = expMs ? expMs > Date.now() + 5 * 60 * 1000 : true;
-        steps.push({
-          step: "ENVO Bearer Token",
-          status: valid ? "ok" : "fail",
-          detail: [
-            `Source: ${bearerPasted ? "Settings field (pasted)" : "TCS_STATIC_BEARER_TOKEN environment variable"}`,
-            `Client ID: ${jwtPayload.clientid ?? "N/A"}`,
-            `Services: ${(jwtPayload.services ?? "").split(",").filter(Boolean).length} services`,
-            `Issuer: ${jwtPayload.iss ?? "N/A"}`,
-            `Issued: ${jwtPayload.iat ? new Date(jwtPayload.iat * 1000).toISOString() : "N/A"}`,
-            `Expiry: ${daysLeft != null ? `${daysLeft} days remaining` : "No exp claim"} — ${valid ? "✅ VALID" : "❌ EXPIRED"}`,
-          ].join("\n"),
-        });
-      } catch {
-        steps.push({ step: "ENVO Bearer Token", status: "info", detail: "Token present but not a standard JWT (may be an opaque token — still usable)." });
-      }
-    } else {
-      steps.push({
-        step: "ENVO Bearer Token",
-        status: "warn",
-        detail: "Not configured.\nPaste your ENVO Portal Bearer Token in Advanced Settings → ENVO Bearer Token field.\nThis token goes in the Authorization header for ALL TCS API calls.",
-      });
+    if (!bearer) {
+      const serverIp = await getServerIp();
+      res.json({ ok: false, steps, serverIp, error: "ENVO Bearer Token not configured" });
+      return;
     }
 
-    /* ── Step 3: ECOM Token (Step 2) ── */
-    if (directToken) {
-      steps.push({ step: "ECOM Access Token (Step 2)", status: "ok", detail: `Direct token pasted — length: ${directToken.length} chars.\nStep 2 API call will be skipped.` });
-    } else if (username && password) {
-      tcsTokenCache.clear();
-      const step2Url = `${baseUrl}/ecom/api/authentication/token`;
-      const step2Headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (bearerToken) step2Headers["Authorization"] = `Bearer ${bearerToken}`;
-
+    /* ── Step 2: Bearer token JWT analysis ── */
+    try {
+      const jwtPayload = JSON.parse(Buffer.from(bearer.split(".")[1], "base64url").toString());
+      const expMs    = typeof jwtPayload.exp === "number" ? jwtPayload.exp * 1000 : null;
+      const daysLeft = expMs ? Math.floor((expMs - Date.now()) / 86400000) : null;
+      const valid    = jwtIsValid(bearer);
       steps.push({
-        step: "ECOM Token Request (Step 2)",
-        status: "info",
+        step: "ENVO Bearer Token (JWT)",
+        status: valid ? "ok" : "fail",
         detail: [
-          `Endpoint: POST ${step2Url}`,
-          `Authorization header: ${bearerToken ? `Bearer ●●●●…${bearerToken.slice(-8)}` : "(none — no bearer set)"}`,
-          `Body: { username: "${username}", password: "●●●●" }`,
+          `Source: ${bearerPasted ? "Settings field (pasted manually)" : "TCS_STATIC_BEARER_TOKEN environment variable"}`,
+          `Client ID: ${jwtPayload.clientid ?? "N/A"}`,
+          `Services: ${String(jwtPayload.services ?? "").split(",").filter(Boolean).length} services`,
+          `Issuer: ${jwtPayload.iss ?? "N/A"}`,
+          `Issued: ${jwtPayload.iat ? new Date(jwtPayload.iat * 1000).toISOString() : "N/A"}`,
+          `Expiry: ${daysLeft != null ? `${daysLeft} days remaining` : "No exp claim"} — ${valid ? "✅ VALID" : "❌ EXPIRED — get a new token from ENVO Portal"}`,
+          `Token tail: ●●●●…${bearer.slice(-12)}`,
         ].join("\n"),
       });
-
-      try {
-        const step2Resp = await fetch(step2Url, {
-          method: "POST",
-          headers: step2Headers,
-          body: JSON.stringify({ username, password }),
-          signal: AbortSignal.timeout(12000),
-        });
-        const step2Text = await step2Resp.text();
-        let step2Data: Record<string, any> = {};
-        try { step2Data = JSON.parse(step2Text); } catch {}
-
-        const ecomToken =
-          step2Data.accessToken ?? step2Data.accesstoken ?? step2Data.token ?? step2Data.access_token ??
-          step2Data.data?.accessToken ?? step2Data.data?.accesstoken ?? step2Data.data?.token ??
-          step2Data.result?.accessToken ?? step2Data.result?.accesstoken ?? step2Data.result?.token;
-
-        if (ecomToken) {
-          steps.push({
-            step: "ECOM Access Token (Step 2)",
-            status: "ok",
-            detail: `✅ ECOM token received successfully.\nToken length: ${String(ecomToken).length} chars\nHTTP status: ${step2Resp.status}`,
-            raw: step2Text.slice(0, 600),
-          });
-        } else {
-          steps.push({
-            step: "ECOM Access Token (Step 2)",
-            status: "fail",
-            detail: `❌ No token in TCS response.\nHTTP status: ${step2Resp.status}\nResponse: ${step2Text.slice(0, 400)}\n\nPossible causes:\n• Wrong username or password\n• ENVO Bearer Token mismatch with TCS account\n• TCS account not activated for API access`,
-            raw: step2Text.slice(0, 600),
-          });
-          const serverIp = await getServerIp();
-          res.json({ ok: false, steps, serverIp, error: `ECOM auth failed: ${step2Data.message ?? step2Text.slice(0, 150)}` });
-          return;
-        }
-      } catch (e: any) {
-        steps.push({ step: "ECOM Access Token (Step 2)", status: "fail", detail: `Network error: ${e.message}` });
-        res.json({ ok: false, steps, error: e.message }); return;
+      if (!valid) {
+        const serverIp = await getServerIp();
+        res.json({ ok: false, steps, serverIp, error: "Bearer token is expired — regenerate from ENVO Portal" });
+        return;
       }
-    } else {
+    } catch {
       steps.push({
-        step: "ECOM Access Token (Step 2)",
-        status: "fail",
-        detail: "❌ TCS Username and Password not set.\nAdd them in Courier Settings → TCS (main settings form).",
+        step: "ENVO Bearer Token",
+        status: "info",
+        detail: "Token present but not a standard JWT (opaque token — still usable).\nWill proceed with live API test.",
       });
-      res.json({ ok: false, steps, error: "TCS Username + Password required" }); return;
     }
 
-    /* ── Step 4: Full auth resolve ── */
-    let resolvedMode = "";
-    let resolvedBearer = "";
-    let resolvedAccessToken = "";
-    try {
-      const tokens = await resolveTcsTokens(settings);
-      resolvedMode = tokens.mode;
-      resolvedBearer = tokens.bearerToken;
-      resolvedAccessToken = tokens.accessToken;
-      steps.push({
-        step: "Full Auth (resolveTcsTokens)",
-        status: "ok",
-        detail: `✅ Auth successful.\nMode: ${tokens.mode}\nECOM token length: ${tokens.accessToken.length} chars\nBearer in header: ${tokens.bearerToken ? "✅ Yes" : "❌ No (no bearer configured)"}`,
-      });
-    } catch (e: any) {
-      steps.push({ step: "Full Auth", status: "fail", detail: `❌ ${e.message}` });
-      const serverIp = await getServerIp();
-      res.json({ ok: false, steps, serverIp, error: e.message }); return;
-    }
-
-    /* ── Step 5: Tracking API validation ── */
+    /* ── Step 3: Live Tracking API test ── */
     const trackUrl = `${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`;
-    const trackHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (resolvedBearer) trackHeaders["Authorization"] = `Bearer ${resolvedBearer}`;
     try {
       const trackResp = await fetch(trackUrl, {
         method: "POST",
-        headers: trackHeaders,
+        headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
         body: JSON.stringify({ consignee: ["TEST0000000000"] }),
         signal: AbortSignal.timeout(10000),
       });
       const trackText = await trackResp.text();
-      /* 400/404 = auth ok, bad test CN. 405 = method not allowed (endpoint reachable, wrong method for test). */
-      const trackOk = trackResp.ok || trackResp.status === 400 || trackResp.status === 404 || trackResp.status === 405;
+      /* 400/404 = auth ok (bad test CN is expected). 401/403 = token rejected. */
+      const authOk = trackResp.status !== 401 && trackResp.status !== 403;
       steps.push({
-        step: "Tracking API Validation",
-        status: trackOk ? "ok" : "fail",
+        step: "Live API Test (Tracking)",
+        status: authOk ? "ok" : "fail",
         detail: [
           `Endpoint: POST ${trackUrl}`,
-          `HTTP status: ${trackResp.status}`,
-          trackOk
-            ? "✅ TCS API reachable and token accepted."
-            : "❌ Unexpected response — may indicate auth or IP whitelist issue.",
-          `Response: ${trackText.slice(0, 200)}`,
+          `Header: Authorization: Bearer ●●●●…${bearer.slice(-12)}`,
+          `HTTP Status: ${trackResp.status}`,
+          authOk
+            ? "✅ Bearer token accepted — TCS API is reachable and auth is working."
+            : `❌ Token rejected (${trackResp.status}) — check if token is for the correct TCS account.\nResponse: ${trackText.slice(0, 300)}`,
         ].join("\n"),
         raw: trackText.slice(0, 500),
       });
+      if (!authOk) {
+        const serverIp = await getServerIp();
+        res.json({ ok: false, steps, serverIp, error: `TCS rejected bearer token (HTTP ${trackResp.status})` });
+        return;
+      }
     } catch (e: any) {
-      /* Timeout/network errors on tracking are non-fatal — auth can still be working */
-      steps.push({ step: "Tracking API Validation", status: "warn", detail: `Network issue (non-fatal): ${e.message}\n\nThis does not indicate auth failure — it may be a firewall/IP restriction on the tracking endpoint.\nBooking API uses a different endpoint and may still work.` });
+      steps.push({
+        step: "Live API Test (Tracking)",
+        status: "warn",
+        detail: `Network timeout or connection error: ${e.message}\n\nThis may be a firewall/IP restriction. The bearer token may still work for booking.\nAsk TCS to whitelist your server IP if this persists.`,
+      });
     }
 
-    /* ── Step 6: Server IP ── */
+    /* ── Step 4: Server IP ── */
     const serverIp = await getServerIp();
     steps.push({
       step: "Server Outbound IP",
       status: "info",
-      detail: `IP: ${serverIp}\n\nIf TCS returns HTTP 401 or 403 errors during booking, ask TCS support to whitelist this IP address.\nPortal: https://ociconnect.tcscourier.com/ecom/index.html`,
+      detail: `IP: ${serverIp}\n\nIf TCS booking returns HTTP 401/403, ask TCS support to whitelist this IP.\nPortal: https://ociconnect.tcscourier.com/ecom/index.html`,
     });
 
     res.json({
       ok: true,
-      mode: resolvedMode,
+      mode: "static-bearer",
       sandbox: !!(settings.sandbox),
       serverIp,
       steps,
-      hint: "All auth checks passed. TCS connection is working correctly.",
+      hint: "Static Bearer Token auth is configured. All TCS API calls use Authorization: Bearer <token> — no ECOM token, no username/password.",
     });
     return;
   } catch (err: any) {
@@ -339,7 +265,7 @@ router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (re
     const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
     if (!courierRow) { res.status(404).json({ error: "TCS courier not configured" }); return; }
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
-    const { accessToken } = await resolveTcsTokens(settings);
+    const bearer = getTcsStaticBearer(settings);
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
 
     /* Build consignment list — single or batch */
@@ -349,7 +275,7 @@ router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (re
 
     const printResp = await fetch(`${baseUrl}/ecom/api/print/label`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
       body: JSON.stringify({ consignmentno: cnList }),
       signal: AbortSignal.timeout(20000),
     });
@@ -972,13 +898,13 @@ router.post("/admin/shipments/:id/cancel", adminMiddleware as any, async (req: A
     }
 
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
-    const { bearerToken, accessToken } = await resolveTcsTokens(settings);
+    const bearer = getTcsStaticBearer(settings);
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
 
     const cancelResp = await fetch(`${baseUrl}/ecom/api/booking/cancel`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ consignmentNumber: shipment.trackingId, accesstoken: accessToken }),
+      headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ consignmentNumber: shipment.trackingId }),
       signal: AbortSignal.timeout(10000),
     });
     const cancelData = await cancelResp.json() as Record<string, any>;
@@ -1804,7 +1730,29 @@ function getTrackingUrl(slug: string, trackingId: string): string {
   return urls[slug] ?? `https://track.kdfnuts.com/?id=${id}&courier=${slug}`;
 }
 
-const tcsTokenCache = new Map<string, { bearerToken: string; accessToken: string; expiresAt: number }>();
+/**
+ * TCS Static Bearer Token — the ONLY auth mechanism.
+ *
+ * HOW IT WORKS:
+ *   Source: settings.bearerToken (pasted in Admin UI) OR TCS_STATIC_BEARER_TOKEN env var.
+ *   Every TCS API call sends: Authorization: Bearer <token>
+ *   NO ECOM token, NO Step 2, NO username/password runtime auth.
+ *
+ * IMPORTANT: This is the ENVO Portal Bearer Token (JWT with clientid).
+ *            It goes in the Authorization header ONLY — never in the request body.
+ */
+function getTcsStaticBearer(settings: Record<string, any>): string {
+  const bearer =
+    (settings.bearerToken ?? "").trim() ||
+    (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+  if (!bearer) {
+    throw new Error(
+      "TCS not configured: ENVO Portal Bearer Token is required. " +
+      "Add it in Courier Settings → TCS → Advanced Settings → ENVO Portal Bearer Token field."
+    );
+  }
+  return bearer;
+}
 
 /* ── JWT expiry checker (no external lib needed) ── */
 function jwtExpiresAt(token: string): number | null {
@@ -1816,76 +1764,8 @@ function jwtExpiresAt(token: string): number | null {
 
 function jwtIsValid(token: string): boolean {
   const exp = jwtExpiresAt(token);
-  if (!exp) return true; /* no exp claim — assume valid */
-  const msLeft = exp - Date.now();
-  return msLeft > 5 * 60 * 1000; /* must have >5 min remaining */
-}
-
-/**
- * TCS Unified Token Resolver — Clean 2-step flow.
- *
- * HOW TCS AUTH WORKS:
- *   Step 1 (Bearer)  — The ENVO Portal Bearer Token.
- *                      Source: settings.bearerToken (pasted) OR TCS_STATIC_BEARER_TOKEN env var.
- *                      Sent as: Authorization: Bearer <token> in ALL TCS API calls.
- *
- *   Step 2 (ECOM)    — POST /ecom/api/authentication/token
- *                      Header: Authorization: Bearer <bearerToken>
- *                      Body:   { username, password }
- *                      Returns the ECOM Access Token → sent in booking body as `accesstoken`.
- *
- *   Shortcut         — If settings.accessToken is set, skip both steps (use it directly as ECOM token).
- */
-async function resolveTcsTokens(settings: Record<string, any>): Promise<{
-  bearerToken: string; accessToken: string; mode: string;
-}> {
-  /* Shortcut: Direct ECOM Access Token pasted in settings.
-     Still include the ENVO bearer so it goes in the Authorization header. */
-  const directToken = (settings.accessToken ?? "").trim();
-  if (directToken) {
-    const bearerPasted = (settings.bearerToken ?? "").trim();
-    const bearerEnv    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
-    const bearerToken  = bearerPasted || bearerEnv;
-    return { bearerToken, accessToken: directToken, mode: "direct-access-token" };
-  }
-
-  const username = (settings.username ?? "").trim();
-  const password = (settings.password ?? "").trim();
-
-  if (!username || !password) {
-    throw new Error(
-      "TCS not configured: TCS Username and Password are required. " +
-      "Add them in Courier Settings → TCS, then Save."
-    );
-  }
-
-  /* Step 1 Bearer: pasted in settings takes priority, env var as fallback */
-  const bearerToken =
-    (settings.bearerToken ?? "").trim() ||
-    (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
-
-  /* Cache key — invalidated when credentials or bearer change */
-  const cacheKey = [
-    settings.tcsaccount || "anon",
-    settings.sandbox ? "sb" : "live",
-    bearerToken ? `b:${bearerToken.slice(-8)}` : "no-bearer",
-    username.slice(-6),
-  ].join(":");
-
-  const cached = tcsTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { bearerToken, accessToken: cached.accessToken, mode: "cached" };
-  }
-
-  /* Step 2: Get ECOM Access Token (bearer in header + username/password in body) */
-  const accessToken = await getTcsEcomToken(bearerToken, username, password, settings.sandbox ?? false);
-
-  tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + 50 * 60 * 1000 });
-  return {
-    bearerToken,
-    accessToken,
-    mode: bearerToken ? "bearer+ecom" : "ecom-only",
-  };
+  if (!exp) return true;
+  return (exp - Date.now()) > 5 * 60 * 1000;
 }
 
 function generateTrackingId(slug: string): string {
@@ -1945,57 +1825,6 @@ async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox
   throw new Error("TCS Authorization API — no token returned. Check clientId and clientSecret.");
 }
 
-/**
- * TCS Step 2: Get ECOM Access Token.
- *
- * Endpoint: POST /ecom/api/authentication/token
- * Header:   Authorization: Bearer <bearerToken>  (ENVO Portal token — if available)
- * Body:     { username, password }
- *
- * The returned ECOM token goes in the booking body as `accesstoken`.
- * It is DIFFERENT from the Bearer token and must NOT be used as the Authorization header.
- */
-async function getTcsEcomToken(
-  bearerToken: string,
-  username: string,
-  password: string,
-  sandbox: boolean,
-): Promise<string> {
-  if (!username || !password) throw new Error("TCS Username and Password are required in settings.");
-  const baseUrl = sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
-  const url = `${baseUrl}/ecom/api/authentication/token`;
-
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (bearerToken) headers["Authorization"] = `Bearer ${bearerToken}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ username, password }),
-    signal: AbortSignal.timeout(12000),
-  });
-
-  const text = await resp.text();
-  let data: Record<string, any> = {};
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  /* Broad token extraction — covers all known TCS response shapes */
-  const token =
-    data.accessToken ?? data.accesstoken ?? data.token ?? data.access_token ??
-    data.AuthToken   ?? data.authToken   ?? data.bearer ?? data.jwt ??
-    data.data?.accessToken   ?? data.data?.accesstoken   ?? data.data?.token ??
-    data.result?.accessToken ?? data.result?.accesstoken ?? data.result?.token ??
-    data.response?.accessToken ?? data.response?.accesstoken ?? data.response?.token;
-
-  if (token) return String(token);
-
-  const errMsg = data.message ?? data.error ?? `HTTP ${resp.status}: ${text.slice(0, 300)}`;
-  throw new Error(
-    `TCS Step 2 (ECOM auth) failed: ${errMsg}\n` +
-    `Bearer: ${bearerToken ? `present (${bearerToken.length} chars)` : "absent"}\n` +
-    `User: ${username}`
-  );
-}
 
 function formatTcsShipmentDate(): string {
   const now = new Date();
@@ -2019,13 +1848,12 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
 
   if (courier.slug === "tcs") {
     const settings = (courier.settings ?? {}) as Record<string, any>;
-    const { bearerToken, accessToken } = await resolveTcsTokens(settings);
+    const bearer = getTcsStaticBearer(settings);
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
     const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
     const items: any[] = Array.isArray(order.items) ? order.items : [];
 
     const payload = {
-      accesstoken: accessToken,
       consignmentno: "",
       shipperinfo: {
         tcsaccount: settings.tcsaccount || "",
@@ -2104,12 +1932,13 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       },
     };
 
-    /* ── ONE clean booking request ──────────────────────────────────────────
-       Header: Authorization: Bearer <bearerToken>  (ENVO Portal token)
-       Body:   accesstoken: <accessToken>            (ECOM token from Step 2)
-       These are TWO DIFFERENT tokens — never use one in place of the other.      */
-    const bookHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (bearerToken) bookHeaders["Authorization"] = `Bearer ${bearerToken}`;
+    /* ── Booking request — Static Bearer Token ONLY ─────────────────────────
+       Header: Authorization: Bearer <bearer>  (ENVO Portal static token)
+       Body:   NO accesstoken field — static bearer is the only auth.           */
+    const bookHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${bearer}`,
+    };
 
     const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
       method: "POST",
@@ -2136,7 +1965,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           ? Object.values(legacyError[0]).join(", ")
           : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 300)}`;
       const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY]";
-      const bearerHint = !bearerToken
+      const bearerHint = !bearer
         ? " | Hint: Add ENVO Portal Bearer Token in Advanced Settings."
         : "";
       throw new Error(`TCS: ${errMsg}${acct}${bearerHint}`);
@@ -2339,8 +2168,7 @@ async function trackWithCourierApi(courier: any, trackingId: string): Promise<{ 
       const settings = (courier.settings ?? {}) as Record<string, any>;
       let bearerToken: string;
       try {
-        const tokens = await resolveTcsTokens(settings);
-        bearerToken = tokens.bearerToken;
+        bearerToken = getTcsStaticBearer(settings);
       } catch (authErr: any) {
         return { status: "in_transit", rawResponse: { note: "TCS auth failed", error: authErr.message } };
       }
