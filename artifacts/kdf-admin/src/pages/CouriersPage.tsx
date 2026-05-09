@@ -407,22 +407,51 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Architecture Guide ── */}
           <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1 font-mono">
-            <p className="text-yellow-300 font-bold text-xs">TCS ECOM API — Auth Flow</p>
-            <p className="text-slate-500 text-[10px]">── Step 1: Get Auth Token ───────────────────────────</p>
-            <p><span className="text-green-300">HEADER</span>  X-IBM-Client-Id: <span className="text-pink-300">username</span></p>
-            <p><span className="text-cyan-300">GET</span>     ociconnect.tcscourier.com/ecom/api/authentication/token</p>
-            <p className="text-slate-400 pl-2">?username=<span className="text-blue-300">{"{username}"}</span>&amp;password=<span className="text-blue-300">{"{password}"}</span></p>
+            <p className="text-yellow-300 font-bold text-xs">TCS ECOM API — IBM API Connect Flow</p>
+            <p className="text-slate-500 text-[10px]">── Step 1: Get ECOM Access Token ──────────────────</p>
+            <p><span className="text-green-300">HEADER</span>  Authorization: Bearer <span className="text-blue-300">{"{bearerToken}"}</span> ← IBM gateway</p>
+            <p><span className="text-green-300">HEADER</span>  X-IBM-Client-Id: <span className="text-pink-300">username</span> (auto)</p>
+            <p><span className="text-cyan-300">GET</span>     /ecom/api/authentication/token?username=&amp;password=</p>
             <p className="text-slate-400 pl-2">→ <span className="text-green-300">{"{ accessToken }"}</span></p>
-            <p className="text-slate-500 text-[10px] mt-0.5">── Step 2: Create Booking ───────────────────────────</p>
+            <p className="text-slate-500 text-[10px] mt-0.5">── Step 2: Create Booking ──────────────────────────</p>
             <p><span className="text-purple-300">POST</span>    /ecom/api/booking/create</p>
             <p className="text-slate-400 pl-2">body: <span className="text-orange-300">{"{ accesstoken, shipperinfo, consigneeinfo, shipmentinfo }"}</span></p>
             <p className="text-slate-400 pl-2">→ <span className="text-green-300">ConsignmentNo</span></p>
-            <p className="text-amber-300 mt-1">✅ Only 2 fields needed: Username + Password.</p>
+            <p className="text-amber-300 mt-1">✅ 3 fields: Bearer Token (ENVO Portal) + Username + Password.</p>
           </div>
 
           {/* ── Required Fields ── */}
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Required Credentials</p>
+
+            {/* Bearer Token */}
+            <div>
+              <Label className="text-xs font-medium">Bearer Token <span className="text-red-500">*</span></Label>
+              <div className="mt-1">
+                {showBearer ? (
+                  <>
+                    <textarea
+                      rows={3}
+                      value={form.bearerToken}
+                      onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-[10px] font-mono resize-none shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <button type="button" onClick={() => setShowBearer(false)} className="mt-0.5 text-xs text-blue-600 hover:underline">Hide</button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-xs font-mono truncate text-muted-foreground">
+                      {form.bearerToken ? `${form.bearerToken.slice(0, 32)}…` : <span className="text-red-400">Not set — required for IBM API gateway</span>}
+                    </div>
+                    <button type="button" onClick={() => setShowBearer(true)} className="shrink-0 text-xs text-blue-600 hover:underline">Edit</button>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → My APIs. IBM API Connect requires this on ALL requests.</p>
+            </div>
 
             {/* Username + Password */}
             <div className="grid grid-cols-2 gap-2">
@@ -460,34 +489,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     The number at the start of your Pickup Address (e.g. "999 - 03049996000 - Shop…"). Required for booking.
                   </p>
-                </div>
-                {/* Bearer Token (optional, tracking only) */}
-                <div>
-                  <Label className="text-xs font-medium">Bearer Token <span className="text-muted-foreground">(optional — for tracking API)</span></Label>
-                  <div className="mt-1">
-                    {showBearer ? (
-                      <>
-                        <textarea
-                          rows={3}
-                          value={form.bearerToken}
-                          onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
-                          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9… (from TCS ENVO Portal)"
-                          autoComplete="off"
-                          spellCheck={false}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-[10px] font-mono resize-none shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                        <button type="button" onClick={() => setShowBearer(false)} className="mt-0.5 text-xs text-blue-600 hover:underline">Hide</button>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-xs font-mono truncate text-muted-foreground">
-                          {form.bearerToken ? `${form.bearerToken.slice(0, 32)}…` : <span className="text-muted-foreground italic">Not set (not required for booking)</span>}
-                        </div>
-                        <button type="button" onClick={() => setShowBearer(true)} className="shrink-0 text-xs text-blue-600 hover:underline">Edit</button>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Not needed for booking. Only used for real-time tracking via TCS COD track API.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>

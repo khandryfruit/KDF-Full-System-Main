@@ -29,11 +29,11 @@ export const TCS_TRACKING_LINK   = "https://ociconnect.tcscourier.com/tracking/i
 /* ─── Settings ───────────────────────────────────────────────────────────── */
 export interface TcsSettings {
   /* ── Required ── */
-  username: string;   /* TCS username — also used as X-IBM-Client-Id and tcsaccount */
-  password: string;   /* TCS password — for auth token step */
+  bearerToken: string;   /* IBM API Connect bearer — required for BOTH auth + booking */
+  username:    string;   /* TCS username — also X-IBM-Client-Id + tcsaccount in body */
+  password:    string;   /* TCS password — sent in auth token step */
 
   /* ── Optional ── */
-  bearerToken?:  string;   /* Legacy COD API bearer — kept for tracking */
   clientId?:     string;   /* Override X-IBM-Client-Id if different from username */
   costCenterCode?: string; /* e.g. "999" — from TCS portal cost center */
   serviceCode?:    string; /* "O"=Overnight, "E"=Economy, "0"=default */
@@ -115,6 +115,7 @@ export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
 
 export function validateSettings(settings: TcsSettings): string[] {
   const errs: string[] = [];
+  if (!settings.bearerToken?.trim()) errs.push("Bearer Token is empty — get it from TCS ENVO Portal");
   if (!settings.username?.trim()) errs.push("TCS Username is empty");
   if (!settings.password?.trim()) errs.push("TCS Password is empty");
   return errs;
@@ -195,6 +196,7 @@ export function httpReq(
 
 /* ─── Step 1: Get ECOM Access Token ──────────────────────────────────────
  * GET /ecom/api/authentication/token?username=&password=
+ * Header: Authorization: Bearer {bearerToken}   ← IBM API Connect requires this
  * Header: X-IBM-Client-Id: {username}
  * Response: { accessToken: "..." } or { AccessToken: "..." }
  */
@@ -207,6 +209,10 @@ export async function getEcomAccessToken(settings: TcsSettings): Promise<string>
     "Accept":       "application/json",
   };
   if (clientId) headers["X-IBM-Client-Id"] = clientId;
+  /* IBM API Connect gateway validates Bearer on ALL endpoints — including auth */
+  if (settings.bearerToken?.trim()) {
+    headers["Authorization"] = `Bearer ${settings.bearerToken.trim()}`;
+  }
 
   logger.info({ authUrl, username: settings.username }, "TCS ECOM — auth token request");
 
@@ -256,10 +262,10 @@ export async function testConnection(
   steps.push({
     step: "Config", status: "info",
     detail: [
+      `bearerToken: ${settings.bearerToken?.trim() ? `${settings.bearerToken.slice(0, 20)}…` : "EMPTY"}`,
       `username: ${settings.username}`,
       `X-IBM-Client-Id: ${resolvedClientId ?? settings.username} (auto from username)`,
       `mode: ${settings.sandbox ? "DEV (devconnect)" : "PRODUCTION (ociconnect)"}`,
-      `base: ${baseUrl}`,
     ].join(" | "),
   });
 
