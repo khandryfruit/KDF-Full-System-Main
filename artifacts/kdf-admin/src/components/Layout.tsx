@@ -186,6 +186,7 @@ const SHOPIFY_NAV_ITEMS = [
   { href: "/shopify/campaigns",        label: "WA Campaigns",     icon: Megaphone       },
   { href: "/shopify/email-campaigns",  label: "Email Campaigns",  icon: Mail            },
   { href: "/shopify/widget",           label: "Chat Widget",      icon: MessageCircle   },
+  { href: "/whatsapp",                 label: "WA Templates",     icon: FileText        },
 ];
 
 const BRANCHES_NAV_ITEMS = [

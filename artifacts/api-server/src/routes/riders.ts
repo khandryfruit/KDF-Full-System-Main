@@ -887,9 +887,36 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
               })();
 
               if (customerPhone) {
-                const etaMins = del.eta_minutes ?? settings.default_eta_minutes;
-                const message = buildCustomerStatusMessage(status, order, del, etaMins);
-                const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message }).catch(() => false);
+                const normPhone = normalisePhone(customerPhone);
+                const orderNumber = order?.order_number ?? del.shopify_order_number ?? String(del.shopify_order_db_id ?? id);
+
+                /* Map rider status → template trigger event */
+                const TEMPLATE_STATUS: Record<string, string> = {
+                  picked:           "processing",
+                  out_for_delivery: "out_for_delivery",
+                  near_customer:    "out_for_delivery",
+                  delivered:        "delivered",
+                  failed:           "cancelled",
+                  returned:         "cancelled",
+                };
+                const templateStatus = TEMPLATE_STATUS[status];
+
+                let sent = false;
+                if (templateStatus) {
+                  /* Template-first: uses approved WA template, falls back to plain text */
+                  sent = await sendOrderStatusUpdate({
+                    phone: normPhone,
+                    orderNumber,
+                    status: templateStatus as any,
+                    trackingId: order?.tracking_number ?? undefined,
+                  }).catch(() => false) as boolean;
+                } else {
+                  /* Plain text for statuses without a template mapping */
+                  const etaMins = del.eta_minutes ?? settings.default_eta_minutes;
+                  const message = buildCustomerStatusMessage(status, order, del, etaMins);
+                  sent = await sendWhatsAppMessage({ phone: normPhone, message }).catch(() => false) as boolean;
+                }
+
                 if (sent) {
                   await db.execute(sql`
                     UPDATE rider_deliveries SET customer_wa_status_at = NOW(), updated_at = NOW() WHERE id = ${id}

@@ -2850,6 +2850,81 @@ router.get("/admin/shopify/orders/:id/confirmation", adminMiddleware, async (req
   }
 });
 
+/* GET full WA delivery status + automation timeline for an order */
+router.get("/admin/shopify/orders/:id/wa-delivery-status", adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [order] = await db.select().from(shopifyOrdersTable).where(eq(shopifyOrdersTable.id, id)).limit(1);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    /* Confirmation record */
+    const confRes = await db.execute(sql`
+      SELECT * FROM shopify_order_confirmations
+      WHERE shopify_order_id = ${order.shopifyOrderId} OR shopify_order_db_id = ${id}
+      ORDER BY id DESC LIMIT 1
+    `);
+    const conf = (confRes.rows ?? [])[0] as Record<string, any> | undefined;
+
+    /* Meta delivery status from whatsapp_logs */
+    let waLog: Record<string, any> | null = null;
+    if (conf?.wa_message_id) {
+      const logRes = await db.execute(sql`
+        SELECT message_id, delivery_status, response, created_at, updated_at
+        FROM whatsapp_logs WHERE message_id = ${conf.wa_message_id} LIMIT 1
+      `);
+      waLog = (logRes.rows ?? [])[0] as any ?? null;
+    }
+
+    /* Rider delivery record */
+    const riderRes = await db.execute(sql`
+      SELECT rd.*, r.name AS rider_name, r.phone AS rider_phone, r.whatsapp_number AS rider_wa
+      FROM rider_deliveries rd
+      LEFT JOIN riders r ON r.id = rd.rider_id
+      WHERE rd.shopify_order_db_id = ${id}
+      ORDER BY rd.id DESC LIMIT 1
+    `);
+    const rider = (riderRes.rows ?? [])[0] as Record<string, any> | undefined;
+
+    /* Approved templates for event selection */
+    const tplRes = await db.execute(sql`
+      SELECT id, name, trigger_event, message_body, approval_status, param_count, language
+      FROM whatsapp_templates
+      WHERE is_active = true
+      ORDER BY approval_status DESC, id ASC
+    `);
+    const templates = (tplRes.rows ?? []) as any[];
+
+    res.json({
+      order: { id: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt },
+      confirmation: conf ?? null,
+      waDelivery: waLog ? {
+        messageId: waLog.message_id,
+        status: waLog.delivery_status,
+        sentAt: conf?.last_sent_at ?? null,
+        updatedAt: waLog.updated_at,
+        rawResponse: waLog.response,
+      } : null,
+      rider: rider ? {
+        id: rider.id,
+        riderName: rider.rider_name,
+        riderPhone: rider.rider_phone,
+        status: rider.status,
+        assignedAt: rider.assigned_at,
+        pickedAt: rider.picked_at,
+        outForDeliveryAt: rider.out_for_delivery_at,
+        deliveredAt: rider.delivered_at,
+        waToRiderAt: rider.wa_sent_at,
+        waToCustomerAt: rider.customer_wa_assigned_at,
+        codAmount: rider.cod_amount,
+      } : null,
+      templates,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* POST send WhatsApp confirmation for an order */
 router.post("/admin/shopify/orders/:id/send-confirmation", adminMiddleware, async (req, res) => {
   try {
