@@ -2449,12 +2449,18 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     );
   }
 
-  /* Priority 2: In-memory cache (keyed by account + username) */
+  /* Priority 2: In-memory cache (keyed by account + username)
+   * Skip cache when tcsDebugNoCache=true (admin enables in Settings for fresh-token debugging) */
   const cacheKey = `${settings.tcsaccount ?? ""}:${username}`;
-  const cached = tcsEcomCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() + 60_000) {
-    logger.info({ cacheKey, expiresInMin: Math.round((cached.expiresAt - Date.now()) / 60000) }, "TCS ECOM token — cache hit");
-    return cached.token;
+  if (!settings.tcsDebugNoCache) {
+    const cached = tcsEcomCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      logger.info({ cacheKey, expiresInMin: Math.round((cached.expiresAt - Date.now()) / 60000) }, "TCS ECOM token — cache hit");
+      return cached.token;
+    }
+  } else {
+    logger.info({ cacheKey }, "TCS ECOM token — cache BYPASSED (debug mode)");
+    tcsEcomCache.delete(cacheKey); /* also evict stale entry so next normal call is fresh */
   }
 
   /* Priority 3: Try Step-2 — Official spec: GET /ecom/api/authentication/token with body
@@ -2644,6 +2650,54 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
        getTcsEcomToken(): manual override → in-memory cache → Step-2 API call.    */
     const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
 
+    /* ── Duplicate booking protection ─────────────────────────────────────
+     * If TCS shipment already exists for this order with a real CN, skip.     */
+    if (order.id) {
+      const existing = await db.select().from(shipmentsTable)
+        .where(eq(shipmentsTable.orderId, order.id))
+        .limit(1);
+      const alreadyBooked = existing.find(
+        (s: any) => s.courierSlug === "tcs" &&
+          s.trackingId &&
+          !s.trackingId.startsWith("TCS") && /* skip our own generated fake IDs */
+          s.trackingId.length > 5
+      );
+      /* Also accept our generated IDs only if courier confirms it (trackingId from TCS API = real) */
+      const hasRealCn = existing.find(
+        (s: any) => s.courierSlug === "tcs" && s.trackingId && s.rawApiResponse
+      );
+      if (hasRealCn && settings.preventDuplicateBookings !== false) {
+        logger.info({ orderId: order.id, trackingId: hasRealCn.trackingId }, "TCS booking — duplicate skip (already booked)");
+        return {
+          trackingId: hasRealCn.trackingId,
+          trackingUrl: getTrackingUrl("tcs", hasRealCn.trackingId),
+          rawResponse: { _skipped: true, reason: "Already booked", existingCN: hasRealCn.trackingId },
+        };
+      }
+    }
+
+    /* ── Pre-flight payload validation ────────────────────────────────────
+     * Validate required fields BEFORE making any API call.                */
+    const validationErrors: string[] = [];
+    if (!settings.tcsaccount?.trim())
+      validationErrors.push("TCS Account Number is empty — set it in Couriers → TCS Settings → TCS Account Number");
+    if (settings.tcsaccount?.trim() === settings.username?.trim())
+      validationErrors.push(`TCS Account Number (${settings.tcsaccount}) looks like it equals Username — they are different fields. Get real account number from TCS contract.`);
+    const rawPhone = (address.phone ?? "").replace(/\D/g, "");
+    if (rawPhone.length < 10)
+      validationErrors.push(`Consignee mobile invalid: "${address.phone ?? "(empty)"}". Need 10–11 digit Pakistani number.`);
+    if (!address.city?.trim())
+      validationErrors.push("Consignee city is empty");
+    const rawAddr = [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").trim();
+    if (!rawAddr)
+      validationErrors.push("Consignee address is empty");
+    const rawWeight = Number(order.weight ?? settings.defaultWeight ?? 0);
+    if (isNaN(rawWeight) || rawWeight <= 0)
+      validationErrors.push(`Weight invalid: "${order.weight ?? settings.defaultWeight}". Must be > 0 kg.`);
+    if (validationErrors.length > 0) {
+      throw new Error(`TCS: Pre-booking validation failed:\n• ${validationErrors.join("\n• ")}`);
+    }
+
     /* ── Official TCS ECOM nested booking payload ─────────────────────────
      * Per official guide: /ecom/api/booking/create
      *   Authorization header = ENVO Bearer Token (Step-1)
@@ -2763,44 +2817,56 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       break;
     }
 
-    /* Success: consignmentNo present OR HTTP 200 with no error message */
-    const isSuccess =
-      !!bookData.consignmentNo ||
-      bookData.message?.toUpperCase() === "SUCCESS" ||
-      bookData.code === "200" || bookData.code === 200 ||
-      bookData.status === true || bookData.status === "SUCCESS" ||
-      (lastStatus >= 200 && lastStatus < 300 &&
-        !bookData.message?.toUpperCase()?.startsWith("FAIL") &&
-        !bookData.message?.toLowerCase()?.includes("invalid"));
+    /* ── Extract REAL consignment number from TCS response ────────────────
+     * We ONLY accept bookings where TCS returns an actual consignment number.
+     * No fake/generated tracking IDs are allowed — if TCS doesn't give a CN,
+     * the booking is treated as failed regardless of HTTP status.              */
+    const realCn =
+      bookData.consignmentNo ??
+      bookData.consignment_no ??
+      bookData.consignmentNumber ??
+      bookData.ConsignmentNo ??
+      bookData.data?.consignmentNo ??
+      bookData.data?.bookingNo ??
+      bookData.result?.consignmentNo;
 
-    if (!isSuccess) {
+    /* Build a structured error message from TCS errorList / message */
+    function buildTcsErrorMsg(): string {
       const errorList: any[] = Array.isArray(bookData.errorList) ? bookData.errorList : [];
       const legacyError: any[] = Array.isArray(bookData.error) ? bookData.error : [];
-      const rawMsg = errorList.length > 0
+      const acct = settings.tcsaccount ? ` [account: ${settings.tcsaccount}]` : " [account: EMPTY — set in Couriers → TCS Settings]";
+      const urlHint = ` [endpoint: ${usedUrl.split("/").slice(-3).join("/")}]`;
+      const tokenHint = settings.accessToken?.trim()
+        ? " | ACTION REQUIRED: Clear 'Direct ECOM Access Token' in Advanced Settings — stale manual token detected!"
+        : "";
+      const acctHint = settings.tcsaccount?.trim() === settings.username?.trim()
+        ? " | Account ≠ Username — update TCS Account Number in Settings with the real account ID from your TCS contract."
+        : "";
+      const raw = errorList.length > 0
         ? errorList.map((e: any) => `${e.key ?? ""}: ${e.errormessage ?? e.message ?? JSON.stringify(e)}`).join(" | ")
         : legacyError.length > 0
           ? Object.values(legacyError[0]).join(", ")
           : bookData.message ?? bookData.statusMessage ?? `HTTP ${lastStatus}: ${bookText.slice(0, 200)}`;
-      const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY]";
-      const urlHint = ` [url: ${usedUrl.split("/").slice(-3).join("/")}]`;
-      const tokenHint = settings.accessToken?.trim()
-        ? " | IMPORTANT: Clear 'Direct ECOM Access Token' field in Advanced Settings — stale token detected!"
-        : !bearer
-          ? " | Hint: Add ENVO Bearer Token in Advanced Settings."
-          : "";
-      throw new Error(`TCS: ${rawMsg}${acct}${urlHint}${tokenHint}`);
+      return `TCS: ${raw}${acct}${urlHint}${tokenHint}${acctHint}`;
     }
 
-    const trackingId =
-      bookData.consignmentNo ??
-      bookData.consignment_no ??
-      bookData.consignmentNumber ??
-      bookData.bookingNo ??
-      bookData.data?.consignmentNo ??
-      bookData.data?.bookingNo ??
-      bookData.result?.consignmentNo ??
-      generateTrackingId("tcs");
-    return { trackingId, trackingUrl: getTrackingUrl("tcs", trackingId), rawResponse: { ...bookData, _usedUrl: usedUrl } };
+    /* Succeed ONLY if we have a real CN from TCS */
+    if (!realCn) {
+      /* HTTP 200 but no CN = TCS accepted request but returned no tracking number */
+      if (lastStatus >= 200 && lastStatus < 300) {
+        const msg = bookData.message ?? bookData.statusMessage ?? "No consignment number in response";
+        if (msg.toLowerCase().includes("success") || bookData.status === true) {
+          /* Some TCS responses return success with CN in a different shape */
+          logger.warn({ bookData }, "TCS booking — HTTP 200 SUCCESS but no CN found in response");
+        }
+      }
+      throw new Error(buildTcsErrorMsg());
+    }
+
+    logger.info({ realCn, usedUrl, account: settings.tcsaccount }, "TCS booking — SUCCESS, real consignment number received");
+    pushTcsLog({ ts: new Date().toISOString(), type: "booking", url: usedUrl, method: "POST", reqBody: "see log", httpStatus: lastStatus, resBody: bookText.slice(0, 400), durationMs: 0, success: true });
+
+    return { trackingId: realCn, trackingUrl: getTrackingUrl("tcs", realCn), rawResponse: { ...bookData, _usedUrl: usedUrl } };
   }
 
   /* ── Leopards ── */

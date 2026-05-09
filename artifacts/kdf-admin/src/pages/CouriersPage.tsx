@@ -127,6 +127,10 @@ interface TcsFormState {
   fragile: boolean; defaultRemarks: string;
   /** "ecom" = ociconnect 2-step (default) | "simple" = api.tcscourier.com single-step */
   tcsApiVariant: "ecom" | "simple";
+  /** Debug: bypass ECOM token cache — fetch fresh token on every request */
+  tcsDebugNoCache: boolean;
+  /** Prevent re-booking if shipment already exists for this order */
+  preventDuplicateBookings: boolean;
 }
 
 function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
@@ -166,6 +170,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     clientId: "", clientSecret: "", accessToken: "", bearerToken: "",
     defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
     tcsApiVariant: "ecom",
+    tcsDebugNoCache: false, preventDuplicateBookings: true,
   });
 
   const [form, setForm] = useState<TcsFormState>(blankForm());
@@ -183,6 +188,8 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
       defaultWeight: s.defaultWeight ?? "0.5", serviceCode: s.serviceCode ?? "O",
       fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
       tcsApiVariant: s.tcsApiVariant ?? "ecom",
+      tcsDebugNoCache: s.tcsDebugNoCache ?? false,
+      preventDuplicateBookings: s.preventDuplicateBookings !== false,
     });
     setEditing(true);
     setShowAdvanced(false);
@@ -441,14 +448,22 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <p className="text-sm font-semibold text-foreground">Account Details</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs font-medium">Account Number</Label>
-                <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="e.g. 00012345" className="mt-1" />
+                <Label className="text-xs font-medium">TCS Account Number</Label>
+                <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="e.g. 04011K1" className="mt-1" />
+                <p className="text-[10px] text-muted-foreground mt-0.5">From your TCS contract — NOT the username</p>
               </div>
               <div>
                 <Label className="text-xs font-medium">Cost Center <span className="font-normal text-muted-foreground">(optional)</span></Label>
                 <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="Leave blank if none" className="mt-1" />
               </div>
             </div>
+            {/* Warning: account number == username */}
+            {form.tcsaccount && form.username && form.tcsaccount.trim() === form.username.trim() && (
+              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+                <p className="font-semibold">⛔ Account Number = Username — this is incorrect</p>
+                <p className="mt-0.5">TCS Account Number and Username are <strong>different fields</strong>. Your username is <code className="bg-red-100 px-0.5 rounded">{form.username}</code>. Enter the real account number from your TCS contract letter (e.g. <code className="bg-red-100 px-0.5 rounded">04011K1</code>).</p>
+              </div>
+            )}
           </div>
 
           {/* ── Pickup Address ── */}
@@ -881,6 +896,25 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                     <p>Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>.</p>
                     <p className="text-green-700 font-medium">✅ If blank: auto-generated via Step-2 (Username + Password + Bearer) — cached 55 min.</p>
                     <p>Only paste here if TCS sent you a "Direct Access Token" separately. Overrides auto Step-2.</p>
+                  </div>
+                </div>
+
+                {/* Debug & Safety Toggles */}
+                <div className="pt-1 border-t border-border/50 space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground">Debug &amp; Safety</p>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs font-medium">🔄 Fresh Token Mode (No Cache)</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Fetch a new ECOM token on every booking request — useful for debugging "Invalid token" errors. Disable once working.</p>
+                    </div>
+                    <Switch checked={form.tcsDebugNoCache} onCheckedChange={v => setForm(p => ({ ...p, tcsDebugNoCache: v }))} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs font-medium">🛡 Prevent Duplicate Bookings</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">If a TCS shipment already exists for an order, skip re-booking and return the existing CN number.</p>
+                    </div>
+                    <Switch checked={form.preventDuplicateBookings} onCheckedChange={v => setForm(p => ({ ...p, preventDuplicateBookings: v }))} />
                   </div>
                 </div>
 
