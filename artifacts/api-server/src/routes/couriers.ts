@@ -152,6 +152,58 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     tcsTokenCache.clear();
     log.push(`[${ts()}] Token cache cleared`);
 
+    /* ── Step 1 raw test: try username as clientId → Step 1 bearer ── */
+    const username = (settings.username ?? "").trim();
+    const password = (settings.password ?? "").trim();
+    const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+
+    if (username && password) {
+      log.push(`[${ts()}] ── Step 1 (Mode F) raw test: POST ${baseUrl}/auth/api/auth ──`);
+      log.push(`[${ts()}]   body: { clientid: "${username}", clientsecret: "***" }`);
+      try {
+        const step1Resp = await fetch(`${baseUrl}/auth/api/auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientid: username, clientsecret: password }),
+          signal: AbortSignal.timeout(12000),
+        });
+        const step1Text = await step1Resp.text();
+        log.push(`[${ts()}]   HTTP ${step1Resp.status}: ${step1Text.slice(0, 500)}`);
+      } catch (e: any) {
+        log.push(`[${ts()}]   fetch-error: ${e.message}`);
+      }
+
+      /* ── Step 2 raw test: POST with no bearer ── */
+      log.push(`[${ts()}] ── Step 2 raw test (no bearer): POST ${baseUrl}/ecom/api/authentication/token ──`);
+      log.push(`[${ts()}]   body: { username: "${username}", password: "***" }`);
+      try {
+        const step2Resp = await fetch(`${baseUrl}/ecom/api/authentication/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const step2Text = await step2Resp.text();
+        log.push(`[${ts()}]   HTTP ${step2Resp.status}: ${step2Text.slice(0, 500)}`);
+      } catch (e: any) {
+        log.push(`[${ts()}]   fetch-error: ${e.message}`);
+      }
+
+      /* ── Step 2 raw test: GET with query params ── */
+      log.push(`[${ts()}] ── Step 2 raw test (GET query, no bearer) ──`);
+      try {
+        const step2gResp = await fetch(`${baseUrl}/ecom/api/authentication/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+          method: "GET",
+          headers: {},
+          signal: AbortSignal.timeout(10000),
+        });
+        const step2gText = await step2gResp.text();
+        log.push(`[${ts()}]   HTTP ${step2gResp.status}: ${step2gText.slice(0, 500)}`);
+      } catch (e: any) {
+        log.push(`[${ts()}]   fetch-error: ${e.message}`);
+      }
+    }
+
     let resolvedMode = "";
     let accessToken = "";
     try {
@@ -160,15 +212,12 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       accessToken = tokens.accessToken;
       log.push(`[${ts()}] ✅ resolveTcsTokens succeeded — mode=${tokens.mode}, accessToken length=${tokens.accessToken.length}`);
     } catch (authErr: any) {
-      log.push(`[${ts()}] ❌ resolveTcsTokens FAILED: ${authErr.message}`);
+      log.push(`[${ts()}] ❌ resolveTcsTokens FAILED:\n${authErr.message}`);
       res.json({ ok: false, log, error: authErr.message }); return;
     }
 
-    /* Try a test booking with a dummy consignment to verify the access token works */
-    const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
-    log.push(`[${ts()}] Testing booking endpoint: ${baseUrl}/ecom/api/booking/create`);
-    /* We don't actually book — just check the /ecom/api/authentication/validate or similar */
-    /* Instead verify by calling the tracking endpoint with a dummy number */
+    /* Verify token via tracking endpoint */
+    log.push(`[${ts()}] ── Testing with tracking API ──`);
     const trackResp = await fetch(`${baseUrl}/tracking/api/Tracking/GetDynamicTrackDetail`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -176,10 +225,9 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       signal: AbortSignal.timeout(10000),
     });
     const trackText = await trackResp.text();
-    log.push(`[${ts()}] Tracking endpoint HTTP status: ${trackResp.status}`);
-    log.push(`[${ts()}] Tracking response: ${trackText.slice(0, 200)}`);
+    log.push(`[${ts()}] Tracking HTTP ${trackResp.status}: ${trackText.slice(0, 300)}`);
 
-    /* Fetch server outbound IP — helps diagnose TCS 403 IP whitelist issues */
+    /* Server outbound IP */
     let serverIp = "unknown";
     try {
       const ipResp = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(4000) });
@@ -197,7 +245,7 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       log,
       hint: resolvedMode === "direct"
         ? "Using Direct Access Token — no auto-refresh. Paste a new token if it expires."
-        : resolvedMode === "cached"
+        : resolvedMode.startsWith("cached")
         ? "Token served from cache (< 50 min old)."
         : "Fresh token obtained via 2-step auth — will be cached for 50 min.",
       ipHint: `If TCS returns HTTP 403, ask TCS to whitelist this server IP: ${serverIp}`,
@@ -1864,55 +1912,73 @@ async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox
 async function getTcsAccessToken(bearerToken: string, username: string, password: string, sandbox?: boolean): Promise<string> {
   if (!username || !password) throw new Error("TCS username and password are required in settings");
   const baseUrl = sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+  const url = `${baseUrl}/ecom/api/authentication/token`;
+  const authHeader: Record<string, string> = bearerToken ? { "Authorization": `Bearer ${bearerToken}` } : {};
 
-  /* Build auth header conditionally — omit Bearer header entirely when no Step 1 token available */
-  const authHeader = bearerToken ? { "Authorization": `Bearer ${bearerToken}` } : {};
-
-  const attempts: Array<() => Promise<Response>> = [
-    /* Attempt 1: POST with body {username, password} — works with or without Step 1 bearer */
-    () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
+  /* TCS Step 2 attempts — try ALL, record full raw response for each so we can diagnose */
+  const ATTEMPTS: Array<{ label: string; method: string; url?: string; headers: Record<string, string>; body?: string }> = [
+    {
+      label: "POST+bearer+json-body",
       method: "POST",
       headers: { ...authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
-      signal: AbortSignal.timeout(10000),
-    }),
-    /* Attempt 2: GET with query params — some TCS environments prefer this */
-    () => fetch(`${baseUrl}/ecom/api/authentication/token?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+    },
+    {
+      label: "GET+bearer+query",
       method: "GET",
+      url: `${url}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
       headers: { ...authHeader },
-      signal: AbortSignal.timeout(10000),
-    }),
-    /* Attempt 3: GET with credentials in custom headers */
-    () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
-      method: "GET",
-      headers: { ...authHeader, "username": username, "password": password, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-    }),
-    /* Attempt 4 (fallback): POST without any Authorization header — pure username/password */
-    () => fetch(`${baseUrl}/ecom/api/authentication/token`, {
+    },
+    {
+      label: "POST-no-bearer+json-body",
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
-      signal: AbortSignal.timeout(10000),
-    }),
+    },
+    {
+      label: "GET-no-bearer+query",
+      method: "GET",
+      url: `${url}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+      headers: {},
+    },
   ];
 
-  let lastError = "";
-  for (const attempt of attempts) {
-    const resp = await attempt();
-    const text = await resp.text();
-    let data: Record<string, any> = {};
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    const token = data.accessToken ?? data.accesstoken ?? data.token ?? data.access_token ?? data.data?.accessToken ?? data.data?.token ?? data.result?.accessToken ?? data.result?.token;
-    if (resp.ok && token) return token;
-    if (resp.ok) {
-      lastError = `HTTP 200 but no token field found in: ${text.slice(0, 300)}`;
-      break;
+  const attemptLog: string[] = [];
+
+  for (const a of ATTEMPTS) {
+    try {
+      const resp = await fetch(a.url ?? url, {
+        method: a.method,
+        headers: a.headers,
+        body: a.body,
+        signal: AbortSignal.timeout(10000),
+      });
+      const text = await resp.text();
+      let data: Record<string, any> = {};
+      try { data = JSON.parse(text); } catch { data = {}; }
+
+      /* Very broad token extraction — covers all known TCS response shapes */
+      const token =
+        data.accessToken ?? data.accesstoken ?? data.token ?? data.access_token ??
+        data.AuthToken ?? data.authToken ?? data.bearer ?? data.jwt ??
+        data.data?.accessToken ?? data.data?.accesstoken ?? data.data?.token ??
+        data.result?.accessToken ?? data.result?.accesstoken ?? data.result?.token ??
+        data.response?.accessToken ?? data.response?.accesstoken ?? data.response?.token;
+
+      if (token) return String(token);
+
+      /* Record what we actually got for diagnostics */
+      attemptLog.push(`[${a.label}] HTTP ${resp.status}: ${text.slice(0, 350)}`);
+    } catch (err: any) {
+      attemptLog.push(`[${a.label}] fetch-error: ${err.message}`);
     }
-    lastError = `HTTP ${resp.status}: ${data.message ?? text.slice(0, 200)}`;
-    if (resp.status !== 400 && resp.status !== 405) break;
   }
-  throw new Error(`TCS Authentication failed — ${lastError}`);
+
+  /* All attempts failed — throw with full diagnostic detail */
+  throw new Error(
+    `TCS Step 2 auth failed (bearer=${bearerToken ? "present" : "absent"}, user=${username}):\n` +
+    attemptLog.join("\n")
+  );
 }
 
 function formatTcsShipmentDate(): string {
@@ -2039,53 +2105,64 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
 
     let { resp: bookResp, text: bookText, data: bookData } = await doBooking(payload, bearerToken || null);
 
-    /* ── Auto-recovery on "Mismatch configuration" ──────────────────────────────
-       Root cause: the Step 1 env JWT (clientid=215627768) produced a Step 2 token
-       scoped to THAT client, not to tcsaccount LGEC11060. Both the wrong token and
-       the wrong Authorization header must be replaced.
-       Recovery: re-run Step 2 with NO bearer → get a fresh LGEC11060-scoped token
-       → retry booking with updated payload and no Authorization header.           */
+    /* ── Auto-recovery on "Mismatch configuration" / "Invalid Bearer" ───────────
+       Root cause: the Step 1 bearer token doesn't match the tcsaccount being booked.
+       Recovery strategy (Mode F):
+         1. Try Step 1 using username as clientId + password as clientSecret → fresh bearer
+         2. Run Step 2 with that fresh bearer → fresh accessToken for the correct account
+         3. Retry booking with both the fresh bearer and fresh accessToken.              */
     const isMismatch = (d: Record<string, any>) =>
       (d.message ?? "").toLowerCase().includes("mismatch") ||
-      (d.message ?? "").toLowerCase().includes("invalid bearer");
+      (d.message ?? "").toLowerCase().includes("invalid bearer") ||
+      (d.message ?? "").toLowerCase().includes("token") ||
+      (d.message ?? "").toLowerCase().includes("unauthorized") ||
+      (d.message ?? "").toLowerCase().includes("authentication");
 
     if (isMismatch(bookData)) {
+      tcsTokenCache.clear();   /* Invalidate any cached tokens immediately */
       const username = (settings.username ?? "").trim();
       const password = (settings.password ?? "").trim();
 
       if (username && password) {
-        /* Fresh Step 2: no bearer → token scoped to the account's own credentials */
+        let freshBearer = "";
         let freshToken: string | null = null;
+
+        /* Mode F: username as clientId → Step 1 → fresh bearer specific to this account */
         try {
-          freshToken = await getTcsAccessToken("", username, password, settings.sandbox);
-        } catch { /* leave null — will report combined error below */ }
+          const step1 = await getTcsBearerToken(username, password, settings.sandbox);
+          freshBearer = step1.bearerToken;
+        } catch { /* Step 1 via credentials failed — try Step 2 without bearer */ }
+
+        /* Step 2: get accessToken using fresh bearer (or empty if Step 1 failed) */
+        try {
+          freshToken = await getTcsAccessToken(freshBearer, username, password, settings.sandbox);
+        } catch { /* will report below */ }
 
         if (freshToken) {
           const freshPayload = { ...payload, accesstoken: freshToken };
-          const retry = await doBooking(freshPayload, null);  /* no Authorization header */
+          const retry = await doBooking(freshPayload, freshBearer || null);
           if (
             retry.data.message?.toUpperCase() === "SUCCESS" ||
             retry.data.code === "200" || retry.data.code === 200 ||
             retry.data.status === true || retry.data.status === "SUCCESS" ||
-            (retry.resp.ok && !retry.data.message?.toUpperCase().startsWith("FAIL"))
+            (retry.resp.ok && !retry.data.message?.toUpperCase().startsWith("FAIL") && !isMismatch(retry.data))
           ) {
-            /* Success — clear cache so future bookings skip the env bearer path */
-            tcsTokenCache.clear();
             bookResp = retry.resp; bookText = retry.text; bookData = retry.data;
           } else {
             const acct = settings.tcsaccount || "(empty)";
             throw new Error(
-              `TCS booking failed (both attempts). ` +
-              `Original: "${bookData.message ?? bookText.slice(0, 120)}" | ` +
-              `Retry (fresh Step2, no-auth): "${retry.data.message ?? retry.text.slice(0, 120)}" ` +
+              `TCS booking failed after recovery. ` +
+              `1st attempt: "${bookData.message ?? bookText.slice(0, 120)}" | ` +
+              `Recovery attempt: "${retry.data.message ?? retry.text.slice(0, 200)}" ` +
               `[tcsaccount: ${acct}]`
             );
           }
         } else {
           const acct = settings.tcsaccount || "(empty)";
           throw new Error(
-            `TCS: Invalid Bearer token. Mismatch configuration — and fresh Step 2 auth also failed. ` +
-            `Check TCS username/password in Courier Settings. [tcsaccount: ${acct}]`
+            `TCS auth failed: "${bookData.message ?? bookText.slice(0, 200)}". ` +
+            `Recovery (Mode F: username-as-clientId + Step 2) also failed. ` +
+            `Check TCS Username + Password in Courier Settings → TCS. [tcsaccount: ${acct}]`
           );
         }
       }

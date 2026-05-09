@@ -1,0 +1,196 @@
+TCS Courier Integration is STILL failing with:
+
+“TCS: Invalid Bearer token. Mismatch configuration — and fresh Step 2 auth also failed.”
+
+This issue has been happening repeatedly and needs a PROPER ROOT-CAUSE FIX — not temporary patches.
+
+You already have:
+
+- TCS Username
+- TCS Password
+- Bearer Token
+- TCS Account ID
+- TCS Production Portal Access
+
+Now fully debug and fix the TCS integration according to official TCS API flow and documentation.
+
+━━━━━━━━━━━━━━━
+REQUIRED FIXES
+━━━━━━━━━━━━━━━
+
+1️⃣ FIX TOKEN FLOW PROPERLY
+
+Right now the system is mixing:
+
+- Static Bearer Token
+- Step 1 Token
+- Step 2 ECOM Token
+
+This mismatch is causing:
+“Invalid Bearer token / Mismatch configuration”
+
+You MUST separate them correctly.
+
+Correct logic:
+
+OPTION A — DIRECT TOKEN MODE
+If Direct Access Token exists:
+✔ use ONLY that token
+✔ skip Step 1
+✔ skip Step 2
+✔ use token directly in booking APIs
+
+OPTION B — FULL 2-STEP LOGIN
+If no direct token:
+STEP 1:
+POST /auth/api/auth
+→ get bearer token
+
+STEP 2:
+GET /ecom/api/authentication/token
+→ exchange token using TCS username/password
+→ get ECOM access token
+
+Then:
+✔ store token securely
+✔ auto refresh before expiry
+✔ use ECOM token for booking APIs
+
+DO NOT MIX BOTH METHODS.
+
+━━━━━━━━━━━━━━━
+2️⃣ PRODUCTION DOMAIN ISSUE FIX
+
+IMPORTANT:
+Booking works on Replit local/dev mode,
+BUT fails after publishing on:
+admin.khanbabadryfruits.com
+
+This means production environment variables or headers are not loading correctly.
+
+Check:
+✔ ENV variables in production
+✔ token loading in deployed build
+✔ CORS headers
+✔ proxy/firewall
+✔ SSL/TLS issues
+✔ Authorization header stripping
+✔ Cloudflare/reverse proxy issues
+✔ server-side fetch differences
+
+Compare:
+LOCAL vs PRODUCTION requests
+
+Log:
+
+- headers
+- auth token
+- API URL
+- request payload
+- response payload
+
+━━━━━━━━━━━━━━━
+3️⃣ ADD FULL DEBUG PANEL
+
+Create proper Courier Debug Mode.
+
+Show:
+✔ current auth method
+✔ token source
+✔ token expiry
+✔ booking payload
+✔ API request URL
+✔ API response
+✔ HTTP status
+✔ tracking number
+✔ booking success/failure
+
+If booking fails:
+show REAL API error.
+
+━━━━━━━━━━━━━━━
+4️⃣ REAL BOOKING VALIDATION
+
+Right now fake booking behavior is happening.
+
+Fix:
+✔ booking must appear on official TCS portal
+✔ shipment must generate real CN number
+✔ label must generate
+✔ tracking must work
+
+TCS Portal:
+https://ociconnect.tcscourier.com/ecom/index.html
+
+Tracking:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+━━━━━━━━━━━━━━━
+5️⃣ PREVENT DUPLICATE BOOKINGS
+
+Once order booked:
+✔ disable re-booking
+✔ show “Already Booked”
+✔ save CN number
+✔ save booking timestamp
+✔ prevent duplicate API calls
+
+━━━━━━━━━━━━━━━
+6️⃣ LABEL GENERATION
+
+Add proper:
+✔ thermal label
+✔ A4 label
+✔ print preview
+✔ PDF label
+✔ QR/barcode
+✔ shipment info
+
+━━━━━━━━━━━━━━━
+7️⃣ SHOPIFY ORDER LINKING
+
+TCS booking MUST sync with Shopify order.
+
+After booking:
+✔ update Shopify order
+✔ save tracking ID
+✔ courier name
+✔ shipment status
+✔ CN number
+✔ tracking URL
+
+━━━━━━━━━━━━━━━
+8️⃣ CUSTOMER NOTIFICATIONS
+
+After successful booking:
+✔ send WhatsApp tracking message
+✔ send shipment confirmation
+✔ send rider/courier updates
+✔ send tracking link automatically
+
+━━━━━━━━━━━━━━━
+9️⃣ IMPORTANT IMPLEMENTATION RULES
+
+✔ backend-only API calls
+✔ never expose token in frontend
+✔ secure token encryption
+✔ production-safe architecture
+✔ retry failed requests
+✔ queue system for bookings
+✔ booking logs
+✔ error monitoring
+
+━━━━━━━━━━━━━━━
+FINAL TASK
+
+Do NOT stop until:
+✔ production booking works
+✔ real TCS portal booking appears
+✔ tracking works
+✔ labels generate
+✔ Shopify sync works
+✔ duplicate booking stops
+✔ notifications work
+✔ debug panel works
+
+This must be implemented professionally and permanently.
