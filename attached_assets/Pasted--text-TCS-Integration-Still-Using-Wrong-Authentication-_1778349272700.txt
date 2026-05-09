@@ -1,0 +1,119 @@
+```text
+TCS Integration Still Using Wrong Authentication Flow — Fix Immediately
+
+Current issue shown in logs:
+
+TCS auth failed (mode=env-bearer-fallback)
+Invalid Bearer token. Mismatch configuration.
+
+This confirms the system is STILL trying multiple broken auth methods:
+
+• POST + bearer + json-body
+• GET + bearer + query
+• POST no-bearer
+• GET no-bearer
+
+This entire fallback system is WRONG and must be removed.
+
+IMPORTANT:
+Do NOT call:
+https://ociconnect.tcscourier.com/auth/api/auth
+
+Do NOT call Step 2 auth recovery.
+
+Do NOT use GET auth requests.
+
+Do NOT regenerate tokens automatically.
+
+━━━━━━━━━━━━━━━
+CORRECT IMPLEMENTATION
+━━━━━━━━━━━━━━━
+
+Use ONLY this method:
+
+STATIC DIRECT BEARER TOKEN MODE
+
+Token:
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRpZCI6IjIxNTYyNzc2OCIsInNlcnZpY2VzIjoiMTAzLDE1NSwxNjEsMTY0LDIyNSwyNDcsMjQ4LDI0OSwyNTAsMjUxLDI3NywyOTMsMzY3LDM3MywzNzcsMzg4LDQ0OCw0NDksNDUwLDQ1MSw0NTIsNDUzLDQ1NCw0NzIsNDczIiwiZXhjbHVkZWQtc2VydmljZXMiOiIiLCJpc3MiOiJjb25uZWN0LnRjc2NvdXJpZXIuY29tIiwianRpIjoiMTgwNTBlMjMtZTg0Yi00YjQ4LTkwMWQtM2Q3YWJhNDkzNTc0IiwibmJmIjoxNzc4MzQ1OTYwLCJleHAiOjE4NjQ3NDU5NjAsImlhdCI6MTc3ODM0NTk2MH0.MZZ4pnCZw9lm2d1FVYspCq45dXWS0KyR1chSRLeZ-JI
+
+━━━━━━━━━━━━━━━
+REQUIRED CHANGES
+━━━━━━━━━━━━━━━
+
+1. Remove ALL auth fallback logic.
+
+Delete:
+• Step 1 auth
+• Step 2 auth
+• GET auth methods
+• Token regeneration attempts
+• Auth recovery attempts
+
+2. Use ONLY:
+
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+3. Use token directly in:
+• Booking API
+• Tracking API
+• Label API
+
+4. Store token securely in:
+ENV VARIABLE
+
+Example:
+TCS_STATIC_BEARER_TOKEN=xxxxx
+
+5. System should NEVER attempt:
+resolveTcsTokens()
+auth recovery
+fallback auth
+token refresh
+
+6. Add clean debug log:
+
+TCS Mode: STATIC_BEARER
+Token Loaded: YES
+Booking API Called: YES
+Authorization Header Sent: YES
+
+7. If booking fails:
+show ONLY actual courier API response.
+
+Do not show internal fallback auth spam.
+
+8. Current error:
+“Invalid Bearer token. Mismatch configuration.”
+is happening because system is mixing:
+• static token
+• username/password auth
+• fallback auth
+
+This creates token mismatch.
+
+9. IMPORTANT:
+Use ONLY ONE auth method:
+STATIC BEARER TOKEN
+
+10. Remove username/password auth calls completely from runtime booking flow.
+
+11. Use production mode only.
+
+12. Ensure Shopify booking creates REAL shipment only.
+
+13. Prevent duplicate booking.
+
+14. Save:
+• Tracking number
+• Booking ID
+• Label URL
+• Courier response
+
+15. Tracking URL:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Goal:
+Stable production-ready TCS integration without fallback auth errors.
+```
