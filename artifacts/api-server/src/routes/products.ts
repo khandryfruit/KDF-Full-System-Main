@@ -111,6 +111,10 @@ router.get("/products/:id", async (req, res) => {
     if (isNumeric) {
       const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parseInt(param))).limit(1);
       if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+      // Numeric IDs are never canonical — tell the SPA to replace the URL with the slug.
+      if (product.slug) {
+        res.setHeader("X-Canonical-Slug", product.slug);
+      }
       res.json(product);
       return;
     }
@@ -128,12 +132,10 @@ router.get("/products/:id", async (req, res) => {
 
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-    // If the requested param differs from the canonical slug, issue a permanent redirect.
-    // This benefits search engines and API clients that call /api/products/:slug directly.
+    // If the requested param differs from the canonical slug, set X-Canonical-Slug so
+    // the SPA frontend can silently replace the browser URL without a page reload.
     if (!isCleanSlug(param) || param !== product.slug) {
-      const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-      res.redirect(301, `/api/products/${product.slug}${qs}`);
-      return;
+      res.setHeader("X-Canonical-Slug", product.slug);
     }
 
     res.json(product);

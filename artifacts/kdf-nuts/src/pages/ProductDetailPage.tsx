@@ -429,7 +429,9 @@ export function ProductDetailPage() {
     queryFn: async () => {
       const r = await fetch(`${API_BASE}/products/${encodeURIComponent(param)}`);
       if (!r.ok) throw new Error("Product not found");
-      return r.json();
+      const data = await r.json();
+      const canonicalSlug = r.headers.get("X-Canonical-Slug");
+      return { ...data, _canonicalSlug: canonicalSlug };
     },
     enabled: !!param,
     staleTime: 60_000,
@@ -483,21 +485,17 @@ export function ProductDetailPage() {
     }
   }, [product?.id]);
 
-  /* ── SEO: redirect numeric ID or unclean slug → canonical slug URL ── */
+  /* ── SEO: silently replace legacy/unclean slug in the browser URL ── */
   useEffect(() => {
     if (!product) return;
-    const slug = (product as any).slug as string | undefined;
-    if (!slug) return;
-    // Decode any %20-style encoding from the current URL for comparison
-    const decodedParam = decodeURIComponent(param);
-    if (decodedParam !== slug) {
-      // Use BASE_URL (e.g. /kdf-nuts/) to build the correct canonical path.
-      // window.location.replace causes the browser to navigate to the clean URL
-      // so back-button skips the broken URL and future shares use the clean one.
-      const base = (BASE_URL || "/").replace(/\/$/, "");
-      window.location.replace(`${base}/products/${slug}`);
-    }
-  }, [product, param]);
+    const canonicalSlug = (product as any)._canonicalSlug as string | null;
+    if (!canonicalSlug) return;
+    // Use BASE_URL (e.g. /kdf-nuts/) to build the correct canonical path.
+    // window.history.replaceState silently updates the address bar without any
+    // page reload, so the user sees the clean URL and shares/bookmarks will use it.
+    const base = (BASE_URL || "/").replace(/\/$/, "");
+    window.history.replaceState(null, "", `${base}/products/${canonicalSlug}`);
+  }, [product]);
 
   /* ── SEO: dynamic page title, meta tags, canonical, JSON-LD ── */
   useEffect(() => {
