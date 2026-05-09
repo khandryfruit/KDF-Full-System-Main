@@ -1,19 +1,17 @@
 /**
- * TCS Courier Integration — Official COD API v1 (Simple)
+ * TCS Courier Integration — ECOM API (ociconnect.tcscourier.com)
  *
- * ONLY 3 things needed: bearerToken + username + password
+ * Auth flow (2 steps):
+ *   1. GET /ecom/api/authentication/token?username=&password=
+ *      Header: X-IBM-Client-Id: {username}
+ *      → Response: { accessToken: "..." }
  *
- * BOOKING:
- *   POST https://api.tcscourier.com/production/v1/cod/create-order
- *   Header: Authorization: Bearer {bearerToken}
- *   Body:   { userName, password, consignee details, weight, codAmount, ... }
- *   Response: bookingReply.CN = consignment number
+ *   2. POST /ecom/api/booking/create
+ *      Header: X-IBM-Client-Id: {username}
+ *      Body: { accesstoken, shipperinfo, consigneeinfo, vendorinfo, shipmentinfo }
+ *      → Response: { ConsignmentNo: "..." } or { ShipmentInformation: { ConsignmentNo } }
  *
- * TRACKING:
- *   GET https://api.tcscourier.com/production/track/v1/shipments/detail?consignmentNo=CN
- *   Header: Authorization: Bearer {bearerToken}
- *
- * Bearer token is long-lived (~10yr) from TCS ENVO Portal. Paste once — no refresh needed.
+ * Required: username + password only. bearerToken kept optional for tracking fallback.
  */
 
 import https from "node:https";
@@ -21,34 +19,32 @@ import http  from "node:http";
 import { logger } from "./logger";
 
 /* ─── URL constants ─────────────────────────────────────────────────────── */
+export const TCS_ECOM_URL        = "https://ociconnect.tcscourier.com/ecom/api";
+export const TCS_ECOM_DEV_URL    = "https://devconnect.tcscourier.com/ecom/api";
 export const TCS_COD_URL         = "https://api.tcscourier.com/production/v1/cod";
 export const TCS_COD_SANDBOX_URL = "https://api.tcscourier.com/sandbox/v1/cod";
 export const TCS_TRACK_URL       = "https://api.tcscourier.com/production/track/v1";
 export const TCS_TRACKING_LINK   = "https://ociconnect.tcscourier.com/tracking/index.html";
 
-/* ─── Settings — only what is actually needed ───────────────────────────── */
+/* ─── Settings ───────────────────────────────────────────────────────────── */
 export interface TcsSettings {
-  /* ── Required: 4 fields ── */
-  bearerToken: string;   /* Long-lived JWT from TCS ENVO Portal */
-  clientId:    string;   /* X-IBM-Client-Id from TCS ENVO Portal → API Credentials */
-  username:    string;   /* TCS username — sent in booking body as "userName" */
-  password:    string;   /* TCS password — sent in booking body as "password" */
+  /* ── Required ── */
+  username: string;   /* TCS username — also used as X-IBM-Client-Id and tcsaccount */
+  password: string;   /* TCS password — for auth token step */
 
-  /* ── Optional booking defaults ── */
-  costCenterCode?: string;   /* Required by COD API — TCS account cost center code */
-  serviceCode?:    string;   /* O=Overnight (default), S=SameDay, E=Economy */
-  defaultWeight?:  number;   /* kg, e.g. 0.5 */
+  /* ── Optional ── */
+  bearerToken?:  string;   /* Legacy COD API bearer — kept for tracking */
+  clientId?:     string;   /* Override X-IBM-Client-Id if different from username */
+  costCenterCode?: string; /* e.g. "999" — from TCS portal cost center */
+  serviceCode?:    string; /* "O"=Overnight, "E"=Economy, "0"=default */
+  defaultWeight?:  number;
   fragile?:        boolean;
   defaultRemarks?: string;
-
-  /* ── Optional shipper/origin info ── */
-  shipperCity?:    string;   /* originCityName — defaults to "Lahore" */
+  shipperCity?:    string;
   shipperName?:    string;
   shipperAddress?: string;
   shipperPhone?:   string;
-
-  /* ── Flags ── */
-  sandbox?:                  boolean;
+  sandbox?:        boolean;
   preventDuplicateBookings?: boolean;
 }
 
@@ -75,18 +71,14 @@ export function pushLog(e: Omit<TcsLogEntry, "id">) {
 }
 export function getLog(limit = 50) { return _log.slice(0, limit); }
 export function clearCache() {
-  logger.info({}, "TCS clearCache called — no cache in this flow");
+  logger.info({}, "TCS clearCache called — no in-memory token cache");
   return { bearerCleared: 0, ecomCleared: 0 };
 }
 export function getCacheStatus() {
-  return { note: "No cache — bearer token is read directly from settings on every request." };
+  return { note: "No cache — fresh auth token fetched on every booking request." };
 }
 
-/* ─── Decode clientId from JWT payload ────────────────────────────────────
- * IBM API Gateway requires the X-IBM-Client-Id header on every request.
- * TCS embeds "clientid" inside the Bearer JWT payload — extract it automatically
- * so the user never has to enter it separately.
- */
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
 export function extractClientIdFromJwt(token: string): string | null {
   try {
     const parts = token.trim().split(".");
@@ -96,52 +88,66 @@ export function extractClientIdFromJwt(token: string): string | null {
     const decoded = JSON.parse(json) as Record<string, unknown>;
     const cid = decoded.clientid ?? decoded.client_id ?? decoded.clientId ?? decoded.sub;
     return cid != null ? String(cid).trim() || null : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-/* ─── Resolve X-IBM-Client-Id ────────────────────────────────────────────
- * Priority:
- *   1. settings.clientId (explicitly entered in form)
- *   2. JWT payload decode (clientid / client_id / clientId / sub)
- *   3. settings.username — TCS ECOM API uses username as X-IBM-Client-Id
- *      and the same often applies to the COD API on IBM API Gateway.
- */
+/** X-IBM-Client-Id = explicit clientId → JWT decode → username (ECOM convention) */
 export function resolveClientId(settings: TcsSettings): string | null {
   const explicit = settings.clientId?.trim() || null;
   if (explicit) return explicit;
   const fromJwt = extractClientIdFromJwt(settings.bearerToken ?? "");
   if (fromJwt) return fromJwt;
-  const fromUsername = settings.username?.trim() || null;
-  return fromUsername;
+  return settings.username?.trim() || null;
 }
 
-/* ─── Auth headers ───────────────────────────────────────────────────────── */
 export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
   const headers: Record<string, string> = {
-    "Authorization": `Bearer ${settings.bearerToken.trim()}`,
-    "Content-Type":  "application/json",
-    "Accept":        "application/json",
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
   };
-  // IBM API Gateway requires X-IBM-Client-Id
-  // TCS ECOM API uses username as client ID — same pattern applies to COD API
   const clientId = resolveClientId(settings);
   if (clientId) headers["X-IBM-Client-Id"] = clientId;
+  if (settings.bearerToken?.trim()) {
+    headers["Authorization"] = `Bearer ${settings.bearerToken.trim()}`;
+  }
   return headers;
 }
 
-/* ─── Validate — required fields ────────────────────────────────────────── */
 export function validateSettings(settings: TcsSettings): string[] {
   const errs: string[] = [];
-  if (!settings.bearerToken?.trim())
-    errs.push("Bearer Token is empty — paste your JWT from TCS ENVO Portal in Couriers → TCS Settings");
-  if (!settings.username?.trim())
-    errs.push("TCS Username is empty");
-  if (!settings.password?.trim())
-    errs.push("TCS Password is empty");
-  // clientId is now optional — resolveClientId falls back to username automatically
+  if (!settings.username?.trim()) errs.push("TCS Username is empty");
+  if (!settings.password?.trim()) errs.push("TCS Password is empty");
   return errs;
+}
+
+export function getTcsTrackingUrl(cn: string): string {
+  return `${TCS_TRACKING_LINK}?cg=${encodeURIComponent(cn)}`;
+}
+
+/* ─── City code map ──────────────────────────────────────────────────────── */
+const CITY_CODES: Record<string, string> = {
+  lahore: "LHE", karachi: "KHI", islamabad: "ISB", rawalpindi: "RWP",
+  faisalabad: "FSD", multan: "MUL", peshawar: "PEW", quetta: "UET",
+  gujranwala: "GJW", sialkot: "SKT", hyderabad: "HYD", sargodha: "SGD",
+  bahawalpur: "BWP", abbottabad: "ABT", jhelum: "JHM", gujrat: "GRT",
+  sahiwal: "SWL", sheikhupura: "SKP", rahim: "RYK", sukkur: "SUK",
+  larkana: "LRK", nawabshah: "NWS", mingora: "MNG",
+};
+
+function cityCode(name: string): string {
+  const lower = name.toLowerCase().trim();
+  return CITY_CODES[lower] ?? name.slice(0, 3).toUpperCase();
+}
+
+/* ─── Weight helper ──────────────────────────────────────────────────────── */
+function tcsWeight(raw?: number | string): number {
+  if (raw == null) return 0.5;
+  const s = String(raw).toLowerCase().trim();
+  if (s.endsWith("g"))  return Math.max(0.5, parseFloat(s) / 1000);
+  if (s.endsWith("kg")) return Math.max(0.5, parseFloat(s));
+  const n = Number(raw);
+  if (!isNaN(n) && n >= 100) return Math.max(0.5, n / 1000);
+  return Math.max(0.5, isNaN(n) || n <= 0 ? 0.5 : n);
 }
 
 /* ─── HTTP helper ─────────────────────────────────────────────────────────── */
@@ -187,25 +193,51 @@ export function httpReq(
   });
 }
 
-/* ─── Weight helper ──────────────────────────────────────────────────────── */
-function tcsWeight(raw?: number | string): number {
-  if (raw == null) return 0.5;
-  const s = String(raw).toLowerCase().trim();
-  if (s.endsWith("g"))  return Math.max(0.5, parseFloat(s) / 1000);
-  if (s.endsWith("kg")) return Math.max(0.5, parseFloat(s));
-  const n = Number(raw);
-  if (!isNaN(n) && n >= 100) return Math.max(0.5, n / 1000); /* grams */
-  return Math.max(0.5, isNaN(n) || n <= 0 ? 0.5 : n);
-}
-
-/* ─── Tracking URL ───────────────────────────────────────────────────────── */
-export function getTcsTrackingUrl(cn: string): string {
-  return `${TCS_TRACKING_LINK}?cg=${encodeURIComponent(cn)}`;
-}
-
-/* ─── Test connection ─────────────────────────────────────────────────────
- * Calls GET /cities with Bearer token to verify credentials are working.
+/* ─── Step 1: Get ECOM Access Token ──────────────────────────────────────
+ * GET /ecom/api/authentication/token?username=&password=
+ * Header: X-IBM-Client-Id: {username}
+ * Response: { accessToken: "..." } or { AccessToken: "..." }
  */
+export async function getEcomAccessToken(settings: TcsSettings): Promise<string> {
+  const baseUrl   = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
+  const authUrl   = `${baseUrl}/authentication/token?username=${encodeURIComponent(settings.username)}&password=${encodeURIComponent(settings.password)}`;
+  const clientId  = resolveClientId(settings);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
+  };
+  if (clientId) headers["X-IBM-Client-Id"] = clientId;
+
+  logger.info({ authUrl, username: settings.username }, "TCS ECOM — auth token request");
+
+  const t0 = Date.now();
+  let result: Awaited<ReturnType<typeof httpReq>>;
+  try {
+    result = await httpReq(authUrl, "GET", headers, null, 15000);
+  } catch (e: any) {
+    pushLog({ ts: new Date().toISOString(), step: "auth", url: authUrl, method: "GET", httpStatus: null, success: false, error: e.message, durationMs: Date.now() - t0 });
+    throw new Error(`TCS auth network error: ${e.message}`);
+  }
+
+  const { status, text, data } = result;
+  const durationMs = Date.now() - t0;
+  const token = data?.accessToken ?? data?.AccessToken ?? data?.access_token ?? data?.token;
+
+  pushLog({ ts: new Date().toISOString(), step: "auth", url: authUrl, method: "GET", httpStatus: status, resBody: text.slice(0, 300), durationMs, success: !!token });
+
+  if (!token) {
+    const msg = data?.Message ?? data?.message ?? data?.error ?? text.slice(0, 200);
+    if (status === 401 || status === 403) {
+      throw new Error(`TCS auth rejected (HTTP ${status}) — check username/password.\nTCS response: ${msg}`);
+    }
+    throw new Error(`TCS auth failed (HTTP ${status}) — no accessToken in response.\nRaw: ${text.slice(0, 300)}`);
+  }
+
+  logger.info({ durationMs, username: settings.username }, "TCS ECOM — auth token OK");
+  return String(token);
+}
+
+/* ─── Test Connection ────────────────────────────────────────────────────── */
 export async function testConnection(
   settings: TcsSettings,
 ): Promise<{ ok: boolean; steps: Array<{ step: string; status: string; detail: string; raw?: string }> }> {
@@ -219,72 +251,47 @@ export async function testConnection(
   }
 
   const resolvedClientId = resolveClientId(settings);
-  const src = settings.clientId?.trim()
-    ? "entered in X-IBM-Client-Id field"
-    : extractClientIdFromJwt(settings.bearerToken)
-      ? "auto-decoded from JWT payload"
-      : "using username as fallback (TCS ECOM API convention)";
+  const baseUrl = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
 
   steps.push({
     step: "Config", status: "info",
-    detail: `username: ${settings.username} | token: ${settings.bearerToken.slice(0, 20)}… | X-IBM-Client-Id: ${resolvedClientId ?? "(MISSING)"} | mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`,
+    detail: [
+      `username: ${settings.username}`,
+      `X-IBM-Client-Id: ${resolvedClientId ?? settings.username} (auto from username)`,
+      `mode: ${settings.sandbox ? "DEV (devconnect)" : "PRODUCTION (ociconnect)"}`,
+      `base: ${baseUrl}`,
+    ].join(" | "),
   });
 
-  if (resolvedClientId) {
-    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId=${resolvedClientId} (${src}) — will be sent as X-IBM-Client-Id header` });
-  } else {
-    steps.push({
-      step: "X-IBM-Client-Id",
-      status: "fail",
-      detail: "❌ X-IBM-Client-Id could not be resolved — username is also missing.\n\n✅ ACTION: Enter your TCS username and try again.",
-    });
-    return { ok: false, steps };
-  }
-
-  const baseUrl = settings.sandbox ? TCS_COD_SANDBOX_URL : TCS_COD_URL;
-  const headers = getAuthHeaders(settings);
-  const t0 = Date.now();
-
-  /* Test GET /cities — exists in COD API swagger */
+  /* Step 1 — ECOM auth token */
+  let accessToken: string;
   try {
-    const { status, text, data } = await httpReq(`${baseUrl}/cities`, "GET", headers, undefined, 15000);
-    /* COD API returns { city: [...] } or { returnStatus: { code: "0200" }, city: [...] } */
-    const cities: any[] = Array.isArray(data?.city) ? data.city
-      : Array.isArray(data) ? data : [];
-    const ok = status < 300 && (cities.length > 0 || status === 200);
+    accessToken = await getEcomAccessToken(settings);
     steps.push({
-      step: "GET /cities",
-      status: ok ? "ok" : "fail",
-      detail: ok
-        ? `✅ ${cities.length > 0 ? cities.length + " cities" : "Response OK"} (${Date.now() - t0}ms) — Bearer + X-IBM-Client-Id accepted`
-        : `HTTP ${status} — ${text.slice(0, 300)}`,
-      raw: ok ? undefined : text.slice(0, 500),
+      step: "ECOM Auth Token",
+      status: "ok",
+      detail: `✅ Auth token received — username/password accepted by TCS`,
     });
-    if (!ok) return { ok: false, steps };
   } catch (e: any) {
-    const isSandbox = settings.sandbox;
-    const econnreset = String(e.message).includes("ECONNRESET") || String(e.message).includes("ECONNREFUSED") || String(e.message).includes("timeout");
     steps.push({
-      step: "GET /cities",
+      step: "ECOM Auth Token",
       status: "fail",
-      detail: econnreset && isSandbox
-        ? `Sandbox server is not responding (${e.message}).\n\n⚠️ TCS Sandbox may be offline or unavailable.\n✅ ACTION: In Couriers → TCS Settings → scroll down → disable Sandbox Mode → Save → Test again.`
-        : `Network error: ${e.message}`,
+      detail: `❌ ${e.message}\n\n✅ ACTION: Check username + password in TCS Settings.`,
     });
     return { ok: false, steps };
   }
 
-  steps.push({ step: "Ready", status: "ok", detail: "✅ Auth working. POST /create-order is ready for bookings." });
+  steps.push({
+    step: "Ready",
+    status: "ok",
+    detail: `✅ Auth working. POST ${baseUrl}/booking/create is ready.\nBooking body: { accesstoken, shipperinfo: { tcsaccount: "${settings.username}" }, consigneeinfo, shipmentinfo }`,
+  });
   return { ok: true, steps };
 }
 
-/* ─── Create Booking ──────────────────────────────────────────────────────
- * POST {TCS_COD_URL}/create-order
- *   Header: Authorization: Bearer {bearerToken}
- *   Body:   { userName, password, consigneeName, consigneeAddress, consigneeMobNo,
- *             consigneeEmail, originCityName, destinationCityName, weight, pieces,
- *             codAmount, customerReferenceNo, services, productDetails, fragile }
- *   Response: { returnStatus: { code: "0200" }, bookingReply: { CN: "..." } }
+/* ─── Create Booking (ECOM API) ───────────────────────────────────────────
+ * 1. GET /authentication/token → accessToken
+ * 2. POST /booking/create → ConsignmentNo
  */
 export async function createBooking(
   settings: TcsSettings,
@@ -301,15 +308,15 @@ export async function createBooking(
     fragile?: boolean;
   },
   address: {
-    name?: string; firstName?: string;
+    name?: string; firstName?: string; lastName?: string;
     address?: string; address1?: string; address2?: string;
     city?: string;
     phone?: string; email?: string;
+    zip?: string;
   },
   service?: string,
 ): Promise<{ trackingId: string; trackingUrl: string; rawResponse: Record<string, any> }> {
 
-  /* Validate config */
   const configErrs = validateSettings(settings);
   if (configErrs.length > 0) throw new Error(`TCS config error:\n• ${configErrs.join("\n• ")}`);
 
@@ -323,47 +330,127 @@ export async function createBooking(
   if (!addr) errs.push("Consignee address is empty");
   if (errs.length > 0) throw new Error(`TCS booking validation:\n• ${errs.join("\n• ")}`);
 
+  /* Step 1: get fresh auth token */
+  const accessToken = await getEcomAccessToken(settings);
+
+  /* Build booking payload matching PHP code structure */
   const weightKg    = tcsWeight(order.weight ?? settings.defaultWeight);
   const pieces      = Math.max(1, parseInt(String(order.pieces ?? 1), 10));
   const isCod       = !order.paymentMethod || order.paymentMethod === "cod";
-  const codAmount   = isCod ? String(Math.round(Number(order.total ?? 0))) : "0";
+  const codAmount   = isCod ? Math.round(Number(order.total ?? 0)) : 0;
   const items       = Array.isArray(order.items) ? order.items : [];
-  const productDesc = items.length > 0 ? items.map(i => i.name).join(", ").slice(0, 100) : "Dry Fruits";
+  const contentDesc = items.length > 0 ? items.map(i => i.name).join(", ").slice(0, 100) : "Dry Fruits";
   const orderRef    = String(order.orderNumber ?? order.id ?? Date.now());
-  const svcCode     = service ?? settings.serviceCode ?? "O";
+  const remarks     = (order.specialInstructions ?? order.notes ?? settings.defaultRemarks ?? "").trim() || "Handle with care";
   const isFragile   = order.fragile ?? settings.fragile ?? false;
   const originCity  = (settings.shipperCity ?? "Lahore").trim();
-  const fullName    = (address.name ?? address.firstName ?? "Customer").trim();
-  const mobNo       = rawPhone.length === 10 ? `0${rawPhone}` : rawPhone;
+  const shipperName = (settings.shipperName ?? "KDF NUTS").trim();
+  const shipperAddr = (settings.shipperAddress ?? "").trim();
+  const shipperPhone = (settings.shipperPhone ?? "").replace(/\D/g, "");
+  const mobNo = rawPhone.length === 10 ? `0${rawPhone}` : rawPhone;
+
+  /* Split full name into first + last */
+  const fullName  = (address.name ?? address.firstName ?? "Customer").trim();
+  const nameParts = fullName.split(" ");
+  const firstName = nameParts[0] ?? fullName;
+  const lastName  = nameParts.slice(1).join(" ") || "";
+
+  /* Service code mapping: our "O"/"E"/"S" → TCS "0"/"1"/"2" or keep as-is */
+  const svcRaw = service ?? settings.serviceCode ?? "O";
+  const svcCode = svcRaw === "O" ? "0" : svcRaw === "E" ? "1" : svcRaw === "S" ? "2" : svcRaw;
+
+  const clientId   = resolveClientId(settings);
+  const baseUrl    = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
+  const bookUrl    = `${baseUrl}/booking/create`;
+  const nowStr     = new Date().toLocaleString("en-GB", { hour12: false }).replace(",", "").replace(/\//g, "/");
 
   const payload: Record<string, any> = {
-    userName:            settings.username,
-    password:            settings.password,
-    costCenterCode:      (settings.costCenterCode ?? "").trim(),
-    consigneeName:       fullName.slice(0, 100),
-    consigneeAddress:    addr.slice(0, 200),
-    consigneeMobNo:      mobNo,
-    consigneeEmail:      (address.email ?? "").slice(0, 100),
-    originCityName:      originCity,
-    destinationCityName: destCity.slice(0, 100),
-    weight:              weightKg,
-    pieces:              pieces,
-    codAmount:           codAmount,
-    customerReferenceNo: orderRef.slice(0, 50),
-    services:            svcCode,
-    productDetails:      productDesc,
-    fragile:             isFragile ? "Yes" : "No",
+    accesstoken:    accessToken,
+    consignmentno:  "",
+    shipperinfo: {
+      tcsaccount:   settings.username,
+      shippername:  shipperName,
+      address1:     shipperAddr || "Main Office",
+      address2:     "",
+      address3:     "",
+      zip:          "54000",
+      countrycode:  "PK",
+      countryname:  "Pakistan",
+      citycode:     cityCode(originCity),
+      cityname:     originCity,
+      mobile:       shipperPhone || "03000000000",
+    },
+    consigneeinfo: {
+      consigneecode: "",
+      firstname:     firstName.slice(0, 50),
+      middlename:    "",
+      lastname:      lastName.slice(0, 50),
+      address1:      addr.slice(0, 100),
+      address2:      (address.address2 ?? "").slice(0, 100),
+      address3:      "",
+      zip:           (address.zip ?? "00000"),
+      countrycode:   "PK",
+      countryname:   "Pakistan",
+      citycode:      cityCode(destCity),
+      cityname:      destCity.slice(0, 50),
+      email:         (address.email ?? "").slice(0, 100),
+      areacode:      "",
+      areaname:      "",
+      blockcode:     "",
+      blockname:     "",
+      lat:           "",
+      lng:           "",
+      landmark:      "",
+      mobile:        mobNo,
+    },
+    vendorinfo: {
+      name:      shipperName,
+      address1:  shipperAddr || "Lahore, Pakistan",
+      address2:  "",
+      address3:  "",
+      citycode:  cityCode(originCity),
+      cityname:  originCity,
+      mobile:    shipperPhone || "03000000000",
+    },
+    shipmentinfo: {
+      costcentercode: (settings.costCenterCode ?? "").trim(),
+      referenceno:    orderRef.slice(0, 50),
+      contentdesc:    contentDesc,
+      servicecode:    svcCode,
+      parametertype:  "Standard",
+      shipmentdate:   nowStr,
+      shippingtype:   "",
+      currency:       "PKR",
+      codamount:      codAmount,
+      declaredvalue:  null,
+      insuredvalue:   null,
+      transactiontype: "",
+      dsflag:         "",
+      carrierslug:    "",
+      weightinkg:     weightKg,
+      pieces:         pieces,
+      fragile:        isFragile,
+      remarks:        remarks.slice(0, 200),
+      skus: [{
+        description:   contentDesc,
+        quantity:      pieces,
+        weight:        weightKg,
+        uom:           "KG",
+        unitprice:     codAmount,
+        declaredvalue: null,
+        insuredvalue:  null,
+      }],
+    },
   };
 
-  const remarks = (order.specialInstructions ?? order.notes ?? settings.defaultRemarks ?? "").trim();
-  if (remarks) payload.remarks = remarks.slice(0, 200);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
+  };
+  if (clientId) headers["X-IBM-Client-Id"] = clientId;
 
-  const baseUrl  = settings.sandbox ? TCS_COD_SANDBOX_URL : TCS_COD_URL;
-  const bookUrl  = `${baseUrl}/create-order`;
-  const headers  = getAuthHeaders(settings);
-  const t0       = Date.now();
-
-  logger.info({ bookUrl, username: settings.username, orderRef, weightKg, codAmount, originCity, destCity }, "TCS — booking");
+  const t0 = Date.now();
+  logger.info({ bookUrl, username: settings.username, orderRef, weightKg, codAmount, originCity, destCity }, "TCS ECOM — booking");
 
   let result: Awaited<ReturnType<typeof httpReq>>;
   try {
@@ -378,81 +465,67 @@ export async function createBooking(
 
   pushLog({
     ts: new Date().toISOString(), step: "booking", url: bookUrl, method: "POST",
-    reqBody: JSON.stringify({ ...payload, password: "●●●" }).slice(0, 400),
+    reqBody: JSON.stringify({ ...payload, accesstoken: "●●●" }).slice(0, 500),
     httpStatus: status, resBody: text.slice(0, 600), durationMs, success: false,
   });
 
-  /* Extract CN: official field is bookingReply.CN */
+  /* Extract CN — TCS ECOM response field names vary */
   const cn =
-    data?.bookingReply?.CN  ??
-    data?.CN                ??
-    data?.consignmentNo     ??
-    data?.consignment_no    ??
-    data?.ConsignmentNo;
+    data?.ConsignmentNo        ??
+    data?.consignmentNo        ??
+    data?.ConsignmentNumber    ??
+    data?.consignmentno        ??
+    data?.ShipmentInformation?.ConsignmentNo ??
+    data?.ShipmentInformation?.consignmentNo ??
+    data?.bookingReply?.CN     ??
+    data?.CN;
 
   if (!cn || String(cn).trim() === "") {
-    const rs     = data?.returnStatus ?? {};
-    const errMsg = rs.message ? `TCS error ${rs.code ?? ""}: ${rs.message}` : `HTTP ${status}`;
-    pushLog({ ts: new Date().toISOString(), step: "booking", url: bookUrl, method: "POST", httpStatus: status, resBody: text.slice(0, 400), durationMs, success: false, error: errMsg });
-    throw new Error(`TCS booking failed — no CN in response.\n${errMsg}\nRaw: ${text.slice(0, 300)}`);
+    const errMsg = data?.Message ?? data?.message ?? data?.Error ?? data?.error ?? `HTTP ${status}`;
+    pushLog({ ts: new Date().toISOString(), step: "booking", url: bookUrl, method: "POST", httpStatus: status, resBody: text.slice(0, 400), durationMs, success: false, error: String(errMsg) });
+    throw new Error(`TCS booking failed — no consignment number in response.\n${errMsg}\nRaw: ${text.slice(0, 300)}`);
   }
 
   if (_log[0]?.step === "booking") _log[0].success = true;
-  logger.info({ cn, durationMs, orderRef }, "TCS — booking SUCCESS");
+  logger.info({ cn, durationMs, orderRef }, "TCS ECOM — booking SUCCESS");
   return { trackingId: String(cn), trackingUrl: getTcsTrackingUrl(String(cn)), rawResponse: data };
 }
 
 /* ─── Track Shipment ──────────────────────────────────────────────────────
- * GET https://api.tcscourier.com/production/track/v1/shipments/detail?consignmentNo=CN
- * Header: Authorization: Bearer {bearerToken}
+ * TCS tracking via COD API (if bearer token available)
+ * or falls back to a static "in_transit" status.
  */
 export async function trackShipment(
   settings: TcsSettings,
   trackingId: string,
 ): Promise<{ status: string; rawResponse: Record<string, any> }> {
-  if (!settings.bearerToken?.trim()) {
-    return { status: "in_transit", rawResponse: { note: "Bearer token not configured." } };
+  /* Try COD API tracking if bearer token is set */
+  if (settings.bearerToken?.trim()) {
+    const trackUrl = settings.sandbox
+      ? `https://api.tcscourier.com/sandbox/track/v1`
+      : TCS_TRACK_URL;
+    const url  = `${trackUrl}/shipments/detail?consignmentNo=${encodeURIComponent(trackingId)}`;
+    const t0   = Date.now();
+    const hdrs = getAuthHeaders(settings);
+    logger.info({ url, trackingId }, "TCS — tracking (COD API)");
+    try {
+      const { status, text, data } = await httpReq(url, "GET", hdrs, undefined, 15000);
+      pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: status, resBody: text.slice(0, 400), durationMs: Date.now() - t0, success: status < 400 });
+      const rs = data?.returnStatus ?? {};
+      if (status === 200 && !rs.code) return { status: "in_transit", rawResponse: data };
+      const shipStatus = data?.ShipmentInformation?.ShipStatus ?? data?.ShipStatus ?? rs.message ?? "in_transit";
+      return { status: String(shipStatus).toLowerCase().replace(/\s+/g, "_"), rawResponse: data };
+    } catch {
+      /* fall through to basic response */
+    }
   }
 
-  const trackUrl = settings.sandbox ? `https://api.tcscourier.com/sandbox/track/v1` : TCS_TRACK_URL;
-  const url = `${trackUrl}/shipments/detail?consignmentNo=${encodeURIComponent(trackingId)}`;
-  const t0  = Date.now();
-
-  logger.info({ url, trackingId }, "TCS — tracking");
-
-  let result: Awaited<ReturnType<typeof httpReq>>;
-  try {
-    result = await httpReq(url, "GET", getAuthHeaders(settings), undefined, 15000);
-  } catch (e: any) {
-    pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: null, success: false, error: e.message, durationMs: Date.now() - t0 });
-    return { status: "in_transit", rawResponse: { error: e.message } };
-  }
-
-  const { status, text, data } = result;
-  pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: status, resBody: text.slice(0, 400), durationMs: Date.now() - t0, success: status < 400 });
-
-  const rs = data?.returnStatus ?? {};
-  if (rs.code && rs.code !== "0200") {
-    return { status: "in_transit", rawResponse: data };
-  }
-
-  const detail     = data?.TrackDetailReply ?? data;
-  const deliveries: any[] = Array.isArray(detail?.DeliveryInfo) ? detail.DeliveryInfo : [];
-  const checkpoints: any[] = Array.isArray(detail?.Checkpoints)  ? detail.Checkpoints  : [];
-  const latest  = deliveries[0];
-  const chk     = checkpoints[0];
-  let shipStatus = "in_transit";
-
-  const codeMap: Record<string, string> = { OK: "delivered", DEL: "delivered", RO: "returned", RET: "returned", OFD: "out_for_delivery" };
-  if (latest?.code) shipStatus = codeMap[String(latest.code).toUpperCase()] ?? shipStatus;
-
-  if (shipStatus === "in_transit") {
-    const s = String(latest?.status ?? chk?.status ?? "").toLowerCase();
-    if (s.includes("deliver"))          shipStatus = "delivered";
-    else if (s.includes("return"))      shipStatus = "returned";
-    else if (s.includes("out for del")) shipStatus = "out_for_delivery";
-  }
-
-  logger.info({ trackingId, shipStatus, durationMs: Date.now() - t0 }, "TCS — tracking done");
-  return { status: shipStatus, rawResponse: data };
+  /* No bearer token — use ECOM tracking link */
+  return {
+    status: "in_transit",
+    rawResponse: {
+      note: "Tracking: visit TCS tracking portal",
+      url:  getTcsTrackingUrl(trackingId),
+    },
+  };
 }
