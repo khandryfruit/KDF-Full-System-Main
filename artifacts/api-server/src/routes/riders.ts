@@ -20,6 +20,168 @@ function normalisePhone(raw: string): string {
 }
 
 /* ═══════════════════════════════════════════════════════
+   HELPER — get delivery settings (auto mode etc.)
+═══════════════════════════════════════════════════════ */
+async function getDeliverySettings(): Promise<{
+  auto_delivery_mode: boolean;
+  auto_wa_on_assign: boolean;
+  auto_wa_on_status: boolean;
+  default_eta_minutes: number;
+}> {
+  try {
+    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
+    if (rows.rows.length) return rows.rows[0] as any;
+  } catch {}
+  return { auto_delivery_mode: true, auto_wa_on_assign: true, auto_wa_on_status: true, default_eta_minutes: 30 };
+}
+
+/* ═══════════════════════════════════════════════════════
+   HELPER — build customer WhatsApp message by status
+═══════════════════════════════════════════════════════ */
+function buildCustomerStatusMessage(
+  status: string,
+  order: any,
+  delivery: any,
+  etaMinutes?: number | null,
+): string {
+  const orderNum = order?.order_number ?? delivery?.shopify_order_number ?? "—";
+  const customerName = delivery?.customer_name ?? "Customer";
+  const cod = Number(delivery?.cod_amount ?? 0);
+  const isPaid = order?.financial_status === "paid" || delivery?.is_paid;
+  const codText = isPaid ? "PAID ✅" : `PKR ${cod.toLocaleString()} Cash on Delivery`;
+  const riderName = delivery?.rider_name ?? delivery?.name ?? "";
+  const riderPhone = delivery?.rider_phone ?? delivery?.phone ?? "";
+  const addr = delivery?.delivery_address ?? "";
+
+  const etaText = etaMinutes
+    ? etaMinutes <= 60 ? `${etaMinutes} minutes` : `${Math.floor(etaMinutes / 60)} hour${etaMinutes >= 120 ? "s" : ""}`
+    : "30-45 minutes";
+
+  switch (status) {
+    case "assigned":
+      return `🛵 *Your Order Has Been Assigned!*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName}! 👋
+
+Your order *${orderNum}* has been assigned to our delivery rider.
+
+👤 *Rider Name:* ${riderName || "KDF NUTS Rider"}
+📞 *Rider Contact:* ${riderPhone || "Will be shared soon"}
+⏱️ *Estimated Delivery:* ${etaText}
+💰 *Amount to Prepare:* ${codText}
+📍 *Delivering to:* ${addr || "Your address"}
+
+Please keep your phone active and payment ready.
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "picked":
+      return `📦 *Order Picked Up!*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName}!
+
+Great news! 🎉 Your order *${orderNum}* has been picked up by our rider and is on its way to you!
+
+🛵 *Rider:* ${riderName || "KDF NUTS Rider"}
+⏱️ *ETA:* ${etaText}
+💰 *Keep Ready:* ${codText}
+
+We'll notify you when your rider is near.
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "out_for_delivery":
+      return `🚚 *Your Order is Out for Delivery!*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName}!
+
+Your order *${orderNum}* is on its way! 🛵💨
+
+🛵 *Rider:* ${riderName || "KDF NUTS Rider"}
+📞 *Contact:* ${riderPhone || "Available on arrival"}
+⏱️ *Arriving in:* ${etaText}
+💰 *Please Prepare:* ${codText}
+
+Please be available and keep your phone reachable.
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "near_customer":
+      return `📍 *Rider is Near Your Location!*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName}!
+
+Your KDF NUTS order *${orderNum}* rider is almost there! 🏃
+
+🛵 *Rider:* ${riderName || "KDF NUTS Rider"}
+📞 *Call Rider:* ${riderPhone || "—"}
+💰 *Amount Due:* ${codText}
+
+Please come to the door — your order is arriving NOW! 🚨
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "delivered":
+      return `✅ *Order Delivered Successfully!*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName}!
+
+Your order *${orderNum}* has been delivered. Thank you for choosing KDF NUTS! 🌰
+
+We hope you love your premium dry fruits!
+
+⭐ *Enjoying our products?* Please share your experience — your feedback means the world to us.
+
+📞 For any queries: Reply to this message.
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits
+🛍️ Shop again: kdfnuts.com`;
+
+    case "delayed":
+      return `⏰ *Delivery Slightly Delayed*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName},
+
+We sincerely apologize — your order *${orderNum}* is experiencing a slight delay.
+
+🛵 Our rider is on the way and will be with you shortly.
+💰 Amount to keep ready: ${codText}
+
+We appreciate your patience. 🙏
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "failed":
+      return `❌ *Delivery Attempt Failed*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName},
+
+We were unable to deliver your order *${orderNum}* — our rider could not reach you.
+
+📞 Please call us or reply to reschedule your delivery.
+
+We'll try again at your convenience. 🙏
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    case "returned":
+      return `↩️ *Order Returned*
+━━━━━━━━━━━━━━━━━━━
+Hi ${customerName},
+
+Your order *${orderNum}* has been returned to our warehouse.
+
+Please contact us to arrange redelivery or for a refund.
+📞 Reply to this message or reach out to our support team.
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    default:
+      return `📦 *Order Update — KDF NUTS*\n\nHi ${customerName}! Your order *${orderNum}* status: *${status.replace(/_/g, " ").toUpperCase()}*.\n\n🌰 KDF NUTS | Thank you for shopping with us!`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    HELPER — build WhatsApp message text for rider
 ═══════════════════════════════════════════════════════ */
 function buildRiderMessage(order: any, delivery: any): string {
@@ -237,10 +399,158 @@ router.get("/admin/riders/stats", adminMiddleware, async (req, res) => {
    ASSIGN ORDER TO RIDER
 ═══════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════
+   DELIVERY SETTINGS — GET / PUT
+═══════════════════════════════════════════════════════ */
+router.get("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
+  try {
+    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
+    res.json(rows.rows[0] ?? {});
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.put("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
+  try {
+    const { auto_delivery_mode, auto_wa_on_assign, auto_wa_on_status, default_eta_minutes } = req.body;
+    const rows = await db.execute(sql`
+      UPDATE rider_delivery_settings SET
+        auto_delivery_mode   = COALESCE(${auto_delivery_mode   ?? null}, auto_delivery_mode),
+        auto_wa_on_assign    = COALESCE(${auto_wa_on_assign    ?? null}, auto_wa_on_assign),
+        auto_wa_on_status    = COALESCE(${auto_wa_on_status    ?? null}, auto_wa_on_status),
+        default_eta_minutes  = COALESCE(${default_eta_minutes != null ? parseInt(String(default_eta_minutes)) : null}, default_eta_minutes),
+        updated_at = NOW()
+      WHERE id = 1
+      RETURNING *
+    `);
+    res.json(rows.rows[0] ?? {});
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   LIVE DASHBOARD — real-time overview
+═══════════════════════════════════════════════════════ */
+router.get("/admin/riders/live-dashboard", adminMiddleware, async (req, res) => {
+  try {
+    const stats = await db.execute(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM riders WHERE status = 'active') AS active_riders,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'assigned')         AS assigned,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'picked')           AS picked,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'out_for_delivery') AS out_for_delivery,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'near_customer')    AS near_customer,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'delivered' AND DATE(delivered_at) = CURRENT_DATE) AS delivered_today,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'failed'   AND DATE(updated_at)   = CURRENT_DATE) AS failed_today,
+        (SELECT COALESCE(SUM(cod_amount),0) FROM rider_deliveries WHERE status = 'delivered' AND is_paid = false AND DATE(delivered_at) = CURRENT_DATE) AS cod_collected_today,
+        (SELECT COUNT(*)::int FROM shopify_orders WHERE (shipping_address->>'city') ILIKE '%lahore%' AND id NOT IN (SELECT shopify_order_db_id FROM rider_deliveries WHERE shopify_order_db_id IS NOT NULL)) AS unassigned
+    `);
+
+    const activeRiders = await db.execute(sql`
+      SELECT r.id, r.name, r.phone, r.delivery_area,
+        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_orders,
+        COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND DATE(d.delivered_at) = CURRENT_DATE) AS delivered_today
+      FROM riders r
+      LEFT JOIN rider_deliveries d ON d.rider_id = r.id
+      WHERE r.status = 'active'
+      GROUP BY r.id
+      ORDER BY active_orders DESC
+    `);
+
+    const recentActivity = await db.execute(sql`
+      SELECT d.id, d.status, d.shopify_order_number, d.customer_name, d.updated_at,
+             r.name AS rider_name
+      FROM rider_deliveries d
+      LEFT JOIN riders r ON r.id = d.rider_id
+      ORDER BY d.updated_at DESC
+      LIMIT 15
+    `);
+
+    res.json({
+      stats: stats.rows[0] ?? {},
+      activeRiders: activeRiders.rows ?? [],
+      recentActivity: recentActivity.rows ?? [],
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   COD REMINDER — send payment reminder to customer
+═══════════════════════════════════════════════════════ */
+router.post("/admin/riders/deliveries/:id/cod-reminder", adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const delRows = await db.execute(sql`
+      SELECT d.*, r.name AS rider_name, r.phone AS rider_phone
+      FROM rider_deliveries d LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE d.id = ${id} LIMIT 1
+    `);
+    if (!delRows.rows.length) { res.status(404).json({ error: "Delivery not found" }); return; }
+    const del = delRows.rows[0] as any;
+    const cod = Number(del.cod_amount ?? 0);
+    if (del.is_paid || cod === 0) { res.json({ ok: false, message: "Order is prepaid — no COD needed" }); return; }
+
+    const customerPhone = del.customer_phone;
+    if (!customerPhone) { res.status(400).json({ error: "No customer phone number" }); return; }
+
+    const message = `💰 *Payment Reminder — KDF NUTS*
+━━━━━━━━━━━━━━━━━━━
+Hi ${del.customer_name ?? "Customer"}! 👋
+
+Your KDF NUTS order *${del.shopify_order_number ?? del.id}* is on its way!
+
+💵 *Please prepare:* PKR ${cod.toLocaleString()}
+📋 *Payment Type:* Cash on Delivery
+
+Our rider will be with you soon. Please keep the exact amount ready for a smooth handover. 🙏
+━━━━━━━━━━━━━━━━━━━
+🌰 KDF NUTS | Premium Dry Fruits`;
+
+    const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message });
+    if (sent) {
+      await db.execute(sql`UPDATE rider_deliveries SET cod_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = ${id}`);
+    }
+    res.json({ ok: sent, message: sent ? "COD reminder sent!" : "Send failed" });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   UPDATE ETA — set delivery estimate
+═══════════════════════════════════════════════════════ */
+router.put("/admin/riders/deliveries/:id/eta", adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const { eta_minutes, notify_customer } = req.body;
+    if (!eta_minutes || eta_minutes < 1) { res.status(400).json({ error: "eta_minutes required (min 1)" }); return; }
+
+    await db.execute(sql`UPDATE rider_deliveries SET eta_minutes = ${parseInt(String(eta_minutes))}, updated_at = NOW() WHERE id = ${id}`);
+
+    if (notify_customer) {
+      const delRows = await db.execute(sql`
+        SELECT d.*, r.name AS rider_name, r.phone AS rider_phone
+        FROM rider_deliveries d LEFT JOIN riders r ON r.id = d.rider_id
+        WHERE d.id = ${id} LIMIT 1
+      `);
+      const del = delRows.rows[0] as any;
+      if (del?.customer_phone) {
+        const etaText = eta_minutes <= 60 ? `${eta_minutes} minutes` : `${Math.floor(eta_minutes / 60)} hour(s)`;
+        const message = `⏱️ *Delivery Update — KDF NUTS*
+
+Hi ${del.customer_name ?? "Customer"}! Your order *${del.shopify_order_number ?? del.id}* will arrive in approximately *${etaText}*.
+
+${del.rider_name ? `🛵 Rider: ${del.rider_name}` : ""}
+💰 Amount ready: PKR ${Number(del.cod_amount ?? 0).toLocaleString()}
+
+🌰 KDF NUTS | Premium Dry Fruits`;
+        await sendWhatsAppMessage({ phone: normalisePhone(del.customer_phone), message }).catch(() => {});
+      }
+    }
+    res.json({ ok: true, eta_minutes });
+  } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
+});
+
 /* POST /api/admin/riders/assign */
 router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
   try {
-    const { shopify_order_db_id, rider_id, notes, cod_override } = req.body;
+    const { shopify_order_db_id, rider_id, notes, cod_override, eta_minutes, send_customer_wa } = req.body;
     if (!shopify_order_db_id) res.status(400).json({ error: "shopify_order_db_id required" });
 
     // Get order
@@ -304,16 +614,34 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
 
     res.json({ ok: true, delivery });
 
-    /* ── Non-blocking Shopify sync ── */
+    /* ── Non-blocking: Shopify sync + auto Customer WA ── */
     if (delivery) {
       setImmediate(async () => {
         try {
           let rider: any = null;
           if (rider_id) {
-            const rr = await db.execute(sql`SELECT name, phone FROM riders WHERE id = ${parseInt(rider_id)} LIMIT 1`);
+            const rr = await db.execute(sql`SELECT name, phone, whatsapp_number FROM riders WHERE id = ${parseInt(rider_id)} LIMIT 1`);
             rider = rr.rows[0];
           }
           await syncDeliveryToShopify(buildSyncPayload("assigned", delivery, rider, notes));
+
+          /* Auto customer WA — if auto mode or explicitly requested */
+          const shouldSendWa = send_customer_wa !== false && rider_id;
+          if (shouldSendWa) {
+            const settings = await getDeliverySettings();
+            if (settings.auto_wa_on_assign || send_customer_wa === true) {
+              const customerPhone = delivery.customer_phone || order.customer_phone;
+              if (customerPhone) {
+                const etaMins = eta_minutes ? parseInt(String(eta_minutes)) : settings.default_eta_minutes;
+                const enrichedDel = { ...delivery, rider_name: rider?.name, rider_phone: rider?.phone || rider?.whatsapp_number };
+                const message = buildCustomerStatusMessage("assigned", order, enrichedDel, etaMins);
+                const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message }).catch(() => false);
+                if (sent) {
+                  await db.execute(sql`UPDATE rider_deliveries SET customer_wa_assigned_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
+                }
+              }
+            }
+          }
         } catch {}
       });
     }
@@ -481,16 +809,18 @@ router.post("/admin/riders/orders/:orderId/send-wa", adminMiddleware, async (req
 router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, res) => {
   try {
     const id = parseInt(req.params["id"] as string);
-    const { status, notes } = req.body;
-    const valid = ["assigned","picked","out_for_delivery","delivered","failed","returned","cancelled","delayed","rescheduled"];
+    const { status, notes, skip_customer_wa } = req.body;
+    const valid = ["assigned","picked","out_for_delivery","near_customer","delivered","failed","returned","cancelled","delayed","rescheduled"];
     if (!valid.includes(status)) { res.status(400).json({ error: `status must be one of: ${valid.join(", ")}` }); return; }
 
     const tsField: Record<string, string> = {
       picked:           "picked_at",
       out_for_delivery: "out_for_delivery_at",
+      near_customer:    "near_customer_at",
       delivered:        "delivered_at",
       failed:           "failed_at",
       returned:         "returned_at",
+      delayed:          "delayed_at",
     };
 
     let extra = "";
@@ -502,43 +832,65 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
 
     res.json({ ok: true, status });
 
-    /* ── Non-blocking: Shopify sync + Customer WA notification ── */
+    /* ── Non-blocking: Shopify sync + Customer WA for ALL status changes ── */
     setImmediate(async () => {
       try {
         const delRow = await db.execute(sql`
-          SELECT d.*, r.name AS rider_name, r.phone AS rider_phone
+          SELECT d.*, r.name AS rider_name, r.phone AS rider_phone, r.whatsapp_number AS rider_wa
           FROM rider_deliveries d
           LEFT JOIN riders r ON r.id = d.rider_id
           WHERE d.id = ${id} LIMIT 1
         `);
         const del = delRow.rows[0] as any;
         if (!del) return;
-        const rider = del.rider_name ? { name: del.rider_name, phone: del.rider_phone } : undefined;
-        await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, del, rider, notes));
 
-        /* ── Customer WA notification on delivery outcome ── */
-        if (status === "delivered" || status === "failed") {
+        const rider = del.rider_name ? { name: del.rider_name, phone: del.rider_phone } : undefined;
+        await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, del, rider, notes)).catch(() => {});
+
+        /* ── Auto Customer WA for every status (if not suppressed) ── */
+        if (!skip_customer_wa) {
           try {
-            const orderRows = await db.execute(sql`
-              SELECT order_number, shipping_address FROM shopify_orders
-              WHERE id = ${del.shopify_order_db_id} LIMIT 1
-            `);
-            const order = orderRows.rows[0] as any;
-            if (order) {
-              const addr = typeof order.shipping_address === "string"
-                ? JSON.parse(order.shipping_address)
-                : order.shipping_address;
-              const customerPhone = addr?.phone;
-              const customerName  = addr?.name ?? undefined;
-              const orderNumber   = order.order_number ?? del.shopify_order_db_id;
+            const settings = await getDeliverySettings();
+            const shouldNotify = settings.auto_wa_on_status;
+
+            if (shouldNotify) {
+              const orderRows = await db.execute(sql`
+                SELECT * FROM shopify_orders WHERE id = ${del.shopify_order_db_id} LIMIT 1
+              `);
+              const order = orderRows.rows[0] as any;
+
+              const customerPhone = del.customer_phone || (() => {
+                try {
+                  const a = typeof order?.shipping_address === "string" ? JSON.parse(order.shipping_address) : order?.shipping_address;
+                  return a?.phone;
+                } catch { return null; }
+              })();
+
               if (customerPhone) {
-                if (status === "delivered") {
-                  await sendOrderStatusUpdate({ phone: customerPhone, orderNumber, status: "delivered" }).catch(() => {});
-                  await sendReviewRequest({ phone: customerPhone, orderNumber, customerName }).catch(() => {});
-                } else {
-                  await sendFailedDeliveryNotification({ phone: customerPhone, orderNumber, customerName }).catch(() => {});
+                const etaMins = del.eta_minutes ?? settings.default_eta_minutes;
+                const message = buildCustomerStatusMessage(status, order, del, etaMins);
+                const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message }).catch(() => false);
+                if (sent) {
+                  await db.execute(sql`
+                    UPDATE rider_deliveries SET customer_wa_status_at = NOW(), updated_at = NOW() WHERE id = ${id}
+                  `).catch(() => {});
                 }
               }
+            }
+
+            /* ── Extra: for delivered — also send review request ── */
+            if (status === "delivered") {
+              try {
+                const orderRows = await db.execute(sql`SELECT order_number, shipping_address FROM shopify_orders WHERE id = ${del.shopify_order_db_id} LIMIT 1`);
+                const order = orderRows.rows[0] as any;
+                if (order) {
+                  const addr = typeof order.shipping_address === "string" ? JSON.parse(order.shipping_address) : order.shipping_address;
+                  const phone = del.customer_phone || addr?.phone;
+                  if (phone && settings.auto_wa_on_status) {
+                    await sendReviewRequest({ phone: normalisePhone(phone), orderNumber: order.order_number ?? del.id, customerName: del.customer_name }).catch(() => {});
+                  }
+                }
+              } catch {}
             }
           } catch {}
         }
