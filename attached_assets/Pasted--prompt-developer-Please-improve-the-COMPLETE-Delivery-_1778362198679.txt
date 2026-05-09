@@ -1,0 +1,243 @@
+یہ prompt اپنے developer کو بھیج دیں:
+
+Please improve the COMPLETE Delivery Rider Mobile App professionally without breaking existing working systems.
+
+IMPORTANT:
+Do NOT change current order flow logic unnecessarily.
+Focus on:
+
+* notification system
+* live tracking
+* rider experience
+* UI/UX improvement
+* performance optimization
+
+==================================================
+
+1. STRONG REAL-TIME NOTIFICATION SYSTEM
+   ==================================================
+
+The rider app notification system must be upgraded completely.
+
+Current issue:
+
+* notifications are weak
+* delayed
+* sometimes missed
+* rider does not notice orders
+
+Required:
+
+✅ instant push notifications
+✅ loud notification sound
+✅ repeated alerts until opened
+✅ vibration support
+✅ lock-screen notification
+✅ background notifications
+✅ terminated app notifications
+✅ heads-up popup notifications
+✅ Android foreground service support
+✅ iPhone push support
+
+IMPORTANT:
+Until rider opens the notification or accepts/rejects order:
+
+* notification should continue repeating
+* reminder sound should continue
+* high-priority notification channel required
+
+Use:
+
+* Firebase Cloud Messaging (FCM)
+* High Priority Notifications
+* Foreground notification service
+
+==================================================
+2. LIVE LOCATION TRACKING FIX
+=============================
+
+Current issue:
+Rider live location is NOT properly appearing inside admin panel.
+
+Fix completely.
+
+Required:
+
+✅ real-time GPS tracking
+✅ background location updates
+✅ accurate rider movement
+✅ auto refresh every few seconds
+✅ live map inside admin
+✅ online/offline rider status
+✅ current speed/location updates
+✅ last active timestamp
+✅ route tracking
+
+IMPORTANT:
+Location must continue updating even:
+
+* app minimized
+* screen locked
+* phone background mode
+
+Use:
+
+* background location services
+* socket/websocket updates
+* Firebase realtime updates
+
+==================================================
+3. ADMIN LIVE MAP
+=================
+
+Inside admin panel show:
+
+✅ all active riders on map
+✅ moving rider markers
+✅ delivery route
+✅ rider current order
+✅ estimated delivery time
+✅ rider battery/network status if possible
+
+==================================================
+4. DELIVERY FLOW IMPROVEMENT
+============================
+
+Add better rider workflow:
+
+✅ New Order Assigned
+✅ Rider Accepted
+✅ Rider Picked Parcel
+✅ Rider On The Way
+✅ Rider Delivered
+✅ Rider Failed Delivery
+✅ Rider Returned Order
+
+Each step should:
+
+* update admin instantly
+* notify customer instantly
+* save timeline logs
+
+==================================================
+5. CUSTOMER WHATSAPP NOTIFICATIONS
+==================================
+
+When rider status changes:
+
+Send WhatsApp updates automatically:
+
+✅ rider assigned
+✅ rider name
+✅ rider phone number
+✅ estimated arrival time
+✅ delivery started
+✅ delivered successfully
+
+==================================================
+6. MOBILE APP UI/UX IMPROVEMENT
+===============================
+
+Current design needs improvement.
+
+Please make UI:
+✅ cleaner
+✅ modern
+✅ faster
+✅ easy to use
+✅ large buttons
+✅ smooth animations
+✅ delivery-focused UI
+✅ dark/light compatible
+✅ professional courier style
+
+IMPORTANT:
+Do NOT make app complicated.
+
+Rider should access everything quickly:
+
+* orders
+* maps
+* call customer
+* WhatsApp customer
+* delivery status
+* earnings
+
+==================================================
+7. PERFORMANCE OPTIMIZATION
+===========================
+
+Optimize app for:
+✅ low RAM phones
+✅ slow internet
+✅ battery efficiency
+✅ fast loading
+✅ low API usage
+
+==================================================
+8. ORDER ALERT SYSTEM
+=====================
+
+When new order assigned:
+
+Rider app should:
+✅ play loud sound
+✅ vibrate
+✅ popup alert
+✅ repeat reminder
+✅ show accept/reject buttons
+
+Until action taken.
+
+==================================================
+9. LIVE SOCKET SYSTEM
+=====================
+
+Implement stable real-time system:
+
+Use:
+✅ WebSockets
+OR
+✅ Socket.IO
+
+For:
+
+* live location
+* order updates
+* admin sync
+* rider sync
+* delivery status
+
+==================================================
+10. IMPORTANT
+=============
+
+Do NOT break:
+
+* Shopify orders
+* Ecommerce orders
+* Courier booking
+* Rider assignment
+* WhatsApp automation
+* Admin dashboards
+
+Only improve rider app professionally.
+
+==================================================
+11. FINAL GOAL
+==============
+
+I need a professional delivery rider system like:
+
+* Foodpanda
+* Bykea
+* Careem
+* InDrive Delivery
+
+Features required:
+✅ fast notifications
+✅ reliable live location
+✅ smooth delivery flow
+✅ professional UI
+✅ stable background tracking
+✅ real-time admin monitoring

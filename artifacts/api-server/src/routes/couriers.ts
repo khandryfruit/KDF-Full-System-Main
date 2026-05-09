@@ -799,14 +799,11 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
     } else if (username && password) {
       const t0e = Date.now();
       try {
-        /* Try all variants — GET first (official spec), POST as fallback */
+        /* CONFIRMED by live curl (May 2026): only GET /token is valid.
+         * POST /token → 405. GET/POST generateToken → 404. */
         const attempts: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
-          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { Username: username, Password: password } },
-          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { Username: username, Password: password } },
-          { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "GET",  body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "POST", body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { Username: username, Password: password } },
         ];
         let found = false;
         const attemptResults: string[] = [];
@@ -826,7 +823,13 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
             try { aData = JSON.parse(aText); } catch { aData = {}; }
             const aToken = aData.accessToken ?? aData.accesstoken ?? aData.token ?? aData.result?.accessToken ?? aData.data?.accessToken;
             const fieldStyle = Object.keys(aBody).includes("Username") ? "PascalCase" : "lowercase";
-            attemptResults.push(`Attempt ${i + 1}: ${aMethod} ${aUrl.split("/").slice(-2).join("/")} (${fieldStyle}) → HTTP ${aResp.status} (${aDuration}ms) ${aToken ? "✅ TOKEN OK" : `❌ no token: ${aData.message ?? aData.error ?? ""}`}`);
+            const statusHint =
+              aResp.status === 401 ? "❌ HTTP 401 — Bearer token expired or wrong credentials" :
+              aResp.status === 403 ? "❌ HTTP 403 — Access denied (bearer token invalid)" :
+              aResp.status === 404 ? "❌ HTTP 404 — endpoint not found" :
+              aResp.status === 405 ? "❌ HTTP 405 — wrong HTTP method" :
+              aToken ? "✅ TOKEN OK" : `❌ no token: ${aData.message ?? aData.error ?? ""}`;
+            attemptResults.push(`Attempt ${i + 1}: ${aMethod} ${aUrl.split("/").slice(-2).join("/")} (${fieldStyle}) → HTTP ${aResp.status} (${aDuration}ms) ${statusHint}`);
             pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: aUrl, method: aMethod, reqBody: JSON.stringify({ ...aBody, password: "●●●" }), httpStatus: aResp.status, resBody: aText.slice(0, 400), durationMs: aDuration, success: !!aToken, attempt: i + 1 });
             if (aToken) {
               ecomToken = aToken;
@@ -834,7 +837,10 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
               tcsEcomCache.set(`${settings.tcsaccount}:${username}`, { token: aToken, expiresAt: Date.now() + 55 * 60 * 1000 });
               break;
             }
-            if (aResp.status !== 405 && aResp.status !== 404) break;
+            /* 401/403 = credentials wrong — stop immediately, no point trying PascalCase */
+            if (aResp.status === 401 || aResp.status === 403) break;
+            /* 404/405 = wrong endpoint/method — try next variant */
+            if (aResp.status !== 404 && aResp.status !== 405) break;
           } catch (ae: any) {
             attemptResults.push(`Attempt ${i + 1}: ${aMethod} ${aUrl.split("/").slice(-2).join("/")} → Network error: ${ae.message}`);
           }
@@ -2594,21 +2600,18 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     tcsEcomCache.delete(cacheKey); /* also evict stale entry so next normal call is fresh */
   }
 
-  /* Priority 3: Try Step-2 — Official spec: GET /ecom/api/authentication/token with body
-   * (axios sends GET with `data` field; fetch supports GET+body in Node.js).
-   * We try GET first (official), then POST as fallback for older API versions.
-   * Also try both lowercase and PascalCase field names, and both URL paths. */
+  /* Priority 3: Step-2 — GET /ecom/api/authentication/token
+   * CONFIRMED by live curl test on ociconnect.tcscourier.com (May 2026):
+   *   GET  /ecom/api/authentication/token → 401 (exists, needs valid bearer + credentials)
+   *   POST /ecom/api/authentication/token → 405 (Method Not Allowed — POST is WRONG)
+   *   GET  /ecom/api/authentication/generateToken → 404 (endpoint does not exist)
+   * Per official TCS Node.js guide: axios.get() with { data: {username,password} }
+   * Response: { message: "success", accesstoken: "...", expiry: "..." }             */
   const STEP2_ATTEMPTS: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
-    /* ✅ Official spec: GET with body, lowercase fields */
-    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { username, password } },
-    /* Official spec: GET with body, PascalCase fields */
-    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { Username: username, Password: password } },
-    /* POST fallback — some TCS deployments use POST */
-    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { username, password } },
-    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { Username: username, Password: password } },
-    /* Alternative endpoint variants */
-    { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "GET",  body: { username, password } },
-    { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "POST", body: { username, password } },
+    /* ✅ Official: GET with lowercase body fields */
+    { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { username, password } },
+    /* Fallback: PascalCase field names */
+    { url: `${baseUrl}/ecom/api/authentication/token`, method: "GET", body: { Username: username, Password: password } },
   ];
 
   let lastError = "";
@@ -2643,12 +2646,28 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     lastStatus = resp.status;
     lastRaw = rawText.slice(0, 400);
 
-    /* 405 / 404 — try next variant */
+    /* 405 / 404 — try next body-field variant */
     if (resp.status === 405 || resp.status === 404) {
       pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 200), durationMs, success: false, error: `HTTP ${resp.status} — trying next variant`, attempt: i + 1 });
       logger.warn({ url: attemptUrl, method: attemptMethod, status: resp.status, attempt: i + 1 }, "TCS Step-2 — trying next variant");
       lastError = `HTTP ${resp.status} on ${attemptMethod} ${attemptUrl}`;
       continue;
+    }
+
+    /* 401 — endpoint reached but bearer/credentials rejected */
+    if (resp.status === 401 || resp.status === 403) {
+      const apiMsg = data.message ?? data.statusMessage ?? data.error ?? "";
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: `HTTP ${resp.status} — bearer/credentials rejected`, attempt: i + 1 });
+      logger.warn({ url: attemptUrl, method: attemptMethod, status: resp.status, attempt: i + 1, apiMsg }, "TCS Step-2 — credentials rejected");
+      lastError =
+        `HTTP ${resp.status} — TCS rejected your credentials. ` +
+        `Two possible causes:\n` +
+        `  1. ENVO Bearer Token (TCS_STATIC_BEARER_TOKEN env var) is EXPIRED — get a fresh one from TCS ENVO Portal.\n` +
+        `  2. TCS Username/Password is wrong — verify in Couriers → TCS → Advanced Settings.\n` +
+        `TCS response: ${apiMsg || rawText.slice(0, 100)}`;
+      lastStatus = resp.status;
+      lastRaw = rawText.slice(0, 300);
+      break; /* 401 is definitive — no point trying PascalCase variant with same bad credentials */
     }
 
     const token =
@@ -2659,28 +2678,33 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
 
     if (token) {
       pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
+      /* Official response uses lowercase "accesstoken" and "expiry" (string) */
+      const expiry = data.expiry ? new Date(data.expiry).getTime() - Date.now() : 55 * 60 * 1000;
       const ttlMs = typeof data.expiresIn === "number"
         ? Math.min(data.expiresIn * 1000, 55 * 60 * 1000)
-        : 55 * 60 * 1000;
+        : Math.min(Math.max(expiry, 5 * 60 * 1000), 55 * 60 * 1000);
       tcsEcomCache.set(cacheKey, { token, expiresAt: Date.now() + ttlMs });
       logger.info({ tcsaccount: settings.tcsaccount, username, attempt: i + 1, method: attemptMethod, url: attemptUrl, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
       return token;
     }
 
-    /* Got response but no token — wrong credentials, stop */
-    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status}`;
+    /* Got 2xx/3xx response but no token field — unexpected format */
+    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status} — no token in response`;
     pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
-    lastError = msg;
+    lastError = `${msg} — Raw: ${rawText.slice(0, 150)}`;
     lastStatus = resp.status;
     lastRaw = rawText.slice(0, 300);
-    /* Non-405/404 — URL is correct but auth failed — stop probing, report error */
-    break;
+    continue; /* try PascalCase variant */
   }
 
+  /* Build a clear, actionable error message */
+  const is401 = lastStatus === 401 || lastStatus === 403;
+  const hint = is401
+    ? "ACTION: (1) Go to TCS ENVO Portal → re-copy your Bearer Token → update TCS_STATIC_BEARER_TOKEN env var. OR (2) Paste a fresh Direct ECOM Access Token in Couriers → TCS settings."
+    : `Verify TCS Username/Password and ENVO Bearer Token, or paste a Direct ECOM Access Token to bypass Step-2.`;
+
   throw new Error(
-    `TCS ECOM token (Step-2) failed: ${lastError} (HTTP ${lastStatus}). ` +
-    `Verify Username/Password in TCS settings, or paste a Direct ECOM Access Token to skip Step-2. ` +
-    `Raw: ${lastRaw.slice(0, 150)}`
+    `TCS ECOM token (Step-2) failed at GET /ecom/api/authentication/token:\n${lastError}\n\n${hint}`
   );
 }
 

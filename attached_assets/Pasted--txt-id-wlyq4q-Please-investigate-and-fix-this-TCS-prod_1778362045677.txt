@@ -1,0 +1,165 @@
+````txt id="wlyq4q"
+Please investigate and fix this TCS production/domain issue properly.
+
+Current Error:
+
+Courier API Booking Failed
+
+TCS ECOM token (Step-2) failed:
+HTTP 404 on POST
+
+https://ociconnect.tcscourier.com/ecom/api/authentication/generateToken
+
+==================================================
+IMPORTANT
+==================================================
+
+Please check whether this issue is related to:
+
+1. Production domain
+2. Proxy/Cloudflare
+3. Wrong API endpoint
+4. CORS
+5. Replit deployment
+6. SSL/HTTPS
+7. Wrong HTTP method
+8. Incorrect route from old docs
+9. Domain-based restrictions
+10. Old cached API URLs
+
+==================================================
+MY DOMAINS
+==================================================
+
+Admin Panel:
+```txt
+admin.khanbabadryfruits.com
+````
+
+Website:
+
+```txt
+khanbabadryfruits.com
+```
+
+Please verify whether:
+
+* production deployment
+* domain routing
+* reverse proxy
+* environment variables
+* Cloudflare settings
+* SSL certificates
+* API forwarding
+
+are affecting the TCS API requests.
+
+==================================================
+VERY IMPORTANT
+==============
+
+The current endpoint being used is:
+
+```txt
+/ecom/api/authentication/generateToken
+```
+
+But according to official TCS docs, this endpoint may be WRONG or outdated.
+
+Please verify the CORRECT endpoint from the latest TCS API documentation.
+
+Possible correct endpoint may be:
+
+```txt
+/ecom/api/authentication/token
+```
+
+instead of:
+
+```txt
+/ecom/api/authentication/generateToken
+```
+
+HTTP 404 means:
+
+* route does not exist
+* OR wrong endpoint
+* OR wrong HTTP method
+
+==================================================
+ACTION REQUIRED
+===============
+
+Please:
+
+✅ re-check official TCS docs
+✅ verify latest auth endpoint
+✅ verify GET vs POST method
+✅ verify headers
+✅ verify production domain behavior
+✅ verify Replit deployment
+✅ clear old cached routes
+✅ remove old auth logic
+✅ test directly in Postman
+✅ test on production domain
+✅ compare dev vs production
+
+==================================================
+POSTMAN TEST REQUIRED
+=====================
+
+Please test both endpoints:
+
+```txt
+POST /ecom/api/authentication/generateToken
+```
+
+AND
+
+```txt
+GET /ecom/api/authentication/token
+```
+
+with:
+
+* bearer token
+* username
+* password
+
+Then confirm which one is officially working.
+
+==================================================
+DEBUGGING REQUIRED
+==================
+
+Inside:
+
+```txt
+Courier > API Logs
+```
+
+show:
+
+* final request URL
+* request method
+* headers
+* request payload
+* HTTP response
+* trace ID
+* production URL
+* token response
+
+==================================================
+FINAL GOAL
+==========
+
+I need:
+✅ real working TCS authentication
+✅ production-safe integration
+✅ no fake success
+✅ no outdated endpoints
+✅ same behavior in dev + production
+✅ correct latest TCS API flow
+
+```
+```
