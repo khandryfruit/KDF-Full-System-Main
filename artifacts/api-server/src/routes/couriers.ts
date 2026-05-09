@@ -1828,15 +1828,15 @@ async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox
 
 
 /**
- * TCS weight formatter — always returns a NUMBER e.g. 0.5, 1.0, 1.25.
- * TCS booking API requires a numeric decimal value, NOT a string.
- * Correct: 0.5 | Wrong: "0.5" | Wrong: "0.5 KG" | Wrong: NaN | Wrong: 0
- * Minimum weight: 0.5 kg. Invalid/zero/negative → fallback 0.5.
+ * TCS weight formatter — returns a STRING decimal e.g. "0.50", "1.00", "1.25".
+ * TCS API rejects JS integers (1 → JSON "1") but accepts string decimals ("1.00").
+ * Min 0.5 kg; NaN/zero/negative → fallback "0.50".
  */
-function tcsWeight(raw: any): number {
+function tcsWeight(raw: any): string {
   const n = Number(raw);
   const safe = (isNaN(n) || n <= 0) ? 0.5 : n;
-  return parseFloat(Math.max(0.5, safe).toFixed(2));
+  /* TCS requires a string decimal: "0.50", "1.00", etc. — NOT a JS integer */
+  return Math.max(0.5, safe).toFixed(2);
 }
 
 function formatTcsShipmentDate(): string {
