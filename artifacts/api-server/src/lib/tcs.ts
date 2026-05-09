@@ -146,7 +146,7 @@ const CITY_CODES: Record<string, string> = {
   "muzaffarabad": "MZD", "mirpur": "MPR", "bhimber": "BHM",
   "attock": "ATK", "chakwal": "CKW", "taxila": "TXL",
   "wah cantt": "WAH", "wah": "WAH", "kamra": "KAM",
-  "gujranwala": "GJW", "hafizabad": "HFZ", "mandi bahauddin": "MBD",
+  "hafizabad": "HFZ", "mandi bahauddin": "MBD",
   "narowal": "NRW", "okara": "OKR", "pakpattan": "PKP",
   "vehari": "VHR", "khanewal": "KNW", "lodhran": "LDR",
   "bahawalnagar": "BHN", "chiniot": "CHN", "jhang": "JHG",
@@ -572,40 +572,66 @@ export async function createBooking(
 }
 
 /* ─── Track Shipment ──────────────────────────────────────────────────────
- * TCS tracking via COD API (if bearer token available)
- * or falls back to a static "in_transit" status.
+ * Uses TCS ECOM API /track-order (same API used for booking).
+ * Returns: status + trackingDetails (from cnDetail) + rawResponse.
+ *
+ * DO NOT modify auth logic or API base URL — booking system is stable.
  */
 export async function trackShipment(
   settings: TcsSettings,
   trackingId: string,
-): Promise<{ status: string; rawResponse: Record<string, any> }> {
-  /* Try COD API tracking if bearer token is set */
-  if (settings.bearerToken?.trim()) {
-    const trackUrl = settings.sandbox
-      ? `https://api.tcscourier.com/sandbox/track/v1`
-      : TCS_TRACK_URL;
-    const url  = `${trackUrl}/shipments/detail?consignmentNo=${encodeURIComponent(trackingId)}`;
-    const t0   = Date.now();
-    const hdrs = getAuthHeaders(settings);
-    logger.info({ url, trackingId }, "TCS — tracking (COD API)");
-    try {
-      const { status, text, data } = await httpReq(url, "GET", hdrs, undefined, 15000);
-      pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: status, resBody: text.slice(0, 400), durationMs: Date.now() - t0, success: status < 400 });
-      const rs = data?.returnStatus ?? {};
-      if (status === 200 && !rs.code) return { status: "in_transit", rawResponse: data };
-      const shipStatus = data?.ShipmentInformation?.ShipStatus ?? data?.ShipStatus ?? rs.message ?? "in_transit";
-      return { status: String(shipStatus).toLowerCase().replace(/\s+/g, "_"), rawResponse: data };
-    } catch {
-      /* fall through to basic response */
+): Promise<{ status: string; trackingDetails?: Record<string, any>; rawResponse: Record<string, any> }> {
+  const baseUrl  = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
+  const clientId = resolveClientId(settings);
+  const t0       = Date.now();
+
+  const headers: Record<string, string> = { "Accept": "application/json" };
+  if (clientId)                      headers["X-IBM-Client-Id"] = clientId;
+  if (settings.bearerToken?.trim()) headers["Authorization"]    = `Bearer ${settings.bearerToken.trim()}`;
+
+  const url = `${baseUrl}/track-order?userName=${encodeURIComponent(settings.username)}&password=${encodeURIComponent(settings.password ?? "")}&referenceNo=${encodeURIComponent(trackingId)}`;
+
+  logger.info({ url, cn: trackingId }, "TCS ECOM — tracking request");
+
+  try {
+    const { status, text, data } = await httpReq(url, "GET", headers, null, 15000);
+    const durationMs = Date.now() - t0;
+    pushLog({ ts: new Date().toISOString(), step: "tracking", url, method: "GET", httpStatus: status, resBody: text.slice(0, 500), durationMs, success: status < 400 });
+    logger.info({ httpStatus: status, durationMs, cn: trackingId }, "TCS ECOM — tracking response");
+
+    if (status === 200) {
+      /* cnDetail may be an array or single object */
+      const cnData: Record<string, any> = Array.isArray(data?.cnDetail)
+        ? (data.cnDetail[0] ?? {})
+        : (data?.cnDetail ?? data ?? {});
+
+      /* Derive a status from whatever TCS returns */
+      const shipStatus: string = (
+        cnData.ShipStatus ?? cnData.shipStatus ?? cnData.status ?? "booked"
+      ).toString().toLowerCase().replace(/\s+/g, "_");
+
+      return {
+        status:          shipStatus || "booked",
+        trackingDetails: cnData,
+        rawResponse: {
+          ...data,
+          trackingUrl: getTcsTrackingUrl(trackingId),
+          syncedAt:    new Date().toISOString(),
+          durationMs,
+        },
+      };
     }
+  } catch (err: any) {
+    logger.warn({ err: err.message, cn: trackingId }, "TCS ECOM — tracking failed, using fallback");
   }
 
-  /* No bearer token — use ECOM tracking link */
+  /* Fallback — direct tracking portal link always works */
   return {
     status: "in_transit",
     rawResponse: {
-      note: "Tracking: visit TCS tracking portal",
-      url:  getTcsTrackingUrl(trackingId),
+      note:        "Open TCS tracking portal for live status",
+      trackingUrl: getTcsTrackingUrl(trackingId),
+      syncedAt:    new Date().toISOString(),
     },
   };
 }

@@ -8,7 +8,7 @@ import {
   ChevronDown, ArrowRight, Ban, Bell, Copy, ExternalLink, Boxes,
   Zap, Weight, Star, Info, ShieldCheck, UserCheck, Bike, FileText,
   Navigation, CalendarCheck, TriangleAlert, CircleCheck, Loader2,
-  Settings, AlertTriangle, Code2, CheckCheck,
+  Settings, AlertTriangle, Code2, CheckCheck, Satellite,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -510,6 +510,7 @@ function BulkBookModal({ orderIds, couriers, onClose, onDone }: { orderIds: numb
 function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId: number; onRefresh: () => void }) {
   const { toast } = useToast();
   const [showTimeline, setShowTimeline] = useState(false);
+  const [liveTrack, setLiveTrack] = useState<{ status: string; trackingDetails: Record<string, any>; syncedAt: string } | null>(null);
 
   const cancelMutation = useMutation({
     mutationFn: () => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/cancel`, { method: "POST" }).then(r => r.json()),
@@ -535,6 +536,23 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
       body: JSON.stringify({ codStatus }),
     }).then(r => r.json()),
     onSuccess: () => { toast({ title: "COD status updated" }); onRefresh(); },
+  });
+
+  /* Live tracking — only TCS ECOM (real API bookings) */
+  const isTcsReal = shipment.courierSlug === "tcs" && (shipment.rawResponse as any)?.realApiBooking === true;
+  const trackMutation = useMutation({
+    mutationFn: () =>
+      api(`/admin/couriers/tcs/track/${encodeURIComponent(shipment.trackingId)}`)
+        .then(r => r.json()),
+    onSuccess: (d) => {
+      if (d.ok) {
+        setLiveTrack({ status: d.status, trackingDetails: d.trackingDetails ?? {}, syncedAt: d.syncedAt });
+        toast({ title: "✅ Live status synced", description: `Status: ${d.status.replace(/_/g, " ")}` });
+      } else {
+        toast({ title: "Tracking returned no data", variant: "destructive" });
+      }
+    },
+    onError: () => toast({ title: "Tracking failed", variant: "destructive" }),
   });
 
   const isCancelled = shipment.isCancelled;
@@ -617,6 +635,42 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
         </a>
       )}
 
+      {/* Live tracking panel — shown after sync */}
+      {liveTrack && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-semibold text-indigo-800">
+              <Satellite className="w-3.5 h-3.5" />
+              Live Status — TCS ECOM
+            </div>
+            <span className="text-indigo-500 font-mono">{new Date(liveTrack.syncedAt).toLocaleTimeString()}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge status={liveTrack.status} />
+            <span className="text-indigo-700 capitalize">{liveTrack.status.replace(/_/g, " ")}</span>
+          </div>
+          {Object.keys(liveTrack.trackingDetails).length > 0 && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-indigo-700 bg-white/60 rounded p-2 border border-indigo-100">
+              {liveTrack.trackingDetails.consignee && (
+                <><span className="font-medium">Consignee:</span><span>{liveTrack.trackingDetails.consignee}</span></>
+              )}
+              {liveTrack.trackingDetails.origin && (
+                <><span className="font-medium">Origin:</span><span>{liveTrack.trackingDetails.origin}</span></>
+              )}
+              {liveTrack.trackingDetails.destination && (
+                <><span className="font-medium">Destination:</span><span>{liveTrack.trackingDetails.destination}</span></>
+              )}
+              {liveTrack.trackingDetails.service && (
+                <><span className="font-medium">Service:</span><span>{liveTrack.trackingDetails.service}</span></>
+              )}
+              {liveTrack.trackingDetails.ShipmentWeight && (
+                <><span className="font-medium">Weight:</span><span>{liveTrack.trackingDetails.ShipmentWeight}</span></>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Timeline toggle */}
       <button onClick={() => setShowTimeline(v => !v)}
         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
@@ -642,6 +696,43 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 hover:text-green-800 hover:bg-green-50" onClick={() => notifyMutation.mutate()} disabled={notifyMutation.isPending}>
             <Bell className="w-3 h-3" /> Notify
           </Button>
+          {/* Live Track — TCS real bookings only */}
+          {isTcsReal && (
+            <Button
+              size="sm" variant="outline"
+              className="h-7 text-xs gap-1 text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200"
+              onClick={() => trackMutation.mutate()}
+              disabled={trackMutation.isPending}
+            >
+              <Satellite className={`w-3 h-3 ${trackMutation.isPending ? "animate-pulse" : ""}`} />
+              {trackMutation.isPending ? "Syncing…" : "Live Track"}
+            </Button>
+          )}
+          {/* Print Label — all shipments with tracking ID */}
+          {shipment.trackingId && (
+            <Button
+              size="sm" variant="outline"
+              className="h-7 text-xs gap-1 text-orange-700 hover:text-orange-800 hover:bg-orange-50 border-orange-200"
+              onClick={async () => {
+                try {
+                  const token = localStorage.getItem("admin_token") ?? "";
+                  const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (!resp.ok) { toast({ title: "Label generation failed", variant: "destructive" }); return; }
+                  const blob = await resp.blob();
+                  const url = URL.createObjectURL(blob);
+                  const win = window.open(url, "_blank");
+                  if (win) setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } catch {
+                  toast({ title: "Label failed to open", variant: "destructive" });
+                }
+              }}
+            >
+              <Printer className="w-3 h-3" />
+              Print Label
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => {
             if (confirm("Cancel this shipment?")) cancelMutation.mutate();
           }} disabled={cancelMutation.isPending}>

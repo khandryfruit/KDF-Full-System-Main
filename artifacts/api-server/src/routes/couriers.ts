@@ -2392,6 +2392,234 @@ router.post("/admin/shipments/:id/retry-booking", adminMiddleware as any, async 
   }
 });
 
+/* ─── GET /admin/couriers/tcs/track/:cn ─────────────────────────────────
+ * Live shipment tracking via TCS ECOM API.
+ * Returns status, trackingDetails, trackingUrl, syncedAt.
+ * Logs: tracking request + CN + response in server logs.
+ */
+router.get("/admin/couriers/tcs/track/:cn", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const cn = (req.params.cn ?? "").trim();
+    if (!cn) { res.status(400).json({ ok: false, error: "cn param required" }); return; }
+
+    const s = await getTcsSettings();
+    if (!s) { res.status(404).json({ ok: false, error: "TCS not configured" }); return; }
+
+    req.log.info({ cn }, "TCS — live track request");
+    const result = await Tcs.trackShipment(s, cn);
+    req.log.info({ cn, status: result.status }, "TCS — live track response");
+
+    res.json({
+      ok:              true,
+      cn,
+      status:          result.status,
+      trackingUrl:     Tcs.getTcsTrackingUrl(cn),
+      trackingDetails: (result as any).trackingDetails ?? {},
+      syncedAt:        new Date().toISOString(),
+      rawResponse:     result.rawResponse,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ─── GET /admin/shipments/:id/print-label ───────────────────────────────
+ * Professional TCS shipping label (HTML) — opens in browser for print/download.
+ * Uses JsBarcode CDN for CODE128 barcode generation.
+ * Separate from /label (which returns JSON data for legacy use).
+ * Logs: label generation + CN + shipment id.
+ */
+router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid shipment id" }); return; }
+
+    const [shipment] = await db.select().from(shipmentsTable).where(eq(shipmentsTable.id, id)).limit(1);
+    if (!shipment) { res.status(404).json({ error: "Shipment not found" }); return; }
+
+    const cn           = shipment.trackingId ?? "";
+    const raw          = (shipment.rawResponse ?? {}) as Record<string, any>;
+    const customerName  = (shipment.customerName  ?? raw.customerName  ?? "—").toString();
+    const customerPhone = (shipment.customerPhone ?? raw.customerPhone ?? "—").toString();
+    const customerAddr  = (shipment.customerAddress ?? "—").toString();
+    const customerCity  = (shipment.customerCity  ?? raw.customerCity  ?? "—").toString();
+    const codAmount     = shipment.isCod && shipment.codAmount ? `PKR ${Number(shipment.codAmount).toLocaleString()}` : null;
+    const weight        = shipment.weight ? `${Number(shipment.weight).toFixed(2)} kg` : "0.50 kg";
+    const pieces        = shipment.pieces ?? 1;
+    const orderRef      = (shipment.shopifyOrderNumber ?? String(shipment.orderId ?? id)).toString();
+    const contentDesc   = (shipment.contentDesc ?? "Dry Fruits").toString().slice(0, 60);
+    const bookedAt      = shipment.createdAt ? new Date(shipment.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    const serviceCode   = (shipment.serviceCode ?? "O").toUpperCase();
+    const serviceLabel  = serviceCode === "O" ? "Overnight" : serviceCode === "E" ? "Economy" : serviceCode === "S" ? "Same-Day" : serviceCode;
+
+    req.log.info({ id, cn, orderRef, customerCity }, "TCS — label generation");
+
+    /* ─── Escape HTML special chars ─── */
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TCS Label — ${esc(cn || orderRef)}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;background:#e5e5e5;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+    .actions{display:flex;gap:10px;margin-bottom:16px}
+    .btn{padding:10px 22px;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px}
+    .btn-print{background:#c62828;color:#fff}
+    .btn-close{background:#424242;color:#fff}
+    .label{width:100mm;background:#fff;border:2.5px solid #000;font-family:Arial,sans-serif}
+    .hdr{background:#c62828;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
+    .hdr-name{font-size:26px;font-weight:900;letter-spacing:3px;line-height:1}
+    .hdr-sub{font-size:7px;margin-top:2px;letter-spacing:0.5px;opacity:.9}
+    .hdr-right{text-align:right;font-size:7px;line-height:1.6;opacity:.9}
+    .svc-bar{background:#212121;color:#fff;text-align:center;font-size:10px;font-weight:700;padding:3px 0;letter-spacing:3px}
+    .bc-wrap{padding:10px 12px 6px;text-align:center;border-bottom:1.5px solid #ddd}
+    .bc-wrap svg{max-width:100%;height:65px}
+    .cn-txt{font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:2.5px;margin-top:3px}
+    .cod-bar{background:#c62828;color:#fff;text-align:center;font-size:16px;font-weight:900;padding:7px;letter-spacing:1px}
+    .prepaid-bar{background:#2e7d32;color:#fff;text-align:center;font-size:11px;font-weight:700;padding:5px;letter-spacing:2px}
+    .sec{padding:6px 12px;border-bottom:1.5px solid #ddd}
+    .sec-lbl{font-size:6.5px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+    .sec-val{font-size:11px;font-weight:600;color:#111;line-height:1.45}
+    .sec-val.xl{font-size:14px;font-weight:900}
+    .row2{display:grid;grid-template-columns:1fr 1fr}
+    .row2 .cell{padding:6px 12px;border-bottom:1.5px solid #ddd}
+    .row2 .cell:first-child{border-right:1.5px solid #ddd}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr}
+    .row3 .cell{padding:6px 12px;border-bottom:1.5px solid #ddd}
+    .row3 .cell:not(:last-child){border-right:1.5px solid #ddd}
+    .ftr{padding:5px 12px;text-align:center;font-size:6.5px;color:#888;line-height:1.5}
+    @media print{
+      body{background:#fff;padding:0}
+      .actions{display:none!important}
+      .label{border:2px solid #000;box-shadow:none}
+    }
+  </style>
+</head>
+<body>
+
+<div class="actions">
+  <button class="btn btn-print" onclick="window.print()">🖨️ Print Label</button>
+  <button class="btn btn-close" onclick="window.close()">✕ Close</button>
+</div>
+
+<div class="label">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-name">TCS</div>
+      <div class="hdr-sub">COURIER SERVICES</div>
+    </div>
+    <div class="hdr-right">
+      Delivering Excellence<br>
+      www.tcscourier.com<br>
+      0800-TCS-786
+    </div>
+  </div>
+
+  <!-- Service Bar -->
+  <div class="svc-bar">${esc(serviceLabel)} — ECOM</div>
+
+  <!-- Barcode -->
+  <div class="bc-wrap">
+    <svg id="bc"></svg>
+    <div class="cn-txt">CN: ${esc(cn)}</div>
+  </div>
+
+  <!-- COD / Prepaid -->
+  ${codAmount
+    ? `<div class="cod-bar">💰 COD: ${esc(codAmount)}</div>`
+    : `<div class="prepaid-bar">✓ PREPAID</div>`}
+
+  <!-- Consignee -->
+  <div class="sec">
+    <div class="sec-lbl">📦 Consignee (To)</div>
+    <div class="sec-val xl">${esc(customerName)}</div>
+    <div class="sec-val">${esc(customerPhone)}</div>
+    <div class="sec-val">${esc(customerAddr)}</div>
+    <div class="sec-val xl">${esc(customerCity)}</div>
+  </div>
+
+  <!-- Order Ref / Date -->
+  <div class="row2">
+    <div class="cell">
+      <div class="sec-lbl">Order #</div>
+      <div class="sec-val">${esc(orderRef)}</div>
+    </div>
+    <div class="cell">
+      <div class="sec-lbl">Date Booked</div>
+      <div class="sec-val">${esc(bookedAt)}</div>
+    </div>
+  </div>
+
+  <!-- Weight / Pieces / Contents -->
+  <div class="row3">
+    <div class="cell">
+      <div class="sec-lbl">Weight</div>
+      <div class="sec-val">${esc(weight)}</div>
+    </div>
+    <div class="cell">
+      <div class="sec-lbl">Pieces</div>
+      <div class="sec-val">${pieces}</div>
+    </div>
+    <div class="cell">
+      <div class="sec-lbl">Service</div>
+      <div class="sec-val">${esc(serviceCode)}</div>
+    </div>
+  </div>
+
+  <!-- Contents -->
+  <div class="sec">
+    <div class="sec-lbl">Contents</div>
+    <div class="sec-val">${esc(contentDesc)}</div>
+  </div>
+
+  <!-- Shipper -->
+  <div class="sec">
+    <div class="sec-lbl">🏪 Shipper (From)</div>
+    <div class="sec-val xl">KDF NUTS</div>
+    <div class="sec-val">Lahore, Pakistan</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="ftr">
+    Track: ociconnect.tcscourier.com/tracking | CN: ${esc(cn)}<br>
+    Generated: ${new Date().toLocaleString("en-PK")}
+  </div>
+
+</div><!-- /label -->
+
+<script>
+  (function(){
+    var cn="${cn.replace(/"/g, '\\"')}";
+    if(!cn){ return; }
+    try{
+      JsBarcode("#bc", cn, {
+        format:"CODE128", width:2.2, height:65,
+        displayValue:false, margin:4, background:"#ffffff", lineColor:"#000000"
+      });
+    }catch(e){
+      document.getElementById("bc").outerHTML='<div style="font-family:monospace;font-size:18px;letter-spacing:4px;padding:10px">'+cn+'</div>';
+    }
+  })();
+<\/script>
+</body></html>`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(html);
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message ?? "Label generation failed" });
+  }
+});
+
 /* ─── Exported helpers for shopify.ts ─────────────────── */
 export { callCourierApi as callCourierApiForShopify, trackWithCourierApi as trackWithCourierApiForShopify };
 
