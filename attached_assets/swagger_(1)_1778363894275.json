@@ -1,0 +1,613 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "x-ibm-name": "tracking-api",
+    "title": "Tracking API",
+    "version": "1.0.0",
+    "description": "This API allow customers to track TCS shipments, It's easy to track your shipment online with this API. Simply enter your consignment/shipment number (CN) to get same details provided on the website.\n\n<label>Prerequisites</label>\n\n1. Request parameter key names must be correct (case sensitive).\n2. Input parameter key values are not case sensitive.\n3. Subscription must be made to API product before integration.\n4. Consumers can use their Reference Numbers instead of CN.\n\n<label>Message Status</label>  \n\nReply message status can be determined from below object.\n\n<pre><code>{ \n  \"returnStatus\":    { \n     \"code\": \"0200\", \n     \"status\": \"SUCCESS\", \n     \"message\": \"The operation was successful.\", \n     \"requestTime\": \"20180724111142089\", \n     \"responseTime\": \"20180724111143100\"\n  }  \n}</code></pre>\n\n| Code | Description |\n| ------ | ------ |\n| 0200 | The operation was successful. |\n| 0400 | Bad Request / Custom validation message. |\n| 0404 | Data Not Found. |\n| 0408 | The server is taking too long to respond, please try later. |\n| 0500 | An internal error has occurred.|\n\n# Authentication\n\n<!-- ReDoc-Inject: <security-definitions> -->"
+  },
+  "paths": {
+    "/shipments": {
+      "get": {
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "clientIdHeader": []
+          }
+        ],
+        "description": "<br>This operation is deprecated, please use \"/shipments/detail\" operation instead.",
+        "summary": "To get shipment's detail",
+        "tags": [
+          "Track"
+        ]
+      }
+    },
+    "/shipments/delivery-status": {
+      "get": {
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackDeliveryOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "clientIdHeader": []
+          }
+        ],
+        "description": "<br>This operation is deprecated, please use \"/shipments/detail\" operation instead.",
+        "tags": [
+          "Track"
+        ],
+        "summary": "To get shipment's delivery detail"
+      }
+    },
+    "/shipments/checkpoints": {
+      "get": {
+        "deprecated": true,
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointsOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "clientIdHeader": []
+          }
+        ],
+        "description": "<br>This operation is deprecated, please use \"/shipments/detail\" operation instead.",
+        "tags": [
+          "Track"
+        ],
+        "summary": "To get shipment's checkpoint detail"
+      }
+    },
+    "/shipments/detail": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackDetailOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>To track shipments by consignment number, for multiple CN(s) use comma between them, multiple CN(s) should be up to 10.",
+        "parameters": [
+          {
+            "name": "consignmentNo",
+            "in": "query",
+            "description": "This is your shipment tracking CN# or Reference No.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "Max. 20"
+            }
+          }
+        ],
+        "summary": "Track Shipment by CN",
+        "tags": [
+          "Track Shipment"
+        ]
+      }
+    },
+    "/shipments/customers/{customerNo}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTrackOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>To get shipments detail by customer number",
+        "parameters": [
+          {
+            "required": true,
+            "name": "customerNo",
+            "in": "path",
+            "description": "The TCS A/c no of customers.",
+            "schema": {
+              "type": "string",
+              "format": "Max. 20"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "required": true,
+            "description": "The format for to Date should be (yyyymmdd).",
+            "schema": {
+              "type": "string",
+              "format": "YYYYMMDD"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "required": true,
+            "description": "The format for from Date should be (yyyymmdd).",
+            "schema": {
+              "type": "string",
+              "format": "YYYYMMDD"
+            }
+          }
+        ],
+        "summary": "Track shipment by account number",
+        "tags": [
+          "Track Customer Shipment"
+        ]
+      }
+    },
+    "/shipments/customers/{customerNo}/delivery-status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDeliveryOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>To get shipments delivery status by customer number, provided in path by replacing {customerNo}.",
+        "parameters": [
+          {
+            "required": true,
+            "name": "customerNo",
+            "in": "path",
+            "description": "The TCS A/c no of customers.",
+            "schema": {
+              "type": "string",
+              "format": "Max. 20"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "required": true,
+            "description": "The format for to Date should be (yyyymmdd).",
+            "schema": {
+              "type": "string",
+              "format": "YYYYMMDD"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "required": true,
+            "description": "The format for from Date should be (yyyymmdd).",
+            "schema": {
+              "type": "string",
+              "format": "YYYYMMDD"
+            }
+          }
+        ],
+        "summary": "Track shipment delivery status by account number",
+        "tags": [
+          "Track Customer Shipment"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "clientIdHeader": []
+    }
+  ],
+  "mtime": "2021-12-29T10:10:16.000Z",
+  "servers": [
+    {
+      "url": "https://api.tcscourier.com/production/track/v1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "clientIdHeader": {
+        "type": "apiKey",
+        "description": "This is your registered application Client ID check the Apps credentials for the detail, as you started API integration provide this apiKey in header.",
+        "in": "header",
+        "name": "X-IBM-Client-Id"
+      }
+    },
+    "schemas": {
+      "returnStatus": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "0200"
+          },
+          "status": {
+            "type": "string",
+            "example": "SUCCESS"
+          },
+          "message": {
+            "type": "string",
+            "example": "The operation was successful."
+          },
+          "requestTime": {
+            "type": "string",
+            "example": "2100000000"
+          },
+          "responseTime": {
+            "type": "string",
+            "example": "2100000000"
+          }
+        }
+      },
+      "Checkpoints": {
+        "type": "object",
+        "properties": {
+          "consignmentNo": {
+            "type": "string",
+            "example": "1000001",
+            "format": "Max. 20"
+          },
+          "dateTime": {
+            "type": "string",
+            "format": "YYYYMMDD",
+            "example": "20180101"
+          },
+          "recievedBy": {
+            "type": "string",
+            "format": "Max. 20",
+            "example": "Shahbaz"
+          },
+          "status": {
+            "type": "string",
+            "format": "Max. 20",
+            "example": "DELIVERED"
+          },
+          "appendloc": {
+            "type": "string",
+            "format": "Max. 01",
+            "example": "Y"
+          }
+        },
+        "required": [
+          "consignmentNo",
+          "recievedBy",
+          "dateTime",
+          "status",
+          "appendloc"
+        ]
+      },
+      "TrackInfo": {
+        "type": "object",
+        "properties": {
+          "consignmentNo": {
+            "type": "string",
+            "example": "1000001"
+          },
+          "bookingDate": {
+            "type": "string",
+            "format": "YYYYMMDD",
+            "example": "20180101"
+          },
+          "shipper": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "consignee": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "origin": {
+            "type": "string",
+            "example": "KHI"
+          },
+          "originCountry": {
+            "type": "string",
+            "example": "PK"
+          },
+          "destination": {
+            "type": "string",
+            "example": "LHE"
+          },
+          "destinationCountry": {
+            "type": "string",
+            "example": "PK"
+          },
+          "referenceNo": {
+            "type": "string",
+            "example": "1000001"
+          }
+        }
+      },
+      "DeliveryInfo": {
+        "type": "object",
+        "properties": {
+          "consignmentNo": {
+            "type": "string",
+            "example": "1000001"
+          },
+          "station": {
+            "type": "string",
+            "example": "KHI"
+          },
+          "dateTime": {
+            "type": "string",
+            "example": "20150201 20:00"
+          },
+          "recievedBy": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "status": {
+            "type": "string",
+            "example": "DELIVERED"
+          },
+          "code": {
+            "type": "string",
+            "example": "OK"
+          },
+          "appendLoc": {
+            "type": "string",
+            "example": "Y"
+          },
+          "allowShow": {
+            "type": "string",
+            "example": "Y"
+          }
+        }
+      },
+      "CustomerDeliveryInfo": {
+        "type": "object",
+        "properties": {
+          "consignmentNo": {
+            "type": "string",
+            "example": "1000001"
+          },
+          "bookingDate": {
+            "type": "string",
+            "format": "YYYYMMDD",
+            "example": "20180101"
+          },
+          "consignee": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "deliveredBy": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "deliveryDate": {
+            "type": "string",
+            "format": "YYYYMMDD",
+            "example": "20180101"
+          },
+          "deliveryTime": {
+            "type": "string",
+            "example": "210000"
+          },
+          "recievedBy": {
+            "type": "string",
+            "example": "SHAHBAZ"
+          },
+          "destination": {
+            "type": "string",
+            "example": "KHI"
+          },
+          "status": {
+            "type": "string",
+            "example": "DELIVERED"
+          },
+          "referenceNo": {
+            "type": "string",
+            "example": "100001"
+          }
+        }
+      },
+      "CustomerTrackReply": {
+        "type": "object",
+        "properties": {
+          "TrackInfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackInfo"
+            }
+          }
+        }
+      },
+      "CheckpointsReply": {
+        "type": "object",
+        "properties": {
+          "Checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Checkpoints"
+            }
+          }
+        }
+      },
+      "TrackDeliveryReply": {
+        "type": "object",
+        "properties": {
+          "DeliveryInfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryInfo"
+            }
+          }
+        }
+      },
+      "CustomerDeliveryReply": {
+        "type": "object",
+        "properties": {
+          "DeliveryInfo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerDeliveryInfo"
+            }
+          }
+        }
+      },
+      "TrackOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "TrackReply": {
+            "$ref": "#/components/schemas/TrackDetailReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "TrackReply"
+        ]
+      },
+      "TrackDeliveryOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "TrackDeliveryReply": {
+            "$ref": "#/components/schemas/TrackDeliveryReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "TrackDeliveryReply"
+        ]
+      },
+      "CustomerTrackOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "CustomerTrackReply": {
+            "$ref": "#/components/schemas/CustomerTrackReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "CustomerTrackReply"
+        ]
+      },
+      "CustomerDeliveryOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "CustomerDeliveryReply": {
+            "$ref": "#/components/schemas/CustomerDeliveryReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "CustomerDeliveryReply"
+        ]
+      },
+      "CheckpointsOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "CheckpointsReply": {
+            "$ref": "#/components/schemas/CheckpointsReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "CheckpointsReply"
+        ]
+      },
+      "TrackDetailOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "TrackDetailReply": {
+            "$ref": "#/components/schemas/TrackDetailReply"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "returnStatus",
+          "TrackDetailReply"
+        ]
+      },
+      "TrackDetailReply": {
+        "type": "object",
+        "properties": {
+          "TrackInfo": {
+            "$ref": "#/components/schemas/TrackInfoArray"
+          },
+          "DeliveryInfo": {
+            "$ref": "#/components/schemas/DeliveryInfoArray"
+          },
+          "Checkpoints": {
+            "$ref": "#/components/schemas/CheckpointsArray"
+          }
+        },
+        "required": [
+          "TrackInfo",
+          "DeliveryInfo",
+          "Checkpoints"
+        ]
+      },
+      "TrackInfoArray": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/TrackInfo"
+        }
+      },
+      "DeliveryInfoArray": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/DeliveryInfo"
+        }
+      },
+      "CheckpointsArray": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Checkpoints"
+        }
+      }
+    }
+  }
+}

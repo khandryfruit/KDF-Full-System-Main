@@ -1,0 +1,466 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "x-ibm-name": "transit-api",
+    "title": "Time in Transit API",
+    "version": "1.0.0",
+    "description": "This API is used to find out the expected time for the shipment to reach the given destinations.\n  \n<label>Prerequisites</label>\n\n1. Request parameter key names must be correct (case sensitive).\n2. Input parameter key values are not case sensitive.\n3. Subscription must be made to API product before integration.\n4. To calculate volumetric weight, use the formula given below:\n\n>      length x width x height / 5000\n\n<label>Message Status</label>  \n\nReply message status can be determined from below object.\n\n<pre><code>{ \n\"returnStatus\":    { \n     \"code\": \"0200\", \n     \"status\": \"SUCCESS\", \n     \"message\": \"The operation was successful.\", \n     \"requestTime\": \"20180724111142089\", \n     \"responseTime\": \"20180724111143100\"\n  }  \n} </code></pre>\n\n| Code | Description |\n| ------ | ------ |\n| 0200 | The operation was successful. |\n| 0400 | Bad Request / Custom validation message. |\n| 0404 | Data Not Found. |\n| 0408 | The server is taking too long to respond, please try later. |\n| 0500 | An internal error has occurred. |\n\n# Authentication\n\n<!-- ReDoc-Inject: <security-definitions> -->",
+    "contact": {
+      "name": "",
+      "url": ""
+    }
+  },
+  "paths": {
+    "/stations": {
+      "get": {
+        "tags": [
+          "Station List"
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StationsOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>To get origins or destinations list by passing  \"productId\" and  \"O\" or \"D\" for \"type\" in query parameters.",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "query",
+            "description": "The Stations Type (O for Origins) and (D for Destinations).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "productId",
+            "required": true,
+            "in": "query",
+            "description": "The product of shipment e.g. (General, Logisticscargo, OLE).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "required": true,
+            "in": "query",
+            "description": "The service of shipment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "To get all TCS station list"
+      }
+    },
+    "/postal-codes/{stationId}": {
+      "get": {
+        "tags": [
+          "Postal Code List"
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostalCodesOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>To retrieve postal-codes by replacing {stationId} in path with origin or destination code.",
+        "parameters": [
+          {
+            "required": true,
+            "name": "stationId",
+            "in": "path",
+            "description": "The station code of Origin or Destination of shipment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "To get postal code list"
+      }
+    },
+    "/services/{productId}": {
+      "get": {
+        "tags": [
+          "Service List"
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicesOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>This API is used to get TCS shipment product's service list with description.",
+        "parameters": [
+          {
+            "required": true,
+            "name": "productId",
+            "in": "path",
+            "description": "The type of shipment. e.g. (\"G\" = General, \"LC\" = Logisticscargo, OLE).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "To get product's service list"
+      }
+    },
+    "/time-calculator": {
+      "get": {
+        "tags": [
+          "Time Calculator"
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>This API allow public users to view domestic transit days, estimated delivery date/day, delivery start time, origin departure time, destination arrival time, delivery time frame.",
+        "parameters": [
+          {
+            "name": "originCode",
+            "in": "query",
+            "required": true,
+            "description": "Origin code or Station Code from where shipment is pickup.",
+            "schema": {
+              "type": "string",
+              "format": "Max. 3"
+            }
+          },
+          {
+            "name": "destinationCode",
+            "in": "query",
+            "required": true,
+            "description": "Destination code or Station Code from where shipment receives.",
+            "schema": {
+              "type": "string",
+              "format": "Max. 3"
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": true,
+            "description": "The type of shipment. e.g. (General, Logisticscargo, OLE).",
+            "schema": {
+              "type": "string",
+              "format": "Max. 2"
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "required": true,
+            "description": "The service type of product used in the delivery of shipment.",
+            "schema": {
+              "type": "string",
+              "format": "Max. 3"
+            }
+          },
+          {
+            "name": "bookingDate",
+            "in": "query",
+            "required": true,
+            "description": "The shipments origin pickup date (yyyymmdd)",
+            "schema": {
+              "type": "string",
+              "format": "YYYYMMDD"
+            }
+          },
+          {
+            "name": "weight",
+            "required": true,
+            "in": "query",
+            "description": "The weight of shipment",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Domestic Transit Calculator",
+        "deprecated": false
+      }
+    },
+    "/products": {
+      "get": {
+        "tags": [
+          "Product List"
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation was successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductsOutput"
+                }
+              }
+            }
+          }
+        },
+        "description": "<br>This API is used to get TCS shipment product codes list with description.",
+        "summary": "To get all product list"
+      }
+    }
+  },
+  "security": [
+    {
+      "clientIdHeader": []
+    }
+  ],
+  "mtime": "2021-11-19T13:08:23.000Z",
+  "servers": [
+    {
+      "url": "https://api.tcscourier.com/production/v1/transit"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "clientIdHeader": {
+        "type": "apiKey",
+        "description": "This is your registered application Client ID check the Apps credentials for the detail, as you started API integration provide this apiKey in header.",
+        "in": "header",
+        "name": "X-IBM-Client-Id"
+      }
+    },
+    "schemas": {
+      "returnStatus": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "0200"
+          },
+          "status": {
+            "type": "string",
+            "example": "SUCCESS"
+          },
+          "message": {
+            "type": "string",
+            "example": "The operation was successful."
+          },
+          "requestTime": {
+            "type": "string",
+            "example": "2100000000"
+          },
+          "responseTime": {
+            "type": "string",
+            "example": "2100000000"
+          }
+        }
+      },
+      "TransitReply": {
+        "type": "object",
+        "properties": {
+          "totalTransitDays": {
+            "type": "string",
+            "example": "1"
+          },
+          "dayOfWeek": {
+            "type": "string",
+            "example": "Monday"
+          },
+          "deliveryDate": {
+            "type": "string",
+            "example": "20180101"
+          },
+          "deliveryStartTime": {
+            "type": "string",
+            "example": "210000"
+          },
+          "originDepartureTime": {
+            "type": "string",
+            "example": "210000"
+          },
+          "destinationArrivalTime": {
+            "type": "string",
+            "example": "210000"
+          },
+          "deliveryTimeFrame": {
+            "type": "string",
+            "example": "10:00:00 AM - 02:00:00 PM"
+          }
+        },
+        "required": [
+          "totalTransitDays",
+          "dayOfWeek",
+          "deliveryDate",
+          "deliveryStartTime",
+          "originDepartureTime",
+          "destinationArrivalTime",
+          "deliveryTimeFrame"
+        ]
+      },
+      "PostalCodesReply": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PostalCodes"
+        }
+      },
+      "StationsReply": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Stations"
+        }
+      },
+      "ProductsReply": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Products"
+        }
+      },
+      "ServicesReply": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Services"
+        }
+      },
+      "Stations": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "string",
+            "example": "KHI"
+          },
+          "countryCode": {
+            "type": "string",
+            "example": "PK"
+          },
+          "description": {
+            "type": "string",
+            "example": "Karachi"
+          }
+        }
+      },
+      "PostalCodes": {
+        "properties": {
+          "postalcode": {
+            "type": "string",
+            "example": "75350"
+          },
+          "stationId": {
+            "type": "string",
+            "example": "KHI"
+          },
+          "location": {
+            "type": "string",
+            "example": "Karachi Shahra-E-Faisal"
+          },
+          "city": {
+            "type": "string",
+            "example": "Karachi"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Products": {
+        "properties": {
+          "productId": {
+            "type": "string",
+            "example": "G"
+          },
+          "description": {
+            "type": "string",
+            "example": "General Express"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Services": {
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "example": "O"
+          },
+          "description": {
+            "type": "string",
+            "example": "Overnight"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TransitOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "TransitReply": {
+            "$ref": "#/components/schemas/TransitReply"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PostalCodesOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "PostalCodesReply": {
+            "$ref": "#/components/schemas/PostalCodesReply"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductsOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "ProductsReply": {
+            "$ref": "#/components/schemas/ProductsReply"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServicesOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "ServicesReply": {
+            "$ref": "#/components/schemas/ServicesReply"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StationsOutput": {
+        "properties": {
+          "returnStatus": {
+            "$ref": "#/components/schemas/returnStatus"
+          },
+          "StationsReply": {
+            "$ref": "#/components/schemas/StationsReply"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

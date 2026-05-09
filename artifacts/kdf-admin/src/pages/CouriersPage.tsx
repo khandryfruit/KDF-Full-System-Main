@@ -115,20 +115,28 @@ const fmt = (n: number) => {
 
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
-  username: string; password: string;
-  tcsaccount: string; costcentercode: string;
-  shipperName: string; shipperAddress: string;
-  shipperCity: string; shipperCityCode: string; shipperPhone: string;
+  /* Step 1 — ENVO Auth: POST /auth/api/auth → bearerToken (auto-generated, cached) */
+  clientId: string;
+  clientSecret: string;
+  /* Step 2 — ECOM Auth: GET /ecom/api/authentication/token → accessToken (auto-generated, cached) */
+  username: string;
+  password: string;
+  /* Booking fields */
+  tcsAccountNo: string;
+  costcentercode: string;
+  /* Pickup / shipper address */
+  shipperName: string;
+  shipperAddress: string;
+  shipperCity: string;
+  shipperCityCode: string;
+  shipperPhone: string;
+  /* Environment */
   sandbox: boolean;
-  /* advanced / developer fields */
-  clientId: string; clientSecret: string;
-  accessToken: string; bearerToken: string;
-  defaultWeight: string; serviceCode: string;
-  fragile: boolean; defaultRemarks: string;
-  /** "ecom" = ociconnect 2-step (default) | "simple" = api.tcscourier.com single-step */
-  tcsApiVariant: "ecom" | "simple";
-  /** Debug: bypass ECOM token cache — fetch fresh token on every request */
-  tcsDebugNoCache: boolean;
+  /* Shipping defaults */
+  defaultWeight: string;
+  serviceCode: string;
+  fragile: boolean;
+  defaultRemarks: string;
   /** Prevent re-booking if shipment already exists for this order */
   preventDuplicateBookings: boolean;
 }
@@ -140,22 +148,22 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const config = (couriers as any[]).find((c: any) => c.slug === "tcs");
 
   type DebugStep = { step: string; status: "ok" | "fail" | "info" | "warn"; detail: string; raw?: string };
-  const [editing, setEditing]       = useState(false);
-  const [showPw, setShowPw]         = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showDebug, setShowDebug]   = useState(false);
-  const [debugSteps, setDebugSteps] = useState<DebugStep[]>([]);
-  const [debugOk, setDebugOk]       = useState<boolean | null>(null);
+  const [editing, setEditing]             = useState(false);
+  const [showPw, setShowPw]               = useState(false);
+  const [showSecret, setShowSecret]       = useState(false);
+  const [showAdvanced, setShowAdvanced]   = useState(false);
+  const [showDebug, setShowDebug]         = useState(false);
+  const [debugSteps, setDebugSteps]       = useState<DebugStep[]>([]);
+  const [debugOk, setDebugOk]             = useState<boolean | null>(null);
   const [debugServerIp, setDebugServerIp] = useState<string>("");
-  const [tokenStatus, setTokenStatus] = useState<"idle" | "ok" | "fail">("idle");
-  /* ── Debug Console state ── */
-  const [showDebugConsole, setShowDebugConsole]         = useState(false);
-  const [debugConsoleSteps, setDebugConsoleSteps]       = useState<DebugStep[]>([]);
-  const [debugConsoleOk, setDebugConsoleOk]             = useState<boolean | null>(null);
-  const [debugConsoleTitle, setDebugConsoleTitle]       = useState("");
-  const [requestLog, setRequestLog]                     = useState<any[]>([]);
-  const [showRequestLog, setShowRequestLog]             = useState(false);
-  const [trackingInput, setTrackingInput]               = useState("");
+  const [tokenStatus, setTokenStatus]     = useState<"idle" | "ok" | "fail">("idle");
+  const [showDebugConsole, setShowDebugConsole]   = useState(false);
+  const [debugConsoleSteps, setDebugConsoleSteps] = useState<DebugStep[]>([]);
+  const [debugConsoleOk, setDebugConsoleOk]       = useState<boolean | null>(null);
+  const [debugConsoleTitle, setDebugConsoleTitle] = useState("");
+  const [requestLog, setRequestLog]               = useState<any[]>([]);
+  const [showRequestLog, setShowRequestLog]       = useState(false);
+  const [trackingInput, setTrackingInput]         = useState("");
 
   const { data: serverIpData } = useQuery({
     queryKey: ["/api/admin/couriers/server-ip"],
@@ -164,13 +172,13 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   });
 
   const blankForm = (): TcsFormState => ({
-    username: "", password: "", tcsaccount: "", costcentercode: "",
+    clientId: "", clientSecret: "",
+    username: "", password: "",
+    tcsAccountNo: "", costcentercode: "",
     shipperName: "", shipperAddress: "", shipperCity: "", shipperCityCode: "", shipperPhone: "",
     sandbox: false,
-    clientId: "", clientSecret: "", accessToken: "", bearerToken: "",
     defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
-    tcsApiVariant: "ecom",
-    tcsDebugNoCache: false, preventDuplicateBookings: true,
+    preventDuplicateBookings: true,
   });
 
   const [form, setForm] = useState<TcsFormState>(blankForm());
@@ -178,17 +186,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const loadForm = () => {
     const s = (config?.settings ?? {}) as any;
     setForm({
+      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
       username: s.username ?? "", password: s.password ?? "",
-      tcsaccount: s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
+      tcsAccountNo: s.tcsAccountNo ?? s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
       shipperCity: s.shipperCity ?? "", shipperCityCode: s.shipperCityCode ?? "",
       shipperPhone: s.shipperPhone ?? "", sandbox: s.sandbox ?? false,
-      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
-      accessToken: s.accessToken ?? "", bearerToken: s.bearerToken ?? "",
       defaultWeight: s.defaultWeight ?? "0.5", serviceCode: s.serviceCode ?? "O",
       fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
-      tcsApiVariant: s.tcsApiVariant ?? "ecom",
-      tcsDebugNoCache: s.tcsDebugNoCache ?? false,
       preventDuplicateBookings: s.preventDuplicateBookings !== false,
     });
     setEditing(true);
@@ -209,55 +214,32 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const testConn = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/test", { method: "POST" }),
     onSuccess: (d: any) => {
-      /* Show step-by-step results in the debug console */
       openConsoleWith("Connection Test", d);
-      if (d.ok) {
-        setTokenStatus("ok");
-        toast({ title: "✅ TCS Connection Test Passed", description: d.message ?? "Auth + Token + Config validated" });
-      } else {
-        setTokenStatus("fail");
-        toast({ variant: "destructive", title: "TCS Connection Test Failed", description: d.error?.slice(0, 120) ?? "See debug console for details" });
-      }
+      if (d.ok) { setTokenStatus("ok"); toast({ title: "✅ TCS Connection Test Passed", description: d.message ?? "Auth + Token + Config validated" }); }
+      else { setTokenStatus("fail"); toast({ variant: "destructive", title: "TCS Connection Test Failed", description: d.error?.slice(0, 120) ?? "See debug console for details" }); }
     },
-    onError: (e: any) => {
-      setTokenStatus("fail");
-      toast({ variant: "destructive", title: "Connection test error", description: e.message });
-    },
+    onError: (e: any) => { setTokenStatus("fail"); toast({ variant: "destructive", title: "Connection test error", description: e.message }); },
   });
 
   const refreshToken = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/debug-auth", { method: "POST" }),
     onSuccess: (d: any) => {
-      setDebugSteps(d.steps ?? []);
-      setDebugOk(d.ok ?? false);
-      setDebugServerIp(d.serverIp ?? "");
-      setShowDebug(true);
-      if (d.ok) {
-        setTokenStatus("ok");
-        toast({ title: "✅ TCS Auth Debug Complete", description: "All steps passed — ECOM token ready" });
-      } else {
-        setTokenStatus("fail");
-        toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error?.slice(0, 120) ?? "See debug panel below" });
-      }
+      setDebugSteps(d.steps ?? []); setDebugOk(d.ok ?? false); setDebugServerIp(d.serverIp ?? ""); setShowDebug(true);
+      if (d.ok) { setTokenStatus("ok"); toast({ title: "✅ TCS Auth Debug Complete", description: "All 3 steps passed — tokens ready" }); }
+      else { setTokenStatus("fail"); toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error?.slice(0, 120) ?? "See debug panel below" }); }
     },
     onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
   });
 
   const clearCache = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/clear-cache", { method: "POST" }),
-    onSuccess: (d: any) => {
-      toast({ title: "🗑 Token Cache Cleared", description: d.message ?? "Next booking will auto-generate a fresh ECOM token via Step-2" });
-    },
+    onSuccess: (d: any) => toast({ title: "🗑 Token Cache Cleared", description: d.message ?? "Next booking will auto-generate fresh tokens" }),
     onError: (e: any) => toast({ variant: "destructive", title: "Clear failed", description: e.message }),
   });
 
-  /* ── Debug Console Mutations ── */
   const openConsoleWith = (title: string, d: any) => {
-    setDebugConsoleTitle(title);
-    setDebugConsoleSteps(d.steps ?? []);
-    setDebugConsoleOk(d.ok ?? false);
-    setShowDebugConsole(true);
-    setShowDebug(false);
+    setDebugConsoleTitle(title); setDebugConsoleSteps(d.steps ?? []); setDebugConsoleOk(d.ok ?? false);
+    setShowDebugConsole(true); setShowDebug(false);
   };
 
   const fullDiagnostics = useMutation({
@@ -292,11 +274,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const fetchLog = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/request-log"),
-    onSuccess: (d: any) => {
-      setRequestLog(d.entries ?? []);
-      setShowRequestLog(true);
-      setShowDebugConsole(true);
-    },
+    onSuccess: (d: any) => { setRequestLog(d.entries ?? []); setShowRequestLog(true); setShowDebugConsole(true); },
     onError: (e: any) => toast({ variant: "destructive", title: "Log fetch failed", description: e.message }),
   });
 
@@ -312,9 +290,8 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const f = (k: keyof TcsFormState) => (e: any) => setForm(p => ({ ...p, [k]: e.target.value }));
   const isActive = config?.isActive ?? false;
   const cs = (config?.settings ?? {}) as any;
-  const isConfigured = !!(cs.username || cs.accessToken);
+  const isConfigured = !!(cs.clientId || cs.username);
 
-  /* Connection status pill */
   const connPill = tokenStatus === "ok"
     ? <span className="flex items-center gap-1 text-xs text-green-700 font-medium"><CheckCircle2 className="w-3 h-3" />Connected</span>
     : tokenStatus === "fail"
@@ -354,14 +331,15 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
         {isConfigured && (
           <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
             {cs.username && <span>User: <strong className="text-foreground">{cs.username}</strong></span>}
-            {cs.tcsaccount && <span>Account: <strong className="text-foreground">{cs.tcsaccount}</strong></span>}
+            {(cs.tcsAccountNo || cs.tcsaccount) && <span>Account: <strong className="text-foreground">{cs.tcsAccountNo || cs.tcsaccount}</strong></span>}
+            {cs.clientId && <span>Client ID: <strong className="text-foreground">{cs.clientId}</strong></span>}
             <span className={`font-medium ${cs.sandbox ? "text-amber-600" : "text-green-700"}`}>
               {cs.sandbox ? "🧪 Sandbox" : "🚀 Production"}
             </span>
           </div>
         )}
 
-        {/* Server IP — compact, always visible when configured */}
+        {/* Server IP */}
         {serverIpData?.ip && isConfigured && (
           <div className="mt-2.5 flex items-center justify-between rounded-lg border px-3 py-1.5 bg-muted/40">
             <div className="flex items-center gap-2 min-w-0">
@@ -378,22 +356,21 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
           </div>
         )}
 
-        {/* Professional debug panel */}
+        {/* Auth debug panel */}
         {showDebug && debugSteps.length > 0 && (
           <div className="mt-2.5 border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
               <span className="text-xs font-semibold flex items-center gap-1.5">
                 {debugOk
                   ? <><CheckCircle2 className="w-3.5 h-3.5 text-green-600" /><span className="text-green-700">Auth Debug — All Passed</span></>
-                  : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">Auth Debug — Check Failed Steps</span></>
-                }
+                  : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">Auth Debug — Check Failed Steps</span></>}
               </span>
               <button onClick={() => setShowDebug(false)} className="text-muted-foreground hover:text-foreground text-xs">✕ Close</button>
             </div>
             <div className="divide-y">
               {debugSteps.map((s, i) => {
-                const icon = s.status === "ok" ? "✅" : s.status === "fail" ? "❌" : s.status === "warn" ? "⚠️" : "ℹ️";
-                const bg   = s.status === "ok" ? "bg-green-50" : s.status === "fail" ? "bg-red-50" : s.status === "warn" ? "bg-amber-50" : "bg-gray-50";
+                const icon   = s.status === "ok" ? "✅" : s.status === "fail" ? "❌" : s.status === "warn" ? "⚠️" : "ℹ️";
+                const bg     = s.status === "ok" ? "bg-green-50" : s.status === "fail" ? "bg-red-50" : s.status === "warn" ? "bg-amber-50" : "bg-gray-50";
                 const border = s.status === "ok" ? "border-l-2 border-green-400" : s.status === "fail" ? "border-l-2 border-red-400" : s.status === "warn" ? "border-l-2 border-amber-400" : "";
                 return (
                   <details key={i} open={s.status === "fail" || s.status === "warn"} className={`${bg} ${border}`}>
@@ -418,66 +395,68 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             {debugServerIp && (
               <div className="px-3 py-2 bg-blue-50 border-t text-xs text-blue-800 flex items-center gap-2">
                 <span>Server IP: <strong className="font-mono">{debugServerIp}</strong></span>
-                <button onClick={() => { navigator.clipboard.writeText(debugServerIp); toast({ title: "IP copied" }); }}
-                  className="underline hover:no-underline">Copy</button>
+                <button onClick={() => { navigator.clipboard.writeText(debugServerIp); toast({ title: "IP copied" }); }} className="underline hover:no-underline">Copy</button>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* ── Stale Token Alert — shown in VIEW mode (outside edit form) ── */}
-      {!editing && config && cs.accessToken && (
-        <div className="border-t border-red-300 bg-red-50 px-4 py-3 space-y-2">
-          <p className="text-xs font-bold text-red-800 flex items-center gap-1.5">🔴 Stale ECOM Token — Causing Booking Failures</p>
-          <p className="text-xs text-red-700">A manual "Direct ECOM Access Token" is set and TCS is rejecting it with <strong>"Invalid Bearer token. Mismatch configuration."</strong> Clear it so the system auto-generates a fresh token.</p>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="w-full gap-1.5"
-            onClick={() => {
-              const body = {
-                name: "TCS Couriers", slug: "tcs", apiKey: "", apiSecret: "",
-                apiEndpoint: preset.apiEndpoint, isActive: true,
-                settings: { ...(config?.settings ?? {}), accessToken: "" },
-              };
-              apiFetch("/api/admin/couriers", { method: "POST", body: JSON.stringify(body) })
-                .then(() => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); toast({ title: "✅ Stale token cleared — next booking will auto-generate a fresh one" }); })
-                .catch((e: any) => toast({ variant: "destructive", title: e.message }));
-            }}
-          >
-            Clear Stale Token Now
-          </Button>
-        </div>
-      )}
-
       {/* ── Settings Form ── */}
       {editing && (
         <div className="border-t bg-white/70 p-4 space-y-4">
 
-          {/* ── TCS 2-Token Architecture Guide — top of form ── */}
+          {/* ── Architecture Guide ── */}
           <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
-            <p className="text-yellow-300 font-bold text-xs">TCS API — 2-Token Architecture (ECOM mode)</p>
+            <p className="text-yellow-300 font-bold text-xs">TCS API — 3-Step Auth Flow</p>
             <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
-            <p><span className="text-blue-300">TOKEN 1</span> · ENVO Bearer Token</p>
-            <p className="text-slate-400 pl-2">→ From TCS ENVO Portal → paste in Advanced Settings</p>
-            <p className="text-slate-400 pl-2">→ Used ONLY to generate Token 2 (ECOM)</p>
-            <p className="text-slate-400 pl-2">→ Not sent directly to booking / label APIs</p>
+            <p><span className="text-blue-300">STEP 1</span> · POST /auth/api/auth</p>
+            <p className="text-slate-400 pl-2">→ Body: clientId + clientSecret</p>
+            <p className="text-slate-400 pl-2">→ Returns: <span className="text-green-300">bearerToken</span> (cached auto)</p>
             <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
-            <p><span className="text-orange-300">TOKEN 2</span> · ECOM Access Token</p>
-            <p className="text-slate-400 pl-2">→ <span className="text-green-300">AUTO:</span> POST /ecom/api/authentication/token</p>
-            <p className="text-slate-400 pl-2">   using Bearer + Username + Password above</p>
-            <p className="text-slate-400 pl-2">   cached 55 min, auto-refreshes on booking</p>
-            <p className="text-slate-400 pl-2">→ <span className="text-yellow-300">MANUAL:</span> paste "Direct ECOM Token" in Advanced Settings</p>
+            <p><span className="text-orange-300">STEP 2</span> · GET /ecom/api/authentication/token</p>
+            <p className="text-slate-400 pl-2">→ Header: Authorization: Bearer {"{"}<span className="text-green-300">bearerToken</span>{"}"}</p>
+            <p className="text-slate-400 pl-2">→ Query: username + password</p>
+            <p className="text-slate-400 pl-2">→ Returns: <span className="text-orange-300">accesstoken</span> (cached auto)</p>
             <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
-            <p className="text-amber-300">⚠ These are DIFFERENT tokens. Never mix them.</p>
-            <p className="text-slate-400 pl-2">Token 1 (Bearer) → only used to generate Token 2</p>
-            <p className="text-slate-400 pl-2">Token 2 (ECOM) → used for all booking operations</p>
+            <p><span className="text-purple-300">STEP 3</span> · POST /ecom/api/booking/create</p>
+            <p className="text-slate-400 pl-2">→ Header: Bearer {"{"}<span className="text-green-300">bearerToken</span>{"}"}</p>
+            <p className="text-slate-400 pl-2">→ Body includes: <span className="text-orange-300">accesstoken</span> field</p>
+            <p className="text-amber-300 mt-1">✅ All tokens auto-generated + cached. No manual pasting.</p>
           </div>
 
-          {/* ── Essential Credentials ── */}
+          {/* ── Step 1: ENVO App Credentials ── */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">TCS Credentials</p>
+            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">1</span>
+              ENVO App Credentials
+              <span className="text-xs font-normal text-muted-foreground">(Step 1 — required)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs font-medium">Client ID</Label>
+                <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 215627768" autoComplete="off" className="mt-1 text-xs font-mono" />
+                <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → API Access</p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Client Secret</Label>
+                <div className="relative mt-1">
+                  <Input type={showSecret ? "text" : "password"} value={form.clientSecret} onChange={f("clientSecret")} placeholder="Client Secret" autoComplete="new-password" className="pr-9 text-xs font-mono" />
+                  <button type="button" onClick={() => setShowSecret(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Step 2: TCS Credentials ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">2</span>
+              TCS Credentials
+              <span className="text-xs font-normal text-muted-foreground">(Step 2 — required)</span>
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs font-medium">Username</Label>
@@ -497,11 +476,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Account Info ── */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Account Details</p>
+            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold">3</span>
+              Account Details
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs font-medium">TCS Account Number</Label>
-                <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="e.g. 04011K1" className="mt-1" />
+                <Input value={form.tcsAccountNo} onChange={f("tcsAccountNo")} placeholder="e.g. 04011K1" className="mt-1" />
                 <p className="text-[10px] text-muted-foreground mt-0.5">From your TCS contract — NOT the username</p>
               </div>
               <div>
@@ -509,11 +491,10 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="Leave blank if none" className="mt-1" />
               </div>
             </div>
-            {/* Warning: account number == username */}
-            {form.tcsaccount && form.username && form.tcsaccount.trim() === form.username.trim() && (
+            {form.tcsAccountNo && form.username && form.tcsAccountNo.trim() === form.username.trim() && (
               <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
                 <p className="font-semibold">⛔ Account Number = Username — this is incorrect</p>
-                <p className="mt-0.5">TCS Account Number and Username are <strong>different fields</strong>. Your username is <code className="bg-red-100 px-0.5 rounded">{form.username}</code>. Enter the real account number from your TCS contract letter (e.g. <code className="bg-red-100 px-0.5 rounded">04011K1</code>).</p>
+                <p className="mt-0.5">TCS Account Number and Username are <strong>different fields</strong>. Your username is <code className="bg-red-100 px-0.5 rounded">{form.username}</code>. Enter the real account number from your TCS contract letter.</p>
               </div>
             )}
           </div>
@@ -564,37 +545,9 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
           </div>
 
-          {/* ── Warning: manual ECOM token set ── */}
-          {config && cs.accessToken && (
-            <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 text-xs text-red-900 space-y-2">
-              <p className="font-bold flex items-center gap-1.5 text-sm">🔴 Stale ECOM Token Detected — CAUSING BOOKING FAILURES</p>
-              <p>A manual "Direct ECOM Access Token" is set in Advanced Settings. TCS is rejecting it with <strong>"Invalid Bearer token. Mismatch configuration."</strong></p>
-              <p>This token is expired or wrong. Click below to clear it — the system will auto-generate a fresh one on the next booking.</p>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="w-full gap-1.5 mt-1"
-                onClick={() => {
-                  setForm(p => ({ ...p, accessToken: "" }));
-                  const body = {
-                    name: "TCS Couriers", slug: "tcs", apiKey: "", apiSecret: "",
-                    apiEndpoint: preset.apiEndpoint, isActive: true,
-                    settings: { ...(config?.settings ?? {}), accessToken: "" },
-                  };
-                  apiFetch("/api/admin/couriers", { method: "POST", body: JSON.stringify(body) })
-                    .then(() => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); toast({ title: "✅ Stale token cleared — system will auto-generate fresh token on next booking" }); })
-                    .catch((e: any) => toast({ variant: "destructive", title: e.message }));
-                }}
-              >
-                Clear Stale Token Now
-              </Button>
-            </div>
-          )}
-
           {/* ── Action Buttons ── */}
           {config && (
             <div className="space-y-2">
-              {/* Row 1: primary actions */}
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5 text-xs"
                   onClick={() => testConn.mutate()} disabled={testConn.isPending}>
@@ -608,7 +561,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 </Button>
               </div>
 
-              {/* Row 2: TCS Debug Console button — full width */}
               <button
                 type="button"
                 onClick={() => setShowDebugConsole(v => !v)}
@@ -617,20 +569,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 <span className="flex items-center gap-2">
                   <span className="text-base">🖥</span>
                   TCS Debug Console
-                  <span className="font-normal text-muted-foreground text-[10px]">— Test Auth · Booking · Tracking · Full Diagnostics</span>
+                  <span className="font-normal text-muted-foreground text-[10px]">— Auth · Booking · Tracking · Diagnostics</span>
                 </span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform text-muted-foreground ${showDebugConsole ? "rotate-180" : ""}`} />
               </button>
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════ */}
-          {/* ──  TCS DEBUG CONSOLE  ─────────────────────── */}
-          {/* ════════════════════════════════════════════════ */}
+          {/* ════════════════════════════════ TCS DEBUG CONSOLE ════════════════════ */}
           {showDebugConsole && config && (
             <div className="border-2 border-purple-300 rounded-xl overflow-hidden bg-white shadow-md">
-
-              {/* Console header */}
               <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-900 to-purple-950 text-white">
                 <span className="flex items-center gap-2 text-sm font-bold">
                   <Terminal className="w-4 h-4 text-purple-300" />
@@ -643,93 +591,51 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
               </div>
 
               <div className="p-3 space-y-3 bg-slate-50">
-
-                {/* ── Test buttons row ── */}
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Full Diagnostics */}
-                  <button
-                    type="button"
-                    onClick={() => { setShowRequestLog(false); fullDiagnostics.mutate(); }}
+                  <button type="button" onClick={() => { setShowRequestLog(false); fullDiagnostics.mutate(); }}
                     disabled={fullDiagnostics.isPending || testBooking.isPending || testTracking.isPending}
-                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 transition-all"
-                  >
-                    {fullDiagnostics.isPending
-                      ? <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
-                      : <ListChecks className="w-4 h-4 text-emerald-700" />}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 transition-all">
+                    {fullDiagnostics.isPending ? <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" /> : <ListChecks className="w-4 h-4 text-emerald-700" />}
                     <span className="text-[11px] font-bold text-emerald-800">Full Diagnostics</span>
-                    <span className="text-[9px] text-emerald-600">Bearer · Token · APIs</span>
+                    <span className="text-[9px] text-emerald-600">Step-1 · Step-2 · APIs</span>
                   </button>
-
-                  {/* Test Auth */}
-                  <button
-                    type="button"
-                    onClick={() => { setShowRequestLog(false); refreshToken.mutate(); }}
+                  <button type="button" onClick={() => { setShowRequestLog(false); refreshToken.mutate(); }}
                     disabled={refreshToken.isPending || fullDiagnostics.isPending}
-                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 hover:bg-blue-100 disabled:opacity-60 transition-all"
-                  >
-                    {refreshToken.isPending
-                      ? <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                      : <Activity className="w-4 h-4 text-blue-700" />}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-blue-300 bg-blue-50 hover:bg-blue-100 disabled:opacity-60 transition-all">
+                    {refreshToken.isPending ? <Loader2 className="w-4 h-4 text-blue-600 animate-spin" /> : <Activity className="w-4 h-4 text-blue-700" />}
                     <span className="text-[11px] font-bold text-blue-800">Test Auth</span>
                     <span className="text-[9px] text-blue-600">Step-1 + Step-2</span>
                   </button>
-
-                  {/* Test Booking */}
-                  <button
-                    type="button"
-                    onClick={() => { setShowRequestLog(false); testBooking.mutate(); }}
+                  <button type="button" onClick={() => { setShowRequestLog(false); testBooking.mutate(); }}
                     disabled={testBooking.isPending || fullDiagnostics.isPending}
-                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 disabled:opacity-60 transition-all"
-                  >
-                    {testBooking.isPending
-                      ? <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
-                      : <FlaskConical className="w-4 h-4 text-orange-700" />}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 disabled:opacity-60 transition-all">
+                    {testBooking.isPending ? <Loader2 className="w-4 h-4 text-orange-600 animate-spin" /> : <FlaskConical className="w-4 h-4 text-orange-700" />}
                     <span className="text-[11px] font-bold text-orange-800">Test Booking</span>
                     <span className="text-[9px] text-orange-600">{form.sandbox ? "Safe sandbox" : "⚠ Creates real CN"}</span>
                   </button>
-
-                  {/* Test Tracking */}
-                  <button
-                    type="button"
-                    onClick={() => { setShowRequestLog(false); testTracking.mutate(); }}
+                  <button type="button" onClick={() => { setShowRequestLog(false); testTracking.mutate(); }}
                     disabled={testTracking.isPending || fullDiagnostics.isPending}
-                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-60 transition-all"
-                  >
-                    {testTracking.isPending
-                      ? <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
-                      : <MapPin className="w-4 h-4 text-sky-700" />}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-60 transition-all">
+                    {testTracking.isPending ? <Loader2 className="w-4 h-4 text-sky-600 animate-spin" /> : <MapPin className="w-4 h-4 text-sky-700" />}
                     <span className="text-[11px] font-bold text-sky-800">Test Tracking</span>
-                    <span className="text-[9px] text-sky-600">Bearer token check</span>
+                    <span className="text-[9px] text-sky-600">Auth + track check</span>
                   </button>
                 </div>
 
-                {/* Tracking number input */}
                 <div className="flex gap-2 items-center">
-                  <Input
-                    value={trackingInput}
-                    onChange={e => setTrackingInput(e.target.value)}
+                  <Input value={trackingInput} onChange={e => setTrackingInput(e.target.value)}
                     placeholder="Optional CN# for Test Tracking (e.g. 1234567890)"
-                    className="text-xs h-7 flex-1 font-mono"
-                  />
+                    className="text-xs h-7 flex-1 font-mono" />
                 </div>
 
-                {/* Utility buttons */}
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => clearCache.mutate()}
-                    disabled={clearCache.isPending}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[11px] font-medium text-red-700 transition-all disabled:opacity-60"
-                  >
+                  <button type="button" onClick={() => clearCache.mutate()} disabled={clearCache.isPending}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[11px] font-medium text-red-700 transition-all disabled:opacity-60">
                     {clearCache.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                     Clear Token Cache
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => fetchLog.mutate()}
-                    disabled={fetchLog.isPending}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 transition-all disabled:opacity-60"
-                  >
+                  <button type="button" onClick={() => fetchLog.mutate()} disabled={fetchLog.isPending}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 transition-all disabled:opacity-60">
                     {fetchLog.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Terminal className="w-3 h-3" />}
                     {showRequestLog ? "Refresh Log" : "View Request Log"} {requestLog.length > 0 && `(${requestLog.length})`}
                   </button>
@@ -739,15 +645,13 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   </a>
                 </div>
 
-                {/* ── Test Results Panel ── */}
                 {debugConsoleSteps.length > 0 && (
                   <div className="border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-3 py-2 bg-gray-100 border-b">
                       <span className="text-[11px] font-bold flex items-center gap-1.5 text-slate-700">
                         {debugConsoleOk
                           ? <><CheckCircle2 className="w-3.5 h-3.5 text-green-600" /><span className="text-green-700">{debugConsoleTitle} — PASSED</span></>
-                          : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">{debugConsoleTitle} — CHECK FAILED STEPS</span></>
-                        }
+                          : <><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-red-700">{debugConsoleTitle} — CHECK FAILED STEPS</span></>}
                       </span>
                       <button onClick={() => setDebugConsoleSteps([])} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
                     </div>
@@ -779,7 +683,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                   </div>
                 )}
 
-                {/* ── Live Request/Response Log ── */}
                 {showRequestLog && (
                   <div className="border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-3 py-2 bg-slate-900 text-white">
@@ -797,12 +700,9 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                         {requestLog.map((entry: any) => {
                           const statusOk = entry.success;
                           const statusColor = statusOk ? "text-green-400" : "text-red-400";
-                          const httpColor = !entry.httpStatus ? "text-gray-400"
-                            : entry.httpStatus < 300 ? "text-green-400"
-                            : entry.httpStatus < 400 ? "text-yellow-400"
-                            : "text-red-400";
+                          const httpColor = !entry.httpStatus ? "text-gray-400" : entry.httpStatus < 300 ? "text-green-400" : entry.httpStatus < 400 ? "text-yellow-400" : "text-red-400";
                           const typeColors: Record<string, string> = {
-                            auth_step2: "text-blue-300", booking: "text-orange-300", tracking: "text-sky-300",
+                            auth_step1: "text-blue-300", auth_step2: "text-blue-300", booking: "text-orange-300", tracking: "text-sky-300",
                             test_booking: "text-orange-300", test_tracking: "text-sky-300", diagnostics: "text-emerald-300",
                             label: "text-purple-300", test_label: "text-purple-300",
                           };
@@ -832,7 +732,6 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                                   </details>
                                 )}
                                 {entry.error && <div className="text-red-400">Error: {entry.error}</div>}
-                                {entry.attempt && <div className="text-slate-500">Attempt #{entry.attempt}</div>}
                               </div>
                             </details>
                           );
@@ -841,168 +740,46 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                     )}
                   </div>
                 )}
-
               </div>
             </div>
           )}
 
-          {/* ── Advanced Developer Settings (collapsible) ── */}
+          {/* ── Advanced Settings (collapsible) ── */}
           <div className="border border-border rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <Settings className="w-3.5 h-3.5" />
-                Advanced Developer Settings
-              </span>
+            <button type="button" onClick={() => setShowAdvanced(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors">
+              <span className="flex items-center gap-1.5"><Settings className="w-3.5 h-3.5" />Shipping Defaults &amp; Safety</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
             </button>
-
             {showAdvanced && (
               <div className="border-t bg-gray-50/80 p-4 space-y-4">
-
-                {/* ── API Variant Selector ── */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-slate-700">TCS API Variant</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button"
-                      onClick={() => setForm(p => ({ ...p, tcsApiVariant: "ecom" }))}
-                      className={`rounded-lg border-2 p-3 text-left transition-all ${form.tcsApiVariant === "ecom" ? "border-green-500 bg-green-50" : "border-border bg-white hover:border-slate-300"}`}>
-                      <p className="text-xs font-bold text-green-800">ECOM API ✅ (Recommended)</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">ociconnect.tcscourier.com</p>
-                      <p className="text-[10px] text-slate-400">2-step auth · /ecom/api/shipment/book</p>
-                    </button>
-                    <button type="button"
-                      onClick={() => setForm(p => ({ ...p, tcsApiVariant: "simple" }))}
-                      className={`rounded-lg border-2 p-3 text-left transition-all ${form.tcsApiVariant === "simple" ? "border-blue-500 bg-blue-50" : "border-border bg-white hover:border-slate-300"}`}>
-                      <p className="text-xs font-bold text-blue-800">Simple API 🔁 (Fallback)</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">api.tcscourier.com</p>
-                      <p className="text-[10px] text-slate-400">1-step auth · /bookShipment</p>
-                    </button>
-                  </div>
-                  {form.tcsApiVariant === "simple" && (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-[10px] text-blue-800 space-y-0.5">
-                      <p className="font-semibold">Simple API uses: Username + Password + Account No only</p>
-                      <p>No Bearer Token or ECOM token needed. Direct single-step auth.</p>
-                      <p className="text-blue-600">Fields used: consigneePhone · destinationCity · orderNo · weight</p>
-                    </div>
-                  )}
-                  {form.tcsApiVariant === "ecom" && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-2.5 text-[10px] text-green-800 space-y-0.5">
-                      <p className="font-semibold">ECOM API requires: ENVO Bearer Token + Username + Password</p>
-                      <p>Step-1 Bearer → Step-2 ECOM token (auto-generated, cached 55 min)</p>
-                      <p className="text-green-700">Fields: consigneeName · consigneeMobNo · destinationCityName · weightInKg</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* ENVO Bearer Token — primary field */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-blue-800">
-                    ENVO Portal Bearer Token
-                    <span className="ml-1 font-normal text-muted-foreground">(goes in Authorization header)</span>
-                  </Label>
-                  <textarea
-                    value={form.bearerToken}
-                    onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
-                    placeholder="Paste your ENVO Portal Bearer Token here (eyJhbGci...)"
-                    rows={3}
-                    className="w-full border rounded-lg px-2.5 py-2 text-[10px] font-mono bg-white resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Get from: TCS ENVO Portal → API Access → Bearer Token.
-                    If ENV var <code className="bg-muted px-0.5 rounded">TCS_STATIC_BEARER_TOKEN</code> is set, it is used as fallback.
-                  </p>
-                </div>
-
-                {/* Client ID + Secret — for Step 1 auto-generation (future use) */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    ENVO Portal Client ID &amp; Secret
-                    <span className="ml-1 font-normal">(optional — for auto Step 1 refresh in future)</span>
-                  </Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Input value={form.clientId} onChange={f("clientId")} placeholder="Client ID (e.g. 215627768)" className="text-xs" />
-                    </div>
-                    <div>
-                      <Input type="password" value={form.clientSecret} onChange={f("clientSecret")} placeholder="Client Secret" className="text-xs" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Direct ECOM Access Token — manual bypass */}
-                <div className="space-y-1.5 pt-1 border-t border-border/50">
-                  <Label className="text-xs font-medium text-orange-800">
-                    Direct ECOM Access Token
-                    <span className="ml-1 font-normal text-muted-foreground">(optional — bypasses Step-2 auto-generation)</span>
-                  </Label>
-                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Only if TCS emailed you a separate ECOM token" className="text-xs font-mono" />
-                  <div className="text-[10px] text-muted-foreground space-y-0.5">
-                    <p>Goes in booking body as <code className="bg-muted px-0.5 rounded">accesstoken</code>.</p>
-                    <p className="text-green-700 font-medium">✅ If blank: auto-generated via Step-2 (Username + Password + Bearer) — cached 55 min.</p>
-                    <p>Only paste here if TCS sent you a "Direct Access Token" separately. Overrides auto Step-2.</p>
-                  </div>
-                </div>
-
-                {/* Debug & Safety Toggles */}
-                <div className="pt-1 border-t border-border/50 space-y-2">
-                  <p className="text-[11px] font-semibold text-muted-foreground">Debug &amp; Safety</p>
-                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
-                    <div>
-                      <p className="text-xs font-medium">🔄 Fresh Token Mode (No Cache)</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Fetch a new ECOM token on every booking request — useful for debugging "Invalid token" errors. Disable once working.</p>
-                    </div>
-                    <Switch checked={form.tcsDebugNoCache} onCheckedChange={v => setForm(p => ({ ...p, tcsDebugNoCache: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
-                    <div>
-                      <p className="text-xs font-medium">🛡 Prevent Duplicate Bookings</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">If a TCS shipment already exists for an order, skip re-booking and return the existing CN number.</p>
-                    </div>
-                    <Switch checked={form.preventDuplicateBookings} onCheckedChange={v => setForm(p => ({ ...p, preventDuplicateBookings: v }))} />
-                  </div>
-                </div>
-
-                {/* Shipping Defaults */}
-                <div className="pt-1 border-t border-border/50 space-y-2">
-                  <p className="text-[11px] font-semibold text-muted-foreground">Shipping Defaults</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Default Weight (KG)</Label>
-                      <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.5" min="0.5" className="text-xs mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Default Service</Label>
-                      <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
-                        {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
-                      </select>
-                    </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Default Weight (KG)</Label>
+                    <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.5" min="0.5" className="text-xs mt-1" />
                   </div>
                   <div>
-                    <Label className="text-xs">Default Remarks</Label>
-                    <Input value={form.defaultRemarks} onChange={f("defaultRemarks")} className="text-xs mt-1" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch checked={form.fragile} onCheckedChange={v => setForm(p => ({ ...p, fragile: v }))} />
-                    <Label className="text-xs">Mark all shipments as Fragile by default</Label>
+                    <Label className="text-xs">Default Service</Label>
+                    <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
+                      {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                    </select>
                   </div>
                 </div>
-
-                {/* Debug panel toggle */}
-                {debugSteps.length > 0 && (
-                  <div className="pt-1 border-t border-border/50">
-                    <button
-                      type="button"
-                      onClick={() => setShowDebug(v => !v)}
-                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5">
-                      <BookOpen className="w-3.5 h-3.5" />
-                      {showDebug ? "Hide" : "Show"} Auth Debug Results ({debugSteps.length} steps)
-                    </button>
+                <div>
+                  <Label className="text-xs">Default Remarks</Label>
+                  <Input value={form.defaultRemarks} onChange={f("defaultRemarks")} className="text-xs mt-1" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.fragile} onCheckedChange={v => setForm(p => ({ ...p, fragile: v }))} />
+                  <Label className="text-xs">Mark all shipments as Fragile by default</Label>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
+                  <div>
+                    <p className="text-xs font-medium">🛡 Prevent Duplicate Bookings</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">If a TCS shipment already exists for an order, skip re-booking and return the existing CN number.</p>
                   </div>
-                )}
+                  <Switch checked={form.preventDuplicateBookings} onCheckedChange={v => setForm(p => ({ ...p, preventDuplicateBookings: v }))} />
+                </div>
               </div>
             )}
           </div>
