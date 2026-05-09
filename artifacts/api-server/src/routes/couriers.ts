@@ -3,6 +3,7 @@ import { db, couriersTable, shipmentsTable, ordersTable, usersTable, whatsappSet
 import { eq, desc, sql, and, gte, lte, ne } from "drizzle-orm";
 import { adminMiddleware, authMiddleware, type AuthRequest } from "../lib/auth";
 import { sendOrderStatusUpdate } from "../lib/whatsapp";
+import { logger } from "../lib/logger";
 import OpenAI from "openai";
 import type { Response } from "express";
 
@@ -1826,6 +1827,16 @@ async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox
 }
 
 
+/**
+ * TCS weight formatter — always returns a 2-decimal string e.g. "1.00", "0.50".
+ * TCS booking API requires strict decimal format; integers or undefined are rejected.
+ */
+function tcsWeight(raw: any): string {
+  const n = Number(raw);
+  const safe = isNaN(n) || n <= 0 ? 0.5 : n;
+  return Math.max(0.5, safe).toFixed(2);
+}
+
 function formatTcsShipmentDate(): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -1906,7 +1917,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         transactiontype: "",
         dsflag: "",
         carrierslug: "",
-        weightinkg: parseFloat(Math.max(0.5, (Number(order.weight || settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
+        weightinkg: tcsWeight(order.weight ?? settings.defaultWeight),
         pieces: parseInt(String(order.pieces ?? 1), 10),
         fragile: order.fragile ?? settings.fragile ?? false,
         remarks: order.specialInstructions || settings.defaultRemarks || order.notes || "",
@@ -1914,7 +1925,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           ? items.map((item: any) => ({
               description: item.name ?? "Product",
               quantity: parseInt(String(item.qty ?? 1), 10),
-              weight: parseFloat(Math.max(0.5, (Number(settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
+              weight: tcsWeight(settings.defaultWeight),
               uom: "KG",
               unitprice: Number(item.price ?? 0),
               declaredvalue: settings.declaredValue > 0 ? Number(settings.declaredValue) : null,
@@ -1923,7 +1934,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           : [{
               description: "KDF Nuts Products",
               quantity: 1,
-              weight: parseFloat(Math.max(0.5, (Number(settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
+              weight: tcsWeight(settings.defaultWeight),
               uom: "KG",
               unitprice: codAmount,
               declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
@@ -1935,6 +1946,9 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     /* ── Booking request — Static Bearer Token ONLY ─────────────────────────
        Header: Authorization: Bearer <bearer>  (ENVO Portal static token)
        Body:   NO accesstoken field — static bearer is the only auth.           */
+    const finalWeight = payload.shipmentinfo.weightinkg;
+    logger.info({ finalWeight, tcsaccount: settings.tcsaccount }, "TCS booking — final weightinkg");
+
     const bookHeaders: Record<string, string> = {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${bearer}`,
