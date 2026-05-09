@@ -115,28 +115,22 @@ const fmt = (n: number) => {
 
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
-  /* COD API auth headers */
-  bearerToken: string;  /* Long-lived JWT from TCS ENVO Portal — paste directly */
-  clientId: string;     /* X-IBM-Client-Id (embedded in JWT payload, e.g. "215627768") */
-  /* Booking body credentials — go directly in booking request body */
-  username: string;
-  password: string;
-  /* Tracking API — IBM API Gateway */
-  trackingClientId: string;
-  /* Booking config */
-  costcentercode: string;
-  /* Pickup / shipper info */
-  shipperName: string;
-  shipperAddress: string;
-  shipperCity: string;
-  shipperPhone: string;
-  /* Environment */
-  sandbox: boolean;
-  /* Shipping defaults */
-  defaultWeight: string;
-  serviceCode: string;
-  fragile: boolean;
+  /* ── 3 required fields ── */
+  bearerToken: string;
+  username:    string;
+  password:    string;
+  /* ── Optional shipping defaults ── */
+  serviceCode:    string;
+  defaultWeight:  string;
+  fragile:        boolean;
   defaultRemarks: string;
+  /* ── Optional origin info ── */
+  shipperCity:    string;
+  shipperName:    string;
+  shipperAddress: string;
+  shipperPhone:   string;
+  /* ── Flags ── */
+  sandbox:                  boolean;
   preventDuplicateBookings: boolean;
 }
 
@@ -171,14 +165,10 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   });
 
   const blankForm = (): TcsFormState => ({
-    bearerToken: "", clientId: "",
-    username: "", password: "",
-    trackingClientId: "",
-    costcentercode: "",
-    shipperName: "", shipperAddress: "", shipperCity: "", shipperPhone: "",
-    sandbox: false,
-    defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
-    preventDuplicateBookings: true,
+    bearerToken: "", username: "", password: "",
+    serviceCode: "O", defaultWeight: "0.5", fragile: false, defaultRemarks: "KDF NUTS Order",
+    shipperCity: "Lahore", shipperName: "", shipperAddress: "", shipperPhone: "",
+    sandbox: false, preventDuplicateBookings: true,
   });
 
   const [form, setForm] = useState<TcsFormState>(blankForm());
@@ -186,16 +176,18 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const loadForm = () => {
     const s = (config?.settings ?? {}) as any;
     setForm({
-      bearerToken: s.bearerToken ?? "",
-      clientId: s.clientId ?? "",
-      username: s.username ?? "", password: s.password ?? "",
-      trackingClientId: s.trackingClientId ?? "",
-      costcentercode: s.costcentercode ?? "",
-      shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
-      shipperCity: s.shipperCity ?? "",
-      shipperPhone: s.shipperPhone ?? "", sandbox: s.sandbox ?? false,
-      defaultWeight: String(s.defaultWeight ?? "0.5"), serviceCode: s.serviceCode ?? "O",
-      fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
+      bearerToken:    s.bearerToken ?? "",
+      username:       s.username ?? "",
+      password:       s.password ?? "",
+      serviceCode:    s.serviceCode ?? "O",
+      defaultWeight:  String(s.defaultWeight ?? "0.5"),
+      fragile:        s.fragile ?? false,
+      defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
+      shipperCity:    s.shipperCity ?? "Lahore",
+      shipperName:    s.shipperName ?? "",
+      shipperAddress: s.shipperAddress ?? "",
+      shipperPhone:   s.shipperPhone ?? "",
+      sandbox:                  s.sandbox ?? false,
       preventDuplicateBookings: s.preventDuplicateBookings !== false,
     });
     setEditing(true);
@@ -410,71 +402,52 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
         <div className="border-t bg-white/70 p-4 space-y-4">
 
           {/* ── Architecture Guide ── */}
-          <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
-            <p className="text-yellow-300 font-bold text-xs">TCS COD API — Official Flow</p>
-            <p className="text-slate-500 text-[10px]">── Booking (api.tcscourier.com/production/v1/cod) ────</p>
-            <p><span className="text-green-300">AUTH</span> · Header: <span className="text-blue-300">Authorization: Bearer {"{bearerToken}"}</span></p>
-            <p><span className="text-green-300">    </span> · Header: <span className="text-cyan-300">X-IBM-Client-Id: {"{clientId}"}</span></p>
-            <p><span className="text-purple-300">BOOK</span> · POST /create-order</p>
-            <p className="text-slate-400 pl-2">→ Body: userName + password + consignee + weight + COD amount</p>
-            <p className="text-slate-400 pl-2">→ Response: <span className="text-green-300">bookingReply.CN</span> = consignment number</p>
-            <p className="text-slate-500 text-[10px] mt-1">── Tracking (api.tcscourier.com/production/track/v1) ─</p>
-            <p><span className="text-cyan-300">TRACK</span> · GET /shipments/detail?consignmentNo=CN</p>
-            <p className="text-slate-400 pl-2">→ Header: X-IBM-Client-Id (same clientId or trackingClientId)</p>
-            <p className="text-amber-300 mt-1">✅ Bearer token is long-lived (~10yr) — paste once, no refresh needed.</p>
+          <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1 font-mono">
+            <p className="text-yellow-300 font-bold text-xs">TCS COD API — Simple Flow</p>
+            <p className="text-slate-500 text-[10px]">── Booking ───────────────────────────────────────────</p>
+            <p><span className="text-green-300">HEADER</span>  Authorization: Bearer <span className="text-blue-300">{"{bearerToken}"}</span></p>
+            <p><span className="text-purple-300">POST</span>    /production/v1/cod/create-order</p>
+            <p className="text-slate-400 pl-2">body: <span className="text-orange-300">{"{ userName, password, consignee… }"}</span></p>
+            <p className="text-slate-400 pl-2">→ <span className="text-green-300">bookingReply.CN</span> = consignment number</p>
+            <p className="text-slate-500 text-[10px] mt-0.5">── Tracking ──────────────────────────────────────────</p>
+            <p><span className="text-cyan-300">GET</span>     /production/track/v1/shipments/detail?consignmentNo=CN</p>
+            <p className="text-amber-300 mt-1">✅ Paste Bearer token once — no refresh ever needed.</p>
           </div>
 
-          {/* ── Step 1: Bearer Token ── */}
+          {/* ── 3 Required Fields ── */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">1</span>
-              Bearer Token
-              <span className="text-xs font-normal text-muted-foreground">(from TCS ENVO Portal — required)</span>
-            </p>
+            <p className="text-sm font-semibold text-foreground">Required Credentials</p>
+
+            {/* Bearer Token */}
             <div>
               <Label className="text-xs font-medium">Bearer Token <span className="text-red-500">*</span></Label>
-              <div className="relative mt-1">
-                <textarea
-                  rows={3}
-                  value={form.bearerToken}
-                  onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[10px] font-mono resize-none shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  style={{ display: showBearer ? "block" : "none" }}
-                />
-                {!showBearer && (
+              <div className="mt-1">
+                {showBearer ? (
+                  <>
+                    <textarea
+                      rows={3}
+                      value={form.bearerToken}
+                      onChange={e => setForm(p => ({ ...p, bearerToken: e.target.value.trim() }))}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-[10px] font-mono resize-none shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <button type="button" onClick={() => setShowBearer(false)} className="mt-0.5 text-xs text-blue-600 hover:underline">Hide</button>
+                  </>
+                ) : (
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-xs text-muted-foreground font-mono">
-                      {form.bearerToken ? `${form.bearerToken.slice(0, 30)}…` : <span className="text-red-400">Not set — required</span>}
+                    <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-xs font-mono truncate text-muted-foreground">
+                      {form.bearerToken ? `${form.bearerToken.slice(0, 32)}…` : <span className="text-red-400">Not set — required</span>}
                     </div>
-                    <button type="button" onClick={() => setShowBearer(true)} className="text-xs text-blue-600 hover:underline whitespace-nowrap">Edit Token</button>
+                    <button type="button" onClick={() => setShowBearer(true)} className="shrink-0 text-xs text-blue-600 hover:underline">Edit</button>
                   </div>
                 )}
-                {showBearer && (
-                  <button type="button" onClick={() => setShowBearer(false)} className="mt-1 text-xs text-blue-600 hover:underline">Hide</button>
-                )}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                From <strong>TCS ENVO Portal</strong> → API Access → copy the JWT token. It is valid for ~10 years — paste it once.
-                Sent as <code className="bg-muted px-0.5 rounded">Authorization: Bearer</code> header on every request.
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → paste the full JWT. Valid ~10 years.</p>
             </div>
-            <div>
-              <Label className="text-xs font-medium">X-IBM-Client-Id <span className="text-red-500">*</span></Label>
-              <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 215627768" autoComplete="off" className="mt-1 text-xs font-mono" />
-              <p className="text-[10px] text-muted-foreground mt-0.5">Embedded inside the JWT payload — typically 9 digits. Sent as <code className="bg-muted px-0.5 rounded">X-IBM-Client-Id</code> header.</p>
-            </div>
-          </div>
 
-          {/* ── Step 2: Booking Credentials ── */}
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">2</span>
-              Booking Credentials
-              <span className="text-xs font-normal text-muted-foreground">(go in booking request body)</span>
-            </p>
+            {/* Username + Password */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs font-medium">Username <span className="text-red-500">*</span></Label>
@@ -492,63 +465,64 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             </div>
           </div>
 
-          {/* ── Tracking API (IBM) ── */}
+          {/* ── Advanced (optional) ── */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">T</span>
-              Tracking Client ID
-              <span className="text-xs font-normal text-muted-foreground">(optional — defaults to X-IBM-Client-Id above)</span>
-            </p>
-            <div>
-              <Label className="text-xs font-medium">Tracking X-IBM-Client-Id</Label>
-              <Input
-                value={form.trackingClientId}
-                onChange={f("trackingClientId")}
-                placeholder="Leave blank to use same clientId as booking"
-                autoComplete="off"
-                className="mt-1 text-xs font-mono"
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Only fill if TCS gave you a <strong>separate</strong> clientId for the tracking API.
-                Used for: <code className="bg-muted px-0.5 rounded">GET /track/v1/shipments/detail?consignmentNo=CN</code>
-              </p>
-            </div>
-          </div>
-
-          {/* ── Cost Center ── */}
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-bold">3</span>
-              Booking Config
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs font-medium">Cost Center Code <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="e.g. CCC01" className="mt-1" />
-                <p className="text-[10px] text-muted-foreground mt-0.5">From TCS ENVO Portal → Cost Centers</p>
+            <button type="button" onClick={() => setShowAdvanced(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+              {showAdvanced ? "Hide" : "Show"} optional settings (service, weight, origin city…)
+            </button>
+            {showAdvanced && (
+              <div className="space-y-3 pl-1 border-l-2 border-muted ml-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs font-medium">Service Code</Label>
+                    <select value={form.serviceCode} onChange={e => setForm(p => ({ ...p, serviceCode: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs shadow-sm">
+                      <option value="O">O — Overnight (default)</option>
+                      <option value="S">S — Same Day</option>
+                      <option value="E">E — Economy</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Default Weight (kg)</Label>
+                    <Input value={form.defaultWeight} onChange={f("defaultWeight")} placeholder="0.5" type="number" step="0.1" min="0.1" className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Default Remarks</Label>
+                  <Input value={form.defaultRemarks} onChange={f("defaultRemarks")} placeholder="e.g. KDF NUTS Order" className="mt-1" />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <Label className="text-xs font-medium">Fragile by default</Label>
+                  <Switch checked={form.fragile} onCheckedChange={v => setForm(p => ({ ...p, fragile: v }))} />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium">Prevent Duplicate Bookings</p>
+                    <p className="text-[10px] text-muted-foreground">Skip if CN already exists for this order</p>
+                  </div>
+                  <Switch checked={form.preventDuplicateBookings} onCheckedChange={v => setForm(p => ({ ...p, preventDuplicateBookings: v }))} />
+                </div>
+                <p className="text-xs font-semibold text-foreground mt-1">Pickup / Origin</p>
+                <div>
+                  <Label className="text-xs font-medium">Origin City</Label>
+                  <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="Lahore" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Business / Shipper Name</Label>
+                  <Input value={form.shipperName} onChange={f("shipperName")} placeholder="e.g. KDF Nuts" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Pickup Address</Label>
+                  <Input value={form.shipperAddress} onChange={f("shipperAddress")} placeholder="Street address" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Pickup Phone</Label>
+                  <Input value={form.shipperPhone} onChange={f("shipperPhone")} placeholder="+92300…" className="mt-1" />
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* ── Pickup Address ── */}
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Pickup Address</p>
-            <div>
-              <Label className="text-xs font-medium">Business / Shipper Name</Label>
-              <Input value={form.shipperName} onChange={f("shipperName")} placeholder="e.g. KDF Nuts" className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs font-medium">Pickup Address</Label>
-              <Input value={form.shipperAddress} onChange={f("shipperAddress")} placeholder="Street address" className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs font-medium">Origin City <span className="font-normal text-muted-foreground">(used as originCityName in booking)</span></Label>
-              <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs font-medium">Pickup Phone</Label>
-              <Input value={form.shipperPhone} onChange={f("shipperPhone")} placeholder="+92300…" className="mt-1" />
-            </div>
+            )}
           </div>
 
           {/* ── Environment ── */}

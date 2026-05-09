@@ -1,0 +1,139 @@
+IMPORTANT — Please simplify the TCS settings completely.
+
+Right now too many unnecessary fields were added manually which we do NOT need.
+
+REMOVE these unnecessary fields:
+
+❌ Tracking Client ID
+❌ Tracking X-IBM-Client-Id
+❌ Cost Center Code
+❌ Extra Client Secret fields
+❌ Advanced token configs
+❌ Extra auth layers
+❌ Unnecessary optional IBM fields
+
+These were added from assumptions and are confusing the system.
+
+==================================================
+WE ONLY NEED 3 THINGS
+=====================
+
+1️⃣ TCS Username
+2️⃣ TCS Password
+3️⃣ Bearer Token
+
+That’s it.
+
+==================================================
+CORRECT FLOW
+============
+
+As per the actual working TCS flow:
+
+HEADER:
+
+```http
+Authorization: Bearer {BEARER_TOKEN}
+Content-Type: application/json
+```
+
+BODY:
+
+```json
+{
+  "userName": "LGEC11060",
+  "password": "XXXX"
+}
+```
+
+Then booking payload should directly use:
+
+* username
+* password
+* consignee details
+* COD amount
+* weight
+* address
+
+==================================================
+REMOVE COMPLEX LOGIC
+====================
+
+Please remove:
+❌ stale token logic
+❌ extra token generators
+❌ fake refresh systems
+❌ unnecessary clientId dependency
+❌ unnecessary tracking client fields
+
+==================================================
+IMPORTANT
+=========
+
+The Bearer Token is already long-lived from TCS ENVO Portal.
+
+We only paste it once.
+
+No refresh system needed.
+
+==================================================
+USE THIS FLOW ONLY
+==================
+
+BOOKING API:
+
+```txt
+https://api.tcscourier.com/production/v1/cod/create-order
+```
+
+TRACKING API:
+
+```txt
+https://api.tcscourier.com/production/track/v1/shipments/detail?consignmentNo=CN
+```
+
+==================================================
+AUTH METHOD
+===========
+
+HEADER:
+
+```http
+Authorization: Bearer {TOKEN}
+```
+
+BODY:
+
+```json
+{
+  "userName": "LGEC11060",
+  "password": "XXXX"
+}
+```
+
+==================================================
+IMPORTANT
+=========
+
+Please rebuild the integration cleanly.
+
+Current issue happened because too many unnecessary auth layers and fields were added.
+
+Keep the system:
+✅ simple
+✅ clean
+✅ production-safe
+✅ easy to debug
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ real booking
+✅ real tracking
+✅ real CN generation
+✅ stable production booking
+✅ simple auth flow
+✅ no fake booking
+✅ no unnecessary configs

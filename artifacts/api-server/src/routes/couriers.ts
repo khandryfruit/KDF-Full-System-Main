@@ -179,11 +179,9 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
 
     steps.push({ step: "Server IP", status: "info", detail: serverIp });
     steps.push({
-      step:   "Config",
-      status: "info",
+      step: "Config", status: "info",
       detail: [
         `bearerToken: ${s.bearerToken ? `${s.bearerToken.slice(0, 20)}…` : "(EMPTY — required)"}`,
-        `clientId: ${s.clientId || "(empty)"}`,
         `username: ${s.username || "(empty)"}`,
         `password: ${s.password ? "●●●" : "(empty)"}`,
         `mode: ${s.sandbox ? "SANDBOX" : "PRODUCTION"}`,
@@ -196,19 +194,16 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
       res.json({ ok: false, steps, error: missing.join("; "), serverIp }); return;
     }
 
-    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken!.length} chars)\nHeader: Authorization: Bearer {token}` });
-    steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId: ${s.clientId}\nHeader: X-IBM-Client-Id: ${s.clientId}` });
+    steps.push({ step: "Bearer Token", status: "ok", detail: `✅ Token present (${s.bearerToken.length} chars)\nHeader: Authorization: Bearer {token}\nContent-Type: application/json` });
 
-    /* Test the live COD API */
     const testResult = await Tcs.testConnection(s);
     steps.push(...(testResult.steps as any[]));
 
     steps.push({
-      step:   "Booking ready",
-      status: testResult.ok ? "ok" : "warn",
+      step: "Booking ready", status: testResult.ok ? "ok" : "warn",
       detail: testResult.ok
-        ? `✅ Ready to book.\nEndpoint: POST ${baseUrl}/create-order\nAuth: Authorization: Bearer + X-IBM-Client-Id\nBody: userName + password + order details`
-        : "API test failed — check bearer token and clientId",
+        ? `✅ Ready to book.\nPOST ${baseUrl}/create-order\nBody: { userName, password, consignee details, codAmount… }`
+        : "API test failed — check bearer token, username, password",
     });
 
     res.json({ ok: testResult.ok, steps, serverIp });
