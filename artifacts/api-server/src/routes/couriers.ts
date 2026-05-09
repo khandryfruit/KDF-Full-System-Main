@@ -350,9 +350,12 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
 
 /* ─── Admin: TCS – Clear ECOM token cache ────────────── */
 router.post("/admin/couriers/tcs/clear-cache", adminMiddleware as any, async (_req: AuthRequest, res: Response): Promise<void> => {
-  const count = tcsEcomCache.size;
+  const ecomCount   = tcsEcomCache.size;
+  const simpleCount = tcsSimpleCache.size;
   tcsEcomCache.clear();
-  res.json({ ok: true, cleared: count, message: `Cleared ${count} cached ECOM token(s). Next booking will generate a fresh token via Step-2.` });
+  tcsSimpleCache.clear();
+  const total = ecomCount + simpleCount;
+  res.json({ ok: true, cleared: total, ecomCleared: ecomCount, simpleCleared: simpleCount, message: `Cleared ${total} cached token(s) (ECOM: ${ecomCount}, Simple: ${simpleCount}). Next booking will generate a fresh token.` });
 });
 
 /* ─── Admin: TCS – CN / Label Print ─────────────────── */
@@ -1828,6 +1831,55 @@ const TCS_PROD_URL = "https://ociconnect.tcscourier.com";
 /* ── TCS ECOM token in-memory cache — 55-min TTL, auto-refreshes on next booking ── */
 interface TcsEcomCacheEntry { token: string; expiresAt: number; }
 const tcsEcomCache = new Map<string, TcsEcomCacheEntry>();
+
+/* ── TCS Simple API (api.tcscourier.com) — single-step token cache ── */
+const TCS_SIMPLE_URL = "https://api.tcscourier.com";
+const tcsSimpleCache = new Map<string, TcsEcomCacheEntry>();
+
+/**
+ * TCS Simple API single-step auth:
+ *   POST https://api.tcscourier.com/auth  {username, password, accountNo}
+ *   → response.accessToken
+ * Token cached 50 min. Used for /bookShipment endpoint.
+ */
+async function getTcsSimpleToken(settings: Record<string, any>): Promise<string> {
+  const username  = (settings.username  ?? "").trim();
+  const password  = (settings.password  ?? "").trim();
+  const accountNo = (settings.tcsaccount ?? "").trim();
+
+  const cacheKey = `simple:${accountNo}:${username}`;
+  const cached = tcsSimpleCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    logger.info({ cacheKey }, "TCS Simple token — cache hit");
+    return cached.token;
+  }
+
+  const authUrl = `${TCS_SIMPLE_URL}/auth`;
+  logger.info({ authUrl, username, accountNo }, "TCS Simple token — calling auth endpoint");
+
+  const resp = await fetch(authUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, accountNo }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  let data: Record<string, any> = {};
+  try { data = await resp.json(); } catch { data = {}; }
+
+  const token =
+    data.accessToken ?? data.token ?? data.access_token ??
+    data.result?.accessToken ?? data.data?.accessToken;
+
+  if (!token) {
+    const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status}`;
+    throw new Error(`TCS Simple auth failed: ${msg}. Check Username, Password and Account No.`);
+  }
+
+  tcsSimpleCache.set(cacheKey, { token, expiresAt: Date.now() + 50 * 60 * 1000 }); // 50-min TTL
+  logger.info({ accountNo, username }, "TCS Simple token — auth success, cached 50 min");
+  return token;
+}
 /* ─── Courier tracking URLs ──────────────────────────── */
 function getTrackingUrl(slug: string, trackingId: string): string {
   const id = encodeURIComponent(trackingId);
@@ -2050,6 +2102,56 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
     const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
     const items: any[] = Array.isArray(order.items) ? order.items : [];
+
+    /* ── API Variant: "simple" vs "ecom" ────────────────────────────────────
+       simple → POST https://api.tcscourier.com/auth  + POST /bookShipment
+       ecom   → 2-step ociconnect flow (default, per official guide)            */
+    const apiVariant = (settings.tcsApiVariant ?? "ecom").toLowerCase();
+
+    if (apiVariant === "simple") {
+      /* ── Simple API (api.tcscourier.com) single-step flow ── */
+      const simpleToken = await getTcsSimpleToken(settings);
+      const simplePayload: Record<string, any> = {
+        orderNo:            String(order.orderNumber ?? order.id),
+        consigneeName:      (address.name ?? address.firstName ?? "Customer").trim().slice(0, 100),
+        consigneePhone:     (address.phone ?? "").replace(/\D/g, "").slice(-11),
+        consigneeAddress:   [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").slice(0, 200) || address.address || "",
+        destinationCity:    address.city ?? "",
+        codAmount:          codAmount,
+        weight:             tcsWeight(order.weight ?? settings.defaultWeight), // string decimal e.g. "0.50"
+        pieces:             parseInt(String(order.pieces ?? 1), 10),
+        serviceType:        service ?? settings.serviceType ?? "OVERNIGHT",
+        remarks:            (order.specialInstructions || settings.defaultRemarks || order.notes || "KDF Nuts Order").slice(0, 200),
+      };
+
+      logger.info({ url: `${TCS_SIMPLE_URL}/bookShipment`, simplePayload }, "TCS Simple booking — sending");
+
+      const simpleResp = await fetch(`${TCS_SIMPLE_URL}/bookShipment`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${simpleToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(simplePayload),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const simpleText = await simpleResp.text();
+      let simpleData: Record<string, any> = {};
+      try { simpleData = JSON.parse(simpleText); } catch { simpleData = { raw: simpleText }; }
+
+      logger.info({ status: simpleResp.status, simpleData }, "TCS Simple booking — response");
+
+      const simpleTracking =
+        simpleData.trackingNumber ?? simpleData.consignmentNumber ??
+        simpleData.consignmentNo  ?? simpleData.bookingNo ??
+        simpleData.data?.trackingNumber ?? simpleData.data?.consignmentNo;
+
+      if (!simpleResp.ok || (!simpleTracking && simpleData.message?.toLowerCase().includes("fail"))) {
+        const errMsg = simpleData.message ?? `TCS Simple booking failed (HTTP ${simpleResp.status}): ${simpleText.slice(0, 300)}`;
+        throw new Error(`TCS: ${errMsg}`);
+      }
+
+      const tid = simpleTracking ?? generateTrackingId("tcs");
+      return { trackingId: tid, trackingUrl: getTrackingUrl("tcs", tid), rawResponse: simpleData };
+    }
 
     /* ── Step 2: Get ECOM Access Token ─────────────────────────────────────
        TCS 2-Token architecture (official guide):

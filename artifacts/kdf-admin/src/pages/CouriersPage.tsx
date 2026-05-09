@@ -125,6 +125,8 @@ interface TcsFormState {
   accessToken: string; bearerToken: string;
   defaultWeight: string; serviceCode: string;
   fragile: boolean; defaultRemarks: string;
+  /** "ecom" = ociconnect 2-step (default) | "simple" = api.tcscourier.com single-step */
+  tcsApiVariant: "ecom" | "simple";
 }
 
 function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
@@ -155,6 +157,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     sandbox: false,
     clientId: "", clientSecret: "", accessToken: "", bearerToken: "",
     defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
+    tcsApiVariant: "ecom",
   });
 
   const [form, setForm] = useState<TcsFormState>(blankForm());
@@ -171,6 +174,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
       accessToken: s.accessToken ?? "", bearerToken: s.bearerToken ?? "",
       defaultWeight: s.defaultWeight ?? "0.5", serviceCode: s.serviceCode ?? "O",
       fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
+      tcsApiVariant: s.tcsApiVariant ?? "ecom",
     });
     setEditing(true);
     setShowAdvanced(false);
@@ -491,9 +495,44 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             {showAdvanced && (
               <div className="border-t bg-gray-50/80 p-4 space-y-4">
 
+                {/* ── API Variant Selector ── */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700">TCS API Variant</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button"
+                      onClick={() => setForm(p => ({ ...p, tcsApiVariant: "ecom" }))}
+                      className={`rounded-lg border-2 p-3 text-left transition-all ${form.tcsApiVariant === "ecom" ? "border-green-500 bg-green-50" : "border-border bg-white hover:border-slate-300"}`}>
+                      <p className="text-xs font-bold text-green-800">ECOM API ✅ (Recommended)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">ociconnect.tcscourier.com</p>
+                      <p className="text-[10px] text-slate-400">2-step auth · /ecom/api/shipment/book</p>
+                    </button>
+                    <button type="button"
+                      onClick={() => setForm(p => ({ ...p, tcsApiVariant: "simple" }))}
+                      className={`rounded-lg border-2 p-3 text-left transition-all ${form.tcsApiVariant === "simple" ? "border-blue-500 bg-blue-50" : "border-border bg-white hover:border-slate-300"}`}>
+                      <p className="text-xs font-bold text-blue-800">Simple API 🔁 (Fallback)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">api.tcscourier.com</p>
+                      <p className="text-[10px] text-slate-400">1-step auth · /bookShipment</p>
+                    </button>
+                  </div>
+                  {form.tcsApiVariant === "simple" && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-[10px] text-blue-800 space-y-0.5">
+                      <p className="font-semibold">Simple API uses: Username + Password + Account No only</p>
+                      <p>No Bearer Token or ECOM token needed. Direct single-step auth.</p>
+                      <p className="text-blue-600">Fields used: consigneePhone · destinationCity · orderNo · weight</p>
+                    </div>
+                  )}
+                  {form.tcsApiVariant === "ecom" && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-2.5 text-[10px] text-green-800 space-y-0.5">
+                      <p className="font-semibold">ECOM API requires: ENVO Bearer Token + Username + Password</p>
+                      <p>Step-1 Bearer → Step-2 ECOM token (auto-generated, cached 55 min)</p>
+                      <p className="text-green-700">Fields: consigneeName · consigneeMobNo · destinationCityName · weightInKg</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Auth architecture guide */}
                 <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] space-y-1.5 font-mono">
-                  <p className="text-yellow-300 font-bold text-xs">TCS API — 2-Token Architecture</p>
+                  <p className="text-yellow-300 font-bold text-xs">TCS API — 2-Token Architecture (ECOM mode)</p>
                   <p className="text-slate-400">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</p>
                   <p><span className="text-blue-300">TOKEN 1</span> · ENVO Bearer Token</p>
                   <p className="text-slate-400 pl-2">→ From TCS ENVO Portal → paste below</p>
