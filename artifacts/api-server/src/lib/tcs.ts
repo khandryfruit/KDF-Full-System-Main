@@ -425,9 +425,9 @@ export async function createBooking(
   const firstName = nameParts[0] ?? fullName;
   const lastName  = nameParts.slice(1).join(" ") || "";
 
-  /* Service code mapping: our "O"/"E"/"S" → TCS "0"/"1"/"2" or keep as-is */
-  const svcRaw = service ?? settings.serviceCode ?? "O";
-  const svcCode = svcRaw === "O" ? "0" : svcRaw === "E" ? "1" : svcRaw === "S" ? "2" : svcRaw;
+  /* TCS ECOM service codes: "O" = Overnight, "E" = Economy, "S" = Same-day
+   * Send the letter code directly — do NOT convert to digits */
+  const svcCode = (service ?? settings.serviceCode ?? "O").toUpperCase();
 
   const clientId   = resolveClientId(settings);
   const baseUrl    = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
