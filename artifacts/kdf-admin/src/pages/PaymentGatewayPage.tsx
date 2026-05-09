@@ -255,6 +255,55 @@ function FeedItem({ item }: { item: typeof LIVE_FEED[0] }) {
   );
 }
 
+/* ── Live Feed Panel — real transactions (30s polling) ── */
+function LiveFeedPanel() {
+  const { data, isLoading } = useQuery<{ transactions: MeezanTxn[] }>({
+    queryKey: ["meezan-txns-feed"],
+    queryFn:  () => apiFetch("/api/admin/meezan/transactions?limit=5"),
+    refetchInterval: 30000,
+  });
+
+  const items = (data?.transactions ?? []).map(t => {
+    const status = t.status as string;
+    const type = status === "paid" ? "success" : status === "failed" ? "failed" : status === "disputed" ? "dispute" : status === "held" ? "held" : "pending";
+    const amt  = `Rs. ${Number(t.amount).toLocaleString("en-PK")}`;
+    const who  = t.customerName ?? t.customerPhone ?? "Customer";
+    const ref  = t.invoiceNumber ?? t.meezanOrderId ?? `#${t.id}`;
+    const when = (() => {
+      const diff = Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 1000);
+      if (diff < 60)   return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      return `${Math.floor(diff / 3600)}h ago`;
+    })();
+    const labels: Record<string, string> = { paid: "Payment received", failed: "Payment failed", pending: "Payment pending", initiated: "Payment initiated", held: "Payment held", refunded: "Refund issued", reversed: "Payment reversed" };
+    const label = labels[status] ?? "Transaction";
+    return { id: String(t.id), type, msg: `${label} — ${who} · ${amt} · ${ref}`, time: when };
+  });
+
+  const fallback = LIVE_FEED.slice(0, 5);
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <h3 className="font-semibold text-sm">Live Feed</h3>
+        </div>
+        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">● Live</Badge>
+      </div>
+      <div className="overflow-y-auto max-h-64">
+        {isLoading
+          ? <div className="flex items-center justify-center py-8 text-muted-foreground text-xs gap-2"><RefreshCw className="w-3.5 h-3.5 animate-spin" />Loading…</div>
+          : items.length > 0
+            ? items.map(item => <FeedItem key={item.id} item={item} />)
+            : fallback.map(item => <FeedItem key={item.id} item={item} />)
+        }
+      </div>
+      <div className="px-5 py-3 border-t border-border"><Button variant="ghost" size="sm" className="w-full text-xs gap-1">View all activity <ChevronRight className="w-3 h-3" /></Button></div>
+    </div>
+  );
+}
+
 /* ── Overview Tab ── */
 function OverviewTab() {
   const { toast } = useToast();
@@ -346,20 +395,8 @@ function OverviewTab() {
           </div>
         </div>
 
-        {/* Live Transaction Feed */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <h3 className="font-semibold text-sm">Live Feed</h3>
-            </div>
-            <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">● Live</Badge>
-          </div>
-          <div className="overflow-y-auto max-h-64">
-            {LIVE_FEED.map(item => <FeedItem key={item.id} item={item} />)}
-          </div>
-          <div className="px-5 py-3 border-t border-border"><Button variant="ghost" size="sm" className="w-full text-xs gap-1">View all activity <ChevronRight className="w-3 h-3" /></Button></div>
-        </div>
+        {/* Live Transaction Feed — real data */}
+        <LiveFeedPanel />
       </div>
 
       {/* Source breakdown + Method breakdown */}
@@ -1322,6 +1359,12 @@ function ApiConfigTab() {
     queryFn:  () => apiFetch("/api/admin/meezan/settings"),
   });
 
+  const { data: serverIpData } = useQuery<{ ip: string | null }>({
+    queryKey: ["meezan-server-ip"],
+    queryFn:  () => apiFetch("/api/admin/meezan/server-ip"),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [form, setForm] = useState<MeezanSettings>({
     environment:       "sandbox",
     sandboxUsername:   "",
@@ -1569,6 +1612,27 @@ function ApiConfigTab() {
                         ))}
                       </div>
                     </details>
+
+                    {/* Server IP — for Meezan Bank whitelist */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                      <Server className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-amber-900">Server IP — Must be whitelisted by Meezan Bank</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="font-mono text-sm font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                            {serverIpData?.ip ?? "Fetching…"}
+                          </code>
+                          {serverIpData?.ip && (
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(serverIpData.ip!).catch(() => {}); }}
+                              className="text-amber-600 hover:text-amber-800"
+                              title="Copy IP"
+                            ><Copy className="w-3.5 h-3.5" /></button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-amber-700 mt-1">Email this IP to Meezan Bank tech support to enable sandbox &amp; live access.</p>
+                      </div>
+                    </div>
 
                     {/* Test result */}
                     {testResult && (

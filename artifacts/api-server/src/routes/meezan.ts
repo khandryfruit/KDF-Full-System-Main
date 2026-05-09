@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { eq, desc, and, gte, lte, like, or, sql } from "drizzle-orm";
 import { db, meezanTransactionsTable, meezanSettingsTable, meezanAuditLogsTable, invoicesTable } from "@workspace/db";
+import { shopifyStoresTable, shopifyOrdersTable } from "@workspace/db/schema";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import {
   buildMeezanClient, generateOrderRef, generateInvoiceNumber, isPaid,
   probeMeezanConnectivity, getServerIp, ORDER_STATUS_LABELS,
 } from "../lib/meezan";
+import { sendWhatsAppMessage } from "../lib/whatsapp";
 import type { Request, Response } from "express";
 
 /* ═══════════════════════════════════════════════════════════
@@ -57,6 +59,64 @@ async function audit(
   by = "system"
 ) {
   await db.insert(meezanAuditLogsTable).values({ txnId, action, performedBy: by, payload, response, ip });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   POST-PAYMENT SYNC
+   Fire-and-forget helper: after a Meezan transaction goes to
+   "paid" status, this updates the matching Shopify order and
+   sends a WhatsApp confirmation to the customer.
+═══════════════════════════════════════════════════════════ */
+async function postPaymentSync(txnId: number): Promise<void> {
+  try {
+    const txns = await db.select().from(meezanTransactionsTable)
+      .where(eq(meezanTransactionsTable.id, txnId)).limit(1);
+    if (!txns.length) return;
+    const txn = txns[0];
+
+    /* ── 1. Update Shopify order financial_status to "paid" ── */
+    const shopifyRef = txn.externalRef ?? txn.invoiceNumber ?? "";
+    if (shopifyRef) {
+      try {
+        const stores = await db.select().from(shopifyStoresTable)
+          .where(eq(shopifyStoresTable.isActive, true)).limit(1);
+        if (stores.length) {
+          const store = stores[0];
+          const apiBase = `https://${store.shopDomain}/admin/api/2024-04`;
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (store.accessToken) headers["X-Shopify-Access-Token"] = store.accessToken;
+
+          /* Try by order name (e.g. "#1234") or numeric ID */
+          const isNumericId = /^\d+$/.test(shopifyRef);
+          if (isNumericId) {
+            await fetch(`${apiBase}/orders/${shopifyRef}/transactions.json`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                transaction: { kind: "capture", status: "success", amount: txn.amount, currency: "PKR", source: "meezan_epg" },
+              }),
+            }).catch(() => {});
+          }
+
+          /* Update local DB order record to "paid" */
+          await db.update(shopifyOrdersTable)
+            .set({ financialStatus: "paid", updatedAt: new Date() } as any)
+            .where(eq(shopifyOrdersTable.shopifyOrderId, shopifyRef))
+            .catch(() => {});
+        }
+      } catch { /* non-critical */ }
+    }
+
+    /* ── 2. Send WhatsApp confirmation ── */
+    const phone = txn.customerPhone ?? "";
+    if (phone) {
+      const name   = txn.customerName ?? "Customer";
+      const amt    = `Rs. ${Number(txn.amount).toLocaleString("en-PK")}`;
+      const ref    = txn.invoiceNumber ?? txn.meezanOrderId ?? String(txnId);
+      const msg    = `✅ *Payment Confirmed — KDF NUTS*\n\nSalam ${name}!\n\nYour payment of *${amt}* has been received successfully.\n\nReference: *${ref}*\n\nShukria for shopping with KDF NUTS! 🥜`;
+      await sendWhatsAppMessage({ phone, message: msg }).catch(() => {});
+    }
+  } catch { /* fire-and-forget — swallow all errors */ }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -438,6 +498,7 @@ router.post("/api/payment/meezan/callback", async (req, res: Response) => {
           }
         }
 
+        const wasPaid = txns[0].status === "paid";
         await db.update(meezanTransactionsTable).set({
           status:          newStatus as any,
           callbackPayload: payload,
@@ -446,6 +507,11 @@ router.post("/api/payment/meezan/callback", async (req, res: Response) => {
         }).where(eq(meezanTransactionsTable.id, txns[0].id));
 
         await audit(txns[0].id, "CALLBACK", payload, { newStatus }, req.ip || "");
+
+        /* Fire-and-forget: Shopify + WA sync on first paid event */
+        if (newStatus === "paid" && !wasPaid) {
+          void postPaymentSync(txns[0].id);
+        }
       }
     }
 
@@ -516,6 +582,7 @@ router.post("/admin/meezan/transactions/:id/verify", adminMiddleware as any, asy
 
     const paid    = isPaid(statusRes.orderStatus);
     const newSt   = paid ? "paid" : (statusRes.orderStatus === 3 ? "failed" : txn.status);
+    const wasPaid = txn.status === "paid";
     const [updated] = await db.update(meezanTransactionsTable).set({
       status:          newSt as any,
       cardMask:        statusRes.cardMask       || txn.cardMask,
@@ -526,6 +593,12 @@ router.post("/admin/meezan/transactions/:id/verify", adminMiddleware as any, asy
     }).where(eq(meezanTransactionsTable.id, id)).returning();
 
     await audit(id, "VERIFY", {}, statusRes.raw as Record<string, unknown>, req.ip || "", String(req.user?.id));
+
+    /* Fire-and-forget: Shopify + WA sync on first paid event */
+    if (paid && !wasPaid) {
+      void postPaymentSync(id);
+    }
+
     res.json({ ok: true, transaction: updated, status: statusRes });
   } catch (err) {
     res.status(500).json({ error: String(err) });

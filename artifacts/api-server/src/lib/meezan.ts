@@ -13,7 +13,7 @@
 
 import { logger } from "./logger";
 
-const SANDBOX_BASE = "https://test-securepayment.meezanbank.com/payment/rest";
+const SANDBOX_BASE = "https://test-securepayment.meezanbank.com:9716/payment/rest";
 const LIVE_BASE    = "https://securepayment.meezanbank.com/payment/rest";
 
 /* ──────────────────────────────────────────────────────
