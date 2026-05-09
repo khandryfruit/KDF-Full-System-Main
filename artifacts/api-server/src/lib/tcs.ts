@@ -101,6 +101,22 @@ export function extractClientIdFromJwt(token: string): string | null {
   }
 }
 
+/* ─── Resolve X-IBM-Client-Id ────────────────────────────────────────────
+ * Priority:
+ *   1. settings.clientId (explicitly entered in form)
+ *   2. JWT payload decode (clientid / client_id / clientId / sub)
+ *   3. settings.username — TCS ECOM API uses username as X-IBM-Client-Id
+ *      and the same often applies to the COD API on IBM API Gateway.
+ */
+export function resolveClientId(settings: TcsSettings): string | null {
+  const explicit = settings.clientId?.trim() || null;
+  if (explicit) return explicit;
+  const fromJwt = extractClientIdFromJwt(settings.bearerToken ?? "");
+  if (fromJwt) return fromJwt;
+  const fromUsername = settings.username?.trim() || null;
+  return fromUsername;
+}
+
 /* ─── Auth headers ───────────────────────────────────────────────────────── */
 export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
   const headers: Record<string, string> = {
@@ -109,27 +125,22 @@ export function getAuthHeaders(settings: TcsSettings): Record<string, string> {
     "Accept":        "application/json",
   };
   // IBM API Gateway requires X-IBM-Client-Id
-  // Use explicit clientId field first; fall back to JWT decode for backwards compat
-  const clientId = settings.clientId?.trim() || extractClientIdFromJwt(settings.bearerToken);
+  // TCS ECOM API uses username as client ID — same pattern applies to COD API
+  const clientId = resolveClientId(settings);
   if (clientId) headers["X-IBM-Client-Id"] = clientId;
   return headers;
 }
 
-/* ─── Validate — 4 required fields ──────────────────────────────────────── */
+/* ─── Validate — required fields ────────────────────────────────────────── */
 export function validateSettings(settings: TcsSettings): string[] {
   const errs: string[] = [];
   if (!settings.bearerToken?.trim())
     errs.push("Bearer Token is empty — paste your JWT from TCS ENVO Portal in Couriers → TCS Settings");
-  if (!settings.clientId?.trim()) {
-    // Try JWT fallback — if it works, warn but don't error
-    const fromJwt = extractClientIdFromJwt(settings.bearerToken ?? "");
-    if (!fromJwt)
-      errs.push("X-IBM-Client-Id is empty — find it in TCS ENVO Portal → My APIs → Subscriptions → Client ID");
-  }
   if (!settings.username?.trim())
     errs.push("TCS Username is empty");
   if (!settings.password?.trim())
     errs.push("TCS Password is empty");
+  // clientId is now optional — resolveClientId falls back to username automatically
   return errs;
 }
 
@@ -207,9 +218,12 @@ export async function testConnection(
     return { ok: false, steps };
   }
 
-  const explicitClientId = settings.clientId?.trim() || null;
-  const jwtClientId = extractClientIdFromJwt(settings.bearerToken);
-  const resolvedClientId = explicitClientId ?? jwtClientId;
+  const resolvedClientId = resolveClientId(settings);
+  const src = settings.clientId?.trim()
+    ? "entered in X-IBM-Client-Id field"
+    : extractClientIdFromJwt(settings.bearerToken)
+      ? "auto-decoded from JWT payload"
+      : "using username as fallback (TCS ECOM API convention)";
 
   steps.push({
     step: "Config", status: "info",
@@ -217,13 +231,12 @@ export async function testConnection(
   });
 
   if (resolvedClientId) {
-    const src = explicitClientId ? "entered in settings" : "auto-decoded from JWT";
     steps.push({ step: "X-IBM-Client-Id", status: "ok", detail: `✅ clientId=${resolvedClientId} (${src}) — will be sent as X-IBM-Client-Id header` });
   } else {
     steps.push({
       step: "X-IBM-Client-Id",
       status: "fail",
-      detail: "❌ X-IBM-Client-Id is MISSING — IBM API Gateway will reject every request with 401.\n\n✅ ACTION: Go to TCS ENVO Portal → My APIs → Subscriptions → copy your Client ID → paste it in the X-IBM-Client-Id field in Couriers → TCS Settings.",
+      detail: "❌ X-IBM-Client-Id could not be resolved — username is also missing.\n\n✅ ACTION: Enter your TCS username and try again.",
     });
     return { ok: false, steps };
   }

@@ -455,16 +455,16 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
             {/* X-IBM-Client-Id */}
             <div>
-              <Label className="text-xs font-medium">X-IBM-Client-Id <span className="text-red-500">*</span></Label>
+              <Label className="text-xs font-medium">X-IBM-Client-Id <span className="text-slate-400 font-normal">(optional — auto-fills from username)</span></Label>
               <Input
                 value={form.clientId}
                 onChange={f("clientId")}
-                placeholder="e.g. 215627768"
+                placeholder={form.username ? `Default: ${form.username}` : "Leave blank to use your TCS username"}
                 autoComplete="off"
                 className="mt-1 font-mono text-xs"
               />
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                TCS ENVO Portal → My APIs → Subscriptions → <strong>Client ID</strong>. Required by IBM API Gateway for every request.
+                TCS uses your <strong>username</strong> (e.g. LGEC11060) as the X-IBM-Client-Id header. Leave blank to auto-use username, or override with a specific value from TCS ENVO Portal → My APIs → Subscriptions.
               </p>
             </div>
 

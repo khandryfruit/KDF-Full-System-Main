@@ -1,0 +1,153 @@
+<?php
+// Mukammal Code (TCS Booking - Create API) - 401 UNAUTHORIZED FIX
+// Developer ke liye hidayat: Is script ko Shopify order webhook ya backend se trigger karein.
+
+function createTcsBooking($accessToken, $orderData, $realTcsAccountNo, $clientId) {
+    // FIX 1: Agar aapke paas live account hai toh 'ociconnect' (Production) URL use karein. 
+    // Agar testing chal rahi hai toh 'devconnect' (Development) URL use karein.
+    
+    // Development URL (Testing ke liye):
+    // $apiUrl = "https://devconnect.tcscourier.com/ecom/api/booking/create";
+    
+    // Production URL (Live orders ke liye - isey uncomment karein agar live hain):
+    $apiUrl = "https://ociconnect.tcscourier.com/ecom/api/booking/create";
+
+    // TCS API Manual ke mutabiq mukammal JSON Payload
+    $payload = [
+        "accesstoken" => $accessToken, // Yeh fresh hona chahiye
+        "consignmentno" => "",
+        "shipperinfo" => [
+            "tcsaccount" => $realTcsAccountNo, // Asal Account Number, username nahi
+            "shippername" => "Khan Dry Fruit", 
+            "address1" => "Main Store Address", 
+            "address2" => "",
+            "address3" => "",
+            "zip" => "54000",
+            "countrycode" => "PK",
+            "countryname" => "Pakistan",
+            "citycode" => "LHE", 
+            "cityname" => "Lahore",
+            "mobile" => "03000000000" // Store ka mobile number
+        ],
+        "consigneeinfo" => [
+            "consigneecode" => "", 
+            "firstname" => $orderData['customer_first_name'],
+            "middlename" => "",
+            "lastname" => $orderData['customer_last_name'],
+            "address1" => $orderData['shipping_address_1'],
+            "address2" => $orderData['shipping_address_2'],
+            "address3" => "",
+            "zip" => $orderData['shipping_zip'],
+            "countrycode" => "PK",
+            "countryname" => "Pakistan",
+            "citycode" => $orderData['shipping_city_code'],
+            "cityname" => $orderData['shipping_city'],
+            "email" => $orderData['customer_email'],
+            "areacode" => "",
+            "areaname" => "",
+            "blockcode" => "",
+            "blockname" => "",
+            "lat" => "",
+            "lng" => "",
+            "landmark" => "",
+            "mobile" => $orderData['customer_phone'] 
+        ],
+        "vendorinfo" => [
+            "name" => "Khan Dry Fruit",
+            "address1" => "Lahore, Pakistan",
+            "address2" => "",
+            "address3" => "",
+            "citycode" => "LHE",
+            "cityname" => "Lahore",
+            "mobile" => "03000000000"
+        ],
+        "shipmentinfo" => [
+            "costcentercode" => "Test-01", 
+            "referenceno" => $orderData['order_id'], 
+            "contentdesc" => "Premium Dry Fruits", 
+            "servicecode" => "0", 
+            "parametertype" => "Standard",
+            "shipmentdate" => date("d/m/Y H:i:s"),
+            "shippingtype" => "",
+            "currency" => "PKR",
+            "codamount" => $orderData['total_amount'], 
+            "declaredvalue" => null,
+            "insuredvalue" => null,
+            "transactiontype" => "",
+            "dsflag" => "",
+            "carrierslug" => "",
+            "weightinkg" => $orderData['total_weight'], 
+            "pieces" => 1,
+            "fragile" => false,
+            "remarks" => "Handle with care",
+            "skus" => [
+                [
+                    "description" => "Mixed Dry Fruits Pack",
+                    "quantity" => 1,
+                    "weight" => $orderData['total_weight'],
+                    "uom" => "KG", 
+                    "unitprice" => $orderData['total_amount'],
+                    "declaredvalue" => null,
+                    "insuredvalue" => null
+                ]
+            ]
+        ]
+    ];
+
+    $ch = curl_init($apiUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    
+    // FIX 2 & 3: X-IBM-Client-Id header laazmi add karein 401 se bachne ke liye
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Accept: application/json',
+        'X-IBM-Client-Id: ' . $clientId 
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'http_code' => $httpCode,
+        'response' => json_decode($response, true),
+        'raw_response' => $response
+    ];
+}
+
+// --- ISTEMAL KA TARIKA (USAGE EXAMPLE) ---
+
+// 1. Fresh Access Token (Authentication API se naya generate kiya hua)
+$freshAccessToken = "FRESH_GENERATED_ACCESS_TOKEN_HERE"; 
+
+// 2. Client ID (Aapka Username jo TCS ne diya hai, e.g., LGEC11060)
+$clientId = "LGEC11060"; 
+
+// 3. Asal TCS Account Number (Contract wala, e.g., 04011K1)
+$realTcsAccountNo = "ASAL_ACCOUNT_NUMBER_HERE"; 
+
+// 4. Order Details
+$orderData = [
+    'customer_first_name' => 'Ali',
+    'customer_last_name' => 'Ahmad',
+    'shipping_address_1' => 'House 123, Street 4',
+    'shipping_address_2' => 'Johar Town',
+    'shipping_zip' => '54000',
+    'shipping_city_code' => 'LHE',
+    'shipping_city' => 'Lahore',
+    'customer_email' => 'ali@example.com',
+    'customer_phone' => '03001234567',
+    'order_id' => 'KDF-1003',
+    'total_amount' => 5000,
+    'total_weight' => 0.5
+];
+
+// 5. API Call Execute Karein
+$result = createTcsBooking($freshAccessToken, $orderData, $realTcsAccountNo, $clientId);
+
+echo "<pre>";
+print_r($result);
+echo "</pre>";
+?>
