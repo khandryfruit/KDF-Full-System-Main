@@ -2682,7 +2682,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     if (!settings.tcsaccount?.trim())
       validationErrors.push("TCS Account Number is empty — set it in Couriers → TCS Settings → TCS Account Number");
     if (settings.tcsaccount?.trim() === settings.username?.trim())
-      validationErrors.push(`TCS Account Number (${settings.tcsaccount}) looks like it equals Username — they are different fields. Get real account number from TCS contract.`);
+      logger.warn({ tcsaccount: settings.tcsaccount, username: settings.username }, "TCS: Account Number equals Username — they may be different fields. Proceeding anyway.");
     const rawPhone = (address.phone ?? "").replace(/\D/g, "");
     if (rawPhone.length < 10)
       validationErrors.push(`Consignee mobile invalid: "${address.phone ?? "(empty)"}". Need 10–11 digit Pakistani number.`);
