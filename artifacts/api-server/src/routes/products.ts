@@ -128,9 +128,12 @@ router.get("/products/:id", async (req, res) => {
 
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-    // Signal unclean URL to the frontend for client-side canonical redirect
+    // If the requested param differs from the canonical slug, issue a permanent redirect.
+    // This benefits search engines and API clients that call /api/products/:slug directly.
     if (!isCleanSlug(param) || param !== product.slug) {
-      res.setHeader("X-Canonical-Slug", product.slug);
+      const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+      res.redirect(301, `/api/products/${product.slug}${qs}`);
+      return;
     }
 
     res.json(product);

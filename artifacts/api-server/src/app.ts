@@ -7,6 +7,7 @@ import router from "./routes";
 import publicInvoiceRouter from "./routes/public-invoice";
 import { logger } from "./lib/logger";
 import { generateSitemapXml } from "./lib/generateSitemap";
+import { generateSlugFromName } from "./lib/slugify";
 import { db } from "@workspace/db";
 import { seoSettingsTable } from "@workspace/db/schema";
 
@@ -122,31 +123,33 @@ app.get("/robots.txt", async (req: Request, res: Response) => {
  * the proxy's path routing, so this middleware is skipped entirely.
  */
 /**
- * Server-side 301 redirect for unclean product URLs (production only).
+ * Server-side 301 redirect for unclean product URLs.
  * Handles: /products/Cashews%20nuts%20250g  →  /products/cashews-nuts-250g
+ * Works for both KDF NUTS and KDF Plus storefronts (hostname-routed in production,
+ * Vite-served in development so this middleware is effectively a no-op in dev).
  * Must come BEFORE the static file catch-all.
  */
-if (process.env.NODE_ENV === "production") {
-  app.use((req: Request, res: Response, next: () => void) => {
-    const match = req.path.match(/^\/products\/(.+)$/);
-    if (match) {
-      const rawSegment = decodeURIComponent(match[1]);
-      const cleanSlug = rawSegment
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
-      if (cleanSlug && cleanSlug !== rawSegment) {
-        const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-        res.redirect(301, `/products/${cleanSlug}${qs}`);
-        return;
-      }
+app.use((req: Request, res: Response, next: () => void) => {
+  // Match only a single slug segment — no slashes allowed inside the slug.
+  const match = req.path.match(/^\/products\/([^/]+)$/);
+  if (match) {
+    let rawSegment: string;
+    try {
+      rawSegment = decodeURIComponent(match[1]);
+    } catch {
+      // Malformed percent-encoding — pass through and let the route handler deal with it.
+      next();
+      return;
     }
-    next();
-  });
-}
+    const cleanSlug = generateSlugFromName(rawSegment);
+    if (cleanSlug && cleanSlug !== rawSegment) {
+      const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+      res.redirect(301, `/products/${cleanSlug}${qs}`);
+      return;
+    }
+  }
+  next();
+});
 
 if (process.env.NODE_ENV === "production") {
   app.use((req: Request, res: Response) => {
