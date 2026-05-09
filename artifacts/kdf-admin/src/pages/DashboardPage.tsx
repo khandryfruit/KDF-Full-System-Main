@@ -6,7 +6,8 @@ import {
   MessageCircle, Mail, AlertTriangle, CheckCircle, Clock,
   Truck, BarChart2, Zap, RefreshCw, Settings, Eye, EyeOff,
   ArrowRight, ShoppingBag, Star, DollarSign, Target, Send,
-  Activity, Loader2, ChevronRight,
+  Activity, Loader2, ChevronRight, MapPin, Bike, BadgeCheck,
+  PackageX, RotateCcw, Banknote, Navigation,
 } from "lucide-react";
 
 function api(path: string) {
@@ -50,9 +51,181 @@ type DashStats = {
 const WIDGET_DEFAULTS = {
   overview: true, revenue: true, pipeline: true, marketing: true,
   abandoned: true, recentOrders: true, quickActions: true,
+  logistics: true, activityFeed: true,
 };
 
 type WidgetKey = keyof typeof WIDGET_DEFAULTS;
+
+/* ── Rider / Logistics Stats type ── */
+type RiderStats = {
+  stats: {
+    total_lahore: number; total_assigned: number;
+    delivered: number; out_for_delivery: number;
+    assigned: number; picked: number;
+    failed: number; returned: number;
+    active_riders: number; cod_collected: number;
+  };
+  riderLeaderboard: { id: number; name: string; status: string; delivered: number; active: number }[];
+};
+
+/* ── Logistics Widget ── */
+function LogisticsWidget() {
+  const [, nav] = useLocation();
+  const { data, isLoading } = useQuery<RiderStats>({
+    queryKey: ["rider-stats-dash"],
+    queryFn: () => api("/admin/riders/stats"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const s = data?.stats;
+
+  const tiles = [
+    { label: "Active Riders",   value: s?.active_riders   ?? 0, icon: Bike,        color: "text-emerald-600 bg-emerald-50" },
+    { label: "Out for Delivery",value: s?.out_for_delivery ?? 0, icon: Navigation,  color: "text-orange-600  bg-orange-50"  },
+    { label: "Delivered Today", value: s?.delivered        ?? 0, icon: BadgeCheck,  color: "text-green-600   bg-green-50"   },
+    { label: "Failed",          value: s?.failed           ?? 0, icon: PackageX,    color: "text-red-600     bg-red-50"     },
+    { label: "Returned",        value: s?.returned         ?? 0, icon: RotateCcw,   color: "text-violet-600  bg-violet-50"  },
+    { label: "COD to Collect",  value: `PKR ${(s?.cod_collected ?? 0).toLocaleString()}`, icon: Banknote, color: "text-blue-600 bg-blue-50" },
+  ];
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
+            <Truck className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold leading-none">Logistics</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Lahore Rider Operations</p>
+          </div>
+        </div>
+        <button onClick={() => nav("/logistics/lahore")} className="text-xs text-primary flex items-center gap-1 hover:underline">
+          Manage <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
+            {tiles.map(t => (
+              <div key={t.label} className={`rounded-lg p-2.5 text-center ${t.color.split(" ")[1]}`}>
+                <t.icon className={`w-4 h-4 mx-auto mb-1 ${t.color.split(" ")[0]}`} />
+                <p className={`text-lg font-bold leading-none ${t.color.split(" ")[0]}`}>{t.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{t.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {(data?.riderLeaderboard ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Rider Leaderboard</p>
+              <div className="space-y-1">
+                {data!.riderLeaderboard.slice(0, 3).map((r, i) => (
+                  <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40">
+                    <span className={`text-xs font-bold w-4 text-center ${i === 0 ? "text-amber-500" : i === 1 ? "text-gray-400" : "text-orange-400"}`}>
+                      {i + 1}
+                    </span>
+                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <Bike className="w-3 h-3 text-emerald-600" />
+                    </div>
+                    <span className="flex-1 text-xs font-medium truncate">{r.name}</span>
+                    <span className="text-xs text-emerald-600 font-semibold">{r.delivered} delivered</span>
+                    {r.active > 0 && <span className="text-[10px] text-orange-500 bg-orange-50 rounded px-1">{r.active} active</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => nav("/logistics/riders")}
+              className="flex-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg py-1.5 font-medium hover:bg-emerald-100 transition-colors">
+              Riders
+            </button>
+            <button onClick={() => nav("/logistics/confirmations")}
+              className="flex-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg py-1.5 font-medium hover:bg-blue-100 transition-colors">
+              Confirmations
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Activity Feed ── */
+function ActivityFeed({ orders }: { orders: any[] }) {
+  const [, nav] = useLocation();
+  const { data: waData } = useQuery<{ logs: any[] }>({
+    queryKey: ["wa-activity-feed"],
+    queryFn: () => api("/admin/wa/logs?limit=5"),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  type FeedItem = { id: string; type: "order" | "wa" | "system"; label: string; sub: string; time: Date; color: string; icon: React.FC<any> };
+  const items: FeedItem[] = [
+    ...orders.slice(0, 4).map((o: any) => ({
+      id: `o-${o.id}`,
+      type: "order" as const,
+      label: `Order ${o.orderNumber}`,
+      sub: `${(o.shippingAddress as any)?.name ?? "—"} · PKR ${parseFloat(o.total ?? "0").toLocaleString()}`,
+      time: new Date(o.createdAt),
+      color: "bg-blue-100 text-blue-600",
+      icon: ShoppingCart,
+    })),
+    ...(waData?.logs ?? []).slice(0, 3).map((log: any) => ({
+      id: `wa-${log.id}`,
+      type: "wa" as const,
+      label: `WA ${log.status === "received" ? "Received" : "Sent"}`,
+      sub: `${log.phone ?? "—"} · ${String(log.body ?? "").slice(0, 40)}`,
+      time: new Date(log.createdAt ?? Date.now()),
+      color: "bg-[#25D366]/15 text-[#128C7E]",
+      icon: MessageCircle,
+    })),
+  ].sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 8);
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
+            <Activity className="w-4 h-4 text-primary" />
+          </div>
+          <h3 className="font-semibold">Live Activity</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <span className="text-[10px] text-muted-foreground">Live</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
+        ) : items.map(item => (
+          <div key={item.id}
+            onClick={() => item.type === "order" ? nav("/orders") : nav("/wa-chat")}
+            className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group">
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${item.color}`}>
+              <item.icon className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{item.label}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{item.sub}</p>
+            </div>
+            <p className="text-[10px] text-muted-foreground shrink-0 whitespace-nowrap">
+              {item.time.toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "text-amber-600 bg-amber-50 border-amber-200",
@@ -491,20 +664,28 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Logistics + Activity Feed ── */}
+      {(widgets.logistics || widgets.activityFeed) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {widgets.logistics && <LogisticsWidget />}
+          {widgets.activityFeed && <ActivityFeed orders={stats.recentOrders ?? []} />}
+        </div>
+      )}
+
       {/* ── Quick Actions ── */}
       {widgets.quickActions && (
         <div className="bg-card border border-border rounded-xl p-5">
           <h3 className="font-semibold mb-3">Quick Actions</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {[
-              { label: "New Order", href: "/orders", icon: ShoppingCart, color: "bg-blue-100 text-blue-700" },
-              { label: "Products", href: "/products", icon: Package, color: "bg-orange-100 text-orange-700" },
-              { label: "Customers", href: "/customers", icon: Users, color: "bg-violet-100 text-violet-700" },
-              { label: "WA Chat", href: "/wa-chat", icon: MessageCircle, color: "bg-[#25D366]/10 text-[#25D366]" },
-              { label: "Campaigns", href: "/shopify/campaigns", icon: Send, color: "bg-teal-100 text-teal-700" },
-              { label: "Analytics", href: "/analytics", icon: BarChart2, color: "bg-indigo-100 text-indigo-700" },
-              { label: "Abandoned", href: "/abandoned-checkouts", icon: ShoppingBag, color: "bg-amber-100 text-amber-700" },
-              { label: "WhatsApp", href: "/whatsapp", icon: Activity, color: "bg-green-100 text-green-700" },
+              { label: "Orders",     href: "/orders",              icon: ShoppingCart, color: "bg-blue-100   text-blue-700"          },
+              { label: "Products",   href: "/products",            icon: Package,      color: "bg-orange-100 text-orange-700"         },
+              { label: "Customers",  href: "/customers",           icon: Users,        color: "bg-violet-100 text-violet-700"         },
+              { label: "WA Chat",    href: "/wa-chat",             icon: MessageCircle,color: "bg-[#25D366]/10 text-[#25D366]"       },
+              { label: "Logistics",  href: "/logistics/lahore",    icon: Truck,        color: "bg-emerald-100 text-emerald-700"       },
+              { label: "Campaigns",  href: "/shopify/campaigns",   icon: Send,         color: "bg-teal-100   text-teal-700"           },
+              { label: "Analytics",  href: "/analytics",           icon: BarChart2,    color: "bg-indigo-100  text-indigo-700"        },
+              { label: "Abandoned",  href: "/abandoned-checkouts", icon: ShoppingBag,  color: "bg-amber-100   text-amber-700"         },
             ].map(a => (
               <button key={a.href} onClick={() => nav(a.href)}
                 className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-muted transition-colors group">

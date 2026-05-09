@@ -103,47 +103,58 @@ const INVOICE_NAV_ITEMS = [
   { href: "/erp-settings/mobile",        label: "Mobile / App",       icon: Smartphone     },
 ] as const satisfies ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
 
-const NAV_ITEMS = [
-  { href: "/dashboard",          label: "Dashboard",            icon: LayoutDashboard },
-  { href: "/analytics",          label: "Analytics",            icon: BarChart2      },
-  { href: "/orders",             label: "Orders",               icon: ShoppingCart   },
-  { href: "/products",           label: "Products",             icon: Package        },
-  { href: "/categories",         label: "Categories",           icon: Tags           },
-  { href: "/customers",          label: "Customers",            icon: Users          },
-  { href: "/banners",            label: "Image Banners",        icon: ImageIcon      },
-  { href: "/video-banners",      label: "Video Banners",        icon: Video          },
-  { href: "/mobile-reels",       label: "Mobile Reels",         icon: Smartphone     },
-  { href: "/coupons",            label: "Coupons",              icon: Ticket         },
-  { href: "/wallet",             label: "Wallet",               icon: Wallet         },
-  { href: "/loyalty",            label: "Loyalty",              icon: Award          },
-  { href: "/notifications",      label: "Notifications",        icon: Bell           },
-  { href: "/couriers",           label: "Couriers",             icon: Truck          },
-  { href: "/shipping-rules",     label: "Shipping Rules",       icon: Truck          },
-  { href: "/same-day-delivery",  label: "Same Day Delivery",    icon: Zap            },
-  { href: "/payments",           label: "Payments",             icon: CreditCard     },
-  { href: "/import-export",      label: "Import / Export",      icon: FileUp         },
-  { href: "/integrations",       label: "Integrations",         icon: Plug           },
-  { href: "/sync-jobs",          label: "Sync Jobs",            icon: RefreshCw      },
-  { href: "/location",           label: "Location",             icon: MapPin         },
-  { href: "/cities",             label: "Cities",               icon: MapPin         },
-  { href: "/intelligence",       label: "Intelligence",         icon: Brain          },
-  { href: "/social-ai",          label: "Social AI",            icon: Sparkles       },
-  { href: "/bidding",            label: "Auctions / Bidding",   icon: Gavel          },
-  { href: "/restock",            label: "Restock Alerts",       icon: Bell           },
-  { href: "/header-builder",     label: "Header Builder",       icon: LayoutTemplate },
-  { href: "/website-settings",   label: "Website Settings",     icon: Paintbrush     },
-  { href: "/abandoned-checkouts",label: "Abandoned Checkouts",  icon: ShoppingBag    },
-  { href: "/blog",               label: "Blog / Posts",         icon: BookOpen       },
-  { href: "/adsense",            label: "Blog Ads & Comments",  icon: DollarSign     },
-  { href: "/seo",                label: "SEO Settings",         icon: Search         },
-  { href: "/announcements",      label: "Announcements",        icon: Megaphone      },
-  { href: "/footer",             label: "Footer",               icon: LayoutTemplate },
-  { href: "/ai-content",         label: "AI Content",           icon: Sparkles       },
-  { href: "/reviews",            label: "Reviews",              icon: Star           },
-  { href: "/email-settings",     label: "Email Settings",       icon: Mail           },
-  { href: "/image-optimization", label: "Image Optimization",   icon: Zap            },
-  { href: "/failed-orders",      label: "Failed Orders",        icon: AlertTriangle  },
-  { href: "/profile",            label: "My Profile",           icon: User           },
+const COMMERCE_NAV = [
+  { href: "/orders",     label: "Orders",        icon: ShoppingCart },
+  { href: "/products",   label: "Products",      icon: Package      },
+  { href: "/categories", label: "Categories",    icon: Tags         },
+  { href: "/customers",  label: "Customers",     icon: Users        },
+  { href: "/reviews",    label: "Reviews",       icon: Star         },
+  { href: "/analytics",  label: "Analytics",     icon: BarChart2    },
+];
+
+const STORE_NAV = [
+  { href: "/banners",       label: "Image Banners",  icon: ImageIcon   },
+  { href: "/video-banners", label: "Video Banners",  icon: Video       },
+  { href: "/mobile-reels",  label: "Mobile Reels",   icon: Smartphone  },
+  { href: "/coupons",       label: "Coupons",        icon: Ticket      },
+  { href: "/wallet",        label: "Wallet",         icon: Wallet      },
+  { href: "/loyalty",       label: "Loyalty",        icon: Award       },
+  { href: "/announcements", label: "Announcements",  icon: Megaphone   },
+];
+
+const MARKETING_NAV = [
+  { href: "/abandoned-checkouts", label: "Abandoned Carts",    icon: ShoppingBag },
+  { href: "/ai-content",          label: "AI Content",         icon: Sparkles    },
+  { href: "/blog",                label: "Blog / Posts",       icon: BookOpen    },
+  { href: "/adsense",             label: "Blog Ads",           icon: DollarSign  },
+  { href: "/social-ai",           label: "Social AI",          icon: Sparkles    },
+  { href: "/bidding",             label: "Auctions / Bidding", icon: Gavel       },
+  { href: "/restock",             label: "Restock Alerts",     icon: Bell        },
+  { href: "/seo",                 label: "SEO Settings",       icon: Search      },
+];
+
+const OPERATIONS_NAV = [
+  { href: "/couriers",           label: "Couriers",          icon: Truck          },
+  { href: "/shipping-rules",     label: "Shipping Rules",    icon: Truck          },
+  { href: "/same-day-delivery",  label: "Same Day Delivery", icon: Zap            },
+  { href: "/payments",           label: "Payments",          icon: CreditCard     },
+  { href: "/import-export",      label: "Import / Export",   icon: FileUp         },
+  { href: "/failed-orders",      label: "Failed Orders",     icon: AlertTriangle  },
+  { href: "/notifications",      label: "Notifications",     icon: Bell           },
+  { href: "/sync-jobs",          label: "Sync Jobs",         icon: RefreshCw      },
+];
+
+const SETTINGS_NAV = [
+  { href: "/integrations",       label: "Integrations",      icon: Plug           },
+  { href: "/location",           label: "Location",          icon: MapPin         },
+  { href: "/cities",             label: "Cities",            icon: MapPin         },
+  { href: "/website-settings",   label: "Website Settings",  icon: Paintbrush     },
+  { href: "/header-builder",     label: "Header Builder",    icon: LayoutTemplate },
+  { href: "/footer",             label: "Footer",            icon: LayoutTemplate },
+  { href: "/image-optimization", label: "Image Optimize",    icon: Zap            },
+  { href: "/email-settings",     label: "Email Settings",    icon: Mail           },
+  { href: "/intelligence",       label: "Intelligence",      icon: Brain          },
+  { href: "/profile",            label: "My Profile",        icon: User           },
 ];
 
 const WA_CHAT_NAV_ITEMS = [
@@ -392,12 +403,22 @@ interface SidebarContentProps {
   logisticsOpen: boolean;
   branchesOpen: boolean;
   waChatOpen: boolean;
+  commerceOpen: boolean;
+  storeOpen: boolean;
+  marketingOpen: boolean;
+  operationsOpen: boolean;
+  settingsOpen: boolean;
   onToggleInvoice: () => void;
   onToggleShopify: () => void;
   onTogglePg: () => void;
   onToggleLogistics: () => void;
   onToggleBranches: () => void;
   onToggleWaChat: () => void;
+  onToggleCommerce: () => void;
+  onToggleStore: () => void;
+  onToggleMarketing: () => void;
+  onToggleOperations: () => void;
+  onToggleSettings: () => void;
   onNavClick: () => void;
   onLogout: () => void;
   onToggleCollapse?: () => void;
@@ -405,16 +426,24 @@ interface SidebarContentProps {
   isMobile?: boolean;
 }
 function SidebarContent({
-  location, expanded, invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen, waChatOpen,
+  location, expanded,
+  invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen, waChatOpen,
+  commerceOpen, storeOpen, marketingOpen, operationsOpen, settingsOpen,
   onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches, onToggleWaChat,
+  onToggleCommerce, onToggleStore, onToggleMarketing, onToggleOperations, onToggleSettings,
   onNavClick, onLogout, onToggleCollapse, isCollapsed, isMobile,
 }: SidebarContentProps) {
-  const isInvoiceActive   = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
-  const isShopifyActive   = location.startsWith("/shopify");
-  const isPgActive        = location.startsWith("/payment-gateway");
-  const isLogisticsActive = location.startsWith("/logistics");
-  const isBranchesActive  = location.startsWith("/branches");
-  const isWaChatActive    = location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp";
+  const isInvoiceActive    = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
+  const isShopifyActive    = location.startsWith("/shopify");
+  const isPgActive         = location.startsWith("/payment-gateway");
+  const isLogisticsActive  = location.startsWith("/logistics");
+  const isBranchesActive   = location.startsWith("/branches");
+  const isWaChatActive     = location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp";
+  const isCommerceActive   = ["/orders","/products","/categories","/customers","/reviews","/analytics"].some(p => location === p || location.startsWith(p + "/"));
+  const isStoreActive      = ["/banners","/video-banners","/mobile-reels","/coupons","/wallet","/loyalty","/announcements"].some(p => location === p || location.startsWith(p + "/"));
+  const isMarketingActive  = ["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/"));
+  const isOperationsActive = ["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p || location.startsWith(p + "/"));
+  const isSettingsActive   = ["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p || location.startsWith(p + "/"));
   const { waUnread } = useNotifications();
 
   return (
@@ -457,152 +486,93 @@ function SidebarContent({
       </div>
 
       {/* Scrollable nav */}
-      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-0.5 ${expanded ? "px-3" : "px-1.5"}`}>
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-0.5 ${expanded ? "px-2" : "px-1"}`}>
 
-        {/* Invoice & Billing Section — top priority */}
-        <SidebarSection
-          label="Invoice & Billing"
-          icon={Receipt}
-          accentColor="#D97706"
-          activeBg="bg-amber-600/10"
-          activeText="text-amber-700"
-          badgeLetter="₨"
-          isActive={isInvoiceActive}
-          expanded={expanded}
-          open={invoiceOpen}
-          onToggle={onToggleInvoice}
-          items={INVOICE_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
+        {/* ── Dashboard (standalone top link) ── */}
+        <NavItem href="/dashboard" label="Dashboard" icon={LayoutDashboard}
+          isActive={location === "/dashboard" || location === "/"}
+          expanded={expanded} onClick={onNavClick} />
 
-        {/* Divider */}
-        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
-          <div className="h-px bg-sidebar-border" />
-        </div>
+        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
-        {/* WA Chat Section */}
+        {/* ── Shopify (TOP PRIORITY) ── */}
+        <SidebarSection label="Shopify" icon={Store}
+          accentColor="#96BF48" activeBg="bg-green-600/10" activeText="text-green-700" badgeLetter="S"
+          isActive={isShopifyActive} expanded={expanded} open={shopifyOpen} onToggle={onToggleShopify}
+          items={SHOPIFY_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+
+        {/* ── Logistics (TOP PRIORITY) ── */}
+        <SidebarSection label="Logistics" icon={Truck}
+          accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
+          isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
+          items={LOGISTICS_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+
+        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
+
+        {/* ── WA Chat ── */}
         <div className="relative">
-          <SidebarSection
-            label="WA Chat"
-            icon={MessageCircle}
-            accentColor="#25D366"
-            activeBg="bg-[#25D366]/10"
-            activeText="text-[#128C7E]"
-            badgeLetter="W"
-            isActive={isWaChatActive}
-            expanded={expanded}
-            open={waChatOpen}
-            onToggle={onToggleWaChat}
-            items={WA_CHAT_NAV_ITEMS}
-            location={location}
-            onNavClick={onNavClick}
-          />
+          <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
+            accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
+            isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
+            items={WA_CHAT_NAV_ITEMS} location={location} onNavClick={onNavClick} />
           {waUnread > 0 && !waChatOpen && (
-            <span className={`
-              absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full
-              flex items-center justify-center px-0.5 pointer-events-none leading-none
-              ${expanded ? "right-1.5" : "-right-1 -top-0.5"}
-            `}>
+            <span className={`absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pointer-events-none leading-none ${expanded ? "right-1.5" : "-right-1 -top-0.5"}`}>
               {waUnread > 99 ? "99+" : waUnread}
             </span>
           )}
         </div>
 
-        {/* Divider */}
-        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
-          <div className="h-px bg-sidebar-border" />
-        </div>
+        {/* ── Invoice & Billing ── */}
+        <SidebarSection label="Invoice & Billing" icon={Receipt}
+          accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
+          isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
+          items={INVOICE_NAV_ITEMS} location={location} onNavClick={onNavClick} />
 
-        {/* Main nav items */}
-        {NAV_ITEMS.map(item => {
-          const isActive = location === item.href || location.startsWith(item.href + "/");
-          return (
-            <div key={item.href} className="relative">
-              <NavItem
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                isActive={isActive}
-                expanded={expanded}
-                onClick={onNavClick}
-              />
-            </div>
-          );
-        })}
+        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
-        {/* Divider */}
-        <div className={`my-2 transition-all duration-300 ${expanded ? "mx-0" : "mx-auto w-6"}`}>
-          <div className="h-px bg-sidebar-border" />
-        </div>
+        {/* ── Commerce ── */}
+        <SidebarSection label="Commerce" icon={ShoppingCart}
+          accentColor="#3B82F6" activeBg="bg-blue-500/10" activeText="text-blue-700" badgeLetter="C"
+          isActive={isCommerceActive} expanded={expanded} open={commerceOpen} onToggle={onToggleCommerce}
+          items={COMMERCE_NAV} location={location} onNavClick={onNavClick} />
 
-        {/* Payment Gateway Section */}
-        <SidebarSection
-          label="Payment Gateway"
-          icon={Landmark}
-          accentColor="#2563EB"
-          activeBg="bg-blue-600/15"
-          activeText="text-blue-700"
-          badgeLetter="₨"
-          isActive={isPgActive}
-          expanded={expanded}
-          open={pgOpen}
-          onToggle={onTogglePg}
-          items={PG_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
+        {/* ── Store ── */}
+        <SidebarSection label="Store" icon={ImageIcon}
+          accentColor="#8B5CF6" activeBg="bg-violet-500/10" activeText="text-violet-700" badgeLetter="S"
+          isActive={isStoreActive} expanded={expanded} open={storeOpen} onToggle={onToggleStore}
+          items={STORE_NAV} location={location} onNavClick={onNavClick} />
 
-        {/* Shopify Section */}
-        <SidebarSection
-          label="Shopify"
-          icon={Store}
-          accentColor="#96BF48"
-          activeBg="bg-green-600/10"
-          activeText="text-green-700"
-          badgeLetter="S"
-          isActive={isShopifyActive}
-          expanded={expanded}
-          open={shopifyOpen}
-          onToggle={onToggleShopify}
-          items={SHOPIFY_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
+        {/* ── Marketing ── */}
+        <SidebarSection label="Marketing" icon={Megaphone}
+          accentColor="#EC4899" activeBg="bg-pink-500/10" activeText="text-pink-700" badgeLetter="M"
+          isActive={isMarketingActive} expanded={expanded} open={marketingOpen} onToggle={onToggleMarketing}
+          items={MARKETING_NAV} location={location} onNavClick={onNavClick} />
 
-        {/* Logistics Section */}
-        <SidebarSection
-          label="Logistics"
-          icon={Truck}
-          accentColor="#059669"
-          activeBg="bg-emerald-600/10"
-          activeText="text-emerald-700"
-          badgeLetter="L"
-          isActive={isLogisticsActive}
-          expanded={expanded}
-          open={logisticsOpen}
-          onToggle={onToggleLogistics}
-          items={LOGISTICS_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
+        {/* ── Operations ── */}
+        <SidebarSection label="Operations" icon={GitBranch}
+          accentColor="#F59E0B" activeBg="bg-amber-500/10" activeText="text-amber-700" badgeLetter="O"
+          isActive={isOperationsActive} expanded={expanded} open={operationsOpen} onToggle={onToggleOperations}
+          items={OPERATIONS_NAV} location={location} onNavClick={onNavClick} />
 
-        {/* Branches Section */}
-        <SidebarSection
-          label="Branches"
-          icon={Building2}
-          accentColor="#4F46E5"
-          activeBg="bg-indigo-600/10"
-          activeText="text-indigo-700"
-          badgeLetter="B"
-          isActive={isBranchesActive}
-          expanded={expanded}
-          open={branchesOpen}
-          onToggle={onToggleBranches}
-          items={BRANCHES_NAV_ITEMS}
-          location={location}
-          onNavClick={onNavClick}
-        />
+        {/* ── Settings ── */}
+        <SidebarSection label="Settings" icon={Settings}
+          accentColor="#6B7280" activeBg="bg-gray-500/10" activeText="text-gray-700" badgeLetter="⚙"
+          isActive={isSettingsActive} expanded={expanded} open={settingsOpen} onToggle={onToggleSettings}
+          items={SETTINGS_NAV} location={location} onNavClick={onNavClick} />
+
+        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
+
+        {/* ── Branches ── */}
+        <SidebarSection label="Branches" icon={Building2}
+          accentColor="#4F46E5" activeBg="bg-indigo-600/10" activeText="text-indigo-700" badgeLetter="B"
+          isActive={isBranchesActive} expanded={expanded} open={branchesOpen} onToggle={onToggleBranches}
+          items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+
+        {/* ── Payment Gateway ── */}
+        <SidebarSection label="Payment Gateway" icon={Landmark}
+          accentColor="#2563EB" activeBg="bg-blue-600/15" activeText="text-blue-700" badgeLetter="₨"
+          isActive={isPgActive} expanded={expanded} open={pgOpen} onToggle={onTogglePg}
+          items={PG_NAV_ITEMS} location={location} onNavClick={onNavClick} />
 
       </div>
 
@@ -633,13 +603,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered,   setIsHovered]   = useState(false);
-  const [invoiceOpen,   setInvoiceOpen]   = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings"));
-  const [shopifyOpen,   setShopifyOpen]   = useState(() => location.startsWith("/shopify"));
-  const [pgOpen,        setPgOpen]        = useState(() => location.startsWith("/payment-gateway"));
-  const [logisticsOpen, setLogisticsOpen] = useState(() => location.startsWith("/logistics"));
-  const [branchesOpen,  setBranchesOpen]  = useState(() => location.startsWith("/branches"));
-  const [waChatOpen,    setWaChatOpen]    = useState(() => location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp");
-  const [mobileOpen,    setMobileOpen]    = useState(false);
+  const [invoiceOpen,    setInvoiceOpen]    = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings"));
+  const [shopifyOpen,    setShopifyOpen]    = useState(() => location.startsWith("/shopify"));
+  const [pgOpen,         setPgOpen]         = useState(() => location.startsWith("/payment-gateway"));
+  const [logisticsOpen,  setLogisticsOpen]  = useState(() => location.startsWith("/logistics"));
+  const [branchesOpen,   setBranchesOpen]   = useState(() => location.startsWith("/branches"));
+  const [waChatOpen,     setWaChatOpen]     = useState(() => location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp");
+  const [commerceOpen,   setCommerceOpen]   = useState(() => ["/orders","/products","/categories","/customers","/reviews","/analytics"].some(p => location === p || location.startsWith(p + "/")));
+  const [storeOpen,      setStoreOpen]      = useState(() => ["/banners","/video-banners","/mobile-reels","/coupons","/wallet","/loyalty","/announcements"].some(p => location === p));
+  const [marketingOpen,  setMarketingOpen]  = useState(() => ["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/")));
+  const [operationsOpen, setOperationsOpen] = useState(() => ["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p));
+  const [settingsOpen,   setSettingsOpen]   = useState(() => ["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p));
+  const [mobileOpen,     setMobileOpen]     = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sidebarExpanded = !isCollapsed || isHovered;
@@ -648,13 +623,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setIsCollapsed(true);
     setIsHovered(false);
-    /* Keep sub-menus open when navigating within them */
     if (location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings")) setInvoiceOpen(true);
-    if (location.startsWith("/shopify"))          setShopifyOpen(true);
-    if (location.startsWith("/payment-gateway"))  setPgOpen(true);
-    if (location.startsWith("/logistics"))        setLogisticsOpen(true);
-    if (location.startsWith("/branches"))         setBranchesOpen(true);
+    if (location.startsWith("/shopify"))         setShopifyOpen(true);
+    if (location.startsWith("/payment-gateway")) setPgOpen(true);
+    if (location.startsWith("/logistics"))       setLogisticsOpen(true);
+    if (location.startsWith("/branches"))        setBranchesOpen(true);
     if (location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp") setWaChatOpen(true);
+    if (["/orders","/products","/categories","/customers","/reviews","/analytics"].some(p => location === p || location.startsWith(p + "/"))) setCommerceOpen(true);
+    if (["/banners","/video-banners","/mobile-reels","/coupons","/wallet","/loyalty","/announcements"].some(p => location === p)) setStoreOpen(true);
+    if (["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/"))) setMarketingOpen(true);
+    if (["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p)) setOperationsOpen(true);
+    if (["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p)) setSettingsOpen(true);
   }, [location]);
 
   const handleLogout = () => {
@@ -688,18 +667,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const sharedProps = {
     location,
-    invoiceOpen,
-    shopifyOpen,
-    pgOpen,
-    logisticsOpen,
-    branchesOpen,
-    waChatOpen,
+    invoiceOpen, shopifyOpen, pgOpen, logisticsOpen, branchesOpen, waChatOpen,
+    commerceOpen, storeOpen, marketingOpen, operationsOpen, settingsOpen,
     onToggleInvoice:    () => setInvoiceOpen(o => !o),
     onToggleShopify:    () => setShopifyOpen(o => !o),
     onTogglePg:         () => setPgOpen(o => !o),
     onToggleLogistics:  () => setLogisticsOpen(o => !o),
     onToggleBranches:   () => setBranchesOpen(o => !o),
     onToggleWaChat:     () => setWaChatOpen(o => !o),
+    onToggleCommerce:   () => setCommerceOpen(o => !o),
+    onToggleStore:      () => setStoreOpen(o => !o),
+    onToggleMarketing:  () => setMarketingOpen(o => !o),
+    onToggleOperations: () => setOperationsOpen(o => !o),
+    onToggleSettings:   () => setSettingsOpen(o => !o),
     onNavClick:         handleNavClick,
     onLogout:           handleLogout,
   };
