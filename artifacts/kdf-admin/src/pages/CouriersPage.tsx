@@ -116,7 +116,9 @@ const fmt = (n: number) => {
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
   accessToken: string;
-  bearerToken: string; username: string; password: string;
+  bearerToken: string;
+  clientId: string; clientSecret: string;
+  username: string; password: string;
   tcsaccount: string; costcentercode: string; shipperName: string;
   shipperAddress: string; shipperCityCode: string; shipperCity: string;
   shipperPhone: string; sandbox: boolean; defaultWeight: string;
@@ -141,7 +143,8 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   });
   const [form, setForm] = useState<TcsFormState>({
     accessToken: "",
-    bearerToken: "", username: "", password: "", tcsaccount: "", costcentercode: "",
+    bearerToken: "", clientId: "", clientSecret: "",
+    username: "", password: "", tcsaccount: "", costcentercode: "",
     shipperName: "", shipperAddress: "", shipperCityCode: "", shipperCity: "",
     shipperPhone: "", sandbox: false, defaultWeight: "0.5", serviceCode: "O",
     fragile: false, defaultRemarks: "KDF NUTS Order",
@@ -151,7 +154,9 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
     const s = (config?.settings ?? {}) as any;
     setForm({
       accessToken: s.accessToken ?? "",
-      bearerToken: s.bearerToken ?? "", username: s.username ?? "", password: s.password ?? "",
+      bearerToken: s.bearerToken ?? "",
+      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
+      username: s.username ?? "", password: s.password ?? "",
       tcsaccount: s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
       shipperCityCode: s.shipperCityCode ?? "", shipperCity: s.shipperCity ?? "",
@@ -202,10 +207,12 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const f = (k: keyof TcsFormState) => (e: any) => setForm(p => ({ ...p, [k]: e.target.value }));
   const isActive = config?.isActive ?? false;
-  const authMode = (config?.settings as any)?.accessToken ? "Direct Token" :
-    (config?.settings as any)?.bearerToken && (config?.settings as any)?.username ? "Bearer + 2-Step" :
-    (config?.settings as any)?.username ? "Username + Password" :
-    (config?.settings as any)?.bearerToken ? "Bearer Only ⚠️" : "Not set";
+  const _s = (config?.settings ?? {}) as any;
+  const authMode = _s.accessToken ? "Direct Token" :
+    (_s.clientId && _s.username) ? "Full 2-Step (clientId→username)" :
+    (_s.bearerToken && _s.username) ? "Static Bearer + Step 2" :
+    (_s.username && _s.password) ? "Legacy: username as clientId" :
+    _s.bearerToken ? "Bearer Only ⚠️" : "Not set";
 
   return (
     <div className={`border-2 rounded-xl overflow-hidden ${preset.color}`}>
@@ -324,23 +331,48 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* 2-Step Auth */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-amber-800">🔐 Option 2 — 2-Step Auto Login</p>
-            <p className="text-xs text-amber-700">Provide Bearer Token (Step 1 = Client ID + Secret) AND Username + Password (Step 2). Token is auto-refreshed every 50 minutes.</p>
-            <div className="space-y-2">
-              <div><Label className="text-xs">Bearer Token (Client ID / Client Secret result)</Label>
-                <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste TCS bearer token (from Step 1)" className="text-xs mt-1" /></div>
+            <p className="text-xs font-semibold text-amber-800">🔐 Option 2 — Full 2-Step Auto Login (Recommended)</p>
+            <p className="text-xs text-amber-700">TCS uses two separate credential sets. Step 1 gets a Bearer Token; Step 2 exchanges it for the E-COM Access Token. Tokens auto-refresh every 50 min.</p>
+
+            {/* Step 1 */}
+            <div className="bg-white border border-amber-200 rounded p-2 space-y-1.5">
+              <p className="text-xs font-semibold text-amber-900">Step 1 — Authorization API <span className="font-normal text-amber-600">(POST /auth/api/auth)</span></p>
               <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-xs">Username (for Step 2)</Label>
-                  <Input value={form.username} onChange={f("username")} placeholder="TCS username" className="text-xs mt-1" /></div>
-                <div><Label className="text-xs">Password (for Step 2)</Label>
+                <div>
+                  <Label className="text-xs">Client ID</Label>
+                  <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 205659575" className="text-xs mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs">Client Secret</Label>
                   <div className="relative mt-1">
-                    <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="TCS password" className="text-xs pr-8" />
+                    <Input type={showPw ? "text" : "password"} value={form.clientSecret} onChange={f("clientSecret")} placeholder="TCS client secret" className="text-xs pr-8" />
                     <button onClick={() => setShowPw(!showPw)} className="absolute right-2 top-2 text-muted-foreground">
                       {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="bg-white border border-amber-200 rounded p-2 space-y-1.5">
+              <p className="text-xs font-semibold text-amber-900">Step 2 — E-COM Authentication <span className="font-normal text-amber-600">(GET /ecom/api/authentication/token)</span></p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">TCS Username</Label>
+                  <Input value={form.username} onChange={f("username")} placeholder="E-COM username" className="text-xs mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs">TCS Password</Label>
+                  <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="E-COM password" className="text-xs mt-1" />
+                </div>
+              </div>
+            </div>
+
+            {/* Static bearer — optional override */}
+            <div>
+              <Label className="text-xs text-amber-700">Static Bearer Token <span className="font-normal">(optional — skip Step 1 if TCS gave you one directly)</span></Label>
+              <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste bearer token to skip Step 1" className="text-xs mt-1" />
             </div>
           </div>
 
@@ -364,8 +396,8 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             <div><Label className="text-xs">Shipper Phone</Label>
               <Input value={form.shipperPhone} onChange={f("shipperPhone")} className="text-xs mt-1" /></div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Default Weight (KG)</Label>
-                <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.1" min="0.1" className="text-xs mt-1" /></div>
+              <div><Label className="text-xs">Default Weight (KG) <span className="font-normal text-muted-foreground">min 0.5</span></Label>
+                <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.5" min="0.5" className="text-xs mt-1" /></div>
               <div><Label className="text-xs">Default Service</Label>
                 <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
                   {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}

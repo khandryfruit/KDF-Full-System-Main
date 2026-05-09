@@ -124,10 +124,14 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     const settings = (courierRow.settings ?? {}) as Record<string, any>;
 
     log.push(`[${ts()}] TCS settings loaded — mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`);
-    log.push(`[${ts()}] accessToken field set: ${!!(settings.accessToken)}`);
-    log.push(`[${ts()}] bearerToken field set: ${!!(settings.bearerToken)}`);
-    log.push(`[${ts()}] username set: ${!!(settings.username)}`);
-    log.push(`[${ts()}] password set: ${!!(settings.password)}`);
+    log.push(`[${ts()}] ── Credentials ──`);
+    log.push(`[${ts()}] directAccessToken (Mode A): ${settings.accessToken ? `set (len=${String(settings.accessToken).length})` : "not set"}`);
+    log.push(`[${ts()}] staticBearerToken (skip Step 1): ${settings.bearerToken ? `set (len=${String(settings.bearerToken).length})` : "not set"}`);
+    log.push(`[${ts()}] clientId   (Step 1 – Authorization): ${settings.clientId ? `set (${String(settings.clientId).slice(0, 6)}…)` : `not set (fallback: username=${settings.username ? "set" : "not set"})`}`);
+    log.push(`[${ts()}] clientSecret (Step 1 – Authorization): ${settings.clientSecret ? "set" : `not set (fallback: password=${settings.password ? "set" : "not set"})`}`);
+    log.push(`[${ts()}] username (Step 2 – E-COM Auth): ${settings.username ? "set" : "not set"}`);
+    log.push(`[${ts()}] password (Step 2 – E-COM Auth): ${settings.password ? "set" : "not set"}`);
+    log.push(`[${ts()}] ── Account Info ──`);
     log.push(`[${ts()}] tcsaccount: ${settings.tcsaccount || "(empty)"}`);
     log.push(`[${ts()}] shipperCityCode: ${settings.shipperCityCode || "(empty — fallback: LHE)"}`);
     log.push(`[${ts()}] shipperName: ${settings.shipperName || "(empty — fallback: KDF Nuts)"}`);
@@ -191,6 +195,68 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
   } catch (err: any) {
     log.push(`[${ts()}] ❌ Fatal: ${err.message}`);
     res.status(500).json({ ok: false, log, error: err.message });
+  }
+});
+
+/* ─── Admin: TCS – CN / Label Print ─────────────────── */
+router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { consignmentNumber, shipmentIds } = req.body ?? {};
+    if (!consignmentNumber && (!Array.isArray(shipmentIds) || shipmentIds.length === 0)) {
+      res.status(400).json({ error: "Provide consignmentNumber (single) or shipmentIds[] (batch)" }); return;
+    }
+
+    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, "tcs")).limit(1);
+    if (!courierRow) { res.status(404).json({ error: "TCS courier not configured" }); return; }
+    const settings = (courierRow.settings ?? {}) as Record<string, any>;
+    const { accessToken } = await resolveTcsTokens(settings);
+    const baseUrl = settings.sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
+
+    /* Build consignment list — single or batch */
+    const cnList: string[] = consignmentNumber
+      ? [String(consignmentNumber)]
+      : shipmentIds.map((id: any) => String(id));
+
+    const printResp = await fetch(`${baseUrl}/ecom/api/print/label`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ consignmentno: cnList }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const contentType = printResp.headers.get("content-type") ?? "";
+    if (contentType.includes("application/pdf") || contentType.includes("octet-stream")) {
+      const buf = await printResp.arrayBuffer();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="tcs-label-${cnList[0]}.pdf"`);
+      res.send(Buffer.from(buf));
+      return;
+    }
+
+    /* JSON or HTML response — pass through */
+    const text = await printResp.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+    if (!printResp.ok) {
+      res.status(502).json({ error: data.message ?? `TCS print API returned HTTP ${printResp.status}`, raw: data });
+      return;
+    }
+
+    /* Some TCS responses return base64 PDF in a JSON envelope */
+    const b64 = data.result?.labelData ?? data.labelData ?? data.data ?? null;
+    if (typeof b64 === "string" && b64.length > 100) {
+      const buf = Buffer.from(b64, "base64");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="tcs-label-${cnList[0]}.pdf"`);
+      res.send(buf);
+      return;
+    }
+
+    res.json({ ok: printResp.ok, consignments: cnList, data });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message ?? "TCS print label failed" });
   }
 });
 
@@ -1611,26 +1677,46 @@ function getTrackingUrl(slug: string, trackingId: string): string {
 const tcsTokenCache = new Map<string, { bearerToken: string; accessToken: string; expiresAt: number }>();
 
 /**
- * Unified TCS token resolver — supports 3 auth modes:
- *  1. Direct Access Token  (settings.accessToken)  → skip all steps
- *  2. Static Bearer + username/password             → step 1 skipped, step 2 runs
- *  3. Username/password only                        → full 2-step auth
- * Results are cached for 50 minutes to avoid hammering the auth endpoint.
+ * Unified TCS token resolver — official 2-step flow per TCS API docs:
+ *
+ *  Step 1 — Authorization API  (POST /auth/api/auth):
+ *    Body: { clientid, clientsecret }  →  returns bearerToken
+ *
+ *  Step 2 — E-COM Authentication (GET /ecom/api/authentication/token):
+ *    Header: Authorization: Bearer {step1BearerToken}
+ *    Body: { username, password }  →  returns accessToken
+ *
+ * Mode overrides:
+ *  A. directAccessToken set → skip both steps, use as accessToken
+ *  B. staticBearerToken set → skip Step 1, run Step 2 with stored bearer
+ *
+ * Results cached 50 minutes to avoid hammering the auth endpoint.
  */
 async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   bearerToken: string; accessToken: string; mode: string;
 }> {
-  /* Mode 1: user pasted a direct access token — skip all auth */
+  /* ── Mode A: Direct Access Token pasted — skip all auth ── */
   const directToken = (settings.accessToken ?? "").trim();
   if (directToken) {
     return { bearerToken: directToken, accessToken: directToken, mode: "direct" };
   }
 
-  /* Cache key is unique per account × environment × credential fingerprint */
+  /* ── Step 1 credentials: clientId + clientSecret ── */
+  const clientId     = (settings.clientId     || settings.username || "").trim();
+  const clientSecret = (settings.clientSecret || settings.password || "").trim();
+
+  /* ── Step 2 credentials: TCS E-COM username + password ── */
+  const username = (settings.username || "").trim();
+  const password = (settings.password || "").trim();
+
+  /* ── Mode B: Static bearer token provided (skip Step 1) ── */
+  const staticBearerToken = (settings.bearerToken ?? "").trim();
+
+  /* Cache key */
   const cacheKey = [
     settings.tcsaccount || "anon",
     settings.sandbox ? "sb" : "live",
-    settings.bearerToken ? settings.bearerToken.slice(-8) : (settings.username ?? ""),
+    staticBearerToken ? staticBearerToken.slice(-8) : (clientId.slice(-6) ?? ""),
   ].join(":");
 
   const cached = tcsTokenCache.get(cacheKey);
@@ -1638,52 +1724,52 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
     return { ...cached, mode: "cached" };
   }
 
-  const username = settings.username || "";
-  const password = settings.password || "";
-  const staticBearerToken: string | undefined = settings.bearerToken;
-
-  if (!staticBearerToken && (!username || !password)) {
+  /* Validate we have enough to proceed */
+  if (!staticBearerToken && !clientId) {
     throw new Error(
-      "TCS not configured. Please do one of:\n" +
-      "① Paste a Direct Access Token (from TCS portal) in the 'Direct Access Token' field\n" +
-      "② Add your TCS username + password (for auto 2-step login)\n" +
-      "③ Add a Static Bearer Token + username + password"
+      "TCS not configured. Choose one option:\n" +
+      "① Paste a Direct Access Token (from TCS E-COM portal) in the 'Direct Access Token' field\n" +
+      "② Enter Client ID + Client Secret (for Step 1) AND Username + Password (for Step 2)\n" +
+      "③ Paste a Static Bearer Token + enter Username + Password (Step 2 only)"
     );
   }
 
-  /* Step 1: get bearer token */
+  /* ── Step 1: get Bearer Token from Authorization API ── */
   let bearerToken: string;
   if (staticBearerToken) {
     bearerToken = staticBearerToken;
   } else {
-    const result = await getTcsBearerToken(username, password, settings.sandbox);
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        "TCS Step 1 requires Client ID and Client Secret. " +
+        "Add them in TCS settings, or paste a Static Bearer Token / Direct Access Token instead."
+      );
+    }
+    const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
     bearerToken = result.bearerToken;
   }
 
-  /* Step 2: get access token — requires username + password */
-  let accessToken: string;
-  if (username && password) {
-    try {
-      accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
-    } catch (step2Err: any) {
-      const detail = step2Err.message ?? "unknown";
-      throw new Error(
-        `TCS Step 2 auth failed (${detail}). ` +
-        "The Bearer Token ≠ Access Token — they are different. Please:\n" +
-        "① Add the correct TCS username + password in Courier settings, OR\n" +
-        "② Paste your Direct Access Token from the TCS portal into the 'Direct Access Token' field."
-      );
-    }
-  } else {
-    /* Static bearer only — cannot proceed: bearer ≠ access token */
+  /* ── Step 2: get E-COM Access Token ── */
+  if (!username || !password) {
     throw new Error(
-      "TCS booking requires an Access Token, but only a Bearer Token is configured. " +
-      "Please add your TCS username + password in Courier settings, OR " +
-      "paste the Direct Access Token from your TCS portal."
+      "TCS Step 2 requires TCS Username and Password. " +
+      "Add them in Courier Settings → TCS → Username / Password fields. " +
+      "Or paste a Direct Access Token to skip both steps."
     );
   }
 
-  /* Cache for 50 minutes */
+  let accessToken: string;
+  try {
+    accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
+  } catch (step2Err: any) {
+    throw new Error(
+      `TCS Step 2 (E-COM Authentication) failed: ${step2Err.message ?? "unknown error"}. ` +
+      "The Step 1 Bearer Token ≠ Step 2 Access Token — they are separate tokens. " +
+      "Check that TCS Username + Password are correct, OR paste a Direct Access Token instead."
+    );
+  }
+
+  /* Cache 50 minutes */
   tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + 50 * 60 * 1000 });
   return { bearerToken, accessToken, mode: "fresh" };
 }
@@ -1712,15 +1798,37 @@ function mapShipmentStatusToOrder(shipmentStatus: string): any {
 
 async function getTcsBearerToken(clientId: string, clientSecret: string, sandbox?: boolean): Promise<{ bearerToken: string }> {
   const baseUrl = sandbox ? TCS_SANDBOX_URL : TCS_PROD_URL;
-  const resp = await fetch(`${baseUrl}/auth/api/auth`, {
-    method: "GET",
-    headers: { "clientId": clientId, "clientSecret": clientSecret },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!resp.ok) throw new Error(`TCS Authorization API returned HTTP ${resp.status}`);
-  const data = await resp.json() as Record<string, any>;
-  if (!data.bearerToken) throw new Error(`TCS Authorization failed: ${data.message ?? JSON.stringify(data)}`);
-  return { bearerToken: data.bearerToken };
+  const url = `${baseUrl}/auth/api/auth`;
+  const body = JSON.stringify({ clientid: clientId, clientsecret: clientSecret });
+
+  /* Try POST first (more widely supported), then GET with body */
+  for (const method of ["POST", "GET"] as const) {
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch { continue; }
+
+    let data: Record<string, any> = {};
+    try { data = await resp.json(); } catch { continue; }
+
+    /* Official docs: response is { result: { accessToken, expiry }, status, code } */
+    const token =
+      data.result?.accessToken ?? data.result?.accesstoken ??
+      data.accessToken ?? data.accesstoken ??
+      data.bearerToken ?? data.token;
+
+    if (resp.ok && token) return { bearerToken: token };
+    if (!resp.ok) {
+      const msg = data.message ?? data.error ?? `HTTP ${resp.status}`;
+      throw new Error(`TCS Authorization (Step 1) failed [${resp.status}]: ${msg}`);
+    }
+  }
+  throw new Error("TCS Authorization API — no token returned. Check clientId and clientSecret.");
 }
 
 async function getTcsAccessToken(bearerToken: string, username: string, password: string, sandbox?: boolean): Promise<string> {
@@ -1845,7 +1953,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         transactiontype: "",
         dsflag: "",
         carrierslug: "",
-        weightinkg: Math.max(0.1, parseFloat(Number(order.weight || settings.defaultWeight || 0.5).toFixed(2))),
+        weightinkg: Math.max(0.5, parseFloat(Number(order.weight || settings.defaultWeight || 0.5).toFixed(2))),
         pieces: parseInt(String(order.pieces ?? 1), 10),
         fragile: order.fragile ?? settings.fragile ?? false,
         remarks: order.specialInstructions || settings.defaultRemarks || order.notes || "",
@@ -1853,7 +1961,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           ? items.map((item: any) => ({
               description: item.name ?? "Product",
               quantity: parseInt(String(item.qty ?? 1), 10),
-              weight: Math.max(0.1, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
+              weight: Math.max(0.5, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
               uom: "KG",
               unitprice: Number(item.price ?? 0),
               declaredvalue: settings.declaredValue > 0 ? Number(settings.declaredValue) : null,
@@ -1862,7 +1970,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           : [{
               description: "KDF Nuts Products",
               quantity: 1,
-              weight: Math.max(0.1, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
+              weight: Math.max(0.5, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
               uom: "KG",
               unitprice: codAmount,
               declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
@@ -1873,7 +1981,8 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
 
     const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
+      /* Per TCS docs: booking APIs use the Step 2 accessToken (E-COM token), not the Step 1 bearerToken */
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000),
     });

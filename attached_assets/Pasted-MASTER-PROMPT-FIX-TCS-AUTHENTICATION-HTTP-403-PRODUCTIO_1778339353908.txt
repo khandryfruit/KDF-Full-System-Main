@@ -1,0 +1,250 @@
+MASTER PROMPT — FIX TCS AUTHENTICATION (HTTP 403) + PRODUCTION DOMAIN ISSUE
+
+Current Error:
+“TCS Step 2 auth failed — HTTP 403”
+“The Bearer Token ≠ Access Token”
+
+This means our current TCS authentication flow is incorrect and not following the official TCS documentation properly.
+
+Please rebuild the TCS authentication system according to the uploaded official API documentation.  ￼
+
+==================================================
+IMPORTANT — TCS USES 2 DIFFERENT TOKENS
+
+Developer must understand:
+
+STEP 1:
+Authorization API generates:
+✔ Bearer Token
+
+STEP 2:
+E-COM Authentication API generates:
+✔ Access Token
+
+These are NOT the same token.
+
+Current system is mixing them incorrectly.
+
+==================================================
+OFFICIAL FLOW (MUST FOLLOW)
+
+STEP 1 — AUTHORIZATION API
+
+Production:
+https://ociconnect.tcscourier.com/auth/api/auth
+
+Sandbox:
+https://devconnect.tcscourier.com/auth/api/auth
+
+Payload:
+{
+“clientid”: “CLIENT_ID”,
+“clientsecret”: “CLIENT_SECRET”
+}
+
+Response:
+✔ accessToken
+✔ expiry
+
+This token is the MAIN Bearer Token.  ￼
+
+==================================================
+STEP 2 — ECOM AUTHENTICATION
+
+Production:
+https://ociconnect.tcscourier.com/ecom/api/authentication/token
+
+Sandbox:
+https://devconnect.tcscourier.com/ecom/api/authentication/token
+
+Payload:
+{
+“username”: “TCS_USERNAME”,
+“password”: “TCS_PASSWORD”
+}
+
+Headers:
+Authorization: Bearer {STEP1_TOKEN}
+
+Response:
+✔ accesstoken
+✔ expiry
+
+This generates the SECONDARY Access Token used for booking APIs.  ￼
+
+==================================================
+CURRENT BUG
+
+Current system incorrectly:
+
+❌ using Bearer token as Access token
+❌ replacing Step 2 token
+❌ failing on production domain
+❌ causing HTTP 403 errors
+
+==================================================
+REQUIRED FIXES
+
+1. Separate Both Tokens Properly
+
+Need separate storage:
+✔ bearer_token
+✔ access_token
+
+Never overwrite one with another.
+
+==================================================
+2. Proper Token Manager
+
+Need professional token manager:
+
+✔ auto refresh
+✔ token expiry check
+✔ retry handling
+✔ cache tokens
+✔ refresh before expiry
+
+==================================================
+3. Production Domain Fix
+
+Current issue:
+Works on Replit preview
+Fails on:
+admin.khanbabadryfruits.com
+
+Need to debug:
+
+✔ CORS
+✔ HTTPS
+✔ environment variables
+✔ proxy headers
+✔ deployment configs
+✔ secure cookies
+✔ API firewall blocking
+✔ origin restrictions
+
+==================================================
+4. API Debugging Panel
+
+Need detailed debug logs:
+
+✔ Request URL
+✔ Request headers
+✔ Response headers
+✔ HTTP status
+✔ token type used
+✔ environment used
+✔ payload sent
+✔ traceid
+
+Show exact error:
+✔ 401
+✔ 403
+✔ invalid token
+✔ expired token
+✔ bad credentials
+
+==================================================
+5. Courier Settings UI
+
+Need proper fields:
+
+✔ Client ID
+✔ Client Secret
+✔ TCS Username
+✔ TCS Password
+✔ Bearer Token
+✔ Access Token
+✔ Environment Selector
+
+* Sandbox
+* Production
+
+Also add:
+✔ “Test Connection” button
+✔ “Refresh Token” button
+✔ “Validate Credentials” button
+
+==================================================
+6. Booking API Fix
+
+Before booking:
+
+✔ validate tokens
+✔ validate account
+✔ validate environment
+✔ validate shipment payload
+
+Current booking errors must stop.
+
+==================================================
+7. Weight Validation Fix
+
+Current error:
+shipmentinfo.weightinkg
+“Insert valid Decimal number”
+
+Fix:
+✔ always send decimal
+✔ example:
+0.5
+1.0
+2.5
+
+Never send:
+❌ null
+❌ empty
+❌ string
+❌ integer without decimal conversion
+
+Official docs require:
+weightinkg = Number(double)
+Minimum = 0.5  ￼
+
+==================================================
+8. Tracking Integration
+
+Tracking URL:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Need:
+✔ Track Shipment button
+✔ Open tracking page
+✔ Auto tracking sync
+
+==================================================
+9. CN Print / Shipping Label
+
+Implement official:
+CN Print API
+
+Production:
+https://ociconnect.tcscourier.com/ecom/api/print/label
+
+Need:
+✔ Print Label
+✔ Download PDF
+✔ Thermal label support
+✔ A4 label support
+
+==================================================
+10. IMPORTANT
+
+Please rebuild TCS integration professionally according to official documentation only.
+
+No fake logic.
+No temporary workaround.
+No mixed tokens.
+
+Need:
+✔ stable production-safe system
+✔ scalable architecture
+✔ real booking
+✔ real tracking
+✔ real labels
+✔ real authentication
+✔ Shopify integration
+✔ WhatsApp integration
+
+Official TCS Documentation:
+https://ociconnect.tcscourier.com/ecom/index.html
