@@ -1705,93 +1705,84 @@ function jwtIsValid(token: string): boolean {
 /**
  * Unified TCS token resolver.
  *
- * Mode priority (first match wins):
- *  A. settings.accessToken          → use directly as E-COM token, skip all auth
- *  B. TCS_STATIC_BEARER_TOKEN env   → use DIRECTLY as E-COM token (skip both steps)
- *                                     production only, expiry checked
- *  C. settings.bearerToken          → use directly as E-COM token, skip all auth
- *  D. clientId + clientSecret       → full 2-step (Step 1 → bearer → Step 2 → accessToken)
- *  E. username + password only      → Step 2 only (no Step 1 bearer)
+ * TCS uses a dual-auth pattern for booking/cancel APIs:
+ *   Authorization: Bearer {bearerToken}   ← Step 1 JWT (application-level)
+ *   body.accesstoken: {accessToken}        ← Step 2 E-COM token (user/session)
  *
- * WHY Mode B is "direct" (not a Step 1 bearer):
- *   TCS long-lived JWTs are issued as final E-COM access tokens. Feeding them
- *   into Step 2 as a bearer produces a DIFFERENT token tied to a different account,
- *   causing "Invalid Bearer token. Mismatch configuration" at the booking API.
- *   Using the env JWT directly (like Mode A) avoids this mismatch entirely.
+ * Mode priority (first match wins):
+ *  A. settings.accessToken          → direct: use as both bearer + accessToken (skip all)
+ *  B. TCS_STATIC_BEARER_TOKEN env   → Step 1 bearer; run Step 2 with username+password
+ *                                     production only, expiry checked
+ *  C. settings.bearerToken          → Step 1 bearer; run Step 2 with username+password
+ *  D. clientId + clientSecret       → Step 1 via /auth/api/auth; run Step 2
+ *  E. username + password only      → Step 2 only (bearerToken = "")
  */
 async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   bearerToken: string; accessToken: string; mode: string;
 }> {
-  /* ── Mode A: Direct Access Token saved in settings ── */
+  /* ── Mode A: Direct Access Token — use as-is for both bearer and body ── */
   const directToken = (settings.accessToken ?? "").trim();
   if (directToken) {
     return { bearerToken: directToken, accessToken: directToken, mode: "direct" };
   }
 
-  /* ── Mode B: TCS_STATIC_BEARER_TOKEN env var ──
-     Treat as a final E-COM access token (same as Mode A), NOT as a Step 1 bearer.
-     This prevents the "Mismatch configuration" error caused by Step 2 returning
-     a different token tied to a different clientid than the env JWT's account.
-     Guard: production only + expiry check. */
-  const envToken = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
-  if (envToken && !settings.sandbox && jwtIsValid(envToken)) {
-    const cacheKey = `env:${settings.tcsaccount || "anon"}:${envToken.slice(-8)}`;
-    const cached = tcsTokenCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return { ...cached, mode: "cached:env" };
-    /* Cache for 60 min (env tokens are long-lived; no Step 2 needed) */
-    tcsTokenCache.set(cacheKey, { bearerToken: envToken, accessToken: envToken, expiresAt: Date.now() + 60 * 60 * 1000 });
-    return { bearerToken: envToken, accessToken: envToken, mode: "env-direct" };
-  }
+  /* ── Step 2 credentials (always needed for Modes B-E) ── */
+  const username = (settings.username ?? "").trim();
+  const password = (settings.password ?? "").trim();
 
-  /* ── Mode C: Static bearer token saved in settings ── */
+  /* ── Resolve Step 1 bearer ── */
+  const envToken    = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
   const staticToken = (settings.bearerToken ?? "").trim();
-  if (staticToken) {
-    const cacheKey = `static:${settings.tcsaccount || "anon"}:${staticToken.slice(-8)}`;
-    const cached = tcsTokenCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return { ...cached, mode: "cached:static" };
-    tcsTokenCache.set(cacheKey, { bearerToken: staticToken, accessToken: staticToken, expiresAt: Date.now() + 60 * 60 * 1000 });
-    return { bearerToken: staticToken, accessToken: staticToken, mode: "static-direct" };
+  const clientId    = (settings.clientId ?? "").trim();
+  const clientSecret= (settings.clientSecret ?? "").trim();
+
+  let bearerToken = "";
+  let mode: string;
+
+  if (envToken && !settings.sandbox && jwtIsValid(envToken)) {
+    /* Mode B — env JWT as Step 1 bearer (production only, expiry checked) */
+    bearerToken = envToken;
+    mode = "env-bearer";
+  } else if (staticToken) {
+    /* Mode C — manually saved bearer in settings as Step 1 */
+    bearerToken = staticToken;
+    mode = "static-bearer";
+  } else if (clientId && clientSecret) {
+    /* Mode D — fetch Step 1 bearer via /auth/api/auth */
+    const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
+    bearerToken = result.bearerToken;
+    mode = "full-2step";
+  } else {
+    /* Mode E — no Step 1; Step 2 will POST username+password directly */
+    bearerToken = "";
+    mode = "direct-creds";
   }
 
-  /* ── Modes D / E: need username + password for Step 2 ── */
-  const clientId     = (settings.clientId ?? "").trim();
-  const clientSecret = (settings.clientSecret ?? "").trim();
-  const username     = (settings.username ?? "").trim();
-  const password     = (settings.password ?? "").trim();
+  /* ── Cache key ── */
+  const cacheKey = [
+    settings.tcsaccount || "anon",
+    settings.sandbox ? "sb" : "live",
+    bearerToken ? `b:${bearerToken.slice(-8)}` : `u:${username.slice(-6)}`,
+  ].join(":");
 
+  const cached = tcsTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return { ...cached, mode: `cached:${mode}` };
+
+  /* ── Step 2: get E-COM access token ── */
   if (!username || !password) {
     throw new Error(
       "TCS not configured. Add Username + Password in Courier Settings → TCS, then Save."
     );
   }
 
-  const cacheKey = [
-    settings.tcsaccount || "anon",
-    settings.sandbox ? "sb" : "live",
-    clientId ? `c:${clientId.slice(-6)}` : `u:${username.slice(-6)}`,
-  ].join(":");
-
-  const cached = tcsTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return { ...cached, mode: "cached" };
-
-  let bearerToken = "";
-  let mode: string;
-
-  if (clientId && clientSecret) {
-    /* Mode D — full 2-step */
-    const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
-    bearerToken = result.bearerToken;
-    mode = "full-2step";
-  } else {
-    /* Mode E — Step 2 only (no Step 1 bearer) */
-    mode = "direct-creds";
-  }
-
   let accessToken: string;
   try {
     accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
   } catch (err: any) {
-    throw new Error(`TCS authentication failed: ${err.message ?? "unknown error"}. Check Username + Password in Courier Settings.`);
+    throw new Error(
+      `TCS Step 2 auth failed (mode=${mode}): ${err.message ?? "unknown error"}. ` +
+      "Check Username + Password in Courier Settings."
+    );
   }
 
   tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + 50 * 60 * 1000 });
@@ -2018,8 +2009,11 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
 
     const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
       method: "POST",
-      /* Per TCS docs: booking APIs use the Step 2 accessToken (E-COM token), not the Step 1 bearerToken */
-      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      /* TCS dual-auth pattern (same as /booking/cancel):
+         Authorization header = Step 1 bearerToken (application JWT)
+         body.accesstoken     = Step 2 accessToken  (user/session E-COM token)
+         Using accessToken in the header causes "Mismatch configuration". */
+      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000),
     });
@@ -2044,7 +2038,9 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         : legacyError.length > 0
           ? Object.values(legacyError[0]).join(", ")
           : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 300)}`;
-      throw new Error(`TCS: ${errMsg}`);
+      /* Include tcsaccount in error for easier diagnosis */
+      const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY — check TCS settings]";
+      throw new Error(`TCS: ${errMsg}${acct}`);
     }
 
     const trackingId =
