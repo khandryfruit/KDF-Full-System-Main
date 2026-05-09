@@ -377,6 +377,19 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
   }
 });
 
+/* ─── GET /admin/couriers/tcs/cities — fetch TCS serviceable city list ─── */
+router.get("/admin/couriers/tcs/cities", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const s = await getTcsSettings();
+    if (!s) { res.status(404).json({ ok: false, error: "TCS not configured" }); return; }
+    const cities = await Tcs.fetchCities(s);
+    res.json({ ok: true, count: cities.length, cities });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /* ─── POST /admin/couriers/tcs/print-label ─── */
 router.post("/admin/couriers/tcs/print-label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {

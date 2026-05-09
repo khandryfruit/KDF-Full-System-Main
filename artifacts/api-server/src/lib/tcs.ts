@@ -136,11 +136,11 @@ const CITY_CODES: Record<string, string> = {
   gujranwala: "GJW", sialkot: "SKT", hyderabad: "HYD", sargodha: "SGD",
   bahawalpur: "BWP", abbottabad: "ABT", jhelum: "JHM", gujrat: "GRT",
   sahiwal: "SWL", sheikhupura: "SKP", sukkur: "SUK", larkana: "LRK",
-  nawabshah: "NWS", mingora: "MNG", mardan: "MRD", swabi: "SWB",
+  nawabshah: "NWS", mingora: "MNG", mardan: "MRD", swabi: "SWB", nawabshahr: "NWS",
   "rahim yar khan": "RYK", "rahimyar khan": "RYK", "r.y.khan": "RYK",
   "d.g. khan": "DGK", "dera ghazi khan": "DGK", "dg khan": "DGK",
   "d.i. khan": "DIK", "dera ismail khan": "DIK", "di khan": "DIK",
-  "mirpur khas": "MPK", "nawabshah": "NWS", "khairpur": "KHP",
+  "mirpur khas": "MPK", "khairpur": "KHP",
   "tando adam": "TDA", "tando allahyar": "TAY", "sanghar": "SNH",
   "badin": "BDN", "thatta": "THA", "jacobabad": "JAC", "shikarpur": "SKP2",
   "muzaffarabad": "MZD", "mirpur": "MPR", "bhimber": "BHM",
@@ -390,7 +390,11 @@ export async function createBooking(
   const rawPhone = (address.phone ?? "").replace(/\D/g, "");
   if (rawPhone.length < 10) errs.push(`Phone invalid: "${address.phone}" — need 10–11 digit Pakistani number`);
   const destCityRaw = (address.city ?? "").trim();
-  if (!destCityRaw) errs.push("Consignee city is empty");
+  /* Detect placeholder values that Shopify stores when customer never picks a city */
+  const CITY_PLACEHOLDERS = ["select city", "selectcity", "choose city", "city", "n/a", "na", "-", "--", "none"];
+  if (!destCityRaw || CITY_PLACEHOLDERS.includes(destCityRaw.toLowerCase())) {
+    errs.push(`Consignee city is "${destCityRaw || "empty"}" — the customer did not select a real city. Please edit the Shopify order's shipping address and set a valid Pakistani city before booking.`);
+  }
   const destCity = normalizeCity(destCityRaw);
   const addr = [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").trim();
   if (!addr) errs.push("Consignee address is empty");
@@ -520,7 +524,13 @@ export async function createBooking(
   }
 
   const t0 = Date.now();
-  logger.info({ bookUrl, username: settings.username, orderRef, weightKg, codAmount, originCity, destCity }, "TCS ECOM — booking");
+  const destCityCode = cityCode(destCity);
+  logger.info(
+    { bookUrl, username: settings.username, orderRef, weightKg, codAmount,
+      originCity, originCityCode: cityCode(originCity),
+      destCityRaw, destCity, destCityCode },
+    "TCS ECOM — booking"
+  );
 
   let result: Awaited<ReturnType<typeof httpReq>>;
   try {
@@ -598,4 +608,34 @@ export async function trackShipment(
       url:  getTcsTrackingUrl(trackingId),
     },
   };
+}
+
+/* ─── fetchCities — GET /ecom/api/cities ─────────────────────────────────
+ * Returns TCS's full serviceable city list: [{ cityID, cityName, cityCode, area }]
+ * Requires bearer token + X-IBM-Client-Id; accesstoken optional.
+ */
+export async function fetchCities(settings: TcsSettings): Promise<Array<{ cityID: string; cityName: string; cityCode: string; area: string }>> {
+  const baseUrl  = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
+  const url      = `${baseUrl}/cities`;
+  const clientId = resolveClientId(settings);
+
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+  };
+  if (clientId)                      headers["X-IBM-Client-Id"]  = clientId;
+  if (settings.bearerToken?.trim()) headers["Authorization"]     = `Bearer ${settings.bearerToken.trim()}`;
+
+  /* Try with accesstoken first; if we can get one */
+  let accessToken = "";
+  try { accessToken = await getEcomAccessToken(settings); } catch { /* ignore */ }
+  const finalUrl = accessToken ? `${url}?accesstoken=${encodeURIComponent(accessToken)}` : url;
+
+  const result = await httpReq(finalUrl, "GET", headers, null, 20000);
+  if (result.status !== 200) {
+    throw new Error(`TCS /cities HTTP ${result.status}: ${result.text.slice(0, 200)}`);
+  }
+  /* Response: { city: [...] } or directly an array */
+  const body = result.data;
+  const list  = Array.isArray(body) ? body : (Array.isArray(body?.city) ? body.city : []);
+  return list as Array<{ cityID: string; cityName: string; cityCode: string; area: string }>;
 }
