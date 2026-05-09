@@ -227,11 +227,11 @@ export async function getEcomAccessToken(settings: TcsSettings): Promise<string>
 
   const { status, text, data } = result;
   const durationMs = Date.now() - t0;
-  const token = data?.accessToken ?? data?.AccessToken ?? data?.access_token ?? data?.token;
+  const rawToken = data?.accesstoken ?? data?.accessToken ?? data?.AccessToken ?? data?.access_token ?? data?.token;
 
-  pushLog({ ts: new Date().toISOString(), step: "auth", url: authUrl, method: "GET", httpStatus: status, resBody: text.slice(0, 300), durationMs, success: !!token });
+  pushLog({ ts: new Date().toISOString(), step: "auth", url: authUrl, method: "GET", httpStatus: status, resBody: text.slice(0, 300), durationMs, success: !!rawToken });
 
-  if (!token) {
+  if (!rawToken) {
     const msg = data?.Message ?? data?.message ?? data?.error ?? text.slice(0, 200);
     if (status === 401 || status === 403) {
       throw new Error(`TCS auth rejected (HTTP ${status}) — check username/password.\nTCS response: ${msg}`);
@@ -239,8 +239,10 @@ export async function getEcomAccessToken(settings: TcsSettings): Promise<string>
     throw new Error(`TCS auth failed (HTTP ${status}) — no accessToken in response.\nRaw: ${text.slice(0, 300)}`);
   }
 
+  /* TCS returns the token URL-encoded (contains %2F %2B %3D etc) — decode it */
+  const token = decodeURIComponent(String(rawToken));
   logger.info({ durationMs, username: settings.username }, "TCS ECOM — auth token OK");
-  return String(token);
+  return token;
 }
 
 /* ─── Test Connection ────────────────────────────────────────────────────── */
