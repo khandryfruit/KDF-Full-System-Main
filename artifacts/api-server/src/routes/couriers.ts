@@ -1700,24 +1700,24 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         transactiontype: "",
         dsflag: "",
         carrierslug: "",
-        weightinkg: order.weight ?? settings.defaultWeight ?? 0.5,
-        pieces: order.pieces ?? 1,
+        weightinkg: parseFloat(Number(order.weight ?? settings.defaultWeight ?? 0.5).toFixed(2)),
+        pieces: parseInt(String(order.pieces ?? 1), 10),
         fragile: order.fragile ?? settings.fragile ?? false,
         remarks: order.specialInstructions || settings.defaultRemarks || order.notes || "",
         skus: items.length > 0
           ? items.map((item: any) => ({
               description: item.name ?? "Product",
-              quantity: item.qty ?? 1,
-              weight: settings.defaultWeight ?? 0.5,
+              quantity: parseInt(String(item.qty ?? 1), 10),
+              weight: parseFloat(Number(settings.defaultWeight ?? 0.5).toFixed(2)),
               uom: "KG",
               unitprice: Number(item.price ?? 0),
-              declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
-              insuredvalue: settings.insuredValue > 0 ? settings.insuredValue : null,
+              declaredvalue: settings.declaredValue > 0 ? Number(settings.declaredValue) : null,
+              insuredvalue: settings.insuredValue > 0 ? Number(settings.insuredValue) : null,
             }))
           : [{
               description: "KDF Nuts Products",
               quantity: 1,
-              weight: settings.defaultWeight ?? 0.5,
+              weight: parseFloat(Number(settings.defaultWeight ?? 0.5).toFixed(2)),
               uom: "KG",
               unitprice: codAmount,
               declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
@@ -1745,10 +1745,15 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       (bookResp.ok && !bookData.message?.toUpperCase().startsWith("FAIL"));
 
     if (!isSuccess) {
-      const errMsg = Array.isArray(bookData.error) && bookData.error[0]
-        ? Object.values(bookData.error[0]).join(", ")
-        : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 200)}`;
-      throw new Error(`TCS Booking failed: ${errMsg}`);
+      /* TCS returns errorList (not error) — extract field + message pairs */
+      const errorList: any[] = Array.isArray(bookData.errorList) ? bookData.errorList : [];
+      const legacyError: any[] = Array.isArray(bookData.error) ? bookData.error : [];
+      const errMsg = errorList.length > 0
+        ? errorList.map((e: any) => `${e.key ?? ""}: ${e.errormessage ?? e.message ?? JSON.stringify(e)}`).join(" | ")
+        : legacyError.length > 0
+          ? Object.values(legacyError[0]).join(", ")
+          : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 300)}`;
+      throw new Error(`TCS: ${errMsg}`);
     }
 
     const trackingId =
