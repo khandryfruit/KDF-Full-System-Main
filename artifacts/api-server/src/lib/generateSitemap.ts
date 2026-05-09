@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { productsTable, categoriesTable, blogPostsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { generateSlugFromName } from "./slugify";
 
 export async function generateSitemapXml(domain: string): Promise<string> {
   const base = domain.replace(/\/$/, "");
@@ -41,9 +42,9 @@ export async function generateSitemapXml(domain: string): Promise<string> {
     const lastmod = product.updatedAt
       ? new Date(product.updatedAt).toISOString().split("T")[0]
       : today;
-    const identifier = product.slug || String(product.id);
+    const cleanSlug = generateSlugFromName(product.slug) || String(product.id);
     urls.push(
-      `  <url><loc>${base}/products/${identifier}</loc><changefreq>weekly</changefreq><priority>0.8</priority><lastmod>${lastmod}</lastmod></url>`
+      `  <url><loc>${base}/products/${cleanSlug}</loc><changefreq>weekly</changefreq><priority>0.8</priority><lastmod>${lastmod}</lastmod></url>`
     );
   }
 
