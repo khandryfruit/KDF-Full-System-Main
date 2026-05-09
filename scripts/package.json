@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "backfill-slugs": "tsx ./src/slug-backfill.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "catalog:",
+    "jsonwebtoken": "^9.0.3",
     "tsx": "catalog:"
   }
 }

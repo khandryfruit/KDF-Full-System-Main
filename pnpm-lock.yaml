@@ -1438,9 +1438,15 @@ importers:
 
   scripts:
     devDependencies:
+      '@types/jsonwebtoken':
+        specifier: ^9.0.10
+        version: 9.0.10
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
+      jsonwebtoken:
+        specifier: ^9.0.3
+        version: 9.0.3
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
