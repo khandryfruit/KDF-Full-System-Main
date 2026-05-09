@@ -43,22 +43,31 @@ export function LocationModal({ onClose }: { onClose: () => void }) {
     navigator.geolocation?.getCurrentPosition(
       async (pos) => {
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`
-          );
-          const data = await res.json();
-          const city =
-            data.address?.city ||
-            data.address?.town ||
-            data.address?.county ||
-            data.address?.state_district ||
-            "";
-          if (city) setSelectedCity(city);
-        } catch {}
+          const res = await fetch(`${BASE}api/geocode`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const city = data.city || "";
+            if (city) setSelectedCity(city);
+          } else {
+            /* fallback: Nominatim */
+            const nom = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`
+            );
+            const d = await nom.json();
+            const city = d.address?.city || d.address?.town || d.address?.county || d.address?.state_district || "";
+            if (city) setSelectedCity(city);
+          }
+        } catch {
+          /* silently ignore */
+        }
         setDetecting(false);
       },
       () => setDetecting(false),
-      { timeout: 8000 }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   };
 

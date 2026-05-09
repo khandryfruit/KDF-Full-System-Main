@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MapPin, Eye, EyeOff, Loader2, Plus, Trash2,
   ToggleLeft, ToggleRight, Navigation, CheckCircle2,
   XCircle, AlertTriangle, Map, Server, Globe, FlaskConical,
+  Wifi, WifiOff, Crosshair, Bug, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,254 @@ async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { ...opts, headers: { ...authHeaders(), ...(opts?.headers ?? {}) } });
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? `HTTP ${res.status}`); }
   return res.json();
+}
+
+/* ─── Location Debug Panel ────────────────────────────── */
+type PermStatus = "unknown" | "granted" | "denied" | "prompt" | "checking";
+type GeoResult = { lat: number; lng: number; accuracy: number } | null;
+type GeoError = { code: number; message: string } | null;
+type GeocodeResult = { city?: string; area?: string; street?: string; province?: string; postalCode?: string; fullAddress?: string } | null;
+
+function LocationDebugPanel({ adminToken }: { adminToken: string }) {
+  const [permStatus, setPermStatus] = useState<PermStatus>("unknown");
+  const [coords, setCoords] = useState<GeoResult>(null);
+  const [geoError, setGeoError] = useState<GeoError>(null);
+  const [isGettingGPS, setIsGettingGPS] = useState(false);
+  const [geocodeResult, setGeocodeResult] = useState<GeocodeResult>(null);
+  const [geocodeRaw, setGeocodeRaw] = useState<string>("");
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
+
+  const checkPermission = useCallback(async () => {
+    setPermStatus("checking");
+    try {
+      if (!navigator.permissions) { setPermStatus("unknown"); return; }
+      const result = await navigator.permissions.query({ name: "geolocation" });
+      setPermStatus(result.state as PermStatus);
+      result.onchange = () => setPermStatus(result.state as PermStatus);
+    } catch { setPermStatus("unknown"); }
+  }, []);
+
+  useEffect(() => { checkPermission(); }, [checkPermission]);
+
+  const getGPS = () => {
+    if (!navigator.geolocation) {
+      setGeoError({ code: 0, message: "Geolocation API not available in this browser." });
+      return;
+    }
+    setIsGettingGPS(true); setGeoError(null); setCoords(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) });
+        setPermStatus("granted"); setIsGettingGPS(false);
+      },
+      (err) => {
+        const msgs: Record<number, string> = {
+          1: "Permission denied — user blocked location access",
+          2: "Position unavailable — GPS signal lost",
+          3: "Timeout — GPS took too long to respond",
+        };
+        setGeoError({ code: err.code, message: msgs[err.code] ?? err.message });
+        if (err.code === 1) setPermStatus("denied");
+        setIsGettingGPS(false);
+      },
+      { timeout: 12000, enableHighAccuracy: true }
+    );
+  };
+
+  const runGeocode = async () => {
+    if (!coords) return;
+    setIsGeocoding(true); setGeocodeError(null); setGeocodeResult(null); setGeocodeRaw("");
+    try {
+      const res = await fetch("/api/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ lat: coords.lat, lng: coords.lng }),
+      });
+      const data = await res.json();
+      setGeocodeRaw(JSON.stringify(data, null, 2));
+      if (res.ok) setGeocodeResult(data);
+      else setGeocodeError(data.error ?? `HTTP ${res.status}`);
+    } catch (e: any) { setGeocodeError(e.message); }
+    finally { setIsGeocoding(false); }
+  };
+
+  const permColor: Record<PermStatus, string> = {
+    unknown:  "text-gray-500",
+    checking: "text-yellow-500",
+    granted:  "text-green-600",
+    denied:   "text-red-500",
+    prompt:   "text-blue-500",
+  };
+  const permLabel: Record<PermStatus, string> = {
+    unknown:  "Unknown",
+    checking: "Checking…",
+    granted:  "Granted ✓",
+    denied:   "Denied ✗",
+    prompt:   "Will prompt",
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+        <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
+          <Bug className="w-5 h-5 text-purple-600" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-base">Location Debug Console</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Test GPS, permission status, and geocoding API live</p>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+        {/* Permission status row */}
+        <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/40 border border-border">
+          <div className="flex items-center gap-2 flex-1">
+            {permStatus === "granted" ? <Wifi className="w-4 h-4 text-green-600" /> : <WifiOff className="w-4 h-4 text-gray-400" />}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Browser GPS Permission</p>
+              <p className={`text-sm font-bold ${permColor[permStatus]}`}>{permLabel[permStatus]}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={checkPermission} className="h-8 gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Recheck
+          </Button>
+        </div>
+
+        {/* GPS Test */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Step 1 — Get GPS Coordinates</p>
+            <Button size="sm" onClick={getGPS} disabled={isGettingGPS} className="h-8 gap-1.5" style={{ backgroundColor: "#5FA800" }}>
+              {isGettingGPS ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Getting GPS…</> : <><Crosshair className="w-3.5 h-3.5" /> Test GPS</>}
+            </Button>
+          </div>
+
+          {geoError && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-red-700">GPS Error (Code {geoError.code})</p>
+                <p className="text-xs text-red-600 mt-0.5">{geoError.message}</p>
+                {geoError.code === 1 && (
+                  <p className="text-xs text-red-500 mt-1 italic">
+                    Fix: Click the lock icon in browser address bar → Allow location
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {coords && (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2.5 space-y-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                <p className="text-xs font-bold text-green-700">Coordinates Obtained</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Latitude", value: coords.lat.toFixed(6) },
+                  { label: "Longitude", value: coords.lng.toFixed(6) },
+                  { label: "Accuracy", value: `±${coords.accuracy}m` },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-white rounded-md px-2 py-1.5 border border-green-100">
+                    <p className="text-[10px] text-green-600 font-medium">{label}</p>
+                    <p className="text-sm font-bold text-green-800 font-mono">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Geocoding Test */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Step 2 — Test Reverse Geocoding</p>
+            <Button size="sm" onClick={runGeocode} disabled={!coords || isGeocoding} variant="outline" className="h-8 gap-1.5">
+              {isGeocoding ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Geocoding…</> : <><Navigation className="w-3.5 h-3.5" /> Test Geocode</>}
+            </Button>
+          </div>
+
+          {!coords && (
+            <p className="text-xs text-muted-foreground italic">Get GPS coordinates first (Step 1)</p>
+          )}
+
+          {geocodeError && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-red-700">Geocoding Failed</p>
+                <p className="text-xs text-red-600 mt-0.5">{geocodeError}</p>
+                <p className="text-xs text-red-500 mt-1 italic">Check: Server API key, Geocoding API enabled, billing active</p>
+              </div>
+            </div>
+          )}
+
+          {geocodeResult && (
+            <div className="space-y-2">
+              <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                  <p className="text-xs font-bold text-green-700">Geocoding Successful</p>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { label: "Full Address", value: geocodeResult.fullAddress },
+                    { label: "City", value: geocodeResult.city },
+                    { label: "Area", value: geocodeResult.area },
+                    { label: "Street", value: geocodeResult.street },
+                    { label: "Province", value: geocodeResult.province },
+                    { label: "Postal Code", value: geocodeResult.postalCode },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-white rounded-md px-2 py-1.5 border border-green-100">
+                      <p className="text-[10px] text-green-600 font-medium">{label}</p>
+                      <p className="text-xs font-semibold text-green-800">{value || <span className="text-gray-400 font-normal italic">not available</span>}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowRaw(!showRaw)}
+                className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+              >
+                {showRaw ? "Hide" : "Show"} raw JSON response
+              </button>
+              {showRaw && (
+                <pre className="bg-muted/60 rounded-lg p-3 text-[11px] font-mono overflow-x-auto border border-border max-h-48">
+                  {geocodeRaw}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Common error reference */}
+        <details className="group">
+          <summary className="text-xs font-semibold cursor-pointer text-muted-foreground hover:text-foreground select-none list-none flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" /> Common Errors Reference
+          </summary>
+          <div className="mt-2 space-y-1.5">
+            {[
+              { icon: "❌", error: "REQUEST_DENIED", fix: "API key wrong or Geocoding API not enabled in GCP console" },
+              { icon: "❌", error: "OVER_DAILY_LIMIT", fix: "Quota exceeded — billing not enabled or limit reached" },
+              { icon: "❌", error: "INVALID_REQUEST", fix: "Lat/lng outside valid range or missing parameters" },
+              { icon: "❌", error: "GPS Code 1", fix: "User denied permission — ask them to allow in browser settings" },
+              { icon: "❌", error: "GPS Code 3", fix: "GPS timeout — try outdoors or check enableHighAccuracy setting" },
+            ].map(({ icon, error, fix }) => (
+              <div key={error} className="flex gap-2 text-xs bg-muted/40 rounded-lg px-3 py-2">
+                <span>{icon}</span>
+                <span className="font-mono font-bold text-red-600 min-w-[120px]">{error}</span>
+                <span className="text-muted-foreground">{fix}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      </div>
+    </div>
+  );
 }
 
 export default function LocationSettingsPage() {

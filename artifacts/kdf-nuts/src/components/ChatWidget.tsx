@@ -816,7 +816,7 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess, apiBase }
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
         const { latitude: lat, longitude: lng } = pos.coords;
-        const res = await fetch(`${apiBase}locations/geocode`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lng }) });
+        const res = await fetch(`${apiBase}geocode`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lng }) });
         const d = await res.json();
         if (d.fullAddress) set("address", d.fullAddress);
         if (d.city) {

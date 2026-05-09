@@ -447,28 +447,41 @@ export default function CheckoutPage() {
                           </div>
                         )}
                         <FormControl>
-                          <div className="relative">
-                            {/* Hidden input for Google Maps autocomplete — doesn't interfere with typing */}
-                            <input
-                              ref={addressInputRef}
-                              type="text"
-                              className="sr-only"
-                              tabIndex={-1}
-                              aria-hidden="true"
-                              readOnly
-                            />
-                            <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground pointer-events-none" />
-                            <textarea
-                              ref={addressTextareaRef}
-                              placeholder="House no., street, area, landmark…"
-                              data-testid="input-address"
-                              rows={2}
-                              className="w-full border border-input rounded-md pl-9 pr-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 resize-none"
-                              value={field.value}
-                              onChange={(e) => field.onChange(e.target.value)}
-                              onBlur={field.onBlur}
-                              name={field.name}
-                            />
+                          <div className="space-y-1.5">
+                            {/* Google Maps Places Autocomplete search input (only shown when Maps loaded) */}
+                            {mapsLoaded && (
+                              <div className="relative">
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-400 pointer-events-none" />
+                                <input
+                                  ref={addressInputRef}
+                                  type="text"
+                                  placeholder="Search address with Google Maps…"
+                                  autoComplete="off"
+                                  className="w-full border border-blue-200 bg-blue-50/40 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 placeholder:text-blue-300"
+                                />
+                              </div>
+                            )}
+                            {/* Manual address textarea — always visible */}
+                            <div className="relative">
+                              {!mapsLoaded && <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground pointer-events-none" />}
+                              <textarea
+                                ref={addressTextareaRef}
+                                placeholder="House no., street, area, landmark…"
+                                data-testid="input-address"
+                                rows={2}
+                                className={`w-full border border-input rounded-md ${!mapsLoaded ? "pl-9" : "pl-3"} pr-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 resize-none`}
+                                value={field.value}
+                                onChange={(e) => field.onChange(e.target.value)}
+                                onBlur={field.onBlur}
+                                name={field.name}
+                              />
+                            </div>
+                            {mapsLoaded && (
+                              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+                                Type in the blue field to search via Google Maps, or type directly below
+                              </p>
+                            )}
                           </div>
                         </FormControl>
                         <FormMessage />

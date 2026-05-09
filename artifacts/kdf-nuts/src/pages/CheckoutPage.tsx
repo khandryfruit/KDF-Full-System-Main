@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, MapPin, Check, Truck, CreditCard, Banknote, ChevronDown, ChevronUp, Loader2, AlertCircle, Building2, Navigation, Sparkles } from 'lucide-react';
+import { ChevronLeft, MapPin, Check, CheckCircle2, Truck, CreditCard, Banknote, ChevronDown, ChevronUp, Loader2, AlertCircle, Building2, Navigation, Sparkles } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '../context/CartContext';
@@ -182,25 +182,40 @@ export function CheckoutPage() {
     }
   }, [address.city, sameDayData?.city, deliveryType]);
 
+  const [detectError, setDetectError] = useState<string | null>(null);
+  const [detectSuccess, setDetectSuccess] = useState(false);
+
   const handleDetectLocation = async () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setDetectError("GPS not supported on this device.");
+      return;
+    }
     setIsDetecting(true);
+    setDetectError(null);
+    setDetectSuccess(false);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true })
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
       );
       const { latitude, longitude } = pos.coords;
       const geo = await reverseGeocode(latitude, longitude);
       if (geo) {
+        const detectedAddress = [geo.area, geo.street].filter(Boolean).join(", ") || geo.fullAddress || "";
         setAddress(prev => ({
           ...prev,
-          ...(geo.city                            && { city:       geo.city }),
-          ...(geo.street && !prev.address.trim()  && { address:    geo.street }),
-          ...(geo.postalCode && !prev.postalCode.trim() && { postalCode: geo.postalCode }),
+          ...(geo.city      && { city:       geo.city }),
+          ...(detectedAddress && { address:   detectedAddress }),
+          ...(geo.postalCode && { postalCode: geo.postalCode }),
         }));
+        setDetectSuccess(true);
+        setTimeout(() => setDetectSuccess(false), 4000);
+      } else {
+        setDetectError("Could not fetch address. Please enter manually.");
       }
-    } catch {
-      /* silently fail — user can pick city manually */
+    } catch (err: any) {
+      if (err?.code === 1) setDetectError("Location permission denied. Please allow access in browser settings.");
+      else if (err?.code === 3) setDetectError("GPS timed out. Please try again or enter address manually.");
+      else setDetectError("Could not detect location. Try again.");
     } finally {
       setIsDetecting(false);
     }
@@ -368,10 +383,47 @@ export function CheckoutPage() {
 
         {/* Shipping Address */}
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center gap-2.5 px-4 pt-4 pb-2">
-            <MapPin className="w-4 h-4 text-[#5FA800]" />
-            <h2 className="text-sm font-bold text-gray-900">Shipping Address</h2>
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <div className="flex items-center gap-2.5">
+              <MapPin className="w-4 h-4 text-[#5FA800]" />
+              <h2 className="text-sm font-bold text-gray-900">Shipping Address</h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleDetectLocation}
+              disabled={isDetecting}
+              className="group relative flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed overflow-hidden"
+              style={{ borderColor: "#5FA800", color: "#3d7200", background: isDetecting ? "linear-gradient(135deg,#e8f5d4,#d4edaa)" : "linear-gradient(135deg,#f0fae3,#e4f5c4)" }}
+            >
+              {isDetecting ? (
+                <><Loader2 className="w-3 h-3 animate-spin" /> Detecting…</>
+              ) : (
+                <>
+                  <span className="relative flex items-center justify-center">
+                    <Navigation className="w-3 h-3 relative z-10" style={{ color: "#5FA800" }} />
+                    <span className="absolute inline-flex w-3 h-3 rounded-full opacity-40 animate-ping" style={{ backgroundColor: "#5FA800" }} />
+                  </span>
+                  Auto-detect Address
+                </>
+              )}
+            </button>
           </div>
+
+          {/* Detect status */}
+          {detectError && (
+            <div className="mx-4 mb-1 flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2 text-xs text-red-600">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="flex-1">{detectError}</span>
+              <button onClick={() => setDetectError(null)} className="text-red-400 hover:text-red-600 underline text-[10px]">Dismiss</button>
+            </div>
+          )}
+          {detectSuccess && (
+            <div className="mx-4 mb-1 flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-3 py-2 text-xs text-green-700 font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-green-600" />
+              <span>Address auto-filled from GPS!</span>
+            </div>
+          )}
+
           <div className="px-4 pb-4 space-y-2.5">
             {[
               { id: 'name', label: 'Full Name *', type: 'text', placeholder: 'Ali Hassan' },
@@ -389,16 +441,6 @@ export function CheckoutPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-gray-500 font-medium">City *</label>
-                <button
-                  type="button"
-                  onClick={handleDetectLocation}
-                  disabled={isDetecting}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-[#5FA800] disabled:opacity-50 active:scale-95 transition-transform"
-                >
-                  {isDetecting
-                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Detecting…</>
-                    : <><Navigation className="w-3 h-3" /> Detect</>}
-                </button>
               </div>
               <input
                 list="checkout-cities-list"
