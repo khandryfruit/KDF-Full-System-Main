@@ -2007,19 +2007,52 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       },
     };
 
-    const bookResp = await fetch(`${baseUrl}/ecom/api/booking/create`, {
-      method: "POST",
-      /* TCS dual-auth pattern (same as /booking/cancel):
-         Authorization header = Step 1 bearerToken (application JWT)
-         body.accesstoken     = Step 2 accessToken  (user/session E-COM token)
-         Using accessToken in the header causes "Mismatch configuration". */
-      headers: { "Authorization": `Bearer ${bearerToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15000),
-    });
-    const bookText = await bookResp.text();
+    /* ── Attempt booking with Step 1 bearer in Authorization header ──
+       TCS dual-auth: Authorization = Step 1 JWT (application), body.accesstoken = Step 2 token.
+       If Step 1 JWT is from a different TCS client account than tcsaccount, TCS returns
+       "Mismatch configuration". In that case we retry WITHOUT the Authorization header. */
+    const doBooking = async (authBearer: string | null) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (authBearer) headers["Authorization"] = `Bearer ${authBearer}`;
+      return fetch(`${baseUrl}/ecom/api/booking/create`, {
+        method: "POST", headers,
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000),
+      });
+    };
+
+    let bookResp = await doBooking(bearerToken || null);
+    let bookText = await bookResp.text();
     let bookData: Record<string, any> = {};
     try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
+
+    /* Auto-retry WITHOUT Authorization header if mismatch — env JWT may be for a different TCS account */
+    const isMismatch = (bookData.message ?? "").toLowerCase().includes("mismatch") ||
+                       (bookData.message ?? "").toLowerCase().includes("invalid bearer");
+    if (!bookResp.ok || isMismatch) {
+      if (bearerToken && isMismatch) {
+        /* Retry: username+password Step 2 token in body only, no Authorization header */
+        const retryResp = await doBooking(null);
+        const retryText = await retryResp.text();
+        let retryData: Record<string, any> = {};
+        try { retryData = JSON.parse(retryText); } catch { retryData = { raw: retryText }; }
+        const retryOk =
+          retryData.message?.toUpperCase() === "SUCCESS" ||
+          retryData.code === "200" || retryData.code === 200 ||
+          retryData.status === true || retryData.status === "SUCCESS" ||
+          (retryResp.ok && !retryData.message?.toUpperCase().startsWith("FAIL"));
+        if (retryOk) {
+          /* Retry succeeded — bust the cache so future calls use no-header mode */
+          tcsTokenCache.clear();
+          bookData = retryData; bookText = retryText; bookResp = retryResp;
+        } else {
+          /* Both attempts failed — report combined error */
+          const retryMsg = retryData.message ?? retryText.slice(0, 200);
+          const acct = settings.tcsaccount || "(empty)";
+          throw new Error(`TCS booking failed. Original: "${bookData.message ?? bookText.slice(0, 150)}" | Retry (no-auth): "${retryMsg}" [tcsaccount: ${acct}]`);
+        }
+      }
+    }
 
     const isSuccess =
       bookData.message?.toUpperCase() === "SUCCESS" ||
@@ -2030,7 +2063,6 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
       (bookResp.ok && !bookData.message?.toUpperCase().startsWith("FAIL"));
 
     if (!isSuccess) {
-      /* TCS returns errorList (not error) — extract field + message pairs */
       const errorList: any[] = Array.isArray(bookData.errorList) ? bookData.errorList : [];
       const legacyError: any[] = Array.isArray(bookData.error) ? bookData.error : [];
       const errMsg = errorList.length > 0
@@ -2038,8 +2070,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         : legacyError.length > 0
           ? Object.values(legacyError[0]).join(", ")
           : bookData.message ?? `TCS booking error (HTTP ${bookResp.status}): ${bookText.slice(0, 300)}`;
-      /* Include tcsaccount in error for easier diagnosis */
-      const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY — check TCS settings]";
+      const acct = settings.tcsaccount ? ` [tcsaccount: ${settings.tcsaccount}]` : " [tcsaccount: EMPTY]";
       throw new Error(`TCS: ${errMsg}${acct}`);
     }
 
