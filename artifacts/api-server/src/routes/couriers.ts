@@ -126,9 +126,22 @@ router.post("/admin/couriers/tcs/debug-auth", adminMiddleware as any, async (req
     log.push(`[${ts()}] TCS settings loaded — mode: ${settings.sandbox ? "SANDBOX" : "PRODUCTION"}`);
     log.push(`[${ts()}] ── Credentials ──`);
     log.push(`[${ts()}] directAccessToken (Mode A): ${settings.accessToken ? `set (len=${String(settings.accessToken).length})` : "not set"}`);
-    log.push(`[${ts()}] staticBearerToken (skip Step 1): ${settings.bearerToken ? `set (len=${String(settings.bearerToken).length})` : "not set"}`);
-    log.push(`[${ts()}] clientId   (Step 1 – Authorization): ${settings.clientId ? `set (${String(settings.clientId).slice(0, 6)}…)` : `not set (fallback: username=${settings.username ? "set" : "not set"})`}`);
-    log.push(`[${ts()}] clientSecret (Step 1 – Authorization): ${settings.clientSecret ? "set" : `not set (fallback: password=${settings.password ? "set" : "not set"})`}`);
+
+    /* TCS_STATIC_BEARER_TOKEN env var status */
+    const _envBearer = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+    if (_envBearer) {
+      const _exp = jwtExpiresAt(_envBearer);
+      const _valid = jwtIsValid(_envBearer);
+      const _daysLeft = _exp ? Math.floor((_exp - Date.now()) / 86400000) : null;
+      const _sandbox = settings.sandbox ?? false;
+      log.push(`[${ts()}] TCS_STATIC_BEARER_TOKEN (Mode B — env): SET ✅ len=${_envBearer.length} · expiry=${_daysLeft != null ? `${_daysLeft} days` : "unknown"} · valid=${_valid ? "yes" : "EXPIRED ⚠️"} · sandbox=${_sandbox} · will-use=${!_sandbox && _valid ? "YES ✅" : "NO (sandbox or expired)"}`);
+    } else {
+      log.push(`[${ts()}] TCS_STATIC_BEARER_TOKEN (Mode B — env): not set`);
+    }
+
+    log.push(`[${ts()}] staticBearerToken (Mode C — settings): ${settings.bearerToken ? `set (len=${String(settings.bearerToken).length})` : "not set"}`);
+    log.push(`[${ts()}] clientId   (Mode D — Step 1): ${settings.clientId ? `set (${String(settings.clientId).slice(0, 6)}…)` : "not set"}`);
+    log.push(`[${ts()}] clientSecret (Mode D — Step 1): ${settings.clientSecret ? "set" : "not set"}`);
     log.push(`[${ts()}] username (Step 2 – E-COM Auth): ${settings.username ? "set" : "not set"}`);
     log.push(`[${ts()}] password (Step 2 – E-COM Auth): ${settings.password ? "set" : "not set"}`);
     log.push(`[${ts()}] ── Account Info ──`);
@@ -1676,21 +1689,41 @@ function getTrackingUrl(slug: string, trackingId: string): string {
 
 const tcsTokenCache = new Map<string, { bearerToken: string; accessToken: string; expiresAt: number }>();
 
+/* ── JWT expiry checker (no external lib needed) ── */
+function jwtExpiresAt(token: string): number | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch { return null; }
+}
+
+function jwtIsValid(token: string): boolean {
+  const exp = jwtExpiresAt(token);
+  if (!exp) return true; /* no exp claim — assume valid */
+  const msLeft = exp - Date.now();
+  return msLeft > 5 * 60 * 1000; /* must have >5 min remaining */
+}
+
 /**
  * Unified TCS token resolver — official 2-step flow per TCS API docs:
  *
  *  Step 1 — Authorization API  (POST /auth/api/auth):
- *    Body: { clientid, clientsecret }  →  returns bearerToken
+ *    Body: { clientid, clientsecret }  →  returns bearerToken (Step 1 JWT)
  *
  *  Step 2 — E-COM Authentication (GET /ecom/api/authentication/token):
  *    Header: Authorization: Bearer {step1BearerToken}
- *    Body: { username, password }  →  returns accessToken
+ *    Body: { username, password }  →  returns accessToken (Step 2 E-COM token)
  *
- * Mode overrides:
- *  A. directAccessToken set → skip both steps, use as accessToken
- *  B. staticBearerToken set → skip Step 1, run Step 2 with stored bearer
+ * Mode priority:
+ *  A. settings.accessToken (Direct Access Token) → skip both steps
+ *  B. TCS_STATIC_BEARER_TOKEN env var (production JWT) → skip Step 1, run Step 2
+ *  C. settings.bearerToken (manually pasted bearer) → skip Step 1, run Step 2
+ *  D. settings.clientId + clientSecret → full 2-step
+ *  E. username + password only → skip Step 1, authenticate directly at Step 2
  *
- * Results cached 50 minutes to avoid hammering the auth endpoint.
+ * IMPORTANT: TCS_STATIC_BEARER_TOKEN is a Step 1 Authorization JWT.
+ * It must ONLY be used with the production endpoint (TCS_PROD_URL).
+ * Never send it to the sandbox — different signing keys.
  */
 async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   bearerToken: string; accessToken: string; mode: string;
@@ -1709,16 +1742,22 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   const username = (settings.username || "").trim();
   const password = (settings.password || "").trim();
 
-  /* ── Mode B: Static bearer token provided (skip Step 1) ── */
+  /* ── Mode B: TCS_STATIC_BEARER_TOKEN env var (production JWT, Step 1 token) ──
+     Only use when NOT in sandbox mode — this token is for ociconnect.tcscourier.com only */
+  const envBearerToken = (process.env["TCS_STATIC_BEARER_TOKEN"] ?? "").trim();
+  const canUseEnvBearer = envBearerToken && !settings.sandbox && jwtIsValid(envBearerToken);
+
+  /* ── Mode C: Static bearer token manually saved in settings ── */
   const staticBearerToken = (settings.bearerToken ?? "").trim();
 
-  /* Cache key */
+  /* Cache key — include env bearer tail so env changes bust the cache */
   const cacheKey = [
     settings.tcsaccount || "anon",
     settings.sandbox ? "sb" : "live",
-    staticBearerToken ? staticBearerToken.slice(-8)
-      : clientId ? clientId.slice(-6)
-      : username.slice(-6),
+    canUseEnvBearer    ? `env:${envBearerToken.slice(-8)}`
+      : staticBearerToken ? `s:${staticBearerToken.slice(-8)}`
+      : clientId          ? `c:${clientId.slice(-6)}`
+      : `u:${username.slice(-6)}`,
   ].join(":");
 
   const cached = tcsTokenCache.get(cacheKey);
@@ -1726,34 +1765,40 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
     return { ...cached, mode: "cached" };
   }
 
-  /* Validate we have enough to proceed */
-  if (!staticBearerToken && !clientId && !username) {
+  /* Validate we have enough credentials to proceed */
+  if (!canUseEnvBearer && !staticBearerToken && !clientId && !username) {
     throw new Error(
       "TCS not configured. Enter Username + Password in Courier Settings → TCS, then Save."
     );
   }
 
-  /* ── Step 1: get Bearer Token from Authorization API ── */
+  /* ── Step 1: resolve bearer token ── */
   let bearerToken: string;
-  let mode = "fresh";
-  if (staticBearerToken) {
-    /* Mode B — pre-supplied bearer, skip Step 1 */
+  let mode: string;
+
+  if (canUseEnvBearer) {
+    /* Mode B — production JWT from TCS_STATIC_BEARER_TOKEN env var (Step 1 token).
+       This is a long-lived JWT (clientid=215627768, ~2.7yr expiry).
+       ONLY valid for ociconnect.tcscourier.com (production). Sandbox guard already checked above. */
+    bearerToken = envBearerToken;
+    mode = "env-bearer";
+  } else if (staticBearerToken) {
+    /* Mode C — manually saved bearer token in settings, skip Step 1 */
     bearerToken = staticBearerToken;
     mode = "static-bearer";
   } else if (clientId && clientSecret) {
-    /* Mode C — full 2-step: explicit clientId+clientSecret → bearer token */
+    /* Mode D — full 2-step: clientId+clientSecret → bearer → username+password → accessToken */
     const result = await getTcsBearerToken(clientId, clientSecret, settings.sandbox);
     bearerToken = result.bearerToken;
     mode = "full-2step";
   } else {
-    /* Mode D — username+password only: skip Step 1, authenticate directly at Step 2.
-       IMPORTANT: Do NOT use username as clientId — they are different credential sets.
-       getTcsAccessToken will POST {username,password} directly to the E-COM auth endpoint. */
+    /* Mode E — username+password only: skip Step 1, authenticate directly at Step 2.
+       IMPORTANT: Do NOT use username as clientId — they are different credential sets. */
     bearerToken = "";
     mode = "direct-creds";
   }
 
-  /* ── Step 2: get E-COM Access Token ── */
+  /* ── Step 2: get E-COM Access Token using bearer + username/password ── */
   if (!username || !password) {
     throw new Error(
       "TCS Username and Password are required. Add them in Courier Settings → TCS."
@@ -1764,14 +1809,19 @@ async function resolveTcsTokens(settings: Record<string, any>): Promise<{
   try {
     accessToken = await getTcsAccessToken(bearerToken, username, password, settings.sandbox);
   } catch (step2Err: any) {
+    /* If env bearer was used and Step 2 failed, log clearly */
+    const hint = canUseEnvBearer
+      ? " (used TCS_STATIC_BEARER_TOKEN as Step 1 JWT — check that TCS username/password match this bearer's clientid=215627768)"
+      : "";
     throw new Error(
-      `TCS authentication failed: ${step2Err.message ?? "unknown error"}. ` +
-      "Check that TCS Username and Password are correct in Courier Settings."
+      `TCS authentication failed: ${step2Err.message ?? "unknown error"}.${hint} ` +
+      "Check Username + Password in Courier Settings."
     );
   }
 
-  /* Cache 50 minutes */
-  tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + 50 * 60 * 1000 });
+  /* Cache 50 minutes (env-bearer mode caches slightly shorter — 45 min) */
+  const ttl = canUseEnvBearer ? 45 * 60 * 1000 : 50 * 60 * 1000;
+  tcsTokenCache.set(cacheKey, { bearerToken, accessToken, expiresAt: Date.now() + ttl });
   return { bearerToken, accessToken, mode };
 }
 
