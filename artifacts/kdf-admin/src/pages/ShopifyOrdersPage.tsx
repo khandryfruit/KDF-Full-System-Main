@@ -7,6 +7,7 @@ import {
   ChevronDown, ArrowRight, Ban, Bell, Copy, ExternalLink, Boxes,
   Zap, Weight, Star, Info, ShieldCheck, UserCheck, Bike, FileText,
   Navigation, CalendarCheck, TriangleAlert, CircleCheck, Loader2,
+  Settings, AlertTriangle, Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -166,6 +167,8 @@ function BookCourierModal({
     }
   }, [recData]);
 
+  const [apiError, setApiError] = useState<{ msg: string; notConfigured?: boolean } | null>(null);
+
   const bookMutation = useMutation({
     mutationFn: () => api(`/admin/shopify/orders/${order.id}/book-courier`, {
       method: "POST",
@@ -177,19 +180,21 @@ function BookCourierModal({
       }),
     }).then(async r => {
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Booking failed");
+      if (!r.ok) throw Object.assign(new Error(d.error ?? "Booking failed"), { notConfigured: d.notConfigured, apiError: d.apiError });
       return d;
     }),
     onSuccess: (d) => {
-      if (d.apiBooking) {
-        toast({ title: `✅ Real Booking Created!`, description: `${d.courierName} tracking: ${d.trackingId}` });
-      } else {
-        toast({ title: `📋 Tracking Assigned (Local)`, description: d.bookingNote ?? `Courier API not configured — tracking ID generated locally: ${d.trackingId}`, variant: "default" });
-      }
+      setApiError(null);
+      toast({
+        title: `✅ Courier Booked via Real API!`,
+        description: `${d.courierName} · Tracking: ${d.trackingId}${d.durationMs ? ` · ${d.durationMs}ms` : ""}`,
+      });
       onBooked();
       onClose();
     },
-    onError: (e: any) => toast({ title: e.message ?? "Booking failed", variant: "destructive" }),
+    onError: (e: any) => {
+      setApiError({ msg: e.message ?? "Booking failed", notConfigured: !!(e as any).notConfigured });
+    },
   });
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -382,15 +387,35 @@ function BookCourierModal({
               <MessageCircle className="w-3.5 h-3.5" /> Send <strong>OnDrive</strong> WhatsApp notification to customer
             </label>
           </div>
+
+          {/* ── API Error / Not Configured Banner ── */}
+          {apiError && (
+            <div className={`rounded-xl border p-4 space-y-2 ${apiError.notConfigured ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-300"}`}>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${apiError.notConfigured ? "text-amber-600" : "text-red-600"}`} />
+                <div className="flex-1">
+                  <p className={`text-sm font-semibold ${apiError.notConfigured ? "text-amber-800" : "text-red-700"}`}>
+                    {apiError.notConfigured ? "Courier API Not Configured" : "Courier API Booking Failed"}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${apiError.notConfigured ? "text-amber-700" : "text-red-600"}`}>{apiError.msg}</p>
+                </div>
+              </div>
+              {apiError.notConfigured && (
+                <a href="/couriers" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900">
+                  <Settings className="w-3.5 h-3.5" /> Go to Courier Settings → Integrations
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="p-5 border-t border-border flex gap-3">
-          <Button className="flex-1" onClick={() => bookMutation.mutate()} disabled={bookMutation.isPending || !form.courierSlug || !form.customerPhone}>
+          <Button className="flex-1" onClick={() => { setApiError(null); bookMutation.mutate(); }} disabled={bookMutation.isPending || !form.courierSlug || !form.customerPhone}>
             {bookMutation.isPending ? (
-              <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Booking...</>
+              <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Calling Courier API...</>
             ) : (
-              <><Truck className="w-4 h-4 mr-2" /> Book Shipment</>
+              <><Truck className="w-4 h-4 mr-2" /> Book via Courier API</>
             )}
           </Button>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -559,6 +584,24 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
         </div>
       )}
 
+      {/* Real API badge */}
+      {(shipment.rawResponse as any)?.realApiBooking && (
+        <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+          <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-semibold">Real API Booking</span>
+          {(shipment.rawResponse as any)?.apiCallDurationMs && (
+            <span className="text-emerald-600 ml-auto">{(shipment.rawResponse as any).apiCallDurationMs}ms</span>
+          )}
+        </div>
+      )}
+      {(shipment.rawResponse as any)?.localTracking && (
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-semibold">Local Tracking ID</span>
+          <span className="text-amber-600 ml-2">{(shipment.rawResponse as any)?.note}</span>
+        </div>
+      )}
+
       {/* Timeline toggle */}
       <button onClick={() => setShowTimeline(v => !v)}
         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium">
@@ -570,6 +613,9 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
           <ShipmentTimeline history={shipment.statusHistory ?? []} />
         </div>
       )}
+
+      {/* API Response Logs */}
+      <ApiResponseLog rawResponse={shipment.rawResponse} />
 
       {/* Actions */}
       {!isCancelled && (
@@ -586,6 +632,56 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
           }} disabled={cancelMutation.isPending}>
             <Ban className="w-3 h-3" /> Cancel
           </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Courier API Response Log ──────────────────────────── */
+function ApiResponseLog({ rawResponse }: { rawResponse: any }) {
+  const [open, setOpen] = useState(false);
+  if (!rawResponse || Object.keys(rawResponse).length === 0) return null;
+
+  const isReal = rawResponse.realApiBooking === true;
+  const isLocal = rawResponse.localTracking === true;
+  const note = rawResponse.note as string | undefined;
+  const duration = rawResponse.apiCallDurationMs as number | undefined;
+  const bookedAt = rawResponse.bookedAt as string | undefined;
+
+  const displayData = { ...rawResponse };
+  delete displayData.realApiBooking;
+  delete displayData.localTracking;
+  delete displayData.note;
+  delete displayData.apiCallDurationMs;
+  delete displayData.bookedAt;
+  delete displayData.courier;
+  delete displayData.triggeredBy;
+
+  return (
+    <div className="text-xs">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium py-0.5"
+      >
+        <Code2 className="w-3 h-3" />
+        {open ? "Hide" : "Show"} API Response Logs
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 bg-muted/40 border border-border rounded-lg p-3 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {isReal && <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">✅ Real API</span>}
+            {isLocal && <span className="bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">⚠ Local ID</span>}
+            {duration != null && <span className="bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">{duration}ms</span>}
+            {bookedAt && <span className="text-muted-foreground">{new Date(bookedAt).toLocaleString()}</span>}
+          </div>
+          {note && <p className="text-muted-foreground italic">{note}</p>}
+          {Object.keys(displayData).length > 0 && (
+            <pre className="text-[10px] font-mono bg-black/5 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all leading-relaxed">
+              {JSON.stringify(displayData, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

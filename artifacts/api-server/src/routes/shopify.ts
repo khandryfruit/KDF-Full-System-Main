@@ -1966,23 +1966,42 @@ router.post("/admin/shopify/orders/:id/book-courier", adminMiddleware, async (re
       ? !!(settings.bearerToken || (settings.username && settings.password))
       : !!(courierRow.apiKey && courierRow.apiEndpoint);
 
+    /* ── STRICT: Never fake a booking. If no API creds, tell the admin. ── */
+    if (!hasApiCreds) {
+      return res.status(422).json({
+        error: `Courier API not configured for ${courierRow.name}. Go to Courier Settings → Integrations to add API credentials.`,
+        notConfigured: true,
+        courierName: courierRow.name,
+        courierSlug,
+      });
+    }
+
+    /* ── Make the REAL API call — no silent fallback ── */
     let trackingId: string;
     let rawResponse: Record<string, any> = {};
+    const apiStart = Date.now();
 
-    if (hasApiCreds) {
-      try {
-        const { callCourierApiForShopify } = await import("./couriers.js");
-        const result = await callCourierApiForShopify(courierRow, fakeOrder, serviceCode);
-        trackingId = result.trackingId;
-        rawResponse = result.rawResponse;
-      } catch (apiErr: any) {
-        req.log.warn({ err: apiErr }, "Courier API failed — generating local tracking ID");
-        trackingId = generateShopifyTrackingId(courierSlug);
-        rawResponse = { note: `Courier API failed: ${apiErr.message}`, localTracking: true };
-      }
-    } else {
-      trackingId = generateShopifyTrackingId(courierSlug);
-      rawResponse = { note: "Generated locally — courier API not configured" };
+    try {
+      const { callCourierApiForShopify } = await import("./couriers.js");
+      const result = await callCourierApiForShopify(courierRow, fakeOrder, serviceCode);
+      trackingId = result.trackingId;
+      rawResponse = {
+        ...result.rawResponse,
+        realApiBooking: true,
+        apiCallDurationMs: Date.now() - apiStart,
+        bookedAt: new Date().toISOString(),
+        courier: courierSlug,
+      };
+    } catch (apiErr: any) {
+      /* Real API failed — return the actual error, never fake a tracking ID */
+      req.log.warn({ err: apiErr, courierSlug, orderId: id }, "Courier API booking failed");
+      return res.status(422).json({
+        error: apiErr.message ?? "Courier API booking failed",
+        apiError: true,
+        courierName: courierRow.name,
+        courierSlug,
+        durationMs: Date.now() - apiStart,
+      });
     }
 
     const now = new Date().toISOString();
@@ -2040,8 +2059,13 @@ router.post("/admin/shopify/orders/:id/book-courier", adminMiddleware, async (re
       } catch { /* non-fatal */ }
     }
 
-    const isRealApiBooking = !rawResponse?.localTracking && !rawResponse?.note?.includes("Generated locally");
-    res.status(201).json({ ...shipment, courierName: courierRow.name, apiBooking: isRealApiBooking, bookingNote: rawResponse?.note });
+    res.status(201).json({
+      ...shipment,
+      courierName: courierRow.name,
+      apiBooking: true,
+      durationMs: rawResponse.apiCallDurationMs,
+      bookedAt: rawResponse.bookedAt,
+    });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message ?? "Booking failed" });
