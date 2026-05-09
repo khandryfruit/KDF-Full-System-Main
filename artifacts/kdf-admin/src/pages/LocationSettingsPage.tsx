@@ -693,6 +693,9 @@ export default function LocationSettingsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Location Debug Console ────────────────────────── */}
+      <LocationDebugPanel adminToken={ADMIN_TOKEN()} />
     </div>
   );
 }
