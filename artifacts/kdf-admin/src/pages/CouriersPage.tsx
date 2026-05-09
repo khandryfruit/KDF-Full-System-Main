@@ -115,14 +115,16 @@ const fmt = (n: number) => {
 
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
-  accessToken: string;
-  bearerToken: string;
-  clientId: string; clientSecret: string;
   username: string; password: string;
-  tcsaccount: string; costcentercode: string; shipperName: string;
-  shipperAddress: string; shipperCityCode: string; shipperCity: string;
-  shipperPhone: string; sandbox: boolean; defaultWeight: string;
-  serviceCode: string; fragile: boolean; defaultRemarks: string;
+  tcsaccount: string; costcentercode: string;
+  shipperName: string; shipperAddress: string;
+  shipperCity: string; shipperCityCode: string; shipperPhone: string;
+  sandbox: boolean;
+  /* advanced / developer fields */
+  clientId: string; clientSecret: string;
+  accessToken: string; bearerToken: string;
+  defaultWeight: string; serviceCode: string;
+  fragile: boolean; defaultRemarks: string;
 }
 
 function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
@@ -130,70 +132,86 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const qc = useQueryClient();
   const { data: couriers = [] } = useQuery({ queryKey: ["/api/admin/couriers"], queryFn: () => apiFetch("/api/admin/couriers") });
   const config = (couriers as any[]).find((c: any) => c.slug === "tcs");
-  const [editing, setEditing] = useState(false);
-  const [showPw, setShowPw] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const [debugResult, setDebugResult] = useState<{ serverIp?: string; ipHint?: string; mode?: string; ok?: boolean } | null>(null);
+
+  const [editing, setEditing]       = useState(false);
+  const [showPw, setShowPw]         = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDebug, setShowDebug]   = useState(false);
+  const [debugLog, setDebugLog]     = useState<string[]>([]);
+  const [debugResult, setDebugResult] = useState<{ serverIp?: string; ok?: boolean; mode?: string } | null>(null);
+  const [tokenStatus, setTokenStatus] = useState<"idle" | "ok" | "fail">("idle");
 
   const { data: serverIpData } = useQuery({
     queryKey: ["/api/admin/couriers/server-ip"],
     queryFn: () => apiFetch("/api/admin/couriers/server-ip"),
     staleTime: 5 * 60 * 1000,
   });
-  const [form, setForm] = useState<TcsFormState>({
-    accessToken: "",
-    bearerToken: "", clientId: "", clientSecret: "",
+
+  const blankForm = (): TcsFormState => ({
     username: "", password: "", tcsaccount: "", costcentercode: "",
-    shipperName: "", shipperAddress: "", shipperCityCode: "", shipperCity: "",
-    shipperPhone: "", sandbox: false, defaultWeight: "0.5", serviceCode: "O",
-    fragile: false, defaultRemarks: "KDF NUTS Order",
+    shipperName: "", shipperAddress: "", shipperCity: "", shipperCityCode: "", shipperPhone: "",
+    sandbox: false,
+    clientId: "", clientSecret: "", accessToken: "", bearerToken: "",
+    defaultWeight: "0.5", serviceCode: "O", fragile: false, defaultRemarks: "KDF NUTS Order",
   });
+
+  const [form, setForm] = useState<TcsFormState>(blankForm());
 
   const loadForm = () => {
     const s = (config?.settings ?? {}) as any;
     setForm({
-      accessToken: s.accessToken ?? "",
-      bearerToken: s.bearerToken ?? "",
-      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
       username: s.username ?? "", password: s.password ?? "",
       tcsaccount: s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
-      shipperCityCode: s.shipperCityCode ?? "", shipperCity: s.shipperCity ?? "",
+      shipperCity: s.shipperCity ?? "", shipperCityCode: s.shipperCityCode ?? "",
       shipperPhone: s.shipperPhone ?? "", sandbox: s.sandbox ?? false,
+      clientId: s.clientId ?? "", clientSecret: s.clientSecret ?? "",
+      accessToken: s.accessToken ?? "", bearerToken: s.bearerToken ?? "",
       defaultWeight: s.defaultWeight ?? "0.5", serviceCode: s.serviceCode ?? "O",
       fragile: s.fragile ?? false, defaultRemarks: s.defaultRemarks ?? "KDF NUTS Order",
     });
     setEditing(true);
+    setShowAdvanced(false);
+    setTokenStatus("idle");
   };
 
+  /* ── Mutations ── */
   const save = useMutation({
     mutationFn: () => {
       const body = { name: "TCS Couriers", slug: "tcs", apiKey: "", apiSecret: "", apiEndpoint: preset.apiEndpoint, isActive: true, settings: { ...form } };
       return apiFetch("/api/admin/couriers", { method: "POST", body: JSON.stringify(body) });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); setEditing(false); toast({ title: "TCS settings saved" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); setEditing(false); toast({ title: "✅ TCS settings saved" }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
 
   const testConn = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/test", { method: "POST" }),
-    onSuccess: (d: any) => toast({ title: d.message ?? "TCS connection OK", description: `Token length: ${d.accessTokenLength} · mode: ${d.mode}` }),
-    onError: (e: any) => toast({ variant: "destructive", title: "TCS auth failed", description: e.message }),
+    onSuccess: (d: any) => {
+      setTokenStatus("ok");
+      toast({ title: "✅ Connection successful", description: d.message ?? "TCS credentials validated" });
+    },
+    onError: (e: any) => {
+      setTokenStatus("fail");
+      toast({ variant: "destructive", title: "Connection failed", description: e.message });
+    },
   });
 
-  const debugAuth = useMutation({
+  const refreshToken = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/debug-auth", { method: "POST" }),
     onSuccess: (d: any) => {
       setDebugLog(d.log ?? []);
-      setShowDebug(true);
-      setDebugResult({ serverIp: d.serverIp, ipHint: d.ipHint, mode: d.mode, ok: d.ok });
-      if (!d.ok) toast({ variant: "destructive", title: "TCS Auth Failed", description: d.error });
+      setDebugResult({ serverIp: d.serverIp, ok: d.ok, mode: d.mode });
+      if (d.ok) {
+        setTokenStatus("ok");
+        toast({ title: "✅ Token refreshed", description: `Mode: ${d.mode} · Auth cache cleared` });
+      } else {
+        setTokenStatus("fail");
+        setShowDebug(true);
+        toast({ variant: "destructive", title: "Token refresh failed", description: d.error ?? "Check Debug Logs below" });
+      }
     },
-    onError: (e: any) => {
-      setShowDebug(false);
-      toast({ variant: "destructive", title: "Debug failed", description: e.message });
-    },
+    onError: (e: any) => toast({ variant: "destructive", title: "Refresh failed", description: e.message }),
   });
 
   const toggleActive = useMutation({
@@ -207,218 +225,300 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const f = (k: keyof TcsFormState) => (e: any) => setForm(p => ({ ...p, [k]: e.target.value }));
   const isActive = config?.isActive ?? false;
-  const _s = (config?.settings ?? {}) as any;
-  const authMode = _s.accessToken ? "Direct Token" :
-    (_s.clientId && _s.username) ? "Full 2-Step (clientId→username)" :
-    (_s.bearerToken && _s.username) ? "Static Bearer + Step 2" :
-    (_s.username && _s.password) ? "Legacy: username as clientId" :
-    _s.bearerToken ? "Bearer Only ⚠️" : "Not set";
+  const cs = (config?.settings ?? {}) as any;
+  const isConfigured = !!(cs.username || cs.accessToken);
+
+  /* Connection status pill */
+  const connPill = tokenStatus === "ok"
+    ? <span className="flex items-center gap-1 text-xs text-green-700 font-medium"><CheckCircle2 className="w-3 h-3" />Connected</span>
+    : tokenStatus === "fail"
+    ? <span className="flex items-center gap-1 text-xs text-red-600 font-medium"><XCircle className="w-3 h-3" />Failed</span>
+    : null;
 
   return (
     <div className={`border-2 rounded-xl overflow-hidden ${preset.color}`}>
+
+      {/* ── Card Header ── */}
       <div className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-2xl">{preset.icon}</span>
             <div>
-              <p className="font-semibold text-sm">{preset.name}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {config ? (isActive
-                  ? <><Wifi className="w-3 h-3 text-green-500" /><span className="text-xs text-green-600 font-medium">Active</span></>
-                  : <><WifiOff className="w-3 h-3 text-gray-400" /><span className="text-xs text-gray-400">Disabled</span></>)
+              <p className="font-semibold text-sm leading-none">{preset.name}</p>
+              <div className="flex items-center gap-2 mt-1">
+                {config
+                  ? isActive
+                    ? <><Wifi className="w-3 h-3 text-green-500" /><span className="text-xs text-green-600 font-medium">Active</span></>
+                    : <><WifiOff className="w-3 h-3 text-gray-400" /><span className="text-xs text-gray-400">Disabled</span></>
                   : <span className="text-xs text-muted-foreground">Not configured</span>}
+                {connPill && <span className="text-muted-foreground">·</span>}
+                {connPill}
               </div>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
             {config && <Switch checked={isActive} onCheckedChange={() => toggleActive.mutate()} />}
-            <Button variant="ghost" size="sm" onClick={loadForm}><Settings className="w-3.5 h-3.5" /></Button>
-            {config && (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => testConn.mutate()} disabled={testConn.isPending} title="Test TCS connection">
-                  {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => debugAuth.mutate()} disabled={debugAuth.isPending} title="Full auth debug">
-                  {debugAuth.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span className="text-xs font-mono">DBG</span>}
-                </Button>
-              </>
-            )}
+            <Button variant="ghost" size="sm" onClick={loadForm} title="Configure TCS">
+              <Settings className="w-3.5 h-3.5" />
+            </Button>
           </div>
         </div>
-        {config && (
-          <div className="text-xs text-muted-foreground space-y-0.5">
-            <p>Account: {(config.settings as any)?.tcsaccount || "—"} · Mode: {(config.settings as any)?.sandbox ? "Sandbox" : "Production"}</p>
-            <p>Auth: <span className={(config.settings as any)?.bearerToken && !(config.settings as any)?.username && !(config.settings as any)?.accessToken ? "text-amber-600 font-medium" : ""}>{authMode}</span></p>
+
+        {/* Summary row */}
+        {isConfigured && (
+          <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+            {cs.username && <span>User: <strong className="text-foreground">{cs.username}</strong></span>}
+            {cs.tcsaccount && <span>Account: <strong className="text-foreground">{cs.tcsaccount}</strong></span>}
+            <span className={`font-medium ${cs.sandbox ? "text-amber-600" : "text-green-700"}`}>
+              {cs.sandbox ? "🧪 Sandbox" : "🚀 Production"}
+            </span>
           </div>
         )}
 
-        {/* ── Server IP Panel — always visible, helps TCS whitelisting ── */}
-        {serverIpData?.ip && (
-          <div className={`mt-3 rounded-lg border px-3 py-2 ${serverIpData.env === "production" ? "bg-orange-50 border-orange-300" : "bg-sky-50 border-sky-200"}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-xs font-semibold ${serverIpData.env === "production" ? "text-orange-800" : "text-sky-800"}`}>
-                  {serverIpData.env === "production" ? "🚀 Production" : "🧪 Development"} Server IP
-                </p>
-                <p className="font-mono text-sm font-bold mt-0.5">{serverIpData.ip}</p>
-              </div>
-              <button
-                onClick={() => { navigator.clipboard.writeText(serverIpData.ip); toast({ title: "IP Copied!", description: "Share this with TCS for whitelisting" }); }}
-                className={`text-xs px-2 py-1 rounded font-medium border ${serverIpData.env === "production" ? "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200" : "bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-200"}`}
-              >
-                Copy IP
-              </button>
+        {/* Server IP — compact, always visible when configured */}
+        {serverIpData?.ip && isConfigured && (
+          <div className="mt-2.5 flex items-center justify-between rounded-lg border px-3 py-1.5 bg-muted/40">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-muted-foreground shrink-0">Server IP</span>
+              <span className="font-mono text-xs font-semibold truncate">{serverIpData.ip}</span>
+              {serverIpData.env === "production" && (
+                <span className="text-[10px] bg-orange-100 text-orange-700 rounded px-1 font-medium shrink-0">Whitelist with TCS</span>
+              )}
             </div>
-            <p className={`text-xs mt-1 ${serverIpData.env === "production" ? "text-orange-700" : "text-sky-600"}`}>
-              {serverIpData.env === "production"
-                ? "⚠️ If TCS returns HTTP 403, email TCS support to whitelist this IP for your account."
-                : "TCS HTTP 403 on production? The production IP will differ — run DBG after publishing to get it."}
-            </p>
+            <button
+              onClick={() => { navigator.clipboard.writeText(serverIpData.ip); toast({ title: "IP copied" }); }}
+              className="text-xs text-muted-foreground hover:text-foreground ml-2 shrink-0"
+            >Copy</button>
           </div>
         )}
 
-        {/* ── HTTP 403 Quick Fix Banner ── */}
+        {/* 403 error banner */}
         {debugResult && !debugResult.ok && (
-          <div className="mt-3 bg-red-50 border border-red-300 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-bold text-red-800">⛔ TCS HTTP 403 — IP Not Whitelisted</p>
-            <p className="text-xs text-red-700">TCS is blocking requests from this server. Two ways to fix:</p>
-            <div className="space-y-1.5">
-              <div className="bg-white border border-red-200 rounded px-2 py-1.5">
-                <p className="text-xs font-semibold text-red-800">Option A — Whitelist Server IP (recommended)</p>
-                {debugResult.serverIp && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="font-mono text-sm font-bold text-red-900">{debugResult.serverIp}</span>
-                    <button onClick={() => { navigator.clipboard.writeText(debugResult.serverIp!); toast({ title: "Copied!", description: "Email this IP to TCS support" }); }}
-                      className="text-xs bg-red-100 border border-red-300 text-red-700 px-2 py-0.5 rounded hover:bg-red-200">Copy</button>
-                  </div>
-                )}
-                <p className="text-xs text-red-600 mt-0.5">Email TCS tech support: <em>"Please whitelist IP {debugResult.serverIp} for account {(config?.settings as any)?.tcsaccount}"</em></p>
-              </div>
-              <div className="bg-white border border-blue-200 rounded px-2 py-1.5">
-                <p className="text-xs font-semibold text-blue-800">Option B — Use Direct Access Token (bypass 2-step)</p>
-                <p className="text-xs text-blue-600 mt-0.5">Get a Direct Access Token from TCS portal → paste it in Settings → "Direct Access Token" field. This skips the Step 2 auth that causes 403.</p>
-                <button onClick={loadForm} className="mt-1.5 text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">Open Settings →</button>
-              </div>
-            </div>
+          <div className="mt-2.5 bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+            <p className="text-xs font-semibold text-red-800">⛔ Auth failed — IP may not be whitelisted with TCS</p>
+            {debugResult.serverIp && (
+              <p className="text-xs text-red-700">
+                Email TCS: <em>"Whitelist IP <strong>{debugResult.serverIp}</strong> for account {cs.tcsaccount || "—"}"</em>
+                <button onClick={() => { navigator.clipboard.writeText(debugResult.serverIp!); toast({ title: "IP copied" }); }}
+                  className="ml-1.5 underline hover:no-underline">Copy IP</button>
+              </p>
+            )}
+            <button onClick={() => setShowDebug(v => !v)} className="text-xs text-red-600 hover:underline">
+              {showDebug ? "Hide" : "Show"} debug logs →
+            </button>
           </div>
         )}
 
+        {/* Debug log terminal */}
         {showDebug && debugLog.length > 0 && (
-          <div className="mt-3 bg-gray-900 text-green-400 rounded-lg p-3 text-xs font-mono max-h-64 overflow-y-auto space-y-0.5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-400 text-xs">TCS Auth Debug Log {debugResult?.ok ? "✅" : "❌"}</span>
-              <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+          <div className="mt-2.5 bg-gray-950 text-green-400 rounded-lg p-3 text-[11px] font-mono max-h-56 overflow-y-auto space-y-0.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-gray-400">Debug Logs {debugResult?.ok ? "✅" : "❌"}</span>
+              <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-white">✕</button>
             </div>
             {debugLog.map((line, i) => (
-              <div key={i} className={line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : line.includes("Server outbound IP") ? "text-yellow-300 font-semibold" : "text-gray-300"}>{line}</div>
+              <div key={i} className={
+                line.includes("✅") ? "text-green-400"
+                : line.includes("❌") ? "text-red-400"
+                : line.includes("──") ? "text-yellow-300 font-semibold mt-1"
+                : "text-gray-300"
+              }>{line}</div>
             ))}
           </div>
         )}
       </div>
-      {editing && (
-        <div className="border-t bg-white/60 p-4 space-y-3">
-          <p className="font-medium text-sm">TCS API Configuration</p>
 
-          {/* Direct Access Token — highest priority */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-blue-800">⚡ Option 1 — Direct Access Token (Recommended)</p>
-            <p className="text-xs text-blue-700">If TCS portal gives you a ready-to-use access token, paste it here. This bypasses all auth steps and is the most reliable option.</p>
-            <div>
-              <Label className="text-xs text-blue-800">Direct Access Token</Label>
-              <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste your TCS access token here" className="text-xs mt-1 font-mono" />
+      {/* ── Settings Form ── */}
+      {editing && (
+        <div className="border-t bg-white/70 p-4 space-y-4">
+
+          {/* ── Essential Credentials ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">TCS Credentials</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs font-medium">Username</Label>
+                <Input value={form.username} onChange={f("username")} placeholder="TCS username" autoComplete="off" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Password</Label>
+                <div className="relative mt-1">
+                  <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="TCS password" autoComplete="new-password" className="pr-9" />
+                  <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* 2-Step Auth */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-amber-800">🔐 Option 2 — Full 2-Step Auto Login (Recommended)</p>
-            <p className="text-xs text-amber-700">TCS uses two separate credential sets. Step 1 gets a Bearer Token; Step 2 exchanges it for the E-COM Access Token. Tokens auto-refresh every 50 min.</p>
+          {/* ── Account Info ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">Account Details</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs font-medium">Account Number</Label>
+                <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="e.g. 00012345" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Cost Center <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Input value={form.costcentercode} onChange={f("costcentercode")} placeholder="Leave blank if none" className="mt-1" />
+              </div>
+            </div>
+          </div>
 
-            {/* Step 1 */}
-            <div className="bg-white border border-amber-200 rounded p-2 space-y-1.5">
-              <p className="text-xs font-semibold text-amber-900">Step 1 — Authorization API <span className="font-normal text-amber-600">(POST /auth/api/auth)</span></p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Client ID</Label>
-                  <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 205659575" className="text-xs mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs">Client Secret</Label>
-                  <div className="relative mt-1">
-                    <Input type={showPw ? "text" : "password"} value={form.clientSecret} onChange={f("clientSecret")} placeholder="TCS client secret" className="text-xs pr-8" />
-                    <button onClick={() => setShowPw(!showPw)} className="absolute right-2 top-2 text-muted-foreground">
-                      {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
+          {/* ── Pickup Address ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">Pickup Address</p>
+            <div>
+              <Label className="text-xs font-medium">Business / Shipper Name</Label>
+              <Input value={form.shipperName} onChange={f("shipperName")} placeholder="e.g. KDF Nuts" className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Pickup Address</Label>
+              <Input value={form.shipperAddress} onChange={f("shipperAddress")} placeholder="Street address" className="mt-1" />
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              <div className="col-span-3">
+                <Label className="text-xs font-medium">City</Label>
+                <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="mt-1" />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-medium">City Code</Label>
+                <Input value={form.shipperCityCode} onChange={f("shipperCityCode")} placeholder="LHE" maxLength={5} className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Pickup Phone</Label>
+              <Input value={form.shipperPhone} onChange={f("shipperPhone")} placeholder="+92300…" className="mt-1" />
+            </div>
+          </div>
+
+          {/* ── Environment ── */}
+          <div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold">{form.sandbox ? "🧪 Sandbox Mode" : "🚀 Production Mode"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {form.sandbox ? "Testing only — bookings are not real" : "Live — real shipments will be booked"}
+              </p>
+            </div>
+            <Switch checked={form.sandbox} onCheckedChange={v => setForm(p => ({ ...p, sandbox: v }))} />
+          </div>
+
+          {/* ── Save / Cancel ── */}
+          <div className="flex gap-2">
+            <Button onClick={() => save.mutate()} disabled={save.isPending} className="flex-1 gap-1.5">
+              {save.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</> : "Save Settings"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+          </div>
+
+          {/* ── Action Buttons ── */}
+          {config && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                onClick={() => testConn.mutate()} disabled={testConn.isPending}>
+                {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                Test Connection
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                onClick={() => refreshToken.mutate()} disabled={refreshToken.isPending}>
+                {refreshToken.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Refresh Token
+              </Button>
+              <a href="https://ociconnect.tcscourier.com" target="_blank" rel="noopener noreferrer"
+                className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
+                <Zap className="w-3.5 h-3.5 text-amber-500" /> TCS Portal
+              </a>
+              <a href="https://ociconnect.tcscourier.com/tracking/index.html" target="_blank" rel="noopener noreferrer"
+                className="col-span-1 flex items-center justify-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors">
+                <MapPin className="w-3.5 h-3.5 text-blue-500" /> Track Shipment
+              </a>
+            </div>
+          )}
+
+          {/* ── Advanced Developer Settings (collapsible) ── */}
+          <div className="border border-border rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <Settings className="w-3.5 h-3.5" />
+                Advanced Developer Settings
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+            </button>
+
+            {showAdvanced && (
+              <div className="border-t bg-gray-50/80 p-4 space-y-3">
+                <p className="text-[11px] text-muted-foreground">
+                  These fields are optional. The system auto-handles token generation from Username + Password.
+                  Only fill these if TCS support specifically provides them.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Client ID <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
+                    <Input value={form.clientId} onChange={f("clientId")} placeholder="e.g. 205659575" className="text-xs mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Client Secret <span className="text-muted-foreground font-normal">(Step 1)</span></Label>
+                    <Input type="password" value={form.clientSecret} onChange={f("clientSecret")} placeholder="TCS client secret" className="text-xs mt-1" />
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Step 2 */}
-            <div className="bg-white border border-amber-200 rounded p-2 space-y-1.5">
-              <p className="text-xs font-semibold text-amber-900">Step 2 — E-COM Authentication <span className="font-normal text-amber-600">(GET /ecom/api/authentication/token)</span></p>
-              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">TCS Username</Label>
-                  <Input value={form.username} onChange={f("username")} placeholder="E-COM username" className="text-xs mt-1" />
+                  <Label className="text-xs">Direct Access Token <span className="text-muted-foreground font-normal">(bypasses both steps)</span></Label>
+                  <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste ready-to-use access token" className="text-xs mt-1 font-mono" />
                 </div>
+
                 <div>
-                  <Label className="text-xs">TCS Password</Label>
-                  <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="E-COM password" className="text-xs mt-1" />
+                  <Label className="text-xs">Static Bearer Token <span className="text-muted-foreground font-normal">(skips Step 1 only)</span></Label>
+                  <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste bearer token" className="text-xs mt-1 font-mono" />
                 </div>
-              </div>
-            </div>
 
-            {/* Static bearer — optional override */}
-            <div>
-              <Label className="text-xs text-amber-700">Static Bearer Token <span className="font-normal">(optional — skip Step 1 if TCS gave you one directly)</span></Label>
-              <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste bearer token to skip Step 1" className="text-xs mt-1" />
-            </div>
+                <div className="pt-1 border-t border-border/50 space-y-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">Shipping Defaults</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Default Weight (KG)</Label>
+                      <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.5" min="0.5" className="text-xs mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Default Service</Label>
+                      <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
+                        {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Default Remarks</Label>
+                    <Input value={form.defaultRemarks} onChange={f("defaultRemarks")} className="text-xs mt-1" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={form.fragile} onCheckedChange={v => setForm(p => ({ ...p, fragile: v }))} />
+                    <Label className="text-xs">Mark all shipments as Fragile by default</Label>
+                  </div>
+                </div>
+
+                {/* Debug log toggle */}
+                {debugLog.length > 0 && (
+                  <div className="pt-1 border-t border-border/50">
+                    <button
+                      type="button"
+                      onClick={() => setShowDebug(v => !v)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      {showDebug ? "Hide" : "Show"} Debug Logs ({debugLog.length} lines)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">TCS Account #</Label>
-                <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="Account number" className="text-xs mt-1" /></div>
-              <div><Label className="text-xs">Cost Center</Label>
-                <Input value={form.costcentercode} onChange={f("costcentercode")} className="text-xs mt-1" /></div>
-            </div>
-            <div><Label className="text-xs">Shipper Name</Label>
-              <Input value={form.shipperName} onChange={f("shipperName")} placeholder="Your business name e.g. KDF Nuts" className="text-xs mt-1" /></div>
-            <div><Label className="text-xs">Shipper Address</Label>
-              <Input value={form.shipperAddress} onChange={f("shipperAddress")} className="text-xs mt-1" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Shipper City</Label>
-                <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="text-xs mt-1" /></div>
-              <div><Label className="text-xs">City Code (3-5 chars)</Label>
-                <Input value={form.shipperCityCode} onChange={f("shipperCityCode")} placeholder="e.g. LHE" maxLength={5} className="text-xs mt-1" /></div>
-            </div>
-            <div><Label className="text-xs">Shipper Phone</Label>
-              <Input value={form.shipperPhone} onChange={f("shipperPhone")} className="text-xs mt-1" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Default Weight (KG) <span className="font-normal text-muted-foreground">min 0.5</span></Label>
-                <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.5" min="0.5" className="text-xs mt-1" /></div>
-              <div><Label className="text-xs">Default Service</Label>
-                <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
-                  {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div><Label className="text-xs">Default Remarks</Label>
-              <Input value={form.defaultRemarks} onChange={f("defaultRemarks")} className="text-xs mt-1" /></div>
-            <div className="flex items-center gap-2">
-              <Switch checked={form.fragile} onCheckedChange={v => setForm(p => ({ ...p, fragile: v }))} />
-              <Label className="text-xs">Mark as Fragile by default</Label>
-              <Switch checked={form.sandbox} onCheckedChange={v => setForm(p => ({ ...p, sandbox: v }))} className="ml-4" />
-              <Label className="text-xs">Sandbox / Test Mode</Label>
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending} className="flex-1">
-              {save.isPending ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving…</> : "Save TCS Settings"}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
         </div>
       )}
     </div>
