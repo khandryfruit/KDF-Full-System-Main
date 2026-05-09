@@ -453,43 +453,76 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
       res.json({ ok: false, steps, error: e.message }); return;
     }
 
-    /* Build test booking payload */
+    /* Build test booking payload — official nested structure per TCS API Guide v1.0 */
     const testOrderNo = `KDFTEST-${Date.now()}`;
     const bookingPayload = {
-      originCityName: settings.shipperCity || "Lahore",
-      originCityCode: settings.shipperCityCode || "LHE",
-      consigneeName: "KDF Test Customer",
-      consigneeMobNo: "03001234567",
-      destinationCityName: "Karachi",
-      destinationCityCode: "KHI",
-      senderName: settings.shipperName || "KDF Nuts",
-      senderMobNo: settings.shipperPhone || "03001234567",
-      senderAddress: settings.shipperAddress || "Test Pickup",
-      pickupAddress: settings.shipperAddress || "Test Pickup",
-      consigneeAddress: "Test Delivery Address, Karachi",
-      orderNo: testOrderNo,
-      goodsDescription: "Test Parcel - KDF Nuts",
-      pieces: 1,
-      weightInKg: "0.50",
-      tcsAccountNo: settings.tcsaccount || "",
-      costCenterCode: settings.costcentercode || "",
-      serviceTypeCode: settings.serviceCode || "O",
-      isFrg: false,
-      specialInstruction: "TEST BOOKING — DO NOT DELIVER",
-      accesstoken: ecomToken,
+      accesstoken: ecomToken,   /* ECOM token in body (not Authorization header) */
+      shipperinfo: {
+        tcsaccount:  settings.tcsaccount || "",
+        shippername: (settings.shipperName || "KDF Nuts").slice(0, 50),
+        address1:    (settings.shipperAddress || "Shop, Liberty Market").slice(0, 120),
+        countrycode: "PK",
+        countryname: "Pakistan",
+        citycode:    (settings.shipperCityCode || "LHE").toUpperCase(),
+        cityname:    (settings.shipperCity || "Lahore").slice(0, 50),
+        mobile:      (settings.shipperPhone || "03001234567").replace(/\D/g, "").slice(-11),
+      },
+      consigneeinfo: {
+        firstname:   "KDF",
+        middlename:  ".",
+        lastname:    "Test",
+        address1:    "House 10, Block B, DHA Phase 5",
+        countrycode: "PK",
+        countryname: "Pakistan",
+        citycode:    "",
+        cityname:    "Karachi",
+        mobile:      "03219876543",
+        email:       "",
+      },
+      shipmentinfo: {
+        costcentercode: (settings.costcentercode ?? "").toString().slice(0, 20),
+        referenceno:    testOrderNo,
+        servicecode:    (settings.serviceCode || "O").slice(0, 6),
+        currency:       "PKR",
+        codamount:      0,
+        weightinkg:     0.5,
+        pieces:         1,
+        fragile:        false,
+        remarks:        "TEST BOOKING — DO NOT DELIVER",
+        skus: [{
+          description: "KDF Nuts Test Product",
+          quantity:    1,
+          weight:      0.5,
+          unitprice:   1,
+        }],
+      },
     };
 
     steps.push({
-      step: "Booking Payload",
+      step: "Booking Payload (Official Nested Structure)",
       status: "info",
-      detail: `Order No: ${testOrderNo}\nConsignee: KDF Test Customer\nDestination: Karachi\nWeight: 0.50 kg\n⚠ ${settings.sandbox ? "Sandbox — safe test" : "PRODUCTION — this creates a REAL shipment!"}`,
-      raw: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }, null, 2).slice(0, 800),
+      detail: [
+        `Order No: ${testOrderNo}`,
+        `Shipper: ${bookingPayload.shipperinfo.shippername} (${bookingPayload.shipperinfo.tcsaccount})`,
+        `Consignee: KDF Test → Karachi`,
+        `Weight: 0.50 kg | COD: 0 | Service: ${bookingPayload.shipmentinfo.servicecode}`,
+        `Structure: ✅ Official nested (shipperinfo + consigneeinfo + shipmentinfo)`,
+        `Auth: Bearer = ENVO Bearer | accesstoken in body = ECOM token`,
+        `⚠ ${settings.sandbox ? "Sandbox — safe test" : "PRODUCTION — this creates a REAL shipment!"}`,
+      ].join("\n"),
+      raw: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }, null, 2).slice(0, 1000),
     });
 
-    /* Try booking */
+    /* Authorization = ENVO Bearer (Step-1); accesstoken = ECOM token in body */
+    const bookHeaders = {
+      "Authorization": `Bearer ${bearer}`,   /* ENVO bearer in header */
+      "Content-Type": "application/json",
+    };
+
+    /* Official endpoint first, fallback second */
     const bookUrls = [
-      `${baseUrl}/ecom/api/shipment/book`,
-      `${baseUrl}/ecom/api/booking/create`,
+      `${baseUrl}/ecom/api/booking/create`,   /* ✅ Official spec */
+      `${baseUrl}/ecom/api/shipment/book`,    /* Fallback */
     ];
     let booked = false;
     for (const bookUrl of bookUrls) {
@@ -498,7 +531,7 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
       try {
         const bookResp = await fetch(bookUrl, {
           method: "POST",
-          headers: { "Authorization": `Bearer ${ecomToken}`, "Content-Type": "application/json", "Accept": "application/json" },
+          headers: bookHeaders,
           body: JSON.stringify(bookingPayload),
           signal: AbortSignal.timeout(18000),
         });
@@ -507,11 +540,11 @@ router.post("/admin/couriers/tcs/test-booking", adminMiddleware as any, async (r
         const durationMs = Date.now() - t0;
         let data: Record<string, any> = {};
         try { data = JSON.parse(rawText); } catch { data = {}; }
-        const cn = data.consignmentNo ?? data.ConsignmentNo ?? data.trackingNumber ?? data.result?.consignmentNo;
-        const success = httpStatus === 200 && !!cn;
+        const cn = data.consignmentNo ?? data.ConsignmentNo ?? data.consignment_no ?? data.trackingNumber ?? data.result?.consignmentNo;
+        const success = !!cn || data.message?.toUpperCase() === "SUCCESS" || data.status === true;
         pushTcsLog({ ts: new Date().toISOString(), type: "test_booking", url: bookUrl, method: "POST", reqBody: JSON.stringify({ ...bookingPayload, accesstoken: "●●●" }), httpStatus, resBody: rawText.slice(0, 600), durationMs, success, error: success ? undefined : (data.message ?? data.statusMessage ?? `HTTP ${httpStatus}`) });
         if (success) {
-          steps.push({ step: `Booking API (${bookUrl.split("/").pop()})`, status: "ok", detail: `✅ Booking SUCCESSFUL!\nHTTP Status: ${httpStatus}\nConsignment No: ${cn}\nDuration: ${durationMs}ms\nURL: POST ${bookUrl}`, raw: rawText.slice(0, 600) });
+          steps.push({ step: `Booking API (${bookUrl.split("/").pop()})`, status: "ok", detail: `✅ Booking SUCCESSFUL!\nHTTP Status: ${httpStatus}\nConsignment No: ${cn ?? "see raw"}\nDuration: ${durationMs}ms\nURL: POST ${bookUrl}`, raw: rawText.slice(0, 600) });
           booked = true;
           res.json({ ok: true, steps, consignmentNo: cn, bookUrl, httpStatus, durationMs, warning: settings.sandbox ? undefined : "⚠ PRODUCTION booking created — consignment exists in TCS system" });
           return;
@@ -635,23 +668,23 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
     } else if (username && password) {
       const t0e = Date.now();
       try {
-        /* Try all URL variants and report which one worked */
-        const attempts = [
-          { url: `${baseUrl}/ecom/api/authentication/token`,         body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/token`,         body: { Username: username, Password: password } },
-          { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { username, password } },
-          { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { Username: username, Password: password } },
-          { url: `${baseUrl}/ecom/api/auth/token`,                   body: { username, password } },
-          { url: `${baseUrl}/ecom/api/auth/token`,                   body: { Username: username, Password: password } },
+        /* Try all variants — GET first (official spec), POST as fallback */
+        const attempts: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
+          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { Username: username, Password: password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { Username: username, Password: password } },
+          { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "GET",  body: { username, password } },
+          { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "POST", body: { username, password } },
         ];
         let found = false;
         const attemptResults: string[] = [];
         for (let i = 0; i < attempts.length; i++) {
-          const { url: aUrl, body: aBody } = attempts[i];
+          const { url: aUrl, method: aMethod, body: aBody } = attempts[i];
           const ta = Date.now();
           try {
             const aResp = await fetch(aUrl, {
-              method: "POST",
+              method: aMethod,
               headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
               body: JSON.stringify(aBody),
               signal: AbortSignal.timeout(10000),
@@ -662,8 +695,8 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
             try { aData = JSON.parse(aText); } catch { aData = {}; }
             const aToken = aData.accessToken ?? aData.accesstoken ?? aData.token ?? aData.result?.accessToken ?? aData.data?.accessToken;
             const fieldStyle = Object.keys(aBody).includes("Username") ? "PascalCase" : "lowercase";
-            attemptResults.push(`Attempt ${i + 1}: POST ${aUrl.split("/").slice(-2).join("/")} (${fieldStyle}) → HTTP ${aResp.status} (${aDuration}ms) ${aToken ? "✅ TOKEN OK" : `❌ no token: ${aData.message ?? aData.error ?? ""}`}`);
-            pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: aUrl, method: "POST", reqBody: JSON.stringify({ ...aBody, password: "●●●" }), httpStatus: aResp.status, resBody: aText.slice(0, 400), durationMs: aDuration, success: !!aToken, attempt: i + 1 });
+            attemptResults.push(`Attempt ${i + 1}: ${aMethod} ${aUrl.split("/").slice(-2).join("/")} (${fieldStyle}) → HTTP ${aResp.status} (${aDuration}ms) ${aToken ? "✅ TOKEN OK" : `❌ no token: ${aData.message ?? aData.error ?? ""}`}`);
+            pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: aUrl, method: aMethod, reqBody: JSON.stringify({ ...aBody, password: "●●●" }), httpStatus: aResp.status, resBody: aText.slice(0, 400), durationMs: aDuration, success: !!aToken, attempt: i + 1 });
             if (aToken) {
               ecomToken = aToken;
               found = true;
@@ -672,7 +705,7 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
             }
             if (aResp.status !== 405 && aResp.status !== 404) break;
           } catch (ae: any) {
-            attemptResults.push(`Attempt ${i + 1}: POST ${aUrl.split("/").slice(-2).join("/")} → Network error: ${ae.message}`);
+            attemptResults.push(`Attempt ${i + 1}: ${aMethod} ${aUrl.split("/").slice(-2).join("/")} → Network error: ${ae.message}`);
           }
         }
         steps.push({
@@ -695,8 +728,9 @@ router.post("/admin/couriers/tcs/full-diagnostics", adminMiddleware as any, asyn
       steps.push({ step: "4 · ECOM Token (Step-2)", status: "warn", detail: "No Username/Password set — cannot test Step-2 auto-generation.\nFix: Add credentials in Settings, or paste a Direct ECOM Token." });
     }
 
-    /* 5. Booking URL probe (no actual booking — just HEAD/OPTIONS check) */
-    const bookUrls = [`${baseUrl}/ecom/api/shipment/book`, `${baseUrl}/ecom/api/booking/create`];
+    /* 5. Booking URL probe (no actual booking — just OPTIONS check)
+       Official endpoint is /ecom/api/booking/create (listed first) */
+    const bookUrls = [`${baseUrl}/ecom/api/booking/create`, `${baseUrl}/ecom/api/shipment/book`];
     for (const bUrl of bookUrls) {
       const t0b = Date.now();
       try {
@@ -2423,19 +2457,21 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     return cached.token;
   }
 
-  /* Priority 3: Try multiple Step-2 URL / payload combinations to handle HTTP 405 / field naming variations */
-  const STEP2_ATTEMPTS = [
-    /* Primary URL — lowercase field names */
-    { url: `${baseUrl}/ecom/api/authentication/token`,         body: { username, password } },
-    /* Primary URL — PascalCase field names (some TCS versions require this) */
-    { url: `${baseUrl}/ecom/api/authentication/token`,         body: { Username: username, Password: password } },
-    /* Alternative endpoint — lowercase */
-    { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { username, password } },
-    /* Alternative endpoint — PascalCase */
-    { url: `${baseUrl}/ecom/api/authentication/generateToken`, body: { Username: username, Password: password } },
-    /* Alternate auth path */
-    { url: `${baseUrl}/ecom/api/auth/token`,                   body: { username, password } },
-    { url: `${baseUrl}/ecom/api/auth/token`,                   body: { Username: username, Password: password } },
+  /* Priority 3: Try Step-2 — Official spec: GET /ecom/api/authentication/token with body
+   * (axios sends GET with `data` field; fetch supports GET+body in Node.js).
+   * We try GET first (official), then POST as fallback for older API versions.
+   * Also try both lowercase and PascalCase field names, and both URL paths. */
+  const STEP2_ATTEMPTS: Array<{ url: string; method: "GET" | "POST"; body: Record<string, any> }> = [
+    /* ✅ Official spec: GET with body, lowercase fields */
+    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { username, password } },
+    /* Official spec: GET with body, PascalCase fields */
+    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "GET",  body: { Username: username, Password: password } },
+    /* POST fallback — some TCS deployments use POST */
+    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { username, password } },
+    { url: `${baseUrl}/ecom/api/authentication/token`,         method: "POST", body: { Username: username, Password: password } },
+    /* Alternative endpoint variants */
+    { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "GET",  body: { username, password } },
+    { url: `${baseUrl}/ecom/api/authentication/generateToken`, method: "POST", body: { username, password } },
   ];
 
   let lastError = "";
@@ -2443,25 +2479,25 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
   let lastRaw = "";
 
   for (let i = 0; i < STEP2_ATTEMPTS.length; i++) {
-    const { url: attemptUrl, body: attemptBody } = STEP2_ATTEMPTS[i];
+    const { url: attemptUrl, method: attemptMethod, body: attemptBody } = STEP2_ATTEMPTS[i];
     const t0 = Date.now();
-    logger.info({ url: attemptUrl, attempt: i + 1, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — Step-2 attempt");
+    logger.info({ url: attemptUrl, method: attemptMethod, attempt: i + 1, username, tcsaccount: settings.tcsaccount }, "TCS ECOM token — Step-2 attempt");
 
     let resp: Response;
     let data: Record<string, any> = {};
     let rawText = "";
     try {
       resp = await fetch(attemptUrl, {
-        method: "POST",
+        method: attemptMethod,
         headers: { "Authorization": `Bearer ${bearer}`, "Content-Type": "application/json" },
-        body: JSON.stringify(attemptBody),
+        body: JSON.stringify(attemptBody),   /* Node.js fetch allows GET+body */
         signal: AbortSignal.timeout(12000),
       });
       rawText = await resp.text();
       try { data = JSON.parse(rawText); } catch { data = {}; }
     } catch (netErr: any) {
       const durationMs = Date.now() - t0;
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: null, resBody: netErr.message, durationMs, success: false, error: netErr.message, attempt: i + 1 });
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: null, resBody: netErr.message, durationMs, success: false, error: netErr.message, attempt: i + 1 });
       lastError = `Network error: ${netErr.message}`;
       continue;
     }
@@ -2470,18 +2506,11 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
     lastStatus = resp.status;
     lastRaw = rawText.slice(0, 400);
 
-    /* 405 = Method Not Allowed — this URL doesn't accept POST, try next */
-    if (resp.status === 405) {
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: 405, resBody: rawText.slice(0, 200), durationMs, success: false, error: "405 Method Not Allowed — trying next URL", attempt: i + 1 });
-      logger.warn({ url: attemptUrl, attempt: i + 1 }, "TCS Step-2 — HTTP 405, trying next URL variant");
-      lastError = `HTTP 405 on ${attemptUrl}`;
-      continue;
-    }
-
-    /* 404 = endpoint doesn't exist, try next */
-    if (resp.status === 404) {
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify(attemptBody), httpStatus: 404, resBody: rawText.slice(0, 200), durationMs, success: false, error: "404 Not Found — trying next URL", attempt: i + 1 });
-      lastError = `HTTP 404 on ${attemptUrl}`;
+    /* 405 / 404 — try next variant */
+    if (resp.status === 405 || resp.status === 404) {
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 200), durationMs, success: false, error: `HTTP ${resp.status} — trying next variant`, attempt: i + 1 });
+      logger.warn({ url: attemptUrl, method: attemptMethod, status: resp.status, attempt: i + 1 }, "TCS Step-2 — trying next variant");
+      lastError = `HTTP ${resp.status} on ${attemptMethod} ${attemptUrl}`;
       continue;
     }
 
@@ -2492,23 +2521,22 @@ async function getTcsEcomToken(settings: Record<string, any>, bearer: string, ba
       data.data?.accessToken ?? data.data?.token;
 
     if (token) {
-      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
-      /* Cache with 55-min TTL */
+      pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: true, attempt: i + 1 });
       const ttlMs = typeof data.expiresIn === "number"
         ? Math.min(data.expiresIn * 1000, 55 * 60 * 1000)
         : 55 * 60 * 1000;
       tcsEcomCache.set(cacheKey, { token, expiresAt: Date.now() + ttlMs });
-      logger.info({ tcsaccount: settings.tcsaccount, username, attempt: i + 1, url: attemptUrl, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
+      logger.info({ tcsaccount: settings.tcsaccount, username, attempt: i + 1, method: attemptMethod, url: attemptUrl, ttlMin: Math.round(ttlMs / 60000) }, "TCS ECOM token — Step-2 success, cached");
       return token;
     }
 
-    /* Got a response but no token in it */
+    /* Got response but no token — wrong credentials, stop */
     const msg = data.message ?? data.statusMessage ?? data.error ?? `HTTP ${resp.status}`;
-    pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: "POST", reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
+    pushTcsLog({ ts: new Date().toISOString(), type: "auth_step2", url: attemptUrl, method: attemptMethod, reqBody: JSON.stringify({ ...attemptBody, password: "●●●" }), httpStatus: resp.status, resBody: rawText.slice(0, 400), durationMs, success: false, error: msg, attempt: i + 1 });
     lastError = msg;
     lastStatus = resp.status;
     lastRaw = rawText.slice(0, 300);
-    /* Non-405/404 — this URL works but auth failed (wrong creds etc) — stop trying other URLs */
+    /* Non-405/404 — URL is correct but auth failed — stop probing, report error */
     break;
   }
 
@@ -2616,51 +2644,94 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
        getTcsEcomToken(): manual override → in-memory cache → Step-2 API call.    */
     const ecomToken = await getTcsEcomToken(settings, bearer, baseUrl);
 
-    /* ── Flat booking payload (official /ecom/api/shipment/book format) ─── */
-    const weightKg = parseFloat(tcsWeight(order.weight ?? settings.defaultWeight));
+    /* ── Official TCS ECOM nested booking payload ─────────────────────────
+     * Per official guide: /ecom/api/booking/create
+     *   Authorization header = ENVO Bearer Token (Step-1)
+     *   Body root: accesstoken (ECOM token, Step-2) + shipperinfo + consigneeinfo + shipmentinfo
+     * Reference: TCS COD API Node.js Integration Guide v1.0                        */
+    const weightKg  = parseFloat(tcsWeight(order.weight ?? settings.defaultWeight));
+    const pieces    = parseInt(String(order.pieces ?? 1), 10);
+    const orderRef  = String(order.orderNumber ?? order.id);
+
+    /* Split consignee full name into firstname / middlename / lastname */
+    const fullName  = (address.name ?? address.firstName ?? "Customer").trim();
+    const nameParts = fullName.split(/\s+/);
+    const firstName = nameParts[0] ?? fullName;
+    const lastName  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+    const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : ".";
+
+    const consigneeAddr = [address.address1 ?? address.address, address.address2]
+      .filter(Boolean).join(", ").slice(0, 120) || address.address || "";
+    const consigneePhone = (address.phone ?? "").replace(/\D/g, "").slice(-11);
+    const serviceCode = (service ?? settings.serviceCode ?? "O").slice(0, 6);
+    const costCenter  = (settings.costcentercode ?? "").toString().slice(0, 20);
+    const itemDesc = items.length > 0
+      ? items.map((i: any) => i.name).join(", ").slice(0, 100)
+      : "KDF Nuts Products";
+
     const bookingPayload: Record<string, any> = {
-      /* Consignee / delivery info */
-      consigneeName:        (address.name ?? address.firstName ?? "Customer").trim().slice(0, 100),
-      consigneeAddress:     [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").slice(0, 200) || address.address || "",
-      consigneeMobNo:       (address.phone ?? "").replace(/\D/g, "").slice(-11),
-      /* Shipper info */
-      shipperName:          (settings.shipperName || "KDF Nuts").trim().slice(0, 50),
-      shipperAccountNo:     settings.tcsaccount || "",
-      shipperAddress:       settings.shipperAddress || "",
-      shipperPhone:         settings.shipperPhone || "",
-      /* Origin / destination cities */
-      originCityName:       settings.shipperCity || "Lahore",
-      destinationCityName:  address.city ?? "",
-      /* Shipment details */
-      weightInKg:           weightKg,
-      pieces:               parseInt(String(order.pieces ?? 1), 10),
-      codAmount:            codAmount,
-      orderReferenceNo:     String(order.orderNumber ?? order.id),
-      serviceType:          service ?? settings.serviceType ?? "OVERNIGHT",
-      /* Optional */
-      remarks:              (order.specialInstructions || settings.defaultRemarks || order.notes || "").slice(0, 200),
-      fragile:              !!(order.fragile ?? settings.fragile),
-      contentDesc:          (order.contentDesc ?? (items.length > 0 ? items.map((i: any) => i.name).join(", ") : "KDF Nuts Products")).slice(0, 200),
+      accesstoken: ecomToken,         /* ECOM token goes IN BODY (not Authorization header) */
+      shipperinfo: {
+        tcsaccount:  settings.tcsaccount || "",
+        shippername: (settings.shipperName  || "KDF Nuts").trim().slice(0, 50),
+        address1:    (settings.shipperAddress || "").slice(0, 120),
+        countrycode: "PK",
+        countryname: "Pakistan",
+        citycode:    (settings.shipperCityCode || "LHE").toUpperCase().slice(0, 10),
+        cityname:    (settings.shipperCity || "Lahore").slice(0, 50),
+        mobile:      (settings.shipperPhone || "").replace(/\D/g, "").slice(-11),
+      },
+      consigneeinfo: {
+        firstname:   firstName.slice(0, 50),
+        middlename:  middleName.slice(0, 50),
+        lastname:    lastName.slice(0, 50),
+        address1:    consigneeAddr,
+        countrycode: "PK",
+        countryname: "Pakistan",
+        citycode:    "",              /* TCS often doesn't require citycode if cityname given */
+        cityname:    (address.city ?? "").slice(0, 50),
+        mobile:      consigneePhone,
+        email:       (address.email ?? "").slice(0, 100),
+      },
+      shipmentinfo: {
+        costcentercode: costCenter,
+        referenceno:    orderRef.slice(0, 50),
+        servicecode:    serviceCode,
+        currency:       "PKR",
+        codamount:      codAmount,
+        weightinkg:     weightKg,
+        pieces:         pieces,
+        fragile:        !!(order.fragile ?? settings.fragile),
+        remarks:        (order.specialInstructions || settings.defaultRemarks || order.notes || "KDF Nuts Order").slice(0, 200),
+        skus: [{
+          description: itemDesc,
+          quantity:    pieces,
+          weight:      weightKg,
+          unitprice:   codAmount > 0 ? codAmount : 1,
+        }],
+      },
     };
 
     logger.info({
-      weightKg,
-      tcsaccount:  settings.tcsaccount,
-      ecomTokSrc:  settings.accessToken?.trim() ? "Direct (manual)" : (tcsEcomCache.has(`${settings.tcsaccount ?? ""}:${(settings.username ?? "").trim()}`) ? "cache" : "Step-2 fresh"),
-      url:         `${baseUrl}/ecom/api/shipment/book`,
-      sandbox:     !!settings.sandbox,
-    }, "TCS booking — payload summary");
+      weightKg, pieces, codAmount, orderRef, serviceCode, costCenter,
+      tcsaccount:   settings.tcsaccount,
+      consigneeCity: address.city,
+      shipperCity:   settings.shipperCity,
+      ecomTokSrc:   settings.accessToken?.trim() ? "Direct (manual)" : (tcsEcomCache.has(`${settings.tcsaccount ?? ""}:${(settings.username ?? "").trim()}`) ? "cache" : "Step-2 fresh"),
+      sandbox:      !!settings.sandbox,
+    }, "TCS ECOM booking — nested payload ready");
 
-    /* ECOM Access Token goes in Authorization header (NOT in body) */
+    /* Authorization header = ENVO Bearer Token (Step-1) — NOT the ECOM token */
     const bookHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${ecomToken}`,
+      "Authorization": `Bearer ${bearer}`,    /* ENVO bearer (Step-1) in header */
     };
 
-    /* ── URL Fallback: try /ecom/api/shipment/book first, then /ecom/api/booking/create ── */
+    /* ── Official: POST /ecom/api/booking/create
+       Fallback: /ecom/api/shipment/book (some older TCS instances)          */
     const bookUrls = [
-      `${baseUrl}/ecom/api/shipment/book`,
-      `${baseUrl}/ecom/api/booking/create`,
+      `${baseUrl}/ecom/api/booking/create`,   /* ✅ Official guide endpoint */
+      `${baseUrl}/ecom/api/shipment/book`,    /* Fallback */
     ];
 
     let bookData: Record<string, any> = {};
@@ -2670,30 +2741,25 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
 
     for (const bookUrl of bookUrls) {
       usedUrl = bookUrl;
-      /* For /booking/create, also include accesstoken in body (old API style) */
-      const payload = bookUrl.includes("booking/create")
-        ? { ...bookingPayload, accesstoken: ecomToken }
-        : bookingPayload;
-
       logger.info({ bookUrl }, "TCS booking — trying URL");
       const resp = await fetch(bookUrl, {
         method: "POST",
         headers: bookHeaders,
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify(bookingPayload),
+        signal: AbortSignal.timeout(18000),
       });
       lastStatus = resp.status;
       bookText = await resp.text();
       try { bookData = JSON.parse(bookText); } catch { bookData = { raw: bookText }; }
 
-      logger.info({ bookUrl, status: lastStatus, body: bookText.slice(0, 200) }, "TCS booking — URL response");
+      logger.info({ bookUrl, status: lastStatus, body: bookText.slice(0, 300) }, "TCS booking — URL response");
 
       /* If 404, endpoint doesn't exist — try next URL */
       if (resp.status === 404) {
         logger.warn({ bookUrl }, "TCS booking — 404, trying fallback URL");
         continue;
       }
-      /* Any other status (200, 400, 401, 403, 422…) — stop here, this URL exists */
+      /* Any other status — stop here, this URL exists */
       break;
     }
 

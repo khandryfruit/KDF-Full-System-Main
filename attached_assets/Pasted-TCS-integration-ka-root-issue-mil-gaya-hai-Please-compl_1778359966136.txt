@@ -1,0 +1,462 @@
+TCS integration ka root issue mil gaya hai. Please completely rebuild and fix the TCS courier integration exactly according to the uploaded official TCS API documentation.
+
+CURRENT SYSTEM HAS:
+
+* invalid bearer token issues
+* stale access token cache
+* fake bookings
+* duplicate booking issue
+* production domain failure
+* broken auth flow
+* wrong tcsaccount usage
+* tracking mismatch
+* Shopify + Ecommerce courier conflict
+
+==================================================
+
+1. WRONG TCS ACCOUNT CONFIGURATION
+   ==================================================
+
+Current code is incorrectly using:
+
+```json
+"tcsaccount": "LGEC11060"
+```
+
+This is WRONG.
+
+`LGEC11060` is ONLY the username.
+
+We need the REAL TCS account number from TCS Courier.
+
+Official docs example:
+
+```json
+"tcsaccount": "04011K1"
+```
+
+Please replace everywhere:
+
+* booking payload
+* label printing
+* shipment creation
+* tracking sync
+* Shopify module
+* ecommerce orders
+
+with the actual TCS account number.
+
+==================================================
+2. DELETE OLD TOKEN SYSTEM
+==========================
+
+Current error:
+
+```txt
+Invalid Bearer token
+stale token detected
+```
+
+This means old tokens are still cached.
+
+Completely clear:
+
+* old bearer tokens
+* old access tokens
+* Direct ECOM Access Token
+* Redis cache
+* local cache
+* DB cache
+* advanced settings
+* duplicate configs
+* old courier tables if needed
+
+Rebuild fresh token manager.
+
+==================================================
+3. CORRECT OFFICIAL AUTH FLOW
+=============================
+
+STEP 1:
+
+```http
+/auth/api/auth
+```
+
+Input:
+
+* clientId
+* clientSecret
+
+Returns:
+
+* Bearer Token
+
+---
+
+STEP 2:
+
+```http
+/ecom/api/authentication/token
+```
+
+Headers:
+
+```http
+Authorization: Bearer {BearerToken}
+```
+
+Body:
+
+```json
+{
+  "username": "TCS_USERNAME",
+  "password": "TCS_PASSWORD"
+}
+```
+
+Returns:
+
+```json
+{
+  "accesstoken": "..."
+}
+```
+
+---
+
+STEP 3:
+
+```http
+/ecom/api/booking/create
+```
+
+Headers:
+
+```http
+Authorization: Bearer {BearerToken}
+```
+
+Body:
+
+```json
+{
+  "accesstoken": "{fresh access token}"
+}
+```
+
+IMPORTANT:
+
+* Bearer Token ≠ AccessToken
+* Never mix both
+* Never use expired tokens
+* Auto refresh before expiry
+* No stale token reuse
+
+==================================================
+4. TEMPORARILY DISABLE TOKEN CACHE
+==================================
+
+During debugging:
+
+* disable token cache
+* fetch fresh accessToken every request
+
+After successful testing:
+
+* enable smart token expiry cache
+
+==================================================
+5. PRODUCTION DOMAIN ISSUE
+==========================
+
+Booking works on Replit preview but fails on:
+
+```txt
+admin.khanbabadryfruits.com
+```
+
+Please debug:
+
+* CORS
+* production ENV
+* SSL
+* Cloudflare
+* proxy headers
+* deployment secrets
+* NODE_ENV
+* API URLs
+* IP restrictions
+* cookies/session
+* replit deployment environment
+
+Production and local must behave SAME.
+
+Use production URL only:
+
+```txt
+https://ociconnect.tcscourier.com
+```
+
+==================================================
+6. REMOVE FAKE BOOKINGS
+=======================
+
+Currently fake bookings are being created.
+
+Fix:
+
+* booking successful ONLY after real TCS response
+* save shipment ONLY if TCS returns success
+* save tracking ONLY if real consignment generated
+
+DO NOT create fake tracking numbers.
+
+==================================================
+7. DUPLICATE BOOKING PROTECTION
+===============================
+
+If already booked:
+
+```js
+order.courierBooked === true
+```
+
+Then:
+
+* disable rebooking
+* prevent duplicate API calls
+* prevent multiple tracking numbers
+* show "Already Booked"
+
+Use:
+
+```js
+idempotency_key
+```
+
+or DB locking.
+
+==================================================
+8. VALIDATE PAYLOAD BEFORE API CALL
+===================================
+
+Fix weight issue:
+
+```js
+weightinkg = parseFloat(weight).toFixed(1)
+```
+
+Validate:
+
+* weight
+* mobile
+* citycode
+* codamount
+* servicecode
+* account number
+* pieces
+* countrycode
+
+before API request.
+
+==================================================
+9. REQUIRED FIELDS
+==================
+
+Consignee fields must include:
+
+* firstname
+* middlename
+* address
+* city
+* mobile
+
+`middlename` is mandatory according to docs.
+
+==================================================
+10. FULL DEBUG PANEL
+====================
+
+Create:
+
+```txt
+Courier > API Logs
+```
+
+Show:
+
+* request URL
+* request payload
+* headers
+* bearer token expiry
+* access token expiry
+* response
+* trace ID
+* HTTP status
+* booking logs
+* tracking logs
+* label logs
+
+Status colors:
+
+* green = success
+* red = failed
+* yellow = warning
+
+==================================================
+11. TEST CONNECTION BUTTON
+==========================
+
+Create:
+
+```txt
+Test TCS Connection
+```
+
+Test:
+✅ bearer token
+✅ ECOM token
+✅ booking API
+✅ tracking API
+✅ label API
+✅ account validity
+✅ auth expiry
+
+Show full response.
+
+==================================================
+12. TRACKING URL
+================
+
+Use official tracking URL:
+
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Save tracking URL with every order.
+
+==================================================
+13. LABEL PRINTING
+==================
+
+Implement real TCS labels.
+
+Required:
+
+* PDF labels
+* print label
+* download label
+* auto open label
+
+Support:
+
+* thermal label
+* 4x6
+* A4
+
+Label must show:
+
+* customer name
+* address
+* COD amount
+* tracking number
+* barcode
+* order ID
+
+==================================================
+14. SHOPIFY + ECOMMERCE FIX
+===========================
+
+Current issue:
+Shopify orders and Ecommerce orders may be using separate configs/tokens.
+
+Fix:
+Create ONE shared courier module for:
+
+* Shopify
+* Ecommerce
+* Rider system
+* Manual booking
+
+No duplicate tokens/configs.
+
+==================================================
+15. CUSTOMER NAME FIX
+=====================
+
+Use real customer name from order:
+
+```js
+order.customer.name
+```
+
+Do not send wrong/random names to TCS.
+
+==================================================
+16. ADDRESS + LOCATION FIX
+==========================
+
+Implement:
+
+* Google Maps autocomplete
+* allow location permission
+* auto fetch customer address
+* latitude/longitude
+* formatted address
+
+Save complete location in orders.
+
+==================================================
+17. POSTMAN TESTING REQUIRED
+============================
+
+Before deployment test:
+
+✅ auth token
+✅ access token
+✅ booking create
+✅ tracking
+✅ label print
+✅ cancel booking
+
+Only deploy after successful REAL booking.
+
+==================================================
+18. ADMIN FEATURES
+==================
+
+Add:
+✅ print label
+✅ retry booking
+✅ re-sync tracking
+✅ booking history
+✅ shipment timeline
+✅ live tracking
+✅ API response viewer
+✅ webhook logs
+✅ courier analytics
+
+==================================================
+19. SECURITY
+============
+
+Never expose:
+
+* passwords
+* bearer tokens
+* access tokens
+* secrets
+
+All API calls must be server-side only.
+
+==================================================
+20. OFFICIAL LINKS
+==================
+
+TCS Portal:
+https://ociconnect.tcscourier.com/ecom/index.html
+
+Tracking:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Use uploaded official TCS documentation only.

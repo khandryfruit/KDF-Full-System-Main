@@ -1,0 +1,779 @@
+v1.0 — Official API Guide
+TCS COD API
+Node.js Integration
+TCS E-Commerce API ka complete Node.js developer guide. Har endpoint ke liye working code examples, request/response samples aur best practices.
+
+▶ Shuru Karen
+↗ API Portal
+🧪 Sandbox
+📋
+Overview
+TCS do alag authentication systems use karta hai. Sahi flow samajhna zaroori hai.
+
+GET
+Authorization API
+/auth/api/auth
+Bearer token (clientId + secret)
+
+GET
+Authentication API
+/ecom/api/authentication/token
+E-COM access token (username + password)
+
+POST
+Create Booking
+/ecom/api/booking/create
+Naya shipment register karen
+
+GET
+Tracking
+/tracking/api/Tracking/GetDynamicTrackDetail
+Shipment track karen
+
+POST
+Cancel Booking
+/ecom/api/booking/cancel
+Booking cancel karen
+
+GET
+Payment Status
+/ecom/api/Payment/status
+COD payment status check karen
+
+ℹ️
+Authentication Flow: Pehle Authorization API se Bearer Token lein → Phir us token ko use karke E-COM Authentication API se accessToken lein → Yeh accessToken sab APIs ke body mein bhejna hoga.
+⚙️
+Project Setup
+Node.js project tayaar karen aur zaruri packages install karen.
+
+1
+Project Initialize Karen
+Naya folder banayein aur npm project shuru karen
+
+ terminal
+bash
+mkdir tcs-api-integration
+cd tcs-api-integration
+npm init -y
+2
+Packages Install Karen
+HTTP requests ke liye axios aur environment variables ke liye dotenv
+
+ terminal
+bash
+npm install axios dotenv
+npm install --save-dev nodemon
+3
+Folder Structure
+Recommended project structure
+
+ project structure
+tree
+tcs-api-integration/
+├── .env                  # API credentials (git mein mat daalna)
+├── src/
+│   ├── config.js         # Environment variables
+│   ├── auth.js           # Token management
+│   ├── booking.js        # Booking APIs
+│   ├── tracking.js       # Tracking API
+│   ├── payment.js        # Payment APIs
+│   └── setup.js          # Setup APIs (city, area, etc.)
+├── index.js              # Main entry point
+└── package.json
+4
+package.json Scripts
+ package.json
+json
+{
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  }
+}
+🔐
+Environment Config
+TCS se milne wale credentials .env file mein rakhein.
+
+⚠️
+.gitignore mein .env zaroor shaamil karen! Credentials kabhi bhi GitHub ya kisi aur jagah share na karen.
+ .env
+env
+# TCS API Environment (sandbox ya production)
+TCS_ENV=sandbox
+
+# Authorization API credentials (TCS se milenge)
+TCS_CLIENT_ID=205659575
+TCS_CLIENT_SECRET=YWxuYXNlZWJkYWlyeWZvb2RAdGNzYm9va==
+
+# E-COM Authentication credentials (TCS se milenge)
+TCS_USERNAME=your_username
+TCS_PASSWORD=your_password
+
+# TCS Account Number
+TCS_ACCOUNT=04011K1
+ src/config.js
+javascript
+require('dotenv').config();
+
+const isSandbox = process.env.TCS_ENV !== 'production';
+
+const BASE_URLS = {
+  sandbox: 'https://devconnect.tcscourier.com',
+  production: 'https://ociconnect.tcscourier.com',
+};
+
+module.exports = {
+  BASE_URL: BASE_URLS[isSandbox ? 'sandbox' : 'production'],
+  CLIENT_ID: process.env.TCS_CLIENT_ID,
+  CLIENT_SECRET: process.env.TCS_CLIENT_SECRET,
+  USERNAME: process.env.TCS_USERNAME,
+  PASSWORD: process.env.TCS_PASSWORD,
+  ACCOUNT: process.env.TCS_ACCOUNT,
+};
+API Endpoints — Dono Environments
+Sandbox
+https://devconnect.tcscourier.com
+TESTING
+Production
+https://ociconnect.tcscourier.com
+LIVE
+🔑
+Step 1: Bearer Token (Authorization)
+Sab se pehle Bearer Token lena zaroori hai. Yeh token E-COM Authentication API mein use hota hai.
+
+Field	Value
+Method	GET
+Endpoint	/auth/api/auth
+Params	clientid, clientsecret — TCS se milenge
+Returns	accessToken, expiry
+ src/auth.js — getBearerToken()
+javascript
+const axios = require('axios');
+const { BASE_URL, CLIENT_ID, CLIENT_SECRET } = require('./config');
+
+// Token cache — baar baar request mat karo
+let bearerToken = null;
+let bearerExpiry = null;
+
+async function getBearerToken() {
+  // Agar token abhi valid hai toh naya mat lo
+  if (bearerToken && bearerExpiry && new Date() < new Date(bearerExpiry)) {
+    return bearerToken;
+  }
+
+  try {
+    const response = await axios.get(`${BASE_URL}/auth/api/auth`, {
+      data: {
+        clientid: CLIENT_ID,
+        clientsecret: CLIENT_SECRET,
+      },
+    });
+
+    if (response.data.status && response.data.result) {
+      bearerToken = response.data.result.accessToken;
+      bearerExpiry = response.data.result.expiry;
+      return bearerToken;
+    }
+
+    throw new Error('Bearer token lene mein masla: ' + JSON.stringify(response.data));
+  } catch (err) {
+    throw new Error('Authorization API error: ' + err.message);
+  }
+}
+
+module.exports = { getBearerToken };
+🎫
+Step 2: E-COM Access Token
+Bearer Token milne ke baad yeh E-COM token lein. Yeh accessToken har API ke JSON body mein dena hoga.
+
+ src/auth.js — getAccessToken()
+javascript
+let accessToken = null;
+let accessExpiry = null;
+
+async function getAccessToken() {
+  if (accessToken && accessExpiry && new Date() < new Date(accessExpiry)) {
+    return accessToken;
+  }
+
+  const bearer = await getBearerToken();
+
+  const response = await axios.get(
+    `${BASE_URL}/ecom/api/authentication/token`,
+    {
+      data: {
+        username: USERNAME,
+        password: PASSWORD,
+      },
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (response.data.message === 'success') {
+    accessToken = response.data.accesstoken;
+    accessExpiry = response.data.expiry;
+    return accessToken;
+  }
+
+  throw new Error('E-COM token error');
+}
+
+module.exports = { getBearerToken, getAccessToken };
+✅
+Token Caching: Dono tokens ko cache kiya gaya hai. Har API call pe naya token nahi liya jayega — sirf expiry ke baad naya token fetch hoga. Isse performance behtar hoti hai.
+📦
+Create Booking
+Naya shipment book karen. Yeh sabse important API hai — consignment number yahan milta hai.
+
+Mandatory Fields
+Section	Field	Type	Req?	Notes
+Root	accesstoken	String	✓ YES	E-COM token
+shipperinfo	tcsaccount	String(12)	✓ YES	TCS account no.
+shipperinfo	shippername	String(50)	✓ YES	—
+shipperinfo	address1	String(120)	✓ YES	—
+shipperinfo	countrycode	String(2)	✓ YES	e.g. PK
+shipperinfo	countryname	String(50)	✓ YES	e.g. Pakistan
+shipperinfo	cityname	String(50)	✓ YES	—
+shipperinfo	mobile	Number(11)	✓ YES	0300xxxxxxx
+consigneeinfo	firstname	String(50)	✓ YES	—
+consigneeinfo	middlename	String(50)	✓ YES	—
+consigneeinfo	address1	String(120)	✓ YES	—
+consigneeinfo	countrycode	String(2)	✓ YES	—
+consigneeinfo	countryname	String(50)	✓ YES	—
+consigneeinfo	cityname	String(50)	✓ YES	—
+consigneeinfo	mobile	Number(11)	✓ YES	—
+shipmentinfo	costcentercode	String(20)	✓ YES	—
+shipmentinfo	servicecode	String(6)	✓ YES	e.g. "O"
+shipmentinfo	currency	String(5)	✓ YES	PKR / USD
+shipmentinfo	codamount	int32	✓ YES	0–250000
+shipmentinfo	weightinkg	double	✓ YES	min 0.5
+shipmentinfo	pieces	int32	✓ YES	min 1
+shipmentinfo	fragile	Boolean	✓ YES	true/false
+skus[]	quantity	int32	✓ YES	min 1
+skus[]	weight	double	✓ YES	min 0.5
+skus[]	unitprice	int32	✓ YES	1–250000
+ src/booking.js — createBooking()
+javascript
+const axios = require('axios');
+const { BASE_URL, ACCOUNT } = require('./config');
+const { getAccessToken, getBearerToken } = require('./auth');
+
+async function createBooking(bookingData) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const payload = {
+    accesstoken,
+    shipperinfo: {
+      tcsaccount: ACCOUNT,
+      shippername: bookingData.shipperName,
+      address1: bookingData.shipperAddress,
+      countrycode: 'PK',
+      countryname: 'Pakistan',
+      citycode: bookingData.shipperCityCode,
+      cityname: bookingData.shipperCity,
+      mobile: bookingData.shipperMobile,
+    },
+    consigneeinfo: {
+      firstname: bookingData.consigneeFirstName,
+      middlename: bookingData.consigneeMiddleName || '.',
+      lastname: bookingData.consigneeLastName || '',
+      address1: bookingData.consigneeAddress,
+      countrycode: 'PK',
+      countryname: 'Pakistan',
+      citycode: bookingData.consigneeCityCode,
+      cityname: bookingData.consigneeCity,
+      mobile: bookingData.consigneeMobile,
+      email: bookingData.consigneeEmail || '',
+    },
+    shipmentinfo: {
+      costcentercode: bookingData.costCenterCode,
+      referenceno: bookingData.orderRef || '',
+      servicecode: bookingData.serviceCode || 'O',
+      currency: 'PKR',
+      codamount: bookingData.codAmount,
+      weightinkg: bookingData.weight,
+      pieces: bookingData.pieces || 1,
+      fragile: bookingData.fragile || false,
+      remarks: bookingData.remarks || '',
+      skus: [
+        {
+          description: bookingData.itemDesc || 'Product',
+          quantity: bookingData.pieces || 1,
+          weight: bookingData.weight,
+          unitprice: bookingData.codAmount,
+        },
+      ],
+    },
+  };
+
+  const res = await axios.post(
+    `${BASE_URL}/ecom/api/booking/create`,
+    payload,
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+
+  return res.data; // { response, consignmentNo, code, status, message }
+}
+
+module.exports = { createBooking };
+📌
+Success response mein consignmentNo milega — yeh CN number save kar lein. CN Print, Tracking aur Cancel ke liye yahi use hoga.
+❌
+Cancel Booking
+Existing booking cancel karen using consignment number.
+
+ src/booking.js — cancelBooking()
+javascript
+async function cancelBooking(consignmentNumber) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.post(
+    `${BASE_URL}/ecom/api/booking/cancel`,
+    { consignmentNumber: consignmentNumber, accesstoken: accesstoken },
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+
+  // Success: { message: "SUCCESS", traceid: "..." }
+  // Failure: { message: "Failure: No Record Founds", traceid: "..." }
+  return res.data;
+}
+↩️
+Reverse Booking
+Shipped parcel ka return pickup book karen.
+
+ src/booking.js — reverseBooking()
+javascript
+async function reverseBooking(consignmentno, costcentercode = '') {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.post(
+    `${BASE_URL}/ecom/api/booking/reverse`,
+    { costcentercode, consignmentno, consigneemobno: '', accesstoken },
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+  return res.data;
+}
+🏢
+Create Cost Center Code
+Booking ke liye cost center code create aur assign karen.
+
+ src/booking.js — createCostCenterCode()
+javascript
+async function createCostCenterCode(data) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.post(
+    `${BASE_URL}/ecom/api/booking/createcostcentercode`,
+    {
+      costcentercityname: data.cityName,      // e.g. "KARACHI"
+      costcentercode: data.code,
+      costcentername: data.name,
+      pickupaddress: data.pickupAddress,
+      returnaddress: data.returnAddress,
+      islabelprint: 'yes',
+      accountNumber: ACCOUNT,
+      phoneNumber: data.phone || '',
+      email: data.email || '',
+      accesstoken,
+    },
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+  return res.data;
+}
+🧾
+Payment Invoice
+Invoice number de ke sab bookings ki details hasil karen.
+
+ src/payment.js — getPaymentInvoice()
+javascript
+async function getPaymentInvoice(invoiceno) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/booking/paymentinvoice`,
+    {
+      data: { invoiceno, accesstoken },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // data[] mein har CN ki details
+}
+🔄
+Get CN Update
+Consignment note ka latest status update hasil karen.
+
+ src/booking.js — getCNUpdate()
+javascript
+async function getCNUpdate(cnNumber, flag = '2') {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/booking/getcnupdate`,
+    {
+      data: { ID: cnNumber, flag: flag, accesstoken },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data;
+}
+📍
+Tracking
+CN number de ke shipment ka real-time status track karen — checkpoints, delivery info sab milta hai.
+
+ src/tracking.js — trackShipment()
+javascript
+const axios = require('axios');
+const { BASE_URL } = require('./config');
+const { getAccessToken, getBearerToken } = require('./auth');
+
+/**
+ * @param {string|string[]} consignmentNumbers - Ek ya zyada CN numbers
+ */
+async function trackShipment(consignmentNumbers) {
+  const bearer = await getBearerToken();
+  const cns = Array.isArray(consignmentNumbers)
+    ? consignmentNumbers
+    : [consignmentNumbers];
+
+  const res = await axios.get(
+    `${BASE_URL}/tracking/api/Tracking/GetDynamicTrackDetail`,
+    {
+      data: { consignee: cns },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+
+  // Returns: shipmentinfo, deliveryinfo, checkpoints, shipmentsummary
+  return res.data;
+}
+
+module.exports = { trackShipment };
+🖨️
+CN Print
+Shipping label PDF generate karen — direct file path milta hai.
+
+ src/booking.js — printLabel()
+javascript
+async function printLabel(consignmentno, shipperdetail = true) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/print/label`,
+    {
+      data: {
+        consignmentno,
+        shipperdetail: String(shipperdetail),
+        accesstoken,
+      },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  // Success: PDF file available for download
+  // Failure: { message: "CN not found", url: "", traceid: "..." }
+  return res.data;
+}
+🔍
+Cost Center Inquiry
+Account number se sare cost centers ki list hasil karen.
+
+ src/setup.js — getCostCenterInquiry()
+javascript
+async function getCostCenterInquiry(customerno) {
+  const accessToken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  const res = await axios.get(
+    `${BASE_URL}/ecom/inquiry/costcenterinquiry`,
+    {
+      data: { accessToken, customerno },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // detail[] mein har cost center ki info
+}
+💳
+Payment Status
+COD payment ka current status check karen.
+
+ src/payment.js — getPaymentStatus()
+javascript
+async function getPaymentStatus(customerno, consignmentno) {
+  const bearer = await getBearerToken();
+
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/Payment/status`,
+    {
+      data: { customerno, consignmentno },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data;
+}
+📊
+Payment Detail
+Date range de ke tamam payments ki detailed report hasil karen.
+
+ src/payment.js — getPaymentDetail()
+javascript
+async function getPaymentDetail(customerno, fromdate, todate) {
+  const accesstoken = await getAccessToken();
+  const bearer = await getBearerToken();
+
+  // Date format: "YYYY-MM-DD"
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/Payment/detail`,
+    {
+      data: { accesstoken, customerno, fromdate, todate },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // detail[] mein booking date, CN, status, charges
+}
+📍
+Setup — Area Code
+City ke area codes aur names hasil karen. Booking mein areacode field ke liye use hota hai.
+
+ src/setup.js — getAreaCodes()
+javascript
+async function getAreaCodes(citycode = '', area = '') {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/setup/areacode`,
+    {
+      data: { citycode, area },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // data[]: { areaid, citycode, areacode, areaname }
+}
+
+async function getBlockCodes(areaCode, blockcode = '') {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/setup/blockcode`,
+    {
+      data: { area: areaCode, blockcode },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // data[]: { blockid, blockcode, blockname }
+}
+
+async function getCountryList() {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/setup/countrylist`,
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+  return res.data; // data[]: { countrycode, countryname }
+}
+
+async function getCityList(countrycodes = ['PK']) {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/setup/citylistbycountry`,
+    {
+      data: { countrycode: countrycodes },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data; // data[]: { citycode, cityname }
+}
+
+async function getRouteList(cityCode) {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/api/setup/routelist/`,
+    {
+      data: { countrycode: cityCode },
+      headers: { Authorization: `Bearer ${bearer}` },
+    }
+  );
+  return res.data;
+}
+
+async function getDeliveryStatusList() {
+  const bearer = await getBearerToken();
+  const res = await axios.get(
+    `${BASE_URL}/ecom/setup/deliverystatuslist`,
+    { headers: { Authorization: `Bearer ${bearer}` } }
+  );
+  return res.data; // detail[]: { statuscode, description }
+}
+🛡️
+Error Handling — Best Practices
+Production-ready error handling wrapper jo sab APIs mein use karna chahiye.
+
+Code	Meaning	Kya Karen
+200	OK — Kaam ho gaya	Response data use karen
+201	Created	Naya record ban gaya
+400	Bad Request	Request fields check karen
+401	Auth Failure	Token dobara lein ya credentials check karen
+403	Forbidden	Permission nahi hai
+404	Not Found	CN ya resource maujood nahi
+500	Server Error	TCS ki taraf se masla, retry karen
+503	Service Down	Kuch der baad try karen
+ src/utils.js — apiCall() wrapper
+javascript
+/**
+ * Production-ready API call wrapper
+ * Automatic retry on 401 (token refresh) aur 503 (service down)
+ */
+async function apiCall(fn, maxRetries = 3) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      return { success: true, data: result };
+
+    } catch (err) {
+      lastError = err;
+      const status = err.response?.status;
+
+      if (status === 401) {
+        // Token expired — reset aur retry
+        console.log('Token expired, naya le raha hoon...');
+        bearerToken = null; accessToken = null;
+        if (attempt < maxRetries) continue;
+      }
+
+      if (status === 503 && attempt < maxRetries) {
+        // Service temporarily down — wait aur retry
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+
+      // Baaki errors ke liye turant fail
+      break;
+    }
+  }
+
+  return {
+    success: false,
+    error: lastError.response?.data || lastError.message,
+    status: lastError.response?.status,
+  };
+}
+🚀
+Complete Working Example
+Ek mukammal example jo pehle token leta hai, phir booking karta hai aur track karta hai.
+
+ index.js — Full Integration Example
+javascript
+require('dotenv').config();
+const { createBooking, cancelBooking, printLabel } = require('./src/booking');
+const { trackShipment } = require('./src/tracking');
+const { getPaymentStatus } = require('./src/payment');
+
+async function main() {
+  try {
+    console.log('=== TCS API Integration Test ===');
+
+    // 1. BOOKING BANAO
+    console.log('\n📦 Booking create kar raha hoon...');
+    const booking = await createBooking({
+      shipperName: 'My Online Store',
+      shipperAddress: 'Shop 5, Liberty Market',
+      shipperCityCode: 'LHE',
+      shipperCity: 'Lahore',
+      shipperMobile: '03001234567',
+
+      consigneeFirstName: 'Ahmed',
+      consigneeMiddleName: 'Ali',
+      consigneeLastName: 'Khan',
+      consigneeAddress: 'House 10, Block B, DHA Phase 5',
+      consigneeCityCode: 'KHI',
+      consigneeCity: 'Karachi',
+      consigneeMobile: '03219876543',
+      consigneeEmail: 'ahmed@email.com',
+
+      costCenterCode: 'Test-01',
+      orderRef: 'ORDER-12345',
+      serviceCode: 'O',
+      codAmount: 2500,
+      weight: 1.5,
+      pieces: 1,
+      fragile: false,
+      itemDesc: 'Kapray',
+      remarks: 'Handle with care',
+    });
+
+    if (!booking.status) {
+      throw new Error('Booking fail: ' + booking.message);
+    }
+
+    const cn = booking.consignmentNo;
+    console.log(`✅ Booking SUCCESS! CN: ${cn}`);
+
+    // 2. LABEL PRINT
+    console.log('\n🖨️  Label print kar raha hoon...');
+    const label = await printLabel(cn);
+    console.log('Label response:', label);
+
+    // 3. TRACKING
+    console.log('\n📍 Tracking check kar raha hoon...');
+    const tracking = await trackShipment(cn);
+    if (tracking.shipmentsummary) {
+      console.log('Status:', tracking.shipmentsummary);
+    }
+
+    // 4. PAYMENT STATUS
+    console.log('\n💳 Payment status check...');
+    const payment = await getPaymentStatus('YOUR_CUSTOMER_NO', cn);
+    console.log('Payment:', payment.detail?.[0]);
+
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+    if (err.response) {
+      console.error('Response data:', err.response.data);
+    }
+    process.exit(1);
+  }
+}
+
+main();
+⚡
+HTTP Status Codes Reference
+TCS API ke tamam status codes aur unka matlab.
+
+Code	Matlab	Action
+200	OK	Data use karen
+201	Created	Naya record bana
+400	Bad Request	Request fields dobara check karen
+401	Auth Fail	Token refresh karen, credentials check karen
+403	Forbidden	Account permissions check karen
+404	Not Found	CN number ya resource exist nahi
+405	Method Not Allowed	GET/POST sahi use karen
+500	Server Error	TCS ka masla, retry karen
+501	Not Implemented	Feature available nahi
+503	Service Unavailable	Kuch waqt baad try karen
+⚠️
+Production Access: Production access ke liye pehle Sandbox (UAT) phase successfully complete karni hogi. Approval mein kam az kam 3 working days lagtay hain. Sandbox: devconnect.tcscourier.com | Production: ociconnect.tcscourier.com
+Quick Reference
+Sandbox Portal
+devconnect.tcscourier.com
+Production Portal
+ociconnect.tcscourier.com
+Auth Endpoint
+/auth/api/auth
+E-COM Token
+/ecom/api/authentication/token
+Create Booking
+/ecom/api/booking/create
+Track Shipment
+/tracking/api/Tracking/GetDynamicTrackDetail
+Payment Status
+/ecom/api/Payment/status
+Cancel Booking
+/ecom/api/booking/cancel
