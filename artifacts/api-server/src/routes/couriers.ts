@@ -2078,7 +2078,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         transactiontype: "",
         dsflag: "",
         carrierslug: "",
-        weightinkg: Math.max(0.5, parseFloat(Number(order.weight || settings.defaultWeight || 0.5).toFixed(2))),
+        weightinkg: parseFloat(Math.max(0.5, (Number(order.weight || settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
         pieces: parseInt(String(order.pieces ?? 1), 10),
         fragile: order.fragile ?? settings.fragile ?? false,
         remarks: order.specialInstructions || settings.defaultRemarks || order.notes || "",
@@ -2086,7 +2086,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           ? items.map((item: any) => ({
               description: item.name ?? "Product",
               quantity: parseInt(String(item.qty ?? 1), 10),
-              weight: Math.max(0.5, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
+              weight: parseFloat(Math.max(0.5, (Number(settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
               uom: "KG",
               unitprice: Number(item.price ?? 0),
               declaredvalue: settings.declaredValue > 0 ? Number(settings.declaredValue) : null,
@@ -2095,7 +2095,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
           : [{
               description: "KDF Nuts Products",
               quantity: 1,
-              weight: Math.max(0.5, parseFloat(Number(settings.defaultWeight || 0.5).toFixed(2))),
+              weight: parseFloat(Math.max(0.5, (Number(settings.defaultWeight || 0.5) || 0.5)).toFixed(2)),
               uom: "KG",
               unitprice: codAmount,
               declaredvalue: settings.declaredValue > 0 ? settings.declaredValue : null,
