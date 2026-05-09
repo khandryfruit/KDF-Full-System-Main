@@ -419,6 +419,31 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
         )}
       </div>
 
+      {/* ── Stale Token Alert — shown in VIEW mode (outside edit form) ── */}
+      {!editing && config && cs.accessToken && (
+        <div className="border-t border-red-300 bg-red-50 px-4 py-3 space-y-2">
+          <p className="text-xs font-bold text-red-800 flex items-center gap-1.5">🔴 Stale ECOM Token — Causing Booking Failures</p>
+          <p className="text-xs text-red-700">A manual "Direct ECOM Access Token" is set and TCS is rejecting it with <strong>"Invalid Bearer token. Mismatch configuration."</strong> Clear it so the system auto-generates a fresh token.</p>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="w-full gap-1.5"
+            onClick={() => {
+              const body = {
+                name: "TCS Couriers", slug: "tcs", apiKey: "", apiSecret: "",
+                apiEndpoint: preset.apiEndpoint, isActive: true,
+                settings: { ...(config?.settings ?? {}), accessToken: "" },
+              };
+              apiFetch("/api/admin/couriers", { method: "POST", body: JSON.stringify(body) })
+                .then(() => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); toast({ title: "✅ Stale token cleared — next booking will auto-generate a fresh one" }); })
+                .catch((e: any) => toast({ variant: "destructive", title: e.message }));
+            }}
+          >
+            Clear Stale Token Now
+          </Button>
+        </div>
+      )}
+
       {/* ── Settings Form ── */}
       {editing && (
         <div className="border-t bg-white/70 p-4 space-y-4">
@@ -514,10 +539,28 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
           {/* ── Warning: manual ECOM token set ── */}
           {config && cs.accessToken && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
-              <p className="font-semibold flex items-center gap-1.5">⚠ Direct ECOM Access Token is set</p>
-              <p>A manual ECOM token in Advanced Settings is bypassing auto Step-2. If you're getting "Invalid access token", this token may be wrong or expired.</p>
-              <p className="font-medium">Fix: Clear the "Direct ECOM Access Token" field in Advanced Settings → Save → Run Auth Debug.</p>
+            <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 text-xs text-red-900 space-y-2">
+              <p className="font-bold flex items-center gap-1.5 text-sm">🔴 Stale ECOM Token Detected — CAUSING BOOKING FAILURES</p>
+              <p>A manual "Direct ECOM Access Token" is set in Advanced Settings. TCS is rejecting it with <strong>"Invalid Bearer token. Mismatch configuration."</strong></p>
+              <p>This token is expired or wrong. Click below to clear it — the system will auto-generate a fresh one on the next booking.</p>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="w-full gap-1.5 mt-1"
+                onClick={() => {
+                  setForm(p => ({ ...p, accessToken: "" }));
+                  const body = {
+                    name: "TCS Couriers", slug: "tcs", apiKey: "", apiSecret: "",
+                    apiEndpoint: preset.apiEndpoint, isActive: true,
+                    settings: { ...(config?.settings ?? {}), accessToken: "" },
+                  };
+                  apiFetch("/api/admin/couriers", { method: "POST", body: JSON.stringify(body) })
+                    .then(() => { qc.invalidateQueries({ queryKey: ["/api/admin/couriers"] }); toast({ title: "✅ Stale token cleared — system will auto-generate fresh token on next booking" }); })
+                    .catch((e: any) => toast({ variant: "destructive", title: e.message }));
+                }}
+              >
+                Clear Stale Token Now
+              </Button>
             </div>
           )}
 

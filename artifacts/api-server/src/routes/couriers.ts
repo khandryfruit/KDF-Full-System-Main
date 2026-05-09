@@ -2889,7 +2889,7 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
         ? " | ACTION REQUIRED: Clear 'Direct ECOM Access Token' in Advanced Settings — stale manual token detected!"
         : "";
       const acctHint = settings.tcsaccount?.trim() === settings.username?.trim()
-        ? " | Account ≠ Username — update TCS Account Number in Settings with the real account ID from your TCS contract."
+        ? ` | NOTE: Account Number (${settings.tcsaccount}) is the same as Username — they are usually different fields. If booking fails, update Account Number with the real account ID from your TCS contract.`
         : "";
       const raw = errorList.length > 0
         ? errorList.map((e: any) => `${e.key ?? ""}: ${e.errormessage ?? e.message ?? JSON.stringify(e)}`).join(" | ")
