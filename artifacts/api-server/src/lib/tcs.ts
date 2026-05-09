@@ -125,19 +125,76 @@ export function getTcsTrackingUrl(cn: string): string {
   return `${TCS_TRACKING_LINK}?cg=${encodeURIComponent(cn)}`;
 }
 
-/* ─── City code map ──────────────────────────────────────────────────────── */
+/* ─── City helpers ────────────────────────────────────────────────────────
+ * TCS ECOM API requires exact city names from their list.
+ * citycode is optional — if we don't know it, send empty and let TCS match by name.
+ * normalizeCity() strips area/sector prefixes so "DHA Lahore" → "Lahore".
+ */
 const CITY_CODES: Record<string, string> = {
   lahore: "LHE", karachi: "KHI", islamabad: "ISB", rawalpindi: "RWP",
   faisalabad: "FSD", multan: "MUL", peshawar: "PEW", quetta: "UET",
   gujranwala: "GJW", sialkot: "SKT", hyderabad: "HYD", sargodha: "SGD",
   bahawalpur: "BWP", abbottabad: "ABT", jhelum: "JHM", gujrat: "GRT",
-  sahiwal: "SWL", sheikhupura: "SKP", rahim: "RYK", sukkur: "SUK",
-  larkana: "LRK", nawabshah: "NWS", mingora: "MNG",
+  sahiwal: "SWL", sheikhupura: "SKP", sukkur: "SUK", larkana: "LRK",
+  nawabshah: "NWS", mingora: "MNG", mardan: "MRD", swabi: "SWB",
+  "rahim yar khan": "RYK", "rahimyar khan": "RYK", "r.y.khan": "RYK",
+  "d.g. khan": "DGK", "dera ghazi khan": "DGK", "dg khan": "DGK",
+  "d.i. khan": "DIK", "dera ismail khan": "DIK", "di khan": "DIK",
+  "mirpur khas": "MPK", "nawabshah": "NWS", "khairpur": "KHP",
+  "tando adam": "TDA", "tando allahyar": "TAY", "sanghar": "SNH",
+  "badin": "BDN", "thatta": "THA", "jacobabad": "JAC", "shikarpur": "SKP2",
+  "muzaffarabad": "MZD", "mirpur": "MPR", "bhimber": "BHM",
+  "attock": "ATK", "chakwal": "CKW", "taxila": "TXL",
+  "wah cantt": "WAH", "wah": "WAH", "kamra": "KAM",
+  "gujranwala": "GJW", "hafizabad": "HFZ", "mandi bahauddin": "MBD",
+  "narowal": "NRW", "okara": "OKR", "pakpattan": "PKP",
+  "vehari": "VHR", "khanewal": "KNW", "lodhran": "LDR",
+  "bahawalnagar": "BHN", "chiniot": "CHN", "jhang": "JHG",
+  "toba tek singh": "TTS", "mianwali": "MWL", "khushab": "KSB",
+  "layyah": "LAY", "muzaffargarh": "MFG",
 };
+
+/* Alias map: compound area names → main city */
+const CITY_ALIASES: Array<[RegExp, string]> = [
+  [/\bdha\b/i,         ""],   /* strip "DHA" prefix, keep rest */
+  [/bahria\s+town/i,   ""],   /* strip "Bahria Town", keep city */
+  [/gulberg/i,         "Lahore"],
+  [/johar\s*town/i,    "Lahore"],
+  [/model\s*town/i,    "Lahore"],
+  [/cantt/i,           ""],   /* strip "Cantt" */
+  [/cantonment/i,      ""],
+  [/phase\s+\w+/i,     ""],   /* strip "Phase 5" etc */
+  [/sector\s+\w+/i,    ""],   /* strip "Sector F-10" etc */
+  [/block\s+\w+/i,     ""],   /* strip "Block A" etc */
+  [/f-\d+/i,           ""],   /* strip "F-10" in Islamabad */
+  [/g-\d+/i,           ""],   /* strip "G-11" etc */
+  [/i-\d+/i,           ""],
+];
+
+function normalizeCity(raw: string): string {
+  let city = raw.trim();
+  /* Apply alias replacements */
+  for (const [pattern, replacement] of CITY_ALIASES) {
+    city = city.replace(pattern, replacement);
+  }
+  /* Collapse whitespace */
+  city = city.replace(/\s{2,}/g, " ").trim();
+  /* If empty after stripping, use original */
+  if (!city) city = raw.trim();
+  /* Capitalize first letter of each word */
+  return city.replace(/\b\w/g, c => c.toUpperCase());
+}
 
 function cityCode(name: string): string {
   const lower = name.toLowerCase().trim();
-  return CITY_CODES[lower] ?? name.slice(0, 3).toUpperCase();
+  /* Direct match */
+  if (CITY_CODES[lower]) return CITY_CODES[lower];
+  /* Partial match — check if any known city appears in the name */
+  for (const [key, code] of Object.entries(CITY_CODES)) {
+    if (lower.includes(key)) return code;
+  }
+  /* Unknown city — return empty, let TCS match by name */
+  return "";
 }
 
 /* ─── Weight helper ──────────────────────────────────────────────────────── */
@@ -332,8 +389,9 @@ export async function createBooking(
   const errs: string[] = [];
   const rawPhone = (address.phone ?? "").replace(/\D/g, "");
   if (rawPhone.length < 10) errs.push(`Phone invalid: "${address.phone}" — need 10–11 digit Pakistani number`);
-  const destCity = (address.city ?? "").trim();
-  if (!destCity) errs.push("Consignee city is empty");
+  const destCityRaw = (address.city ?? "").trim();
+  if (!destCityRaw) errs.push("Consignee city is empty");
+  const destCity = normalizeCity(destCityRaw);
   const addr = [address.address1 ?? address.address, address.address2].filter(Boolean).join(", ").trim();
   if (!addr) errs.push("Consignee address is empty");
   if (errs.length > 0) throw new Error(`TCS booking validation:\n• ${errs.join("\n• ")}`);
@@ -351,7 +409,7 @@ export async function createBooking(
   const orderRef    = String(order.orderNumber ?? order.id ?? Date.now());
   const remarks     = (order.specialInstructions ?? order.notes ?? settings.defaultRemarks ?? "").trim() || "Handle with care";
   const isFragile   = order.fragile ?? settings.fragile ?? false;
-  const originCity  = (settings.shipperCity ?? "Lahore").trim();
+  const originCity  = normalizeCity((settings.shipperCity ?? "Lahore").trim());
   const shipperName = (settings.shipperName ?? "KDF NUTS").trim();
   const shipperAddr = (settings.shipperAddress ?? "").trim();
   const shipperPhone = (settings.shipperPhone ?? "").replace(/\D/g, "");
@@ -385,7 +443,7 @@ export async function createBooking(
       countrycode:  "PK",
       countryname:  "Pakistan",
       citycode:     cityCode(originCity),
-      cityname:     originCity,
+      cityname:     originCity.slice(0, 50),
       mobile:       shipperPhone || "03000000000",
     },
     consigneeinfo: {
@@ -417,7 +475,7 @@ export async function createBooking(
       address2:  "",
       address3:  "",
       citycode:  cityCode(originCity),
-      cityname:  originCity,
+      cityname:  originCity.slice(0, 50),
       mobile:    shipperPhone || "03000000000",
     },
     shipmentinfo: {
