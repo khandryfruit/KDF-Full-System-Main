@@ -115,6 +115,7 @@ const fmt = (n: number) => {
 
 /* ─── TCS Integration Card ─────────────────────────── */
 interface TcsFormState {
+  accessToken: string;
   bearerToken: string; username: string; password: string;
   tcsaccount: string; costcentercode: string; shipperName: string;
   shipperAddress: string; shipperCityCode: string; shipperCity: string;
@@ -129,7 +130,10 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const config = (couriers as any[]).find((c: any) => c.slug === "tcs");
   const [editing, setEditing] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
   const [form, setForm] = useState<TcsFormState>({
+    accessToken: "",
     bearerToken: "", username: "", password: "", tcsaccount: "", costcentercode: "",
     shipperName: "", shipperAddress: "", shipperCityCode: "", shipperCity: "",
     shipperPhone: "", sandbox: false, defaultWeight: "0.5", serviceCode: "O",
@@ -139,6 +143,7 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
   const loadForm = () => {
     const s = (config?.settings ?? {}) as any;
     setForm({
+      accessToken: s.accessToken ?? "",
       bearerToken: s.bearerToken ?? "", username: s.username ?? "", password: s.password ?? "",
       tcsaccount: s.tcsaccount ?? "", costcentercode: s.costcentercode ?? "",
       shipperName: s.shipperName ?? "", shipperAddress: s.shipperAddress ?? "",
@@ -161,8 +166,14 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const testConn = useMutation({
     mutationFn: () => apiFetch("/api/admin/couriers/tcs/test", { method: "POST" }),
-    onSuccess: (d: any) => toast({ title: d.message ?? "TCS connection OK" }),
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
+    onSuccess: (d: any) => toast({ title: d.message ?? "TCS connection OK", description: `Token length: ${d.accessTokenLength} · mode: ${d.mode}` }),
+    onError: (e: any) => toast({ variant: "destructive", title: "TCS auth failed", description: e.message }),
+  });
+
+  const debugAuth = useMutation({
+    mutationFn: () => apiFetch("/api/admin/couriers/tcs/debug-auth", { method: "POST" }),
+    onSuccess: (d: any) => { setDebugLog(d.log ?? []); setShowDebug(true); if (!d.ok) toast({ variant: "destructive", title: "Auth failed", description: d.error }); },
+    onError: (e: any) => toast({ variant: "destructive", title: "Debug failed", description: e.message }),
   });
 
   const toggleActive = useMutation({
@@ -176,6 +187,10 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
 
   const f = (k: keyof TcsFormState) => (e: any) => setForm(p => ({ ...p, [k]: e.target.value }));
   const isActive = config?.isActive ?? false;
+  const authMode = (config?.settings as any)?.accessToken ? "Direct Token" :
+    (config?.settings as any)?.bearerToken && (config?.settings as any)?.username ? "Bearer + 2-Step" :
+    (config?.settings as any)?.username ? "Username + Password" :
+    (config?.settings as any)?.bearerToken ? "Bearer Only ⚠️" : "Not set";
 
   return (
     <div className={`border-2 rounded-xl overflow-hidden ${preset.color}`}>
@@ -197,40 +212,72 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
             {config && <Switch checked={isActive} onCheckedChange={() => toggleActive.mutate()} />}
             <Button variant="ghost" size="sm" onClick={loadForm}><Settings className="w-3.5 h-3.5" /></Button>
             {config && (
-              <Button variant="ghost" size="sm" onClick={() => testConn.mutate()} disabled={testConn.isPending}>
-                {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" onClick={() => testConn.mutate()} disabled={testConn.isPending} title="Test TCS connection">
+                  {testConn.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => debugAuth.mutate()} disabled={debugAuth.isPending} title="Full auth debug">
+                  {debugAuth.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span className="text-xs font-mono">DBG</span>}
+                </Button>
+              </>
             )}
           </div>
         </div>
         {config && (
           <div className="text-xs text-muted-foreground space-y-0.5">
             <p>Account: {(config.settings as any)?.tcsaccount || "—"} · Mode: {(config.settings as any)?.sandbox ? "Sandbox" : "Production"}</p>
-            <p>Auth: {(config.settings as any)?.bearerToken ? "Bearer Token" : (config.settings as any)?.username ? "Username/Password" : "Not set"}</p>
+            <p>Auth: <span className={(config.settings as any)?.bearerToken && !(config.settings as any)?.username && !(config.settings as any)?.accessToken ? "text-amber-600 font-medium" : ""}>{authMode}</span></p>
+          </div>
+        )}
+        {showDebug && debugLog.length > 0 && (
+          <div className="mt-3 bg-gray-900 text-green-400 rounded-lg p-3 text-xs font-mono max-h-48 overflow-y-auto space-y-0.5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-gray-400 text-xs">TCS Auth Debug Log</span>
+              <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+            </div>
+            {debugLog.map((line, i) => (
+              <div key={i} className={line.includes("✅") ? "text-green-400" : line.includes("❌") ? "text-red-400" : "text-gray-300"}>{line}</div>
+            ))}
           </div>
         )}
       </div>
       {editing && (
         <div className="border-t bg-white/60 p-4 space-y-3">
           <p className="font-medium text-sm">TCS API Configuration</p>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800">
-            Provide either a <strong>Static Bearer Token</strong> OR your <strong>Username + Password</strong> for auto token refresh. Both are used for live tracking.
+
+          {/* Direct Access Token — highest priority */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-blue-800">⚡ Option 1 — Direct Access Token (Recommended)</p>
+            <p className="text-xs text-blue-700">If TCS portal gives you a ready-to-use access token, paste it here. This bypasses all auth steps and is the most reliable option.</p>
+            <div>
+              <Label className="text-xs text-blue-800">Direct Access Token</Label>
+              <Input value={form.accessToken} onChange={f("accessToken")} placeholder="Paste your TCS access token here" className="text-xs mt-1 font-mono" />
+            </div>
           </div>
-          <div className="space-y-2">
-            <div><Label className="text-xs">Static Bearer Token</Label>
-              <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste TCS bearer token" className="text-xs mt-1" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Username / Client ID</Label>
-                <Input value={form.username} onChange={f("username")} placeholder="TCS username" className="text-xs mt-1" /></div>
-              <div><Label className="text-xs">Password / Client Secret</Label>
-                <div className="relative mt-1">
-                  <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="TCS password" className="text-xs pr-8" />
-                  <button onClick={() => setShowPw(!showPw)} className="absolute right-2 top-2 text-muted-foreground">
-                    {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
+
+          {/* 2-Step Auth */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-amber-800">🔐 Option 2 — 2-Step Auto Login</p>
+            <p className="text-xs text-amber-700">Provide Bearer Token (Step 1 = Client ID + Secret) AND Username + Password (Step 2). Token is auto-refreshed every 50 minutes.</p>
+            <div className="space-y-2">
+              <div><Label className="text-xs">Bearer Token (Client ID / Client Secret result)</Label>
+                <Input value={form.bearerToken} onChange={f("bearerToken")} placeholder="Paste TCS bearer token (from Step 1)" className="text-xs mt-1" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-xs">Username (for Step 2)</Label>
+                  <Input value={form.username} onChange={f("username")} placeholder="TCS username" className="text-xs mt-1" /></div>
+                <div><Label className="text-xs">Password (for Step 2)</Label>
+                  <div className="relative mt-1">
+                    <Input type={showPw ? "text" : "password"} value={form.password} onChange={f("password")} placeholder="TCS password" className="text-xs pr-8" />
+                    <button onClick={() => setShowPw(!showPw)} className="absolute right-2 top-2 text-muted-foreground">
+                      {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div><Label className="text-xs">TCS Account #</Label>
                 <Input value={form.tcsaccount} onChange={f("tcsaccount")} placeholder="Account number" className="text-xs mt-1" /></div>
@@ -238,20 +285,20 @@ function TcsCourierCard({ preset }: { preset: typeof COURIER_PRESETS[0] }) {
                 <Input value={form.costcentercode} onChange={f("costcentercode")} className="text-xs mt-1" /></div>
             </div>
             <div><Label className="text-xs">Shipper Name</Label>
-              <Input value={form.shipperName} onChange={f("shipperName")} placeholder="Your business name" className="text-xs mt-1" /></div>
+              <Input value={form.shipperName} onChange={f("shipperName")} placeholder="Your business name e.g. KDF Nuts" className="text-xs mt-1" /></div>
             <div><Label className="text-xs">Shipper Address</Label>
               <Input value={form.shipperAddress} onChange={f("shipperAddress")} className="text-xs mt-1" /></div>
             <div className="grid grid-cols-2 gap-2">
               <div><Label className="text-xs">Shipper City</Label>
-                <Input value={form.shipperCity} onChange={f("shipperCity")} className="text-xs mt-1" /></div>
-              <div><Label className="text-xs">City Code</Label>
-                <Input value={form.shipperCityCode} onChange={f("shipperCityCode")} placeholder="e.g. LHE" className="text-xs mt-1" /></div>
+                <Input value={form.shipperCity} onChange={f("shipperCity")} placeholder="e.g. Lahore" className="text-xs mt-1" /></div>
+              <div><Label className="text-xs">City Code (3-5 chars)</Label>
+                <Input value={form.shipperCityCode} onChange={f("shipperCityCode")} placeholder="e.g. LHE" maxLength={5} className="text-xs mt-1" /></div>
             </div>
             <div><Label className="text-xs">Shipper Phone</Label>
               <Input value={form.shipperPhone} onChange={f("shipperPhone")} className="text-xs mt-1" /></div>
             <div className="grid grid-cols-2 gap-2">
               <div><Label className="text-xs">Default Weight (KG)</Label>
-                <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.1" className="text-xs mt-1" /></div>
+                <Input value={form.defaultWeight} onChange={f("defaultWeight")} type="number" step="0.1" min="0.1" className="text-xs mt-1" /></div>
               <div><Label className="text-xs">Default Service</Label>
                 <select value={form.serviceCode} onChange={f("serviceCode")} className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background mt-1">
                   {TCS_SERVICE_CODES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
