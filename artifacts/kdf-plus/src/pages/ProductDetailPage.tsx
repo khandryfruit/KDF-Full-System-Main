@@ -325,7 +325,9 @@ export default function ProductDetailPage() {
     queryFn: async () => {
       const r = await fetch(`/api/products/${encodeURIComponent(param)}`);
       if (!r.ok) throw new Error("Product not found");
-      return r.json();
+      const canonicalSlug = r.headers.get("X-Canonical-Slug");
+      const data = await r.json();
+      return { ...data, _canonicalSlug: canonicalSlug };
     },
     enabled: !!param,
     staleTime: 60_000,
@@ -334,19 +336,14 @@ export default function ProductDetailPage() {
 
   const productId: number = (product as any)?.id ?? 0;
 
-  /* ── SEO: redirect numeric ID or unclean slug → canonical slug URL ── */
+  /* ── SEO: silently update address bar to canonical slug (no reload) ── */
   useEffect(() => {
     if (!product) return;
-    const slug = (product as any).slug as string | undefined;
-    if (!slug) return;
-    const decodedParam = decodeURIComponent(param);
-    if (decodedParam !== slug) {
-      // window.location.replace causes a permanent navigation so the browser
-      // back-button skips the broken URL and future shares use the clean one.
-      const base = (BASE_URL || "/").replace(/\/$/, "");
-      window.location.replace(`${base}/products/${slug}`);
-    }
-  }, [product, param]);
+    const canonicalSlug = (product as any)._canonicalSlug as string | null;
+    if (!canonicalSlug) return;
+    const base = (BASE_URL || "/").replace(/\/$/, "");
+    window.history.replaceState(null, "", `${base}/products/${canonicalSlug}`);
+  }, [product]);
 
   const { data: bidData, refetch: refetchBid } = useQuery({
     queryKey: ["bids", productId],
