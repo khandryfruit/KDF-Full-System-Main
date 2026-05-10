@@ -1,0 +1,190 @@
+IMPORTANT — Please add a professional Google Fast Indexing system for SEO.
+
+This is a VERY IMPORTANT feature.
+
+Need automatic indexing for:
+
+✅ Products
+✅ Categories
+✅ Blog Posts
+✅ Pages (optional)
+
+==================================================
+GOAL
+====
+
+Whenever we:
+
+✅ create product
+✅ update product
+✅ publish product
+✅ create category
+✅ publish category
+✅ create blog post
+✅ publish article
+
+the system should automatically notify Google for fast indexing.
+
+==================================================
+REQUIRED FEATURE
+================
+
+Add:
+
+✅ Google Indexing API integration
+✅ Automatic URL submission
+✅ Manual “Request Indexing” button
+✅ Bulk indexing
+✅ Indexing logs
+✅ Index status checker
+
+==================================================
+SUPPORTED CONTENT TYPES
+=======================
+
+Please support:
+
+✅ Products
+✅ Categories
+✅ Blog Posts
+✅ Static Pages
+
+==================================================
+GOOGLE INDEXING FLOW
+====================
+
+Use official Google APIs:
+
+✅ Google Indexing API
+✅ Google Search Console integration
+✅ Sitemap auto-update
+
+==================================================
+REQUIRED SETTINGS PAGE
+======================
+
+Add:
+
+SEO → Fast Indexing
+
+Inside settings add:
+
+✅ Google Service Account JSON Upload
+✅ Search Console verification
+✅ Site URL
+✅ Auto-submit toggle
+✅ Manual submit button
+✅ Indexing logs
+
+==================================================
+AUTO INDEXING
+=============
+
+When new content is published:
+
+Automatically:
+
+✅ generate URL
+✅ send indexing request to Google
+✅ update sitemap
+✅ ping search engines
+
+==================================================
+INDEXING ACTIONS
+================
+
+Support:
+
+✅ Publish URL
+✅ Update URL
+✅ Remove URL
+
+==================================================
+INDEXING LOGS
+=============
+
+Create logs section showing:
+
+✅ URL
+✅ Type (product/blog/category)
+✅ submission date
+✅ Google response
+✅ indexed status
+✅ failed requests
+
+==================================================
+DOCUMENTATION REQUIRED
+======================
+
+Please also add complete setup documentation inside admin.
+
+Explain step-by-step:
+
+1️⃣ How to create Google Cloud project
+2️⃣ How to enable Indexing API
+3️⃣ How to create Service Account
+4️⃣ How to download JSON key
+5️⃣ How to verify Search Console
+6️⃣ How to upload credentials into admin
+7️⃣ How automatic indexing works
+
+==================================================
+IMPORTANT
+=========
+
+Please use:
+✅ queue system
+✅ retry system
+✅ rate-limit protection
+
+Do NOT spam Google APIs.
+
+==================================================
+MANUAL OPTIONS
+==============
+
+Add buttons:
+
+✅ Request Indexing
+✅ Reindex URL
+✅ Submit All Products
+✅ Submit All Blogs
+✅ Submit All Categories
+
+==================================================
+SEO IMPROVEMENTS
+================
+
+Also ensure:
+
+✅ auto sitemap generation
+✅ clean URLs
+✅ canonical tags
+✅ robots.txt support
+✅ schema markup
+✅ product structured data
+
+==================================================
+DO NOT MODIFY
+=============
+
+❌ courier system
+❌ TCS integration
+❌ order flow
+
+Only ADD:
+✅ fast indexing system
+✅ SEO automation
+✅ Google indexing integration
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+
+✅ faster Google indexing
+✅ automatic SEO submission
+✅ professional indexing dashboard
+✅ Google API integration
+✅ production-safe indexing system
