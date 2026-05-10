@@ -1,0 +1,184 @@
+IMPORTANT — Please add a Professional Rider Daily Collection & Delivery Reporting System.
+
+This feature is VERY IMPORTANT for accounting, monitoring, and rider performance tracking.
+
+==================================================
+GOAL
+====
+
+Every day the system should automatically generate detailed rider reports and send them to:
+
+✅ WhatsApp
+✅ Email
+
+==================================================
+SEND REPORT TO
+==============
+
+WhatsApp Number:
+
+```txt id="z8f4w1"
+03040424252
+```
+
+Emails:
+
+```txt id="w6r3n8"
+kdfmarts@gmail.com
+```
+
+```txt id="y2c7m5"
+khandryfruit.pk@gmail.com
+```
+
+==================================================
+REPORT SHOULD INCLUDE
+=====================
+
+For EACH rider show:
+
+✅ Rider Name
+✅ Total Orders Delivered
+✅ Total Pending Orders
+✅ Total COD Cash Collected
+✅ Total Zero Amount Orders
+✅ Total Paid Orders
+✅ Total Remaining Settlement
+✅ Delivery Success Count
+✅ Failed Deliveries
+✅ Returned Orders
+✅ Online Duration
+✅ Rider Area / Zone
+
+==================================================
+ZERO AMOUNT ORDERS
+==================
+
+Need separate count for:
+
+```txt id="v3h8s2"
+Zero Amount Orders
+```
+
+Example:
+
+✅ prepaid orders
+✅ free orders
+✅ already paid orders
+
+==================================================
+COD / CASH DETAILS
+==================
+
+Need clear breakdown:
+
+✅ COD amount collected
+✅ amount submitted
+✅ remaining pending cash
+✅ settlement status
+
+==================================================
+AUTOMATIC DAILY REPORT
+======================
+
+System should automatically send report:
+
+✅ daily evening
+OR
+✅ custom scheduled time
+
+Example:
+
+```txt id="p7n1f9"
+8:00 PM daily
+```
+
+==================================================
+WHATSAPP REPORT FORMAT
+======================
+
+Need professional formatted summary:
+
+```txt id="d2m4r8"
+📦 Rider Daily Report
+
+👤 Rider: Hanzala
+📍 Area: Lahore
+
+✅ Delivered Orders: 18
+💰 COD Collected: Rs. 24,500
+🟢 Paid Orders: 6
+⚪ Zero Amount Orders: 4
+⚠ Pending Settlement: Rs. 12,000
+
+📦 Returns: 1
+❌ Failed Deliveries: 2
+```
+
+==================================================
+EMAIL REPORT
+============
+
+Send detailed professional report with:
+
+✅ tables
+✅ totals
+✅ rider breakdown
+✅ settlement details
+✅ delivery stats
+
+Prefer:
+✅ PDF report
+OR
+✅ HTML email template
+
+==================================================
+ADMIN DASHBOARD
+===============
+
+Also show inside dashboard:
+
+✅ total rider collections
+✅ top rider
+✅ pending settlements
+✅ zero amount order totals
+✅ delivery summaries
+
+==================================================
+FILTERS
+=======
+
+Need filters:
+
+✅ by rider
+✅ by date
+✅ by area
+✅ by payment type
+✅ by settlement status
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT BREAK:
+❌ rider tracking
+❌ delivery flow
+❌ settlement system
+❌ notifications
+
+ONLY ADD:
+✅ reporting system
+✅ WhatsApp reports
+✅ email summaries
+✅ rider analytics
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ automatic rider reports
+✅ WhatsApp delivery summaries
+✅ accounting transparency
+✅ rider cash monitoring
+✅ professional reporting dashboard

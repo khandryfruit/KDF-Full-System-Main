@@ -759,5 +759,40 @@ router.get("/admin/riders/verifications", adminMiddleware, async (req: any, res)
   }
 });
 
+/* GET /api/rider/cod-summary — rider's own COD collection summary + history */
+router.get("/rider/cod-summary", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId = req.rider.id;
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS rider_cod_settlements (
+        id SERIAL PRIMARY KEY, rider_id INTEGER NOT NULL, type TEXT NOT NULL DEFAULT 'full',
+        amount NUMERIC(12,2) NOT NULL, notes TEXT, settled_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    const summary = await db.execute(sql`
+      SELECT
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)            AS total_collected,
+        COALESCE((SELECT SUM(amount) FROM rider_cod_settlements WHERE rider_id = ${riderId}), 0)                          AS total_settled,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)
+          - COALESCE((SELECT SUM(amount) FROM rider_cod_settlements WHERE rider_id = ${riderId}), 0)
+        )                                                                                                                  AS pending,
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false
+          AND DATE(d.delivered_at) = CURRENT_DATE THEN d.cod_amount ELSE 0 END), 0)                                       AS today_collected,
+        COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND d.is_paid = false)::int                                      AS cod_orders
+      FROM rider_deliveries d
+      WHERE d.rider_id = ${riderId} AND d.status = 'delivered' AND d.is_paid = false
+    `);
+    const history = await db.execute(sql`
+      SELECT * FROM rider_cod_settlements WHERE rider_id = ${riderId} ORDER BY created_at DESC LIMIT 10
+    `);
+    res.json({ summary: summary.rows?.[0] ?? {}, history: history.rows ?? [] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 

@@ -1,0 +1,191 @@
+IMPORTANT — Please add a PROFESSIONAL Rider Payment Settlement & Collection Reminder System inside Admin Panel and Rider App.
+
+This feature is VERY IMPORTANT for rider cash management and accounting.
+
+==================================================
+GOAL
+====
+
+When rider delivers COD orders and collects cash:
+
+Admin should continuously see:
+
+✅ pending rider cash
+✅ unpaid settlement amount
+✅ collected COD totals
+✅ settlement reminders
+
+UNTIL payment is fully settled/confirmed.
+
+==================================================
+RIDER CASH TRACKING SYSTEM
+==========================
+
+For every rider:
+
+Track:
+
+✅ today’s COD collection
+✅ pending cash amount
+✅ settled amount
+✅ remaining balance
+✅ delivery totals
+✅ collection history
+
+==================================================
+ADMIN NOTIFICATION SYSTEM
+=========================
+
+If rider has pending payment:
+
+Admin panel should continuously show:
+
+✅ popup alerts
+✅ dashboard warning
+✅ highlighted rider card
+✅ blinking notification
+✅ settlement reminder
+
+==================================================
+VERY IMPORTANT
+==============
+
+Notifications should continue UNTIL admin confirms:
+
+```txt id="v6j3q9"
+PAYMENT RECEIVED / SETTLED
+```
+
+==================================================
+EXAMPLE
+=======
+
+Example:
+
+```txt id="r5m2hf"
+Hanzala has Rs. 18,500 pending settlement.
+```
+
+This should appear:
+
+✅ on dashboard
+✅ in popup alerts
+✅ in notification center
+✅ highlighted on accounting page
+
+UNTIL settled.
+
+==================================================
+AUTOMATIC DAILY REMINDERS
+=========================
+
+If rider collected money during day:
+
+Then after:
+✅ evening 6 PM
+OR
+✅ custom settlement time
+
+system should automatically start reminders.
+
+==================================================
+RIDER APP NOTIFICATIONS
+=======================
+
+Rider should ALSO continuously receive reminders:
+
+✅ please submit collected cash
+✅ settlement pending
+✅ clear today’s account
+
+UNTIL settlement completed.
+
+==================================================
+RIDER SIDE UI
+=============
+
+Inside Rider App show:
+
+✅ today collection amount
+✅ pending amount
+✅ settlement status
+✅ submit payment button
+✅ settlement history
+
+==================================================
+ADMIN SETTLEMENT SYSTEM
+=======================
+
+Admin should be able to:
+
+✅ confirm settlement
+✅ mark payment received
+✅ add notes
+✅ partial settlement
+✅ upload proof/screenshot
+✅ settlement history
+
+==================================================
+ACCOUNTING LOGS
+===============
+
+Save complete records:
+
+✅ rider name
+✅ amount collected
+✅ amount settled
+✅ pending balance
+✅ settlement time
+✅ admin confirmation
+✅ proof uploads
+
+==================================================
+DASHBOARD HIGHLIGHTS
+====================
+
+Main dashboard should show:
+
+✅ total pending rider collections
+✅ highest pending rider
+✅ today COD collected
+✅ unsettled riders
+✅ settlement alerts
+
+==================================================
+NOTIFICATION TYPES
+==================
+
+Need:
+
+✅ popup alerts
+✅ dashboard cards
+✅ sound alerts
+✅ rider app notifications
+✅ mobile push notifications
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT BREAK:
+❌ order system
+❌ delivery workflow
+❌ rider statuses
+
+ONLY ADD:
+✅ settlement reminders
+✅ rider accounting
+✅ COD collection tracking
+✅ admin alerts
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ professional rider settlement system
+✅ automatic payment reminders
+✅ admin cash tracking
+✅ rider COD accounting
+✅ settlement notifications
+✅ accounting dashboard integration

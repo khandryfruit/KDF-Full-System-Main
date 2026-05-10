@@ -335,20 +335,31 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* ── COD BANNER ── */}
+        {/* ── COD SETTLEMENT BANNER ── */}
         {codPending > 0 && (
-          <View style={styles.codBanner}>
+          <TouchableOpacity
+            style={styles.codBanner}
+            activeOpacity={0.85}
+            onPress={() => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              router.push("/(tabs)/profile" as any);
+            }}
+          >
             <View style={styles.codBannerIcon}>
-              <Feather name="dollar-sign" size={18} color="#D97706" />
+              <Feather name="alert-circle" size={20} color="#D97706" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.codBannerLabel}>COD جمع باقی ہے</Text>
+              <Text style={styles.codBannerLabel}>💰 COD Settlement باقی ہے</Text>
               <Text style={styles.codBannerAmount}>Rs. {codPending.toLocaleString()}</Text>
+              <Text style={styles.codBannerSub}>Admin کو جمع کروائیں</Text>
             </View>
-            <View style={styles.codBannerBadge}>
-              <Text style={styles.codBannerBadgeTxt}>Pending</Text>
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <View style={styles.codBannerBadge}>
+                <Text style={styles.codBannerBadgeTxt}>Pending</Text>
+              </View>
+              <Feather name="chevron-right" size={14} color="#92400E" />
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* ── STATS GRID ── */}
@@ -520,6 +531,7 @@ const styles = StyleSheet.create({
   },
   codBannerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#92400E" },
   codBannerAmount: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#D97706", marginTop: 1 },
+  codBannerSub: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#B45309", marginTop: 2 },
   codBannerBadge: {
     backgroundColor: "#FDE68A", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },

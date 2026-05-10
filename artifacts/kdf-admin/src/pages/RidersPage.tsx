@@ -9,6 +9,7 @@ import {
   CheckCircle, XCircle, Package, TrendingUp, X, RefreshCw,
   DollarSign, CreditCard, Printer, BarChart2, Clock, AlertCircle,
   RotateCcw, Bike, KeyRound, Eye, EyeOff, Zap, ShieldCheck, Activity,
+  AlertTriangle, Banknote,
 } from "lucide-react";
 
 const API = "/api";
@@ -228,8 +229,8 @@ function SetPasswordModal({ rider, onClose }: { rider: any; onClose: () => void 
 }
 
 /* ── RIDER CARD ──────────────────────────────────────── */
-function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
-  rider: any; onEdit: () => void; onDelete: () => void; onRefresh: () => void;
+function RiderCard({ rider, onEdit, onDelete, onRefresh, codPending = 0 }: {
+  rider: any; onEdit: () => void; onDelete: () => void; onRefresh: () => void; codPending?: number;
 }) {
   const { toast } = useToast();
   const [loadingDel, setLoadingDel] = useState(false);
@@ -275,6 +276,11 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh }: {
               <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLOR[rider.status] ?? STATUS_COLOR.inactive}`}>
                 {rider.status?.charAt(0).toUpperCase() + rider.status?.slice(1)}
               </span>
+              {codPending > 0 && (
+                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-300 animate-pulse">
+                  <AlertTriangle size={9} />COD Rs.{codPending.toLocaleString()} due
+                </span>
+              )}
             </div>
           </div>
           <div className="flex gap-1">
@@ -511,6 +517,291 @@ function AccountingPanel() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   COD SETTLEMENT PANEL
+══════════════════════════════════════════════════════════ */
+function CodSettlementPanel() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [settling, setSettling] = useState<number | null>(null);
+  const [historyRider, setHistoryRider] = useState<any | null>(null);
+  const [settleModal, setSettleModal] = useState<{ rider: any; maxAmount: number } | null>(null);
+  const [settleForm, setSettleForm] = useState({ amount: "", type: "full", notes: "", settled_by: "Admin" });
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["riders-cod-pending"],
+    queryFn: () => apiFetch("/admin/riders/cod-pending"),
+    refetchInterval: 30_000,
+  });
+
+  const { data: historyData } = useQuery({
+    queryKey: ["rider-cod-history", historyRider?.id],
+    queryFn: () => apiFetch(`/admin/riders/${historyRider?.id}/cod-history`),
+    enabled: !!historyRider,
+  });
+
+  const riders = data?.riders ?? [];
+  const totals = data?.totals ?? {};
+  const totalPending  = Number(totals.total_pending  ?? 0);
+  const totalSettled  = Number(totals.total_settled  ?? 0);
+  const totalCollected = Number(totals.total_cod_collected ?? 0);
+  const pendingRiders = riders.filter((r: any) => Number(r.pending_cod) > 0);
+
+  const openSettle = (rider: any) => {
+    setSettleModal({ rider, maxAmount: Number(rider.pending_cod) });
+    setSettleForm({ amount: String(Number(rider.pending_cod).toFixed(0)), type: "full", notes: "", settled_by: "Admin" });
+  };
+
+  const submitSettle = async () => {
+    if (!settleModal) return;
+    setSettling(settleModal.rider.id);
+    try {
+      const res = await apiFetch(`/admin/riders/${settleModal.rider.id}/cod-settle`, {
+        method: "POST",
+        body: JSON.stringify(settleForm),
+      });
+      if (res.ok) {
+        toast({ title: `✅ Rs. ${Number(settleForm.amount).toLocaleString()} settled for ${settleModal.rider.name}` });
+        setSettleModal(null);
+        refetch();
+        qc.invalidateQueries({ queryKey: ["riders-cod-pending"] });
+      } else {
+        toast({ title: "Error", description: res.error, variant: "destructive" });
+      }
+    } finally { setSettling(null); }
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total COD Collected", value: totalCollected, color: "text-blue-600",  bg: "bg-blue-50",  icon: DollarSign,     fmt: (v: number) => `PKR ${v.toLocaleString()}` },
+          { label: "Total Settled",       value: totalSettled,   color: "text-green-600", bg: "bg-green-50", icon: CheckCircle,    fmt: (v: number) => `PKR ${v.toLocaleString()}` },
+          { label: "Pending Cash",        value: totalPending,   color: totalPending > 0 ? "text-red-600" : "text-gray-400", bg: totalPending > 0 ? "bg-red-50" : "bg-gray-50", icon: AlertTriangle, fmt: (v: number) => `PKR ${v.toLocaleString()}` },
+          { label: "Unsettled Riders",    value: pendingRiders.length, color: pendingRiders.length > 0 ? "text-amber-600" : "text-gray-400", bg: pendingRiders.length > 0 ? "bg-amber-50" : "bg-gray-50", icon: Users, fmt: (v: number) => String(v) },
+        ].map(({ label, value, color, bg, icon: Icon, fmt }) => (
+          <div key={label} className="bg-white rounded-xl border border-border p-4 flex items-center gap-3 shadow-sm">
+            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+              <Icon size={18} className={color} />
+            </div>
+            <div>
+              <p className={`text-xl font-bold leading-none ${color}`}>{fmt(value)}</p>
+              <p className="text-xs text-muted-foreground mt-1">{label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pending alert banner */}
+      {totalPending > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+            <AlertTriangle size={20} className="text-red-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-red-800">🔴 PKR {totalPending.toLocaleString()} unsettled COD cash</p>
+            <p className="text-sm text-red-700 mt-0.5">{pendingRiders.length} rider{pendingRiders.length !== 1 ? "s have" : " has"} pending cash — collect before end of day</p>
+          </div>
+          <Button size="sm" onClick={() => refetch()} variant="outline" className="border-red-300 text-red-700 hover:bg-red-100 gap-1">
+            <RefreshCw size={12} />Refresh
+          </Button>
+        </div>
+      )}
+
+      {totalPending === 0 && !isLoading && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <CheckCircle size={20} className="text-green-600 shrink-0" />
+          <p className="font-semibold text-green-800">✅ All riders are fully settled — no pending COD cash</p>
+        </div>
+      )}
+
+      {/* Per-rider table */}
+      {isLoading ? (
+        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded-xl bg-slate-100 animate-pulse" />)}</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-slate-50 flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <Banknote size={15} className="text-green-600" />COD Settlement Ledger
+            </h3>
+            <span className="text-xs text-muted-foreground">{riders.length} riders</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-border">
+                  {["Rider", "Status", "Total Collected", "Settled", "Pending COD", "Today's COD", "Actions"].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {riders.map((r: any) => {
+                  const pending  = Number(r.pending_cod ?? 0);
+                  const hasPending = pending > 0;
+                  return (
+                    <tr key={r.id} className={`hover:bg-slate-50/50 ${hasPending ? "bg-red-50/40" : ""}`}>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${hasPending ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                            {r.name?.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm leading-none">{r.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{r.delivery_area || "All Areas"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLOR[r.status] ?? STATUS_COLOR.inactive}`}>{r.status}</span>
+                      </td>
+                      <td className="px-3 py-3 font-bold text-blue-700">PKR {Number(r.total_cod_collected ?? 0).toLocaleString()}</td>
+                      <td className="px-3 py-3 font-semibold text-green-700">PKR {Number(r.total_settled ?? 0).toLocaleString()}</td>
+                      <td className="px-3 py-3">
+                        {hasPending ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                            <AlertCircle size={10} />PKR {pending.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-green-600 font-semibold text-xs">✅ Fully Settled</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-amber-700 font-semibold">
+                        {Number(r.today_cod ?? 0) > 0 ? `PKR ${Number(r.today_cod).toLocaleString()}` : "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex gap-1.5">
+                          {hasPending && (
+                            <Button size="sm" className="text-xs h-7 px-2.5 bg-green-600 hover:bg-green-700 text-white gap-1" onClick={() => openSettle(r)}>
+                              <CheckCircle size={11} />Settle
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" className="text-xs h-7 px-2 border-slate-200 gap-1" onClick={() => setHistoryRider(historyRider?.id === r.id ? null : r)}>
+                            <RotateCcw size={11} />{historyRider?.id === r.id ? "Hide" : "History"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Settlement history inline */}
+      {historyRider && (
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-slate-50 flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <RotateCcw size={14} className="text-blue-600" />Settlement History — {historyRider.name}
+            </h3>
+            <button onClick={() => setHistoryRider(null)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+          </div>
+          <div className="p-4">
+            {!historyData ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">Loading...</div>
+            ) : (historyData.settlements ?? []).length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">No settlements recorded yet for {historyRider.name}</div>
+            ) : (
+              <div className="space-y-2">
+                {(historyData.settlements ?? []).map((s: any) => (
+                  <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                    <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+                      <CheckCircle size={14} className="text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-green-800">
+                        PKR {Number(s.amount).toLocaleString()}
+                        <span className="ml-2 text-xs font-normal text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">{s.type}</span>
+                      </p>
+                      {s.notes && <p className="text-xs text-green-700 mt-0.5">{s.notes}</p>}
+                      <p className="text-xs text-muted-foreground mt-0.5">by {s.settled_by} · {new Date(s.created_at).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Settlement modal */}
+      {settleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <CheckCircle size={20} className="text-green-600" />Record COD Settlement
+              </h2>
+              <button onClick={() => setSettleModal(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-7 h-7 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold text-sm">
+                  {settleModal.rider.name?.charAt(0)}
+                </div>
+                <p className="font-bold text-amber-900">{settleModal.rider.name}</p>
+              </div>
+              <p className="text-sm text-amber-700">Pending COD: <strong className="text-amber-900">PKR {settleModal.maxAmount.toLocaleString()}</strong></p>
+              <p className="text-xs text-amber-600 mt-0.5">Total collected: PKR {Number(settleModal.rider.total_cod_collected ?? 0).toLocaleString()}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Amount Received (PKR) *</label>
+                <input type="number" value={settleForm.amount}
+                  onChange={e => setSettleForm(f => ({ ...f, amount: e.target.value }))}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Enter amount" min="1" max={settleModal.maxAmount}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Settlement Type</label>
+                <select value={settleForm.type} onChange={e => setSettleForm(f => ({ ...f, type: e.target.value }))}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <option value="full">Full Settlement</option>
+                  <option value="partial">Partial Settlement</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Confirmed By</label>
+                <input type="text" value={settleForm.settled_by}
+                  onChange={e => setSettleForm(f => ({ ...f, settled_by: e.target.value }))}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Admin name"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notes (optional)</label>
+                <textarea value={settleForm.notes} onChange={e => setSettleForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2} placeholder="Cash received, bank transfer, receipt note…"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setSettleModal(null)}>Cancel</Button>
+              <Button
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                onClick={submitSettle}
+                disabled={settling === settleModal.rider.id || !settleForm.amount || Number(settleForm.amount) <= 0}
+              >
+                <CheckCircle size={15} />
+                {settling === settleModal.rider.id ? "Saving…" : "Confirm Settlement"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    SHOPIFY SYNC MONITOR PANEL
 ══════════════════════════════════════════════════════════ */
 const ACTION_LABELS: Record<string, string> = {
@@ -708,7 +999,7 @@ export default function RidersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editRider, setEditRider] = useState<any>(null);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"riders" | "accounting" | "shopify-sync">("riders");
+  const [activeTab, setActiveTab] = useState<"riders" | "accounting" | "cod-settlement" | "shopify-sync">("riders");
 
   const { data, isLoading } = useQuery({
     queryKey: ["riders-full"],
@@ -722,10 +1013,24 @@ export default function RidersPage() {
     refetchInterval: 30000,
   });
 
+  const { data: codData } = useQuery({
+    queryKey: ["riders-cod-pending"],
+    queryFn: () => apiFetch("/admin/riders/cod-pending"),
+    refetchInterval: 60000,
+  });
+
+  const codPendingMap: Record<number, number> = {};
+  (codData?.riders ?? []).forEach((r: any) => {
+    codPendingMap[r.id] = Number(r.pending_cod ?? 0);
+  });
+  const totalCodPending = Number(codData?.totals?.total_pending ?? 0);
+  const codPendingRidersCount = (codData?.riders ?? []).filter((r: any) => Number(r.pending_cod) > 0).length;
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["riders-full"] });
     qc.invalidateQueries({ queryKey: ["rider-stats-page"] });
     qc.invalidateQueries({ queryKey: ["riders-accounting"] });
+    qc.invalidateQueries({ queryKey: ["riders-cod-pending"] });
   };
 
   const riders: any[] = (data?.riders ?? []).filter((r: any) =>
@@ -777,27 +1082,59 @@ export default function RidersPage() {
         ))}
       </div>
 
+      {/* COD Pending warning banner */}
+      {totalCodPending > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0 animate-pulse">
+            <AlertTriangle size={20} className="text-red-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-red-800">
+              🔴 PKR {totalCodPending.toLocaleString()} unsettled COD cash
+            </p>
+            <p className="text-sm text-red-700 mt-0.5">
+              {codPendingRidersCount} rider{codPendingRidersCount !== 1 ? "s have" : " has"} pending cash collection — settle before end of day
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white gap-1.5 shrink-0"
+            onClick={() => setActiveTab("cod-settlement")}
+          >
+            <Banknote size={14} />Settle Now
+          </Button>
+        </div>
+      )}
+
       {/* Tab toggle */}
       <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {([
-          ["riders",       "Riders",          Users],
-          ["accounting",   "Accounting",       DollarSign],
-          ["shopify-sync", "Shopify Sync",     Zap],
-        ] as const).map(([key, label, Icon]) => (
+          ["riders",         "Riders",          Users,       null],
+          ["accounting",     "Accounting",       DollarSign,  null],
+          ["cod-settlement", "COD Settlement",   Banknote,    codPendingRidersCount > 0 ? codPendingRidersCount : null],
+          ["shopify-sync",   "Shopify Sync",     Zap,         null],
+        ] as const).map(([key, label, Icon, badge]) => (
           <button
             key={key}
-            onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            onClick={() => setActiveTab(key as any)}
+            className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === key ? "bg-white shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Icon size={15} />{label}
+            {badge ? (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                {badge}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
       {activeTab === "accounting" ? (
         <AccountingPanel />
+      ) : activeTab === "cod-settlement" ? (
+        <CodSettlementPanel />
       ) : activeTab === "shopify-sync" ? (
         <ShopifySyncMonitor />
       ) : (
@@ -834,6 +1171,7 @@ export default function RidersPage() {
                   <RiderCard
                     key={rider.id}
                     rider={rider}
+                    codPending={codPendingMap[rider.id] ?? 0}
                     onEdit={() => { setEditRider(rider); setShowModal(true); }}
                     onDelete={refresh}
                     onRefresh={refresh}

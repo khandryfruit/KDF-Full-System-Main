@@ -1846,4 +1846,116 @@ router.post("/admin/riders/shopify-sync/retry", adminMiddleware, async (req, res
   }
 });
 
+/* ═══════════════════════════════════════════════════════
+   COD SETTLEMENT SYSTEM — rider cash collection tracking
+   Table: rider_cod_settlements
+═══════════════════════════════════════════════════════ */
+
+async function ensureCodSettlementsTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS rider_cod_settlements (
+      id          SERIAL PRIMARY KEY,
+      rider_id    INTEGER NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'full',
+      amount      NUMERIC(12,2) NOT NULL,
+      notes       TEXT,
+      settled_by  TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+(async () => { try { await ensureCodSettlementsTable(); } catch (e) { logger.error({ err: e }, "cod_settlements table init"); } })();
+
+/* GET /api/admin/riders/cod-pending — all riders with COD pending summary */
+router.get("/admin/riders/cod-pending", adminMiddleware, async (req, res) => {
+  try {
+    await ensureCodSettlementsTable();
+    const rows = await db.execute(sql`
+      SELECT
+        r.id, r.name, r.phone, r.delivery_area, r.status,
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)        AS total_cod_collected,
+        COALESCE((SELECT SUM(s.amount) FROM rider_cod_settlements s WHERE s.rider_id = r.id), 0)                      AS total_settled,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)
+          - COALESCE((SELECT SUM(s.amount) FROM rider_cod_settlements s WHERE s.rider_id = r.id), 0)
+        )                                                                                                              AS pending_cod,
+        COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND d.is_paid = false)::int                                  AS cod_orders,
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false
+          AND DATE(d.delivered_at) = CURRENT_DATE THEN d.cod_amount ELSE 0 END), 0)                                   AS today_cod
+      FROM riders r
+      LEFT JOIN rider_deliveries d ON d.rider_id = r.id
+      GROUP BY r.id
+      ORDER BY pending_cod DESC, r.name
+    `);
+
+    const totals = await db.execute(sql`
+      SELECT
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0) AS total_cod_collected,
+        COALESCE((SELECT SUM(amount) FROM rider_cod_settlements), 0)                                           AS total_settled,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)
+          - COALESCE((SELECT SUM(amount) FROM rider_cod_settlements), 0)
+        )                                                                                                       AS total_pending,
+        COUNT(DISTINCT d.rider_id) FILTER (WHERE d.status = 'delivered' AND d.is_paid = false)::int            AS riders_with_cod
+      FROM rider_deliveries d
+      WHERE d.status = 'delivered' AND d.is_paid = false
+    `);
+
+    res.json({ riders: rows.rows ?? [], totals: totals.rows?.[0] ?? {} });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* POST /api/admin/riders/:id/cod-settle — record COD settlement (full or partial) */
+router.post("/admin/riders/:id/cod-settle", adminMiddleware, async (req, res) => {
+  try {
+    const riderId = parseInt(req.params["id"] as string);
+    const { amount, type = "full", notes, settled_by } = req.body;
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      res.status(400).json({ error: "Invalid amount — must be positive number" });
+      return;
+    }
+    await ensureCodSettlementsTable();
+    const result = await db.execute(sql`
+      INSERT INTO rider_cod_settlements (rider_id, type, amount, notes, settled_by)
+      VALUES (${riderId}, ${type}, ${Number(amount)}, ${notes ?? null}, ${settled_by ?? "Admin"})
+      RETURNING *
+    `);
+    res.json({ ok: true, settlement: result.rows?.[0] ?? {} });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/riders/:id/cod-history — settlement history per rider */
+router.get("/admin/riders/:id/cod-history", adminMiddleware, async (req, res) => {
+  try {
+    const riderId = parseInt(req.params["id"] as string);
+    await ensureCodSettlementsTable();
+    const settlements = await db.execute(sql`
+      SELECT * FROM rider_cod_settlements WHERE rider_id = ${riderId} ORDER BY created_at DESC LIMIT 50
+    `);
+    const summary = await db.execute(sql`
+      SELECT
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)   AS total_collected,
+        COALESCE((SELECT SUM(amount) FROM rider_cod_settlements WHERE rider_id = ${riderId}), 0)                  AS total_settled,
+        GREATEST(0,
+          COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false THEN d.cod_amount ELSE 0 END), 0)
+          - COALESCE((SELECT SUM(amount) FROM rider_cod_settlements WHERE rider_id = ${riderId}), 0)
+        )                                                                                                          AS pending,
+        COALESCE(SUM(CASE WHEN d.status = 'delivered' AND d.is_paid = false
+          AND DATE(d.delivered_at) = CURRENT_DATE THEN d.cod_amount ELSE 0 END), 0)                               AS today_collected
+      FROM rider_deliveries d
+      WHERE d.rider_id = ${riderId} AND d.status = 'delivered' AND d.is_paid = false
+    `);
+    res.json({ settlements: settlements.rows ?? [], summary: summary.rows?.[0] ?? {} });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
