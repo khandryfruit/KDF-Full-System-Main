@@ -511,84 +511,106 @@ function SidebarContent({
       <div className={`flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-px ${expanded ? "px-2" : "px-1.5"}`}>
 
         {/* ── Dashboard (standalone top link) ── */}
-        <NavItem href="/dashboard" label="Dashboard" icon={LayoutDashboard}
-          isActive={location === "/dashboard" || location === "/"}
-          expanded={expanded} onClick={onNavClick} />
+        {hasPermission("dashboard.view") && (
+          <NavItem href="/dashboard" label="Dashboard" icon={LayoutDashboard}
+            isActive={location === "/dashboard" || location === "/"}
+            expanded={expanded} onClick={onNavClick} />
+        )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
         {/* ── Shopify (TOP PRIORITY) ── */}
-        <SidebarSection label="Shopify" icon={Store}
-          accentColor="#96BF48" activeBg="bg-green-600/10" activeText="text-green-700" badgeLetter="S"
-          isActive={isShopifyActive} expanded={expanded} open={shopifyOpen} onToggle={onToggleShopify}
-          items={SHOPIFY_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        {hasPermission("shopify.view") && (
+          <SidebarSection label="Shopify" icon={Store}
+            accentColor="#96BF48" activeBg="bg-green-600/10" activeText="text-green-700" badgeLetter="S"
+            isActive={isShopifyActive} expanded={expanded} open={shopifyOpen} onToggle={onToggleShopify}
+            items={SHOPIFY_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Logistics (TOP PRIORITY) ── */}
-        <SidebarSection label="Logistics" icon={Truck}
-          accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
-          isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
-          items={LOGISTICS_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        {hasPermission("riders.view") && (
+          <SidebarSection label="Logistics" icon={Truck}
+            accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
+            isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
+            items={LOGISTICS_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
         {/* ── WA Chat ── */}
-        <div className="relative">
-          <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
-            accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
-            isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
-            items={WA_CHAT_NAV_ITEMS} location={location} onNavClick={onNavClick} />
-          {waUnread > 0 && !waChatOpen && (
-            <span className={`absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pointer-events-none leading-none ${expanded ? "right-1.5" : "-right-1 -top-0.5"}`}>
-              {waUnread > 99 ? "99+" : waUnread}
-            </span>
-          )}
-        </div>
+        {hasPermission("whatsapp.view") && (
+          <div className="relative">
+            <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
+              accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
+              isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
+              items={WA_CHAT_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+            {waUnread > 0 && !waChatOpen && (
+              <span className={`absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pointer-events-none leading-none ${expanded ? "right-1.5" : "-right-1 -top-0.5"}`}>
+                {waUnread > 99 ? "99+" : waUnread}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* ── Invoice & Billing ── */}
-        <SidebarSection label="Invoice & Billing" icon={Receipt}
-          accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
-          isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
-          items={INVOICE_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        {hasPermission("billing.view") && (
+          <SidebarSection label="Invoice & Billing" icon={Receipt}
+            accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
+            isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
+            items={INVOICE_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
         {/* ── Commerce ── */}
-        <SidebarSection label="Commerce" icon={ShoppingCart}
-          accentColor="#3B82F6" activeBg="bg-blue-500/10" activeText="text-blue-700" badgeLetter="C"
-          isActive={isCommerceActive} expanded={expanded} open={commerceOpen} onToggle={onToggleCommerce}
-          items={COMMERCE_NAV} location={location} onNavClick={onNavClick} />
+        {(hasPermission("orders.view") || hasPermission("products.view")) && (
+          <SidebarSection label="Commerce" icon={ShoppingCart}
+            accentColor="#3B82F6" activeBg="bg-blue-500/10" activeText="text-blue-700" badgeLetter="C"
+            isActive={isCommerceActive} expanded={expanded} open={commerceOpen} onToggle={onToggleCommerce}
+            items={COMMERCE_NAV} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Store ── */}
-        <SidebarSection label="Store" icon={ImageIcon}
-          accentColor="#8B5CF6" activeBg="bg-violet-500/10" activeText="text-violet-700" badgeLetter="S"
-          isActive={isStoreActive} expanded={expanded} open={storeOpen} onToggle={onToggleStore}
-          items={STORE_NAV} location={location} onNavClick={onNavClick} />
+        {(hasPermission("settings.view") || hasPermission("marketing.view")) && (
+          <SidebarSection label="Store" icon={ImageIcon}
+            accentColor="#8B5CF6" activeBg="bg-violet-500/10" activeText="text-violet-700" badgeLetter="S"
+            isActive={isStoreActive} expanded={expanded} open={storeOpen} onToggle={onToggleStore}
+            items={STORE_NAV} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Marketing ── */}
-        <SidebarSection label="Marketing" icon={Megaphone}
-          accentColor="#EC4899" activeBg="bg-pink-500/10" activeText="text-pink-700" badgeLetter="M"
-          isActive={isMarketingActive} expanded={expanded} open={marketingOpen} onToggle={onToggleMarketing}
-          items={MARKETING_NAV} location={location} onNavClick={onNavClick} />
+        {hasPermission("marketing.view") && (
+          <SidebarSection label="Marketing" icon={Megaphone}
+            accentColor="#EC4899" activeBg="bg-pink-500/10" activeText="text-pink-700" badgeLetter="M"
+            isActive={isMarketingActive} expanded={expanded} open={marketingOpen} onToggle={onToggleMarketing}
+            items={MARKETING_NAV} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Operations ── */}
-        <SidebarSection label="Operations" icon={GitBranch}
-          accentColor="#F59E0B" activeBg="bg-amber-500/10" activeText="text-amber-700" badgeLetter="O"
-          isActive={isOperationsActive} expanded={expanded} open={operationsOpen} onToggle={onToggleOperations}
-          items={OPERATIONS_NAV} location={location} onNavClick={onNavClick} />
+        {(hasPermission("settings.manage") || hasPermission("orders.view")) && (
+          <SidebarSection label="Operations" icon={GitBranch}
+            accentColor="#F59E0B" activeBg="bg-amber-500/10" activeText="text-amber-700" badgeLetter="O"
+            isActive={isOperationsActive} expanded={expanded} open={operationsOpen} onToggle={onToggleOperations}
+            items={OPERATIONS_NAV} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Settings ── */}
-        <SidebarSection label="Settings" icon={Settings}
-          accentColor="#6B7280" activeBg="bg-gray-500/10" activeText="text-gray-700" badgeLetter="⚙"
-          isActive={isSettingsActive} expanded={expanded} open={settingsOpen} onToggle={onToggleSettings}
-          items={SETTINGS_NAV} location={location} onNavClick={onNavClick} />
+        {(hasPermission("settings.view") || hasPermission("integrations.manage")) && (
+          <SidebarSection label="Settings" icon={Settings}
+            accentColor="#6B7280" activeBg="bg-gray-500/10" activeText="text-gray-700" badgeLetter="⚙"
+            isActive={isSettingsActive} expanded={expanded} open={settingsOpen} onToggle={onToggleSettings}
+            items={SETTINGS_NAV} location={location} onNavClick={onNavClick} />
+        )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
         {/* ── Branches ── */}
-        <SidebarSection label="Branches" icon={Building2}
-          accentColor="#4F46E5" activeBg="bg-indigo-600/10" activeText="text-indigo-700" badgeLetter="B"
-          isActive={isBranchesActive} expanded={expanded} open={branchesOpen} onToggle={onToggleBranches}
-          items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        {hasPermission("branches.view") && (
+          <SidebarSection label="Branches" icon={Building2}
+            accentColor="#4F46E5" activeBg="bg-indigo-600/10" activeText="text-indigo-700" badgeLetter="B"
+            isActive={isBranchesActive} expanded={expanded} open={branchesOpen} onToggle={onToggleBranches}
+            items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
 
         {/* ── Payment Gateway ── */}
         {hasPermission("merchant_api.manage") && (
@@ -599,10 +621,10 @@ function SidebarContent({
         )}
 
         {/* ── Admin IAM (Users / Roles / Logs) ── */}
-        {(hasPermission("users.view") || hasPermission("roles.manage") || hasPermission("logs.view")) && (
+        {(hasPermission("users.view") || hasPermission("roles.manage") || hasPermission("logs.view") || hasPermission("modules.manage")) && (
           <SidebarSection label="Admin Panel" icon={ShieldCheck}
             accentColor="#dc2626" activeBg="bg-red-600/10" activeText="text-red-700" badgeLetter="A"
-            isActive={location.startsWith("/admin/")} expanded={expanded} open={adminIamOpen} onToggle={onToggleAdminIam}
+            isActive={location.startsWith("/admin/") || location.startsWith("/settings/modules")} expanded={expanded} open={adminIamOpen} onToggle={onToggleAdminIam}
             items={ADMIN_IAM_NAV_ITEMS} location={location} onNavClick={onNavClick} />
         )}
 

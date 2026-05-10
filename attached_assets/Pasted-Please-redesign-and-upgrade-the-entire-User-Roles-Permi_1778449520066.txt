@@ -1,0 +1,261 @@
+Please redesign and upgrade the entire User Roles & Permissions System.
+
+Current permission system is incomplete, permissions are not properly controlled, password handling has issues, and many important modules are missing from permission management.
+
+This needs a full enterprise-level RBAC (Role Based Access Control) system.
+
+━━━━━━━━━━━━━━━━━━━━
+1. PASSWORD & USER AUTH ISSUES FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problems:
+- Password handling is unstable
+- User permissions not applying correctly
+- Login/session behavior inconsistent
+- Some users can access restricted modules
+
+Required Fixes:
+- Proper password validation
+- Strong password encryption
+- Secure reset password flow
+- Proper session/token handling
+- Role-based route protection
+- Permission middleware validation
+- Prevent unauthorized access
+
+Ensure:
+- User only sees allowed modules
+- Hidden modules cannot be accessed manually by URL
+- Permission changes apply instantly
+
+━━━━━━━━━━━━━━━━━━━━
+2. COMPLETE ROLE BASED ACCESS CONTROL (RBAC)
+━━━━━━━━━━━━━━━━━━━━
+
+Need professional RBAC system.
+
+Create:
+- Super Admin
+- Admin
+- Manager
+- Staff
+- Rider
+- POS Cashier
+- Support Agent
+- Marketing User
+- Custom Roles
+
+Allow admin to create unlimited custom roles.
+
+━━━━━━━━━━━━━━━━━━━━
+3. ADVANCED PERMISSION MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━
+
+Current permission options are incomplete.
+
+Need full permission controls for every module.
+
+Required Permission Categories:
+
+━━━━━━━━━
+A) SHOPIFY PERMISSIONS
+━━━━━━━━━
+
+- View Shopify Dashboard
+- View Orders
+- Create Orders
+- Edit Orders
+- Delete Orders
+- Complete Orders
+- Cancel Orders
+- Refund Orders
+- Sync Orders
+- Export Orders
+
+━━━━━━━━━
+B) RIDER & DELIVERY PERMISSIONS
+━━━━━━━━━
+
+- Assign Rider
+- Auto Assign Access
+- Rider Dashboard Access
+- Delivery Status Update
+- View Rider Earnings
+- Delivery Tracking
+
+━━━━━━━━━
+C) POS/BILLING PERMISSIONS
+━━━━━━━━━
+
+- Create Invoice
+- Edit Invoice
+- Delete Invoice
+- Refund Invoice
+- View Sales
+- Discount Access
+- Cash Drawer Access
+
+━━━━━━━━━
+D) CUSTOMER MANAGEMENT
+━━━━━━━━━
+
+- View Customers
+- Add Customers
+- Edit Customers
+- Delete Customers
+- View Customer History
+
+━━━━━━━━━
+E) WHATSAPP & MESSAGING
+━━━━━━━━━
+
+- Messaging Dashboard
+- Send WhatsApp Messages
+- Broadcast Campaigns
+- Template Management
+- View Conversations
+- Auto Reply Settings
+- Chatbot Settings
+
+━━━━━━━━━
+F) MARKETING & CAMPAIGNS
+━━━━━━━━━
+
+- Campaign Dashboard
+- Create Campaign
+- Edit Campaign
+- Delete Campaign
+- Analytics Access
+- Coupon Management
+
+━━━━━━━━━
+G) INVENTORY & PRODUCTS
+━━━━━━━━━
+
+- Add Products
+- Edit Products
+- Delete Products
+- Manage Stock
+- Import/Export Products
+- Barcode Access
+
+━━━━━━━━━
+H) ADMIN SETTINGS
+━━━━━━━━━
+
+- User Management
+- Roles & Permissions
+- Module Controls
+- System Settings
+- API Settings
+- Activity Logs
+- Security Logs
+
+━━━━━━━━━━━━━━━━━━━━
+4. MODERN PERMISSION UI
+━━━━━━━━━━━━━━━━━━━━
+
+Current permission UI is weak and confusing.
+
+Required:
+- Modern permission matrix UI
+- Grouped permission sections
+- Toggle switches
+- Select All option
+- Search permissions
+- Better spacing/layout
+
+Example:
+[✓] Orders
+   [✓] View
+   [✓] Edit
+   [✓] Delete
+
+━━━━━━━━━━━━━━━━━━━━
+5. MODULE-LEVEL ACCESS CONTROL
+━━━━━━━━━━━━━━━━━━━━
+
+Need complete module visibility control.
+
+If permission disabled:
+- Menu should hide
+- APIs should block
+- Routes should block
+- Buttons/actions should hide
+
+Example:
+If user does not have:
+"Delete Order"
+
+Then:
+- Delete button invisible
+- API blocked
+- URL blocked
+
+━━━━━━━━━━━━━━━━━━━━
+6. SHOPIFY & WHATSAPP MODULES MISSING
+━━━━━━━━━━━━━━━━━━━━
+
+Currently many important modules are missing from permissions.
+
+Please add permissions for:
+- Shopify Dashboard
+- Shopify Orders
+- Messaging
+- WhatsApp
+- Campaigns
+- Broadcast
+- Analytics
+- Chatbot
+- Auto Automation Settings
+
+Everything should be permission controlled.
+
+━━━━━━━━━━━━━━━━━━━━
+7. ACTIVITY & SECURITY LOGS
+━━━━━━━━━━━━━━━━━━━━
+
+Track all admin activities:
+
+- Login
+- Logout
+- Password change
+- Permission changes
+- Order actions
+- Refund actions
+- User updates
+
+Need:
+- Timestamp
+- IP
+- User
+- Action
+- Device info
+
+━━━━━━━━━━━━━━━━━━━━
+8. UX & PERFORMANCE IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+System should feel:
+- Fast
+- Secure
+- Enterprise-level
+- Easy to manage
+
+Avoid:
+- Permission sync delay
+- Cache issues
+- Role mismatch bugs
+
+━━━━━━━━━━━━━━━━━━━━
+9. FINAL GOAL
+━━━━━━━━━━━━━━━━━━━━
+
+Goal:
+Admin should fully control:
+- What each user can SEE
+- What each user can EDIT
+- What each user can DELETE
+- What each user can ACCESS
+
+Current permission system is incomplete and needs a full professional upgrade.

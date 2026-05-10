@@ -17,58 +17,110 @@ const router = Router();
    PERMISSION CATALOGUE
 ═══════════════════════════════════════════════════════════ */
 export const ALL_PERMISSIONS = [
-  { key: "dashboard.view",        name: "View Dashboard",          module: "Dashboard"  },
-  { key: "analytics.view",        name: "View Analytics",          module: "Analytics"  },
-  { key: "orders.view",           name: "View Orders",             module: "Orders"     },
-  { key: "orders.create",         name: "Create Orders",           module: "Orders"     },
-  { key: "orders.edit",           name: "Edit Orders",             module: "Orders"     },
-  { key: "orders.delete",         name: "Delete Orders",           module: "Orders"     },
-  { key: "orders.export",         name: "Export Orders",           module: "Orders"     },
-  { key: "orders.assign_rider",   name: "Assign Rider",            module: "Orders"     },
-  { key: "orders.refund",         name: "Refund Orders",           module: "Orders"     },
-  { key: "products.view",         name: "View Products",           module: "Products"   },
-  { key: "products.create",       name: "Create Products",         module: "Products"   },
-  { key: "products.edit",         name: "Edit Products",           module: "Products"   },
-  { key: "products.delete",       name: "Delete Products",         module: "Products"   },
-  { key: "products.stock_manage", name: "Manage Stock",            module: "Products"   },
-  { key: "customers.view",        name: "View Customers",          module: "Customers"  },
-  { key: "customers.edit",        name: "Edit Customers",          module: "Customers"  },
-  { key: "customers.export",      name: "Export Customers",        module: "Customers"  },
-  { key: "customers.delete",      name: "Delete Customers",        module: "Customers"  },
-  { key: "marketing.view",        name: "View Marketing",          module: "Marketing"  },
-  { key: "campaigns.manage",      name: "Manage Campaigns",        module: "Marketing"  },
-  { key: "seo.manage",            name: "Manage SEO",              module: "Marketing"  },
-  { key: "fast_indexing.run",     name: "Run Fast Indexing",       module: "Marketing"  },
-  { key: "blogs.manage",          name: "Manage Blogs",            module: "Marketing"  },
-  { key: "payments.view",         name: "View Payments",           module: "Payments"   },
-  { key: "payments.manage",       name: "Manage Payments",         module: "Payments"   },
-  { key: "payments.refund",       name: "Process Refunds",         module: "Payments"   },
-  { key: "merchant_api.manage",   name: "Manage Merchant APIs",    module: "Payments"   },
-  { key: "disputes.manage",       name: "Manage Disputes",         module: "Payments"   },
-  { key: "riders.view",           name: "View Riders",             module: "Logistics"  },
-  { key: "riders.assign",         name: "Assign Riders",           module: "Logistics"  },
-  { key: "riders.live_tracking",  name: "Live Rider Tracking",     module: "Logistics"  },
-  { key: "riders.settlement",     name: "Rider Settlements",       module: "Logistics"  },
-  { key: "riders.export",         name: "Export Rider Data",       module: "Logistics"  },
-  { key: "whatsapp.view",         name: "View WhatsApp",           module: "WhatsApp"   },
-  { key: "whatsapp.send",         name: "Send Messages",           module: "WhatsApp"   },
-  { key: "whatsapp.templates",    name: "Manage Templates",        module: "WhatsApp"   },
-  { key: "shopify.view",          name: "View Shopify",            module: "Shopify"    },
-  { key: "shopify.sync",          name: "Sync Shopify",            module: "Shopify"    },
-  { key: "shopify.manage",        name: "Manage Shopify",          module: "Shopify"    },
-  { key: "branches.view",         name: "View Branches",           module: "Branches"   },
-  { key: "branches.manage",       name: "Manage Branches",         module: "Branches"   },
-  { key: "settings.view",         name: "View Settings",           module: "Settings"   },
-  { key: "settings.manage",       name: "Manage Settings",         module: "Settings"   },
-  { key: "integrations.manage",   name: "Manage Integrations",     module: "Settings"   },
-  { key: "users.view",            name: "View Admin Users",        module: "Admin"      },
-  { key: "users.manage",          name: "Manage Admin Users",      module: "Admin"      },
-  { key: "roles.manage",          name: "Manage Roles & Perms",    module: "Admin"      },
-  { key: "logs.view",             name: "View Activity Logs",      module: "Admin"      },
+  /* ── Dashboard & Analytics ── */
+  { key: "dashboard.view",           name: "View Dashboard",             module: "Dashboard"  },
+  { key: "analytics.view",           name: "View Analytics",             module: "Analytics"  },
+
+  /* ── Shopify ── */
+  { key: "shopify.view",             name: "View Shopify Dashboard",     module: "Shopify"    },
+  { key: "shopify.sync",             name: "Sync Shopify Data",          module: "Shopify"    },
+  { key: "shopify.manage",           name: "Manage Shopify Settings",    module: "Shopify"    },
+  { key: "shopify.orders.view",      name: "View Shopify Orders",        module: "Shopify"    },
+  { key: "shopify.orders.complete",  name: "Complete Orders",            module: "Shopify"    },
+  { key: "shopify.orders.cancel",    name: "Cancel Orders",              module: "Shopify"    },
+  { key: "shopify.orders.refund",    name: "Refund Shopify Orders",      module: "Shopify"    },
+  { key: "shopify.orders.export",    name: "Export Shopify Orders",      module: "Shopify"    },
+
+  /* ── Orders (eCommerce) ── */
+  { key: "orders.view",              name: "View Orders",                module: "Orders"     },
+  { key: "orders.create",            name: "Create Orders",              module: "Orders"     },
+  { key: "orders.edit",              name: "Edit Orders",                module: "Orders"     },
+  { key: "orders.delete",            name: "Delete Orders",              module: "Orders"     },
+  { key: "orders.export",            name: "Export Orders",              module: "Orders"     },
+  { key: "orders.assign_rider",      name: "Assign Rider to Order",      module: "Orders"     },
+  { key: "orders.refund",            name: "Refund Orders",              module: "Orders"     },
+
+  /* ── Products ── */
+  { key: "products.view",            name: "View Products",              module: "Products"   },
+  { key: "products.create",          name: "Create Products",            module: "Products"   },
+  { key: "products.edit",            name: "Edit Products",              module: "Products"   },
+  { key: "products.delete",          name: "Delete Products",            module: "Products"   },
+  { key: "products.stock_manage",    name: "Manage Stock",               module: "Products"   },
+  { key: "products.import",          name: "Import / Export Products",   module: "Products"   },
+  { key: "products.barcode",         name: "Barcode Access",             module: "Products"   },
+
+  /* ── Customers ── */
+  { key: "customers.view",           name: "View Customers",             module: "Customers"  },
+  { key: "customers.add",            name: "Add Customers",              module: "Customers"  },
+  { key: "customers.edit",           name: "Edit Customers",             module: "Customers"  },
+  { key: "customers.delete",         name: "Delete Customers",           module: "Customers"  },
+  { key: "customers.export",         name: "Export Customers",           module: "Customers"  },
+  { key: "customers.history",        name: "View Customer History",      module: "Customers"  },
+
+  /* ── Logistics & Riders ── */
+  { key: "riders.view",              name: "View Riders",                module: "Logistics"  },
+  { key: "riders.assign",            name: "Assign Riders",              module: "Logistics"  },
+  { key: "riders.auto_assign",       name: "Auto Assign Riders",         module: "Logistics"  },
+  { key: "riders.live_tracking",     name: "Live Rider Tracking",        module: "Logistics"  },
+  { key: "riders.earnings",          name: "View Rider Earnings",        module: "Logistics"  },
+  { key: "riders.settlement",        name: "Rider Settlements",          module: "Logistics"  },
+  { key: "riders.export",            name: "Export Rider Data",          module: "Logistics"  },
+  { key: "delivery.status_update",   name: "Update Delivery Status",     module: "Logistics"  },
+
+  /* ── POS / Billing ── */
+  { key: "billing.view",             name: "View Billing & Invoices",    module: "Billing"    },
+  { key: "billing.create",           name: "Create Invoice",             module: "Billing"    },
+  { key: "billing.edit",             name: "Edit Invoice",               module: "Billing"    },
+  { key: "billing.delete",           name: "Delete Invoice",             module: "Billing"    },
+  { key: "billing.refund",           name: "Refund Invoice",             module: "Billing"    },
+  { key: "billing.discount",         name: "Apply Discount",             module: "Billing"    },
+  { key: "billing.view_all",         name: "View All Sales (Any Staff)", module: "Billing"    },
+
+  /* ── WhatsApp & Messaging ── */
+  { key: "whatsapp.view",            name: "View WhatsApp Inbox",        module: "WhatsApp"   },
+  { key: "whatsapp.send",            name: "Send WhatsApp Messages",     module: "WhatsApp"   },
+  { key: "whatsapp.broadcast",       name: "Broadcast Campaigns",        module: "WhatsApp"   },
+  { key: "whatsapp.templates",       name: "Manage WA Templates",        module: "WhatsApp"   },
+  { key: "whatsapp.chatbot",         name: "Chatbot Settings",           module: "WhatsApp"   },
+  { key: "whatsapp.auto_reply",      name: "Auto Reply Settings",        module: "WhatsApp"   },
+
+  /* ── Marketing ── */
+  { key: "marketing.view",           name: "View Marketing Dashboard",   module: "Marketing"  },
+  { key: "campaigns.manage",         name: "Manage Campaigns",           module: "Marketing"  },
+  { key: "coupons.manage",           name: "Coupon Management",          module: "Marketing"  },
+  { key: "seo.manage",               name: "Manage SEO",                 module: "Marketing"  },
+  { key: "fast_indexing.run",        name: "Run Fast Indexing",          module: "Marketing"  },
+  { key: "blogs.manage",             name: "Manage Blogs",               module: "Marketing"  },
+  { key: "marketing.analytics",      name: "Marketing Analytics",        module: "Marketing"  },
+
+  /* ── Payments ── */
+  { key: "payments.view",            name: "View Payments",              module: "Payments"   },
+  { key: "payments.manage",          name: "Manage Payments",            module: "Payments"   },
+  { key: "payments.refund",          name: "Process Refunds",            module: "Payments"   },
+  { key: "merchant_api.manage",      name: "Manage Merchant APIs",       module: "Payments"   },
+  { key: "disputes.manage",          name: "Manage Disputes",            module: "Payments"   },
+
+  /* ── Branches ── */
+  { key: "branches.view",            name: "View Branches",              module: "Branches"   },
+  { key: "branches.manage",          name: "Manage Branches",            module: "Branches"   },
+
+  /* ── Settings ── */
+  { key: "settings.view",            name: "View Settings",              module: "Settings"   },
+  { key: "settings.manage",          name: "Manage System Settings",     module: "Settings"   },
+  { key: "integrations.manage",      name: "Manage Integrations",        module: "Settings"   },
+
+  /* ── Admin / IAM ── */
+  { key: "users.view",               name: "View Admin Users",           module: "Admin"      },
+  { key: "users.manage",             name: "Manage Admin Users",         module: "Admin"      },
+  { key: "users.reset_password",     name: "Reset User Passwords",       module: "Admin"      },
+  { key: "roles.manage",             name: "Manage Roles & Permissions", module: "Admin"      },
+  { key: "logs.view",                name: "View Activity Logs",         module: "Admin"      },
+  { key: "logs.security",            name: "View Security Logs",         module: "Admin"      },
+  { key: "modules.manage",           name: "Manage Module Controls",     module: "Admin"      },
 ] as const;
 
 const SUPER_ADMIN_PERMS = ALL_PERMISSIONS.map(p => p.key);
-const EXCLUDED_MASTER   = new Set(["merchant_api.manage", "settings.manage", "roles.manage", "users.manage"]);
+const EXCLUDED_MASTER   = new Set(["merchant_api.manage", "settings.manage", "roles.manage", "users.manage", "logs.security"]);
 
 const SYSTEM_ROLES = [
   {
@@ -84,28 +136,58 @@ const SYSTEM_ROLES = [
     permissions: SUPER_ADMIN_PERMS.filter(k => !EXCLUDED_MASTER.has(k)),
   },
   {
+    name: "Manager", slug: "manager",
+    description: "General operations — orders, customers, riders, products",
+    color: "#0891b2", isSystem: true,
+    permissions: ["dashboard.view","analytics.view","orders.view","orders.edit","orders.assign_rider","orders.export","products.view","products.edit","products.stock_manage","customers.view","customers.edit","customers.history","riders.view","riders.assign","riders.auto_assign","riders.live_tracking","billing.view","billing.create","shopify.view","shopify.orders.view","branches.view","logs.view"],
+  },
+  {
     name: "Accounts Manager", slug: "accounts_manager",
     description: "Financial, invoices, payments and settlements",
     color: "#059669", isSystem: true,
-    permissions: ["dashboard.view","analytics.view","orders.view","orders.export","customers.view","payments.view","payments.manage","payments.refund","disputes.manage","logs.view"],
+    permissions: ["dashboard.view","analytics.view","orders.view","orders.export","customers.view","payments.view","payments.manage","payments.refund","disputes.manage","billing.view","billing.create","billing.edit","billing.refund","billing.view_all","logs.view"],
   },
   {
     name: "Rider Manager", slug: "rider_manager",
     description: "Rider dispatch, logistics and settlement management",
     color: "#d97706", isSystem: true,
-    permissions: ["dashboard.view","analytics.view","orders.view","orders.assign_rider","riders.view","riders.assign","riders.live_tracking","riders.settlement","riders.export","branches.view"],
+    permissions: ["dashboard.view","analytics.view","orders.view","orders.assign_rider","riders.view","riders.assign","riders.auto_assign","riders.live_tracking","riders.earnings","riders.settlement","riders.export","delivery.status_update","branches.view"],
   },
   {
     name: "Marketing Manager", slug: "marketing_manager",
     description: "Marketing, SEO, blogs, campaigns and content",
-    color: "#0891b2", isSystem: true,
-    permissions: ["dashboard.view","analytics.view","marketing.view","campaigns.manage","seo.manage","fast_indexing.run","blogs.manage","customers.view","shopify.view"],
+    color: "#ec4899", isSystem: true,
+    permissions: ["dashboard.view","analytics.view","marketing.view","campaigns.manage","coupons.manage","seo.manage","fast_indexing.run","blogs.manage","marketing.analytics","customers.view","whatsapp.view","whatsapp.broadcast","shopify.view"],
   },
   {
     name: "Customer Support", slug: "customer_support",
     description: "WhatsApp inbox, website chat and order tracking",
     color: "#16a34a", isSystem: true,
-    permissions: ["dashboard.view","orders.view","customers.view","whatsapp.view","whatsapp.send","shopify.view"],
+    permissions: ["dashboard.view","orders.view","customers.view","customers.history","whatsapp.view","whatsapp.send","shopify.view","shopify.orders.view"],
+  },
+  {
+    name: "Support Agent", slug: "support_agent",
+    description: "Basic customer support — chat, orders view only",
+    color: "#0ea5e9", isSystem: true,
+    permissions: ["dashboard.view","orders.view","customers.view","customers.history","whatsapp.view","whatsapp.send"],
+  },
+  {
+    name: "POS Cashier", slug: "pos_cashier",
+    description: "Point of sale — billing, invoicing and cash handling",
+    color: "#f59e0b", isSystem: true,
+    permissions: ["dashboard.view","billing.view","billing.create","billing.discount","customers.view","customers.add","products.view"],
+  },
+  {
+    name: "Staff", slug: "staff",
+    description: "Basic operational access — view only most sections",
+    color: "#64748b", isSystem: true,
+    permissions: ["dashboard.view","orders.view","products.view","customers.view","riders.view"],
+  },
+  {
+    name: "Marketing User", slug: "marketing_user",
+    description: "Marketing content, campaigns, blogs and SEO",
+    color: "#a855f7", isSystem: true,
+    permissions: ["dashboard.view","marketing.view","campaigns.manage","coupons.manage","blogs.manage","seo.manage","shopify.view","whatsapp.broadcast"],
   },
 ] as const;
 
@@ -513,6 +595,28 @@ router.get("/admin/iam/activity-logs", requirePermission("logs.view") as any, as
       db.select({ c: sql<number>`count(*)::int` }).from(adminActivityLogsTable).where(where),
     ]);
     res.json({ ok: true, logs, total: Number(total[0]?.c ?? 0) });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   RESET PASSWORD — POST /api/admin/iam/users/:id/reset-password
+═══════════════════════════════════════════════════════════ */
+router.post("/admin/iam/users/:id/reset-password", requirePermission("users.reset_password") as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { newPassword } = req.body as { newPassword: string };
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ ok: false, error: "Password must be at least 8 characters" });
+      return;
+    }
+    const [user] = await db.select().from(adminUsersTable).where(eq(adminUsersTable.id, id)).limit(1);
+    if (!user) { res.status(404).json({ ok: false, error: "User not found" }); return; }
+    const hash = await hashPassword(newPassword);
+    await db.update(adminUsersTable).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(adminUsersTable.id, id));
+    await logActivity({ req, action: "user.reset_password", resource: "admin_users", resourceId: id, details: `Password reset for ${user.email}` });
+    res.json({ ok: true, message: "Password reset successfully" });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }

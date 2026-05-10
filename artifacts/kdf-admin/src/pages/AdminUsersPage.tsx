@@ -108,14 +108,55 @@ function UserModal({ user, roles, onClose, onSave }: {
   );
 }
 
+/* ─── Reset Password Modal ───────────────────────────────── */
+function ResetPasswordModal({ user, onClose, onSave }: { user: any; onClose: () => void; onSave: (pw: string) => void }) {
+  const [pw, setPw] = useState("");
+  const [show, setShow] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <h2 className="text-base font-bold flex items-center gap-2"><Key className="w-4 h-4 text-primary" />Reset Password</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-sm text-muted-foreground">Set a new password for <span className="font-semibold text-foreground">{user.name}</span></p>
+          <div className="space-y-1.5">
+            <Label>New Password (min 8 chars)</Label>
+            <div className="relative">
+              <Input
+                type={show ? "text" : "password"}
+                value={pw} onChange={e => setPw(e.target.value)}
+                placeholder="••••••••" autoComplete="new-password"
+                className="pr-10"
+              />
+              <button type="button" onClick={() => setShow(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs">
+                {show ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 p-5 border-t border-border">
+          <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+          <Button onClick={() => pw.length >= 8 && onSave(pw)} disabled={pw.length < 8} className="flex-1 gap-2">
+            <Key className="w-4 h-4" /> Reset Password
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────────── */
 export default function AdminUsersPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { user: me } = useAdminAuth();
+  const { user: me, hasPermission } = useAdminAuth();
   const [search, setSearch]     = useState("");
   const [modal, setModal]       = useState<"create" | "edit" | null>(null);
   const [editTarget, setTarget] = useState<any>(null);
+  const [resetTarget, setResetTarget] = useState<any>(null);
 
   const { data: usersData, isLoading: loadingUsers } = useQuery({
     queryKey: ["/api/admin/iam/users"],
