@@ -5,6 +5,7 @@ import { startAbandonedRecoveryScheduler } from "./lib/whatsappRecovery";
 import { startCampaignQueueProcessor } from "./lib/campaignQueue";
 import { startShopifyAutoSync, autoRegisterWebhooksOnStartup } from "./lib/shopifyAutoSync";
 import { startWaAutomationEngine } from "./lib/waAutomationEngine";
+import { startRiderReportScheduler } from "./lib/riderDailyReport.js";
 
 const rawPort = process.env["PORT"];
 
@@ -36,6 +37,7 @@ runMigrations()
       startShopifyAutoSync(15); /* incremental sync every 15 minutes */
       autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
+      startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
     });
   })
   .catch((err) => {
