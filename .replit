@@ -82,4 +82,3 @@ packages = ["zip"]
 [userenv]
 
 [userenv.shared]
-EXPO_TOKEN = "ZHvTrgkqhkhO9qNiUYVaUAJ4dO1XTTvW30xvzuf1"
