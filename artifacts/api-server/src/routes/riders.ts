@@ -265,6 +265,33 @@ router.post("/admin/riders", adminMiddleware, async (req, res) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════
+   DELIVERY SETTINGS — must be BEFORE /admin/riders/:id to avoid wildcard capture
+═══════════════════════════════════════════════════════ */
+router.get("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
+  try {
+    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
+    res.json(rows.rows[0] ?? {});
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.put("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
+  try {
+    const { auto_delivery_mode, auto_wa_on_assign, auto_wa_on_status, default_eta_minutes } = req.body;
+    const rows = await db.execute(sql`
+      UPDATE rider_delivery_settings SET
+        auto_delivery_mode   = COALESCE(${auto_delivery_mode   ?? null}, auto_delivery_mode),
+        auto_wa_on_assign    = COALESCE(${auto_wa_on_assign    ?? null}, auto_wa_on_assign),
+        auto_wa_on_status    = COALESCE(${auto_wa_on_status    ?? null}, auto_wa_on_status),
+        default_eta_minutes  = COALESCE(${default_eta_minutes != null ? parseInt(String(default_eta_minutes)) : null}, default_eta_minutes),
+        updated_at = NOW()
+      WHERE id = 1
+      RETURNING *
+    `);
+    res.json(rows.rows[0] ?? {});
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 /* PUT /api/admin/riders/:id */
 router.put("/admin/riders/:id", adminMiddleware, async (req, res) => {
   try {
@@ -399,33 +426,6 @@ router.get("/admin/riders/stats", adminMiddleware, async (req, res) => {
 /* ═══════════════════════════════════════════════════════
    ASSIGN ORDER TO RIDER
 ═══════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════
-   DELIVERY SETTINGS — GET / PUT
-═══════════════════════════════════════════════════════ */
-router.get("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
-  try {
-    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
-    res.json(rows.rows[0] ?? {});
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
-});
-
-router.put("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
-  try {
-    const { auto_delivery_mode, auto_wa_on_assign, auto_wa_on_status, default_eta_minutes } = req.body;
-    const rows = await db.execute(sql`
-      UPDATE rider_delivery_settings SET
-        auto_delivery_mode   = COALESCE(${auto_delivery_mode   ?? null}, auto_delivery_mode),
-        auto_wa_on_assign    = COALESCE(${auto_wa_on_assign    ?? null}, auto_wa_on_assign),
-        auto_wa_on_status    = COALESCE(${auto_wa_on_status    ?? null}, auto_wa_on_status),
-        default_eta_minutes  = COALESCE(${default_eta_minutes != null ? parseInt(String(default_eta_minutes)) : null}, default_eta_minutes),
-        updated_at = NOW()
-      WHERE id = 1
-      RETURNING *
-    `);
-    res.json(rows.rows[0] ?? {});
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
-});
 
 /* ═══════════════════════════════════════════════════════
    LIVE DASHBOARD — real-time overview

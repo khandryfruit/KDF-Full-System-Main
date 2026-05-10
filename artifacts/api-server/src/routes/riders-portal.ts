@@ -300,7 +300,10 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
     let dateFilter: string;
     const p = String(period ?? "today");
 
-    if (p === "active") {
+    if (p === "new") {
+      /* New orders tab: only "assigned" status, assigned within last 7 days (avoids showing 400+ stale bulk-assigned historical orders) */
+      dateFilter = `(rd.status = 'assigned' AND rd.assigned_at >= NOW() - INTERVAL '7 days')`;
+    } else if (p === "active") {
       /* Active orders: cap at 45 days to prevent stale "stuck" orders showing forever */
       dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '45 days')`;
     } else if (p === "yesterday") {

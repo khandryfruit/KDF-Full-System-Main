@@ -1,0 +1,72 @@
+Please check and fix the following issues in the Admin Panel, Shopify Order Sync, and Rider App urgently.
+
+Current Issues:
+
+1. Automation Settings Toggles Not Working
+Inside Admin → Automation Settings, the following switches are not clickable and are not enabling/disabling properly:
+
+- Auto-Assign on Order
+- Auto WA on Assign
+- Auto WA on Status
+
+Problem:
+The toggle buttons are either disabled, stuck, or not saving state changes in database/API.
+
+Required Fix:
+- Check frontend toggle component
+- Check API integration
+- Check database save/update logic
+- Verify permissions/auth middleware
+- Ensure toggle state persists after refresh
+- Ensure enable/disable works instantly without reload
+
+2. Shopify Orders Not Going to Rider App
+Orders are coming correctly from Shopify into Admin Panel, but they are NOT appearing inside the Rider App dashboard.
+
+Problem:
+Even after updating:
+- Rider App
+- Admin Panel
+- APIs
+
+The issue still exists.
+
+Required Investigation:
+- Check Shopify webhook/order sync
+- Check order assignment logic
+- Check rider API endpoints
+- Check Laravel queue/jobs/events
+- Check Firebase/socket/live updates
+- Check if orders are filtered incorrectly
+- Verify Lahore orders auto-assignment logic
+- Verify rider authentication/token issue
+- Check database records and status flow
+
+Expected Behavior:
+- New Shopify orders should instantly appear in Admin
+- Lahore local orders should auto-assign to Lahore riders
+- Assigned orders should instantly appear in Rider App
+- Rider should receive real-time updates without manual refresh
+
+3. Auto Assign Flow Verification
+Please fully test this workflow:
+
+Shopify Order → Admin Panel → Auto Assign Rider → Rider App → WhatsApp Notification
+
+Current system looks partially broken.
+
+4. WhatsApp Automation Check
+Please verify:
+- Auto WA on Assign
+- Auto WA on Status Change
+
+These should send automatic WhatsApp notifications to customer after:
+- Rider assigned
+- Status changed
+- Delivered
+
+Please debug complete flow and fix all broken integrations.
+
+Priority:
+HIGH PRIORITY ISSUE
+Because live customer orders are affected.

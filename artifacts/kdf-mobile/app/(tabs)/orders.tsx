@@ -442,20 +442,28 @@ function PeriodTab({ period, active, onPress }: { period: typeof PERIODS[0]; act
 /* ─── Empty State ─── */
 function EmptyState({ section, period }: { section: SectionKey; period: PeriodKey }) {
   const col = SECTION_COLORS[section];
-  const icons: Record<SectionKey, string> = { active: "zap", completed: "check-circle", failed: "x-circle", returned: "rotate-ccw" };
+  const icons: Record<SectionKey, string> = { new: "bell", active: "zap", completed: "check-circle", failed: "x-circle", returned: "rotate-ccw" };
   const periodLabel = PERIODS.find(p => p.key === period)?.label ?? "this period";
   const msgs: Record<SectionKey, string> = {
+    new:       "کوئی نئے آرڈر نہیں\nآج کے نئے آرڈر یہاں آئیں گے",
     active:    "کوئی active delivery نہیں",
     completed: `No deliveries in ${periodLabel}`,
     failed:    `No failed orders in ${periodLabel}`,
     returned:  `No returned orders in ${periodLabel}`,
+  };
+  const titles: Record<SectionKey, string> = {
+    new:       "کوئی نئے آرڈر نہیں",
+    active:    "All Clear!",
+    completed: "Nothing Here",
+    failed:    "Nothing Here",
+    returned:  "Nothing Here",
   };
   return (
     <View style={styles.emptyWrap}>
       <View style={[styles.emptyIconWrap, { backgroundColor: col.bg }]}>
         <Feather name={icons[section] as any} size={34} color={col.accent} />
       </View>
-      <Text style={styles.emptyTitle}>{section === "active" ? "All Clear!" : "Nothing Here"}</Text>
+      <Text style={styles.emptyTitle}>{titles[section]}</Text>
       <Text style={styles.emptyTxt}>{msgs[section]}</Text>
     </View>
   );
@@ -471,9 +479,10 @@ export default function TasksScreen() {
   const [activePeriod,  setActivePeriod]  = useState<PeriodKey>("today");
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  /* "new" and "active" fetch all outstanding orders (no date cap except 45 days).
-     History sections use the selected period filter. */
-  const apiPeriod = (activeSection === "new" || activeSection === "active") ? "active" : activePeriod;
+  /* "new" section fetches only last-7-day assigned orders (avoids flooding with 400+ old assignments)
+     "active" section fetches all in-progress orders from last 45 days
+     History sections use the user-selected period */
+  const apiPeriod = activeSection === "new" ? "new" : activeSection === "active" ? "active" : activePeriod;
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["rider-deliveries-tasks", apiPeriod, activeSection],

@@ -562,18 +562,42 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
 
   const { data: deliverySettings, refetch: refetchSettings } = useQuery({
     queryKey: ["delivery-settings"],
-    queryFn: () => apiFetch("/admin/riders/delivery-settings"),
+    queryFn: async () => {
+      const r = await fetch(`${API}/admin/riders/delivery-settings`, { headers: h() });
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json();
+    },
+    staleTime: 30_000,
+    retry: 2,
   });
 
   const { toast } = useToast();
-  const ds = (deliverySettings as any) ?? {};
+
+  /* Optimistic local overrides so toggles respond instantly */
+  const [optimisticSettings, setOptimisticSettings] = useState<Record<string, any>>({});
+  const serverDs = (deliverySettings && !(deliverySettings as any).error) ? (deliverySettings as any) : {};
+  const ds = { ...serverDs, ...optimisticSettings };
 
   const saveSetting = async (key: string, value: boolean | number) => {
+    const prev = ds[key];
+    setOptimisticSettings(s => ({ ...s, [key]: value }));   // instant visual update
     try {
-      await apiFetch("/admin/riders/delivery-settings", { method: "PUT", body: JSON.stringify({ [key]: value }) });
-      refetchSettings();
-      toast({ title: "Setting saved" });
+      const r = await fetch(`${API}/admin/riders/delivery-settings`, {
+        method: "PUT",
+        headers: h(),
+        body: JSON.stringify({ [key]: value }),
+      });
+      const result = await r.json();
+      if (!r.ok || result?.error) {
+        setOptimisticSettings(s => ({ ...s, [key]: prev })); // revert
+        toast({ title: "⚠️ Save failed", description: result?.error ?? `HTTP ${r.status}`, variant: "destructive" });
+      } else {
+        setOptimisticSettings({});
+        refetchSettings();
+        toast({ title: "✅ Setting saved" });
+      }
     } catch (e: any) {
+      setOptimisticSettings(s => ({ ...s, [key]: prev }));  // revert
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
   };
