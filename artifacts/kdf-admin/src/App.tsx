@@ -86,6 +86,7 @@ import RiderLiveMapPage from "@/pages/RiderLiveMapPage";
 import VideoBannersPage from "@/pages/VideoBannersPage";
 import MobileReelsPage from "@/pages/MobileReelsPage";
 import GoogleIndexingPage from "@/pages/GoogleIndexingPage";
+import GoogleMerchantPage from "@/pages/GoogleMerchantPage";
 import ModulesPage from "@/pages/ModulesPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
@@ -162,6 +163,7 @@ function Router() {
       <Route path="/blog"><ProtectedRoute component={BlogPostsPage} /></Route>
       <Route path="/seo"><ProtectedRoute component={SEOSettingsPage} /></Route>
       <Route path="/seo/fast-indexing"><ProtectedRoute component={GoogleIndexingPage} /></Route>
+      <Route path="/seo/merchant-center"><ProtectedRoute component={GoogleMerchantPage} /></Route>
       <Route path="/announcements"><ProtectedRoute component={AnnouncementsPage} /></Route>
       <Route path="/footer"><ProtectedRoute component={FooterPage} /></Route>
       <Route path="/ai-content"><ProtectedRoute component={AIContentPage} /></Route>

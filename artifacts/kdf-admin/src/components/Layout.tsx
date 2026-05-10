@@ -137,6 +137,7 @@ const MARKETING_NAV = [
   { href: "/restock",             label: "Restock Alerts",     icon: Bell        },
   { href: "/seo",                 label: "SEO Settings",       icon: Search      },
   { href: "/seo/fast-indexing",   label: "Fast Indexing",      icon: Zap         },
+  { href: "/seo/merchant-center", label: "Google Merchant",    icon: ShoppingBag },
 ];
 
 const OPERATIONS_NAV = [
@@ -460,7 +461,7 @@ function SidebarContent({
   const isWaChatActive     = location.startsWith("/wa-chat") || location === "/wa-inbox" || location === "/chat-conversations" || location === "/chat-leads" || location === "/whatsapp";
   const isCommerceActive   = ["/orders","/products","/categories","/customers","/reviews","/analytics"].some(p => location === p || location.startsWith(p + "/"));
   const isStoreActive      = ["/banners","/video-banners","/mobile-reels","/coupons","/wallet","/loyalty","/announcements"].some(p => location === p || location.startsWith(p + "/"));
-  const isMarketingActive  = ["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/"));
+  const isMarketingActive  = ["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/") || location.startsWith("/seo/"));
   const isOperationsActive = ["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p || location.startsWith(p + "/"));
   const isSettingsActive   = ["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p || location.startsWith(p + "/"));
   const { waUnread } = useNotifications();

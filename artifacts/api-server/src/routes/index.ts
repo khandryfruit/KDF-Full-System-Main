@@ -57,6 +57,7 @@ import chatWidgetRouter from "./chatWidget";
 import googleIndexingRouter from "./googleIndexing";
 import adminManagementRouter from "./adminManagement";
 import modulesRouter from "./modules";
+import merchantRouter from "./merchant";
 
 const router: IRouter = Router();
 
@@ -120,5 +121,6 @@ router.use(chatWidgetRouter);
 router.use(googleIndexingRouter);
 router.use(adminManagementRouter);
 router.use(modulesRouter);
+router.use(merchantRouter);
 
 export default router;
