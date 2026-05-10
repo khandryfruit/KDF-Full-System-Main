@@ -12,7 +12,7 @@ import {
   LayoutGrid, List, Send, X, Database, Wifi,
   Bell, BellOff, Settings2, Activity, Timer,
   Navigation, PhoneCall, DollarSign, TrendingUp, Eye,
-  Volume2, VolumeX, BarChart3, Shield,
+  Volume2, VolumeX, BarChart3, Shield, Smartphone,
 } from "lucide-react";
 
 const API = "/api";
@@ -483,6 +483,74 @@ function OrderTableRow({ order, riders, onRefresh, onAssign, soundEnabled }: {
 }
 
 /* ══════════════════════════════════════════════════════════
+   RIDER ONLINE ROW — with toggle
+══════════════════════════════════════════════════════════ */
+function RiderOnlineRow({ rider }: { rider: any }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [toggling, setToggling] = useState(false);
+
+  const toggleOnline = async () => {
+    setToggling(true);
+    try {
+      const res = await apiFetch(`/admin/riders/${rider.id}/toggle-online`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_online: !rider.is_online }),
+      });
+      if (res.ok) {
+        toast({ title: `${rider.name} is now ${!rider.is_online ? "🟢 Online" : "⚫ Offline"}` });
+        qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+        qc.invalidateQueries({ queryKey: ["riders-list"] });
+      }
+    } catch {
+      toast({ title: "Error toggling online status", variant: "destructive" });
+    } finally { setToggling(false); }
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50">
+      <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold shrink-0 ${rider.is_online ? "bg-green-600" : "bg-slate-400"}`}>
+        {rider.name.charAt(0)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-sm leading-none">{rider.name}</p>
+          {rider.has_push && (
+            <span title="Push notifications enabled">
+              <Smartphone size={11} className="text-blue-500" />
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">{rider.delivery_area || "All Lahore"} · {rider.phone}</p>
+      </div>
+      <div className="flex gap-2 text-center shrink-0">
+        <div className="text-center">
+          <p className="text-sm font-bold text-orange-600">{rider.active_orders ?? 0}</p>
+          <p className="text-[9px] text-muted-foreground">Active</p>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-bold text-green-600">{rider.delivered_today ?? 0}</p>
+          <p className="text-[9px] text-muted-foreground">Today</p>
+        </div>
+      </div>
+      <button
+        onClick={toggleOnline}
+        disabled={toggling}
+        title={rider.is_online ? "Click to set Offline" : "Click to set Online"}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+          rider.is_online
+            ? "bg-green-50 border-green-200 text-green-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+            : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-green-50 hover:border-green-200 hover:text-green-700"
+        } ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${rider.is_online ? "bg-green-500 animate-pulse" : "bg-slate-400"}`} />
+        {rider.is_online ? "Online" : "Offline"}
+      </button>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    LIVE DASHBOARD TAB
 ══════════════════════════════════════════════════════════ */
 function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean; onSoundToggle: () => void }) {
@@ -547,7 +615,14 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
         <div className="lg:col-span-2 bg-white rounded-xl border border-border shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b bg-slate-50/50 flex items-center justify-between">
             <h3 className="font-semibold text-sm flex items-center gap-2"><Users size={15} className="text-blue-600" />Active Riders</h3>
-            <span className="text-xs text-muted-foreground">{activeRiders.length} riders online</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                🟢 {activeRiders.filter((r: any) => r.is_online).length} online
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                / {activeRiders.length} total
+              </span>
+            </div>
           </div>
           {isLoading ? (
             <div className="p-4 space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />)}</div>
@@ -556,29 +631,7 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
           ) : (
             <div className="divide-y divide-border/50">
               {activeRiders.map((rider: any) => (
-                <div key={rider.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50">
-                  <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
-                    {rider.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm leading-none">{rider.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{rider.delivery_area || "All Lahore"} · {rider.phone}</p>
-                  </div>
-                  <div className="flex gap-2 text-center shrink-0">
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-orange-600">{rider.active_orders ?? 0}</p>
-                      <p className="text-[9px] text-muted-foreground">Active</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-green-600">{rider.delivered_today ?? 0}</p>
-                      <p className="text-[9px] text-muted-foreground">Today</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                    <span className="text-[10px] text-green-600 font-medium">Online</span>
-                  </div>
-                </div>
+                <RiderOnlineRow key={rider.id} rider={rider} />
               ))}
             </div>
           )}

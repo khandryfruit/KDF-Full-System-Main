@@ -446,14 +446,14 @@ router.get("/admin/riders/live-dashboard", adminMiddleware, async (req, res) => 
     `);
 
     const activeRiders = await db.execute(sql`
-      SELECT r.id, r.name, r.phone, r.delivery_area,
+      SELECT r.id, r.name, r.phone, r.delivery_area, r.is_online, r.expo_push_token IS NOT NULL AS has_push,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_orders,
         COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND DATE(d.delivered_at) = CURRENT_DATE) AS delivered_today
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
       WHERE r.status = 'active'
       GROUP BY r.id
-      ORDER BY active_orders DESC
+      ORDER BY r.is_online DESC, active_orders DESC
     `);
 
     const recentActivity = await db.execute(sql`
@@ -693,8 +693,9 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
 /* POST /api/admin/riders/auto-assign — Lahore orders without rider */
 router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
   try {
-    const { limit: lim = 20 } = req.body;
-    // Get unassigned Lahore orders
+    const { limit: lim = 50 } = req.body;
+
+    /* ── Unassigned Lahore orders ── */
     const unassigned = await db.execute(sql`
       SELECT o.* FROM shopify_orders o
       LEFT JOIN rider_deliveries rd ON rd.shopify_order_db_id = o.id
@@ -705,71 +706,210 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
       LIMIT ${parseInt(String(lim))}
     `);
 
-    // Get active riders (round-robin)
-    const ridersRows = await db.execute(sql`
-      SELECT r.id, r.name,
+    if (!unassigned.rows.length) {
+      res.json({ ok: true, assigned: 0, total: 0, message: "No unassigned Lahore orders found" });
+      return;
+    }
+
+    /* ── Prefer online riders → fallback all active ── */
+    const buildRiderQuery = (onlineOnly: boolean) => db.execute(sql`
+      SELECT r.id, r.name, r.phone, r.whatsapp_number, r.expo_push_token,
+        r.is_online, r.delivery_area,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_count
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
       WHERE r.status = 'active'
+        ${onlineOnly ? sql`AND r.is_online = true` : sql``}
       GROUP BY r.id
       ORDER BY active_count ASC
     `);
-    const riders = ridersRows.rows as any[];
 
-    if (!riders.length) res.json({ ok: false, message: "No active riders found", assigned: 0 });
+    let ridersResult = await buildRiderQuery(true);
+    const usedOnlineFilter = ridersResult.rows.length > 0;
+    if (!usedOnlineFilter) ridersResult = await buildRiderQuery(false);
+
+    const riders = ridersResult.rows as any[];
+    if (!riders.length) {
+      res.json({ ok: false, message: "No active riders available", assigned: 0 });
+      return;
+    }
 
     let assignedCount = 0;
+    const assignments: Array<{ orderId: number; orderNumber: string; riderName: string }> = [];
+
     for (let i = 0; i < unassigned.rows.length; i++) {
-      const order = unassigned.rows[i] as any;
-      const rider = riders[i % riders.length];
+      const order  = unassigned.rows[i] as any;
+      const rider  = riders[i % riders.length];
+
       const addr = (() => {
         try {
-          const a = typeof order.shipping_address === "string" ? JSON.parse(order.shipping_address) : order.shipping_address;
+          const a = typeof order.shipping_address === "string"
+            ? JSON.parse(order.shipping_address) : order.shipping_address;
           return [a?.address1, a?.address2, a?.city].filter(Boolean).join(", ");
-        } catch { return ""; }
+        } catch { return "Lahore"; }
       })();
-      await db.execute(sql`
+
+      const isPaid    = order.financial_status === "paid";
+      const codAmount = isPaid ? 0 : Number(order.total_price ?? 0);
+
+      const insertResult = await db.execute(sql`
         INSERT INTO rider_deliveries
           (rider_id, shopify_order_db_id, shopify_order_id, shopify_order_number,
            customer_name, customer_phone, delivery_address, city,
            cod_amount, is_paid, order_items, status, assigned_at)
         VALUES (
-          ${rider.id},
-          ${order.id},
-          ${order.shopify_order_id ?? null},
-          ${order.order_number ?? null},
-          ${order.customer_name ?? null},
-          ${order.customer_phone ?? null},
-          ${addr},
-          'Lahore',
-          ${Number(order.total_price ?? 0)},
-          ${order.financial_status === "paid"},
+          ${rider.id}, ${order.id},
+          ${order.shopify_order_id ?? null}, ${order.order_number ?? null},
+          ${order.customer_name ?? null}, ${order.customer_phone ?? null},
+          ${addr}, 'Lahore',
+          ${codAmount}, ${isPaid},
           ${JSON.stringify(order.line_items ?? [])},
-          'assigned',
-          NOW()
+          'assigned', NOW()
         )
         ON CONFLICT DO NOTHING
+        RETURNING id
       `);
+      const deliveryId = (insertResult.rows?.[0] as any)?.id ?? null;
+      assignedCount++;
+      assignments.push({ orderId: order.id, orderNumber: order.order_number ?? "", riderName: rider.name });
 
-      /* ── Non-blocking Shopify sync per assignment ── */
+      /* ── Non-blocking: Shopify sync + Push Notification + WhatsApp ── */
+      const snap = { rider: { ...rider }, order: { ...order }, addr, deliveryId, isPaid, codAmount };
       setImmediate(async () => {
         try {
+          /* Shopify sync */
           const delRow = await db.execute(sql`
-            SELECT * FROM rider_deliveries
-            WHERE shopify_order_db_id = ${order.id} LIMIT 1
+            SELECT * FROM rider_deliveries WHERE shopify_order_db_id = ${snap.order.id} LIMIT 1
           `);
           const del = delRow.rows[0] as any;
-          if (del) {
-            await syncDeliveryToShopify(buildSyncPayload("assigned", del, rider));
-          }
-        } catch {}
-      });
+          if (del) await syncDeliveryToShopify(buildSyncPayload("assigned", del, snap.rider)).catch(() => {});
 
-      assignedCount++;
+          const codText = snap.isPaid ? "PAID ✅" : `COD Rs.${snap.codAmount.toLocaleString()}`;
+
+          /* ── Expo Push Notification with retry ── */
+          if (snap.rider.expo_push_token) {
+            const { sendExpoPush } = await import("../lib/ondriveEngine.js");
+            await sendExpoPush({
+              expoPushToken: snap.rider.expo_push_token,
+              title: `🚚 نیا آرڈر! #${snap.order.order_number}`,
+              body:  `${snap.order.customer_name ?? "Customer"} · ${snap.addr} · ${codText}`,
+              data:  {
+                deliveryId:  String(snap.deliveryId ?? ""),
+                orderId:     String(snap.order.id),
+                orderNumber: String(snap.order.order_number ?? ""),
+                screen:      "order_detail",
+              },
+              sound:       "default",
+              badge:       1,
+              riderId:     snap.rider.id,
+              deliveryId:  snap.deliveryId,
+              orderNumber: String(snap.order.order_number ?? ""),
+            });
+          }
+
+          /* ── WhatsApp to rider ── */
+          const waPhone = snap.rider.whatsapp_number || snap.rider.phone;
+          if (waPhone) {
+            const lineItems = snap.order.line_items ?? [];
+            const parsed    = typeof lineItems === "string" ? JSON.parse(lineItems) : lineItems;
+            const items     = (parsed as any[]).slice(0, 4)
+              .map((it: any) => `• ${it.name ?? it.title ?? "Product"} × ${it.quantity ?? 1}`)
+              .join("\n");
+            const msg =
+              `🚚 *NEW DELIVERY — KDF NUTS*\n\n` +
+              `📦 *Order:* ${snap.order.order_number}\n` +
+              `👤 *Customer:* ${snap.order.customer_name ?? "Customer"}\n` +
+              `📞 *Phone:* ${snap.order.customer_phone ?? "—"}\n` +
+              `📍 *Address:* ${snap.addr}\n\n` +
+              `🛒 *Items:*\n${items || "See order"}\n\n` +
+              `💰 *Payment:* ${codText}\n\n` +
+              `━━━━━━━━━━━━━━━━━━━\n` +
+              `Reply *PICKED* when collected, *DONE* when delivered.\n` +
+              `━━━━━━━━━━━━━━━━━━━\nKDF NUTS Logistics Team`;
+            const sent = await sendWhatsAppMessage({
+              phone: normalisePhone(waPhone), message: msg,
+            }).catch(() => false);
+            if (sent && snap.deliveryId) {
+              await db.execute(sql`
+                UPDATE rider_deliveries SET wa_sent_at = NOW() WHERE id = ${snap.deliveryId}
+              `).catch(() => {});
+            }
+          }
+        } catch (notifErr) {
+          logger.warn(notifErr, "auto-assign: notification error (non-critical)");
+        }
+      });
     }
 
-    res.json({ ok: true, assigned: assignedCount, total: unassigned.rows.length });
+    const modeLabel = usedOnlineFilter
+      ? `${riders.length} online rider(s)`
+      : `${riders.length} active rider(s) [fallback — no online riders]`;
+
+    res.json({
+      ok: true, assigned: assignedCount, total: unassigned.rows.length,
+      riders_used: riders.length,
+      message: `${assignedCount} orders assigned across ${modeLabel}`,
+      assignments,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   RIDER ONLINE STATUS TOGGLE
+═══════════════════════════════════════════════════════ */
+
+/* PATCH /api/admin/riders/:id/toggle-online */
+router.patch("/admin/riders/:id/toggle-online", adminMiddleware, async (req, res) => {
+  try {
+    const id        = parseInt(req.params["id"] as string);
+    const isOnline  = !!req.body.is_online;
+    const rows      = await db.execute(sql`
+      UPDATE riders SET is_online = ${isOnline}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING id, name, is_online, phone
+    `);
+    if (!rows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
+    logger.info({ riderId: id, isOnline }, "Rider online status updated");
+    res.json({ ok: true, rider: rows.rows[0] });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   PUSH NOTIFICATION LOGS
+═══════════════════════════════════════════════════════ */
+
+/* GET /api/admin/riders/notification-logs */
+router.get("/admin/riders/notification-logs", adminMiddleware, async (req, res) => {
+  try {
+    const limit   = Math.min(200, parseInt(String(req.query["limit"] ?? "100")));
+    const riderId = req.query["rider_id"] ? parseInt(String(req.query["rider_id"])) : null;
+
+    const rows = await db.execute(sql`
+      SELECT nl.*, r.name AS rider_name
+      FROM notification_logs nl
+      LEFT JOIN riders r ON r.id = nl.rider_id
+      ${riderId ? sql`WHERE nl.rider_id = ${riderId}` : sql``}
+      ORDER BY nl.created_at DESC
+      LIMIT ${limit}
+    `);
+
+    const statsRow = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'sent')   AS sent_24h,
+        COUNT(*) FILTER (WHERE status = 'failed') AS failed_24h,
+        COUNT(*)                                   AS total_24h,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'sent') / NULLIF(COUNT(*), 0), 1) AS success_rate
+      FROM notification_logs
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+    `);
+
+    res.json({ logs: rows.rows, stats: statsRow.rows[0] ?? {} });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });

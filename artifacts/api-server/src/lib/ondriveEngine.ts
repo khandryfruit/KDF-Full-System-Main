@@ -30,37 +30,77 @@ export async function sendExpoPush(params: {
   data?: Record<string, unknown>;
   sound?: "default" | null;
   badge?: number;
-}): Promise<void> {
-  const { expoPushToken, title, body, data, sound = "default", badge } = params;
-  if (!expoPushToken || !expoPushToken.startsWith("ExponentPushToken")) return;
-  try {
-    const res = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "Accept-encoding": "gzip, deflate",
-      },
-      body: JSON.stringify({
-        to: expoPushToken,
-        title,
-        body,
-        data: data ?? {},
-        sound,
-        ...(badge !== undefined ? { badge } : {}),
-        priority: "high",
-        channelId: "new_order",
-      }),
-    });
-    const result = await res.json() as any;
-    if (result?.data?.status === "error") {
-      logger.warn({ token: expoPushToken.slice(-8), error: result.data.message }, "Expo push: delivery error");
-    } else {
-      logger.info({ token: expoPushToken.slice(-8) }, "Expo push: sent");
+  riderId?: number;
+  deliveryId?: number;
+  orderNumber?: string;
+}): Promise<boolean> {
+  const { expoPushToken, title, body, data, sound = "default", badge, riderId, deliveryId, orderNumber } = params;
+  if (!expoPushToken || !expoPushToken.startsWith("ExponentPushToken")) return false;
+
+  const MAX_ATTEMPTS = 3;
+  const tokenSlice = expoPushToken.slice(-12);
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) await new Promise(r => setTimeout(r, attempt * 1200));
+    try {
+      const res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Accept-encoding": "gzip, deflate",
+        },
+        body: JSON.stringify({
+          to: expoPushToken,
+          title,
+          body,
+          data: data ?? {},
+          sound,
+          ...(badge !== undefined ? { badge } : {}),
+          priority: "high",
+          channelId: "new_order",
+        }),
+      });
+      const result = await res.json() as any;
+
+      if (result?.data?.status === "error") {
+        const errMsg = result.data.message ?? "Expo delivery error";
+        logger.warn({ token: tokenSlice, error: errMsg, attempt }, "Expo push: delivery error");
+        await db.execute(sql`
+          INSERT INTO notification_logs
+            (rider_id, delivery_id, order_number, expo_push_token, title, body, status, attempt, error, response, created_at)
+          VALUES
+            (${riderId ?? null}, ${deliveryId ?? null}, ${orderNumber ?? null}, ${tokenSlice},
+             ${title}, ${body}, 'failed', ${attempt}, ${errMsg}, ${JSON.stringify(result)}, NOW())
+        `).catch(() => {});
+        if (attempt === MAX_ATTEMPTS) return false;
+        continue;
+      }
+
+      await db.execute(sql`
+        INSERT INTO notification_logs
+          (rider_id, delivery_id, order_number, expo_push_token, title, body, status, attempt, response, sent_at, created_at)
+        VALUES
+          (${riderId ?? null}, ${deliveryId ?? null}, ${orderNumber ?? null}, ${tokenSlice},
+           ${title}, ${body}, 'sent', ${attempt}, ${JSON.stringify(result)}, NOW(), NOW())
+      `).catch(() => {});
+      logger.info({ token: tokenSlice, attempt }, "Expo push: sent");
+      return true;
+
+    } catch (err) {
+      const errMsg = String(err);
+      logger.warn({ err, attempt }, "Expo push: network error");
+      await db.execute(sql`
+        INSERT INTO notification_logs
+          (rider_id, delivery_id, order_number, expo_push_token, title, body, status, attempt, error, created_at)
+        VALUES
+          (${riderId ?? null}, ${deliveryId ?? null}, ${orderNumber ?? null}, ${tokenSlice},
+           ${title}, ${body}, 'failed', ${attempt}, ${errMsg}, NOW())
+      `).catch(() => {});
+      if (attempt === MAX_ATTEMPTS) return false;
     }
-  } catch (err) {
-    logger.warn(err, "Expo push: network error");
   }
+  return false;
 }
 
 /* ── Confirmation keywords (Urdu + English) ── */
