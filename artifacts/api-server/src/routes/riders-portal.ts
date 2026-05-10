@@ -294,13 +294,15 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
      *   "all"               → all records
      *   "active"            → only active status records (no date filter)
      */
-    const ACTIVE_STATUSES = ["'assigned'", "'picked'", "'out_for_delivery'"];
+    /* near_customer included — backend sends this status too */
+    const ACTIVE_STATUSES = ["'assigned'", "'picked'", "'out_for_delivery'", "'near_customer'", "'delayed'", "'rescheduled'"];
 
     let dateFilter: string;
     const p = String(period ?? "today");
 
     if (p === "active") {
-      dateFilter = `rd.status IN (${ACTIVE_STATUSES.join(",")})`;
+      /* Active orders: cap at 45 days to prevent stale "stuck" orders showing forever */
+      dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '45 days')`;
     } else if (p === "yesterday") {
       dateFilter = `DATE(rd.assigned_at) = CURRENT_DATE - INTERVAL '1 day'`;
     } else if (p === "week") {
@@ -310,9 +312,9 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
     } else if (p === "all") {
       dateFilter = "1=1";
     } else {
-      /* default: "today" — active orders always visible + today's completed/failed */
+      /* default "today": active orders (last 45 days) + today's terminal statuses */
       dateFilter = `(
-        rd.status IN (${ACTIVE_STATUSES.join(",")})
+        (rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '45 days')
         OR DATE(rd.assigned_at) = CURRENT_DATE
       )`;
     }
@@ -346,12 +348,15 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
         ${sql.raw(dateCond)}
       ORDER BY
         CASE rd.status
-          WHEN 'out_for_delivery' THEN 1
-          WHEN 'picked' THEN 2
-          WHEN 'assigned' THEN 3
-          WHEN 'delivered' THEN 4
-          WHEN 'failed' THEN 5
-          WHEN 'returned' THEN 6
+          WHEN 'near_customer'   THEN 1
+          WHEN 'out_for_delivery' THEN 2
+          WHEN 'picked'          THEN 3
+          WHEN 'assigned'        THEN 4
+          WHEN 'rescheduled'     THEN 5
+          WHEN 'delayed'         THEN 6
+          WHEN 'delivered'       THEN 7
+          WHEN 'failed'          THEN 8
+          WHEN 'returned'        THEN 9
         END ASC,
         rd.assigned_at DESC
       LIMIT ${limitClause}

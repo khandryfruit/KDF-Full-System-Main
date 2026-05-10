@@ -737,17 +737,21 @@ export async function triggerNewOrderAutomation(params: {
         return { routed: "skipped", message: "Rider already assigned" };
       }
 
-      /* Pick best rider (fewest active deliveries) */
-      const riderRows = await db.execute(sql`
-        SELECT r.id, r.name, r.whatsapp_number, r.phone,
-          COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_count
+      /* Pick best rider — prefer ONLINE riders first, then fewest active deliveries */
+      const buildRiderPick = (onlineOnly: boolean) => db.execute(sql`
+        SELECT r.id, r.name, r.whatsapp_number, r.phone, r.expo_push_token, r.is_online,
+          COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_count
         FROM riders r
         LEFT JOIN rider_deliveries d ON d.rider_id = r.id
         WHERE r.status = 'active'
+          ${onlineOnly ? sql`AND r.is_online = true` : sql``}
         GROUP BY r.id
         ORDER BY active_count ASC
         LIMIT 1
       `).catch(() => ({ rows: [] }));
+
+      let riderRows = await buildRiderPick(true);
+      if (!(riderRows.rows ?? []).length) riderRows = await buildRiderPick(false);
       const rider = (riderRows.rows ?? [])[0] as any;
 
       const deliveryAddr = [addr.address1, addr.address2, addr.city].filter(Boolean).join(", ");
@@ -795,7 +799,7 @@ export async function triggerNewOrderAutomation(params: {
           `━━━━━━━━━━━━━━━━━━━\n` +
           `_Khan Dry Fruits — Lahore Delivery_`;
 
-        await sendWhatsAppMessage({ phone: waPhone, message: msg, userId: "rider-dispatch" }).catch(() => {});
+        await sendWhatsAppMessage({ phone: waPhone, message: msg }).catch(() => {});
 
         /* Mark WA sent timestamp */
         const delId = (delRows.rows?.[0] as any)?.id;
@@ -805,16 +809,26 @@ export async function triggerNewOrderAutomation(params: {
 
         /* ── Send Expo Push Notification to rider app ── */
         try {
-          const tokenRow = await db.execute(sql`SELECT expo_push_token FROM riders WHERE id = ${rider.id} LIMIT 1`);
-          const expoPushToken = (tokenRow.rows?.[0] as any)?.expo_push_token;
+          /* Use token from query (already fetched) or fallback DB fetch */
+          const expoPushToken = rider.expo_push_token
+            ?? ((await db.execute(sql`SELECT expo_push_token FROM riders WHERE id = ${rider.id} LIMIT 1`).catch(() => ({ rows: [] }))).rows?.[0] as any)?.expo_push_token;
           if (expoPushToken) {
-            const codText = isPaid ? "PAID" : `COD: Rs. ${codAmount.toLocaleString()}`;
+            const codText = isPaid ? "PAID ✅" : `COD Rs.${codAmount.toLocaleString()}`;
             await sendExpoPush({
               expoPushToken,
-              title: `🚚 New Order ${orderNumber}`,
-              body: `${customerName ?? "Customer"} · ${deliveryAddr} · ${codText}`,
-              data: { deliveryId: delId, orderId: shopifyOrderDbId, orderNumber },
-              sound: "default",
+              title: `🚚 نیا آرڈر! ${orderNumber}`,
+              body:  `${customerName ?? "Customer"} · ${deliveryAddr} · ${codText}`,
+              data: {
+                deliveryId:  String(delId ?? ""),
+                orderId:     String(shopifyOrderDbId),
+                orderNumber: String(orderNumber),
+                screen:      "order_detail",
+              },
+              sound:       "default",
+              badge:       1,
+              riderId:     rider.id,
+              deliveryId:  delId ?? undefined,
+              orderNumber: String(orderNumber),
             });
           }
         } catch (pushErr) {

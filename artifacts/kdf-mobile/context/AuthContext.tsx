@@ -61,9 +61,21 @@ async function registerForPushNotifications(token: string): Promise<void> {
     if (finalStatus !== "granted") return;
 
     if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("orders", {
+      /* "new_order" — matches channelId sent by backend sendExpoPush */
+      await Notifications.setNotificationChannelAsync("new_order", {
         name: "New Orders",
         importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 400, 200, 400, 200, 400],
+        lightColor: "#00B85A",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+        bypassDnd: true,
+      });
+      /* Legacy "orders" channel for older push tokens */
+      await Notifications.setNotificationChannelAsync("orders", {
+        name: "Order Updates",
+        importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#00B85A",
         sound: "default",
