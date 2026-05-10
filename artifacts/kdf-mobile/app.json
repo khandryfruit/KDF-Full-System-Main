@@ -36,6 +36,14 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.FOREGROUND_SERVICE"
       ]
     },
@@ -63,7 +71,9 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#00B85A",
-          "sounds": ["./assets/audio/new_order.wav"]
+          "sounds": [
+            "./assets/audio/new_order.wav"
+          ]
         }
       ]
     ],
@@ -74,6 +84,12 @@
       "eas": {
         "projectId": "f5433930-a95c-4ac1-857f-dfdafc2fe4d1"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f5433930-a95c-4ac1-857f-dfdafc2fe4d1"
     }
   }
 }
