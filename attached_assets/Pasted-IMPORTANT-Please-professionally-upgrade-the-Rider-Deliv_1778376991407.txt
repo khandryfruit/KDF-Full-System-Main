@@ -1,0 +1,245 @@
+IMPORTANT — Please professionally upgrade the Rider / Delivery Mobile App and Admin Tracking System.
+
+Current app is working, but now we need a FULL professional real-time delivery system with:
+
+✅ ultra-fast notifications
+✅ live rider tracking
+✅ professional UI/UX
+✅ better order visibility
+✅ real-time admin integration
+✅ smart location updates
+
+==================================================
+
+1. REAL-TIME PUSH NOTIFICATIONS
+   ==================================================
+
+Add a powerful push notification system inside Rider App.
+
+When:
+✅ new order assigned
+✅ order updated
+✅ order cancelled
+✅ order delivered
+✅ urgent order assigned
+
+Then rider must instantly receive:
+
+✅ push notification
+✅ sound alert
+✅ vibration
+✅ popup alert
+
+==================================================
+VERY IMPORTANT
+==============
+
+Notification should use:
+
+✅ device default notification sound
+✅ high priority notification channel
+✅ wake screen notification
+✅ background notification support
+
+Even if app is minimized/backgrounded.
+
+==================================================
+NEW ORDER ALERT
+===============
+
+New orders must appear with:
+
+✅ highlighted card
+✅ animated badge
+✅ new order glow/highlight
+✅ sound notification
+✅ unread indicator
+
+Need professional UX like:
+Uber / Foodpanda / Careem delivery apps.
+
+==================================================
+2. LIVE RIDER TRACKING FIX
+==========================
+
+Current problem:
+
+❌ Rider location is stuck at one point
+❌ Location not updating properly in admin
+
+Please FIX complete live tracking system.
+
+==================================================
+REQUIRED TRACKING SYSTEM
+========================
+
+Need:
+
+✅ real-time GPS tracking
+✅ background location updates
+✅ live movement updates
+✅ auto refresh every few seconds
+✅ accurate latitude/longitude
+✅ live route tracking
+
+==================================================
+ADMIN SIDE TRACKING
+===================
+
+Inside Admin Panel:
+
+Need live rider map showing:
+
+✅ rider current position
+✅ movement updates
+✅ active route
+✅ delivery progress
+✅ online/offline status
+✅ last seen time
+✅ battery level (if possible)
+
+==================================================
+TRACKING HISTORY
+================
+
+Need proper tracking reports:
+
+✅ where rider went
+✅ delivery timeline
+✅ visited locations
+✅ route history
+✅ delivery duration
+✅ idle time
+✅ completed deliveries
+
+==================================================
+3. MOBILE APP UI/UX IMPROVEMENT
+===============================
+
+Please redesign rider app professionally.
+
+Need:
+
+✅ modern clean UI
+✅ smooth animations
+✅ premium design
+✅ large readable order cards
+✅ better spacing
+✅ better typography
+✅ professional colors
+✅ delivery status indicators
+
+==================================================
+ORDER CARD DESIGN
+=================
+
+Orders should show beautifully:
+
+✅ customer name
+✅ phone number
+✅ address
+✅ COD amount
+✅ order status
+✅ payment type
+✅ delivery priority
+✅ distance
+✅ map shortcut
+✅ call button
+✅ WhatsApp button
+
+==================================================
+NEW ORDER PRIORITY
+==================
+
+New orders should appear:
+
+✅ at top
+✅ highlighted
+✅ animated
+✅ easy to identify
+
+WITHOUT changing existing order status system.
+
+Keep current statuses working exactly same.
+
+==================================================
+4. PERFORMANCE IMPROVEMENT
+==========================
+
+Need:
+
+✅ faster app loading
+✅ smoother scrolling
+✅ lightweight UI
+✅ optimized maps
+✅ low battery usage
+✅ stable socket/live updates
+
+==================================================
+5. ADMIN + RIDER REAL-TIME SYNC
+===============================
+
+Need full real-time synchronization.
+
+When rider:
+
+✅ accepts order
+✅ starts delivery
+✅ updates status
+✅ reaches customer
+✅ completes order
+
+Admin panel should instantly update.
+
+==================================================
+6. NOTIFICATION SETTINGS
+========================
+
+Inside Rider App add:
+
+✅ notification ON/OFF
+✅ vibration ON/OFF
+✅ sound ON/OFF
+✅ urgent alerts
+✅ background sync toggle
+
+==================================================
+7. PROFESSIONAL DELIVERY EXPERIENCE
+===================================
+
+Need world-class delivery experience similar to:
+
+✅ Uber Driver
+✅ Foodpanda Rider
+✅ Careem Captain
+✅ Bykea Rider
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT BREAK:
+❌ current order statuses
+❌ existing delivery flow
+❌ admin order management
+❌ courier integrations
+
+ONLY IMPROVE:
+✅ notifications
+✅ live tracking
+✅ rider UI
+✅ admin tracking
+✅ real-time updates
+✅ order visibility
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ ultra-fast rider notifications
+✅ real-time live tracking
+✅ premium delivery app UI
+✅ professional rider experience
+✅ stable admin tracking system
+✅ beautiful modern delivery dashboard
