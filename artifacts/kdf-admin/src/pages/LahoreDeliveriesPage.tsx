@@ -676,6 +676,7 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
             </div>
             <div className="p-4 space-y-3">
               {[
+                { key: "auto_delivery_mode", label: "Auto-Assign on Order", desc: "New Lahore orders auto-assigned to riders", icon: "⚡" },
                 { key: "auto_wa_on_assign", label: "Auto WA on Assign", desc: "Customer notified when rider assigned", icon: "🛵" },
                 { key: "auto_wa_on_status", label: "Auto WA on Status", desc: "Customer notified on every status change", icon: "📲" },
               ].map(setting => (
@@ -747,6 +748,39 @@ export default function LahoreDeliveriesPage() {
     qc.invalidateQueries({ queryKey: ["live-dashboard"] });
   }, [qc]);
 
+  /* ── SSE realtime listener ── */
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+
+  useEffect(() => {
+    const es = new EventSource(`/api/admin/sse`);
+    es.addEventListener("rider_assigned", (e: any) => {
+      qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["lahore-orders"] });
+      qc.invalidateQueries({ queryKey: ["rider-stats"] });
+      if (soundEnabledRef.current) playAlert("assign");
+      try {
+        const d = JSON.parse((e as any).data ?? "{}");
+        toast({ title: `🛵 Rider assigned to order ${d.orderNumber ?? ""}` });
+      } catch {}
+    });
+    es.addEventListener("auto_assigned", (e: any) => {
+      qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["lahore-orders"] });
+      qc.invalidateQueries({ queryKey: ["rider-stats"] });
+      try {
+        const d = JSON.parse((e as any).data ?? "{}");
+        if (d.assigned > 0 && soundEnabledRef.current) playAlert("assign");
+      } catch {}
+    });
+    es.addEventListener("new_shopify_order", () => {
+      qc.invalidateQueries({ queryKey: ["lahore-orders"] });
+      qc.invalidateQueries({ queryKey: ["rider-stats"] });
+      qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+    });
+    return () => es.close();
+  }, [qc]);
+
   const { data: ridersData } = useQuery({ queryKey: ["riders-list"], queryFn: () => apiFetch("/admin/riders") });
   const { data: deliverySettings } = useQuery({ queryKey: ["delivery-settings"], queryFn: () => apiFetch("/admin/riders/delivery-settings") });
 
@@ -780,8 +814,6 @@ export default function LahoreDeliveriesPage() {
   const pagination = d?.pagination ?? { total: 0, pages: 1 };
   const s = (stats as any)?.stats ?? {};
   const defaultEta = ds.default_eta_minutes ?? 30;
-
-  const [autoAssignMode, setAutoAssignMode] = useState(false);
 
   const autoAssign = async () => {
     setAutoAssigning(true);

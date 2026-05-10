@@ -728,6 +728,16 @@ export async function triggerNewOrderAutomation(params: {
 
   /* ── LAHORE → assign local rider + send WA to rider ── */
   if (isLahore) {
+    /* Check auto_delivery_mode toggle before proceeding */
+    try {
+      const settingsRow = await db.execute(sql`SELECT auto_delivery_mode FROM rider_delivery_settings WHERE id = 1 LIMIT 1`).catch(() => ({ rows: [] }));
+      const autoMode = (settingsRow.rows?.[0] as any)?.auto_delivery_mode ?? true;
+      if (!autoMode) {
+        logger.info({ shopifyOrderId }, "auto_delivery_mode disabled — skipping Lahore rider auto-assignment");
+        return { routed: "skipped", message: "Auto delivery mode is disabled" };
+      }
+    } catch {}
+
     try {
       /* Already assigned? skip */
       const existCheck = await db.execute(sql`
@@ -836,6 +846,20 @@ export async function triggerNewOrderAutomation(params: {
         }
 
         logger.info({ orderNumber, rider: rider.name, delivery: delId }, "Lahore order: rider assigned + WA sent");
+
+        /* ── SSE broadcast to admin panel ── */
+        try {
+          const { broadcastSSE } = await import("./sse.js");
+          broadcastSSE("rider_assigned", {
+            deliveryId: delId,
+            orderNumber,
+            shopifyOrderId,
+            riderName: rider.name,
+            riderId: rider.id,
+            assignedAt: new Date().toISOString(),
+          });
+        } catch {}
+
         return { routed: "lahore_rider", message: `Assigned to rider ${rider.name} + WA sent` };
       }
 

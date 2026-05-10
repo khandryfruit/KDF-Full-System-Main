@@ -615,6 +615,20 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
 
     res.json({ ok: true, delivery });
 
+    /* ── SSE broadcast — rider assigned ── */
+    if (delivery) {
+      try {
+        const { broadcastSSE } = await import("../lib/sse.js");
+        broadcastSSE("rider_assigned", {
+          deliveryId: delivery.id,
+          orderNumber: delivery.shopify_order_number,
+          shopifyOrderDbId: parseInt(shopify_order_db_id),
+          riderId: rider_id ? parseInt(rider_id) : null,
+          assignedAt: new Date().toISOString(),
+        });
+      } catch {}
+    }
+
     /* ── Non-blocking: Shopify sync + auto Customer WA + auto Rider WA ── */
     if (delivery) {
       setImmediate(async () => {
@@ -844,6 +858,18 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
     const modeLabel = usedOnlineFilter
       ? `${riders.length} online rider(s)`
       : `${riders.length} active rider(s) [fallback — no online riders]`;
+
+    /* ── SSE broadcast — bulk assignment complete ── */
+    if (assignedCount > 0) {
+      try {
+        const { broadcastSSE } = await import("../lib/sse.js");
+        broadcastSSE("auto_assigned", {
+          assigned: assignedCount,
+          assignments,
+          timestamp: new Date().toISOString(),
+        });
+      } catch {}
+    }
 
     res.json({
       ok: true, assigned: assignedCount, total: unassigned.rows.length,

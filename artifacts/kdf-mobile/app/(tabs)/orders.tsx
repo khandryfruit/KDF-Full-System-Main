@@ -28,11 +28,12 @@ import { getPriorityInfo } from "@/utils/priority";
 const C = colors.light;
 const NAV_EXTRA = Platform.OS === "android" ? 84 : 100;
 
-type SectionKey = "active" | "completed" | "failed" | "returned";
+type SectionKey = "new" | "active" | "completed" | "failed" | "returned";
 type PeriodKey  = "today" | "yesterday" | "week" | "month" | "all";
 
 const SECTIONS: { key: SectionKey; label: string; icon: string; statuses: string[] }[] = [
-  { key: "active",    label: "Active",    icon: "zap",          statuses: ["assigned", "picked", "out_for_delivery"] },
+  { key: "new",       label: "نئے آرڈر",  icon: "bell",         statuses: ["assigned"] },
+  { key: "active",    label: "Active",    icon: "zap",          statuses: ["picked", "out_for_delivery", "near_customer"] },
   { key: "completed", label: "Delivered", icon: "check-circle", statuses: ["delivered"] },
   { key: "failed",    label: "Failed",    icon: "x-circle",     statuses: ["failed"] },
   { key: "returned",  label: "Returned",  icon: "rotate-ccw",   statuses: ["returned"] },
@@ -47,6 +48,7 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 
 const SECTION_COLORS: Record<SectionKey, { accent: string; bg: string; light: string }> = {
+  new:       { accent: "#DC2626", bg: "#FEF2F2",  light: "#FEE2E2" },
   active:    { accent: "#3B82F6", bg: "#EFF6FF",  light: "#DBEAFE" },
   completed: { accent: "#10B981", bg: "#ECFDF5",  light: "#D1FAE5" },
   failed:    { accent: "#EF4444", bg: "#FEF2F2",  light: "#FEE2E2" },
@@ -465,13 +467,13 @@ export default function TasksScreen() {
   const router    = useRouter();
   const insets    = useSafeAreaInsets();
   const qc        = useQueryClient();
-  const [activeSection, setActiveSection] = useState<SectionKey>("active");
+  const [activeSection, setActiveSection] = useState<SectionKey>("new");
   const [activePeriod,  setActivePeriod]  = useState<PeriodKey>("today");
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  /* For active section, always use default period (today = active + today's terminal).
-     For history sections, use the selected period. */
-  const apiPeriod = activeSection === "active" ? "today" : activePeriod;
+  /* "new" and "active" fetch all outstanding orders (no date cap except 45 days).
+     History sections use the selected period filter. */
+  const apiPeriod = (activeSection === "new" || activeSection === "active") ? "active" : activePeriod;
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["rider-deliveries-tasks", apiPeriod, activeSection],
@@ -479,7 +481,7 @@ export default function TasksScreen() {
       const r = await riderFetch(`/rider/deliveries?period=${apiPeriod}`, token);
       return r.json();
     },
-    refetchInterval: activeSection === "active" ? 10_000 : 30_000,
+    refetchInterval: (activeSection === "new" || activeSection === "active") ? 8_000 : 30_000,
     refetchIntervalInBackground: false,
   });
 
@@ -492,13 +494,15 @@ export default function TasksScreen() {
     [...arr].sort((a, b) => new Date(b.delivered_at ?? b.assigned_at ?? 0).getTime() - new Date(a.delivered_at ?? a.assigned_at ?? 0).getTime());
 
   const sections = {
-    active:    sortNewest(allDeliveries.filter(d => ["assigned", "picked", "out_for_delivery"].includes(d.status))),
+    new:       sortNewest(allDeliveries.filter(d => d.status === "assigned")),
+    active:    sortNewest(allDeliveries.filter(d => ["picked", "out_for_delivery", "near_customer", "delayed", "rescheduled"].includes(d.status))),
     completed: sortDelivered(allDeliveries.filter(d => d.status === "delivered")),
     failed:    sortNewest(allDeliveries.filter(d => d.status === "failed")),
     returned:  sortNewest(allDeliveries.filter(d => d.status === "returned")),
   };
 
   const current = sections[activeSection];
+  const newOrdersCount = sections.new.length;
   const urgentCount = sections.active.filter(d =>
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
   ).length;
@@ -520,13 +524,13 @@ export default function TasksScreen() {
   };
 
   const renderItem = useCallback(({ item }: { item: any }) => {
-    if (activeSection === "active") {
+    if (activeSection === "new" || activeSection === "active") {
       return <ActiveCard d={item} onPress={() => openOrder(item.id)} token={token} qc={qc} />;
     }
     if (activeSection === "completed") {
       return <CompletedCard d={item} onPress={() => openOrder(item.id)} />;
     }
-    return <TerminalCard d={item} onPress={() => openOrder(item.id)} section={activeSection} />;
+    return <TerminalCard d={item} onPress={() => openOrder(item.id)} section={activeSection === "failed" ? "failed" : "returned"} />;
   }, [activeSection, token]);
 
   const completedEarnings = sections.completed.reduce((s, d) => s + Number(d.delivery_charge ?? 0), 0);
@@ -544,7 +548,8 @@ export default function TasksScreen() {
             <Text style={styles.headerTitle}>My Orders</Text>
             <Text style={styles.headerSub}>
               {isLoading ? "Loading..." : `${allDeliveries.length} orders`}
-              {urgentCount > 0 && <Text style={{ color: "#EF4444" }}> · {urgentCount} urgent</Text>}
+              {newOrdersCount > 0 && <Text style={{ color: "#FCA5A5" }}> · {newOrdersCount} نئے</Text>}
+              {urgentCount > 0 && <Text style={{ color: "#FCA5A5" }}> · {urgentCount} urgent</Text>}
             </Text>
           </View>
           <TouchableOpacity
@@ -575,8 +580,8 @@ export default function TasksScreen() {
           )}
         />
 
-        {/* Period filter — shown for non-active sections */}
-        {activeSection !== "active" && (
+        {/* Period filter — shown for history sections only */}
+        {activeSection !== "new" && activeSection !== "active" && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -594,7 +599,25 @@ export default function TasksScreen() {
         )}
       </LinearGradient>
 
-      {/* ── Urgent Banner ── */}
+      {/* ── NEW ORDERS floating banner (shown when viewing other sections) ── */}
+      {activeSection !== "new" && newOrdersCount > 0 && (
+        <TouchableOpacity
+          style={styles.newOrdersBanner}
+          onPress={() => switchSection("new")}
+          activeOpacity={0.88}
+        >
+          <View style={styles.newOrdersBannerDot} />
+          <Feather name="bell" size={14} color="#fff" />
+          <Text style={styles.newOrdersBannerTxt}>
+            {newOrdersCount} نئے آرڈر آئے — دیکھنے کے لیے یہاں ٹیپ کریں
+          </Text>
+          <View style={styles.newOrdersBadge}>
+            <Text style={styles.newOrdersBadgeTxt}>{newOrdersCount}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* ── Urgent Banner (active section) ── */}
       {activeSection === "active" && urgentCount > 0 && (
         <View style={styles.urgentBanner}>
           <Feather name="alert-octagon" size={14} color="#EF4444" />
@@ -609,8 +632,8 @@ export default function TasksScreen() {
         <View style={styles.sectionHeaderLeft}>
           <View style={[styles.sectionDot, { backgroundColor: SECTION_COLORS[activeSection].accent }]} />
           <Text style={[styles.sectionHeaderTitle, { color: SECTION_COLORS[activeSection].accent }]}>
-            {SECTIONS.find(s => s.key === activeSection)?.label} Orders
-            {activeSection !== "active" && (
+            {SECTIONS.find(s => s.key === activeSection)?.label}
+            {activeSection !== "new" && activeSection !== "active" && (
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12 }}>
                 {" "}· {PERIODS.find(p => p.key === activePeriod)?.label}
               </Text>
@@ -716,6 +739,26 @@ const styles = StyleSheet.create({
   },
   periodTabTxt: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.4)" },
   periodTabTxtActive: { color: "#fff", fontFamily: "Inter_700Bold" },
+
+  /* NEW ORDERS banner */
+  newOrdersBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#DC2626", paddingHorizontal: 16, paddingVertical: 11,
+    position: "relative", overflow: "hidden",
+  },
+  newOrdersBannerDot: {
+    position: "absolute", left: -6, top: -6, width: 40, height: 40,
+    borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  newOrdersBannerTxt: {
+    fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#fff", flex: 1,
+  },
+  newOrdersBadge: {
+    backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2,
+  },
+  newOrdersBadgeTxt: {
+    fontSize: 11, fontFamily: "Inter_700Bold", color: "#DC2626",
+  },
 
   /* Urgent */
   urgentBanner: {

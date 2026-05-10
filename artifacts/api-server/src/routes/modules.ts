@@ -40,15 +40,23 @@ router.get("/modules/active", async (_req, res) => {
 router.put("/admin/modules/:key/toggle", adminMiddleware, async (req, res) => {
   try {
     const key = req.params["key"] as string;
-    const { is_enabled } = req.body as { is_enabled: boolean };
-    await db.execute(sql`
+    const rows = await db.execute(sql`
       UPDATE system_modules
-      SET is_enabled = ${is_enabled}, updated_at = NOW()
+      SET is_enabled = NOT is_enabled, updated_at = NOW()
       WHERE module_key = ${key}
+      RETURNING *
     `);
-    const rows = await db.execute(sql`SELECT * FROM system_modules WHERE module_key = ${key}`);
     const mod = rows.rows[0];
+    if (!mod) return res.status(404).json({ error: "Module not found" });
     broadcastModuleUpdate(mod);
+    /* also push to global SSE channel so LahoreDeliveriesPage / other listeners receive it */
+    try {
+      const { broadcastSSE } = await import("../lib/sse.js");
+      broadcastSSE("module_toggled", {
+        module_key: mod.module_key, is_enabled: mod.is_enabled,
+        module_name: mod.module_name, timestamp: new Date().toISOString(),
+      });
+    } catch {}
     res.json({ ok: true, module: mod });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
