@@ -1,0 +1,97 @@
+یہ بھی اپنے ڈیولپر/ایجنٹ کو بھیج دیں تاکہ وہ صرف بیک اینڈ فکس نہ کرے بلکہ مکمل پروفیشنل React Admin + Rider Experience بنائے:
+
+UI/UX + React App Upgrade Requirements (Important)
+
+Along with fixing the backend and notification system, we also want a completely upgraded modern frontend experience for both Admin Panel and Rider App.
+
+This should NOT look like a basic dashboard or copied template.
+We need a premium, modern, smooth, fast, and user-friendly system.
+
+Frontend Requirements:
+
+1. Create a Proper Modern React Admin Panel
+
+- Clean professional UI
+- Smooth animations/transitions
+- Mobile responsive
+- Fast loading
+- Professional cards/widgets
+- Modern sidebar design
+- Beautiful order management UI
+- Clean typography and spacing
+- Dark/light ready structure
+
+2. Rider App UI Upgrade
+
+- Beautiful professional rider interface
+- Large “New Order” popup/cards
+- Easy Accept / Reject / Start Delivery buttons
+- Realtime order refresh
+- Simple navigation
+- Live tracking screen
+- Smooth map UI
+- Cash collection screen
+- Payment pending alerts
+- Order verification upload UI
+- Clean history section
+- Fast performance even on low-end devices
+
+3. React Native / Expo APK
+
+- Build proper production APK
+- Stable app architecture
+- Optimized performance
+- No lag/crash
+- Proper folder structure
+- Reusable components
+- Professional code quality
+
+4. User Experience Priority
+   The system should feel:
+
+- Premium
+- Fast
+- Easy to use
+- Modern
+- Realtime
+- Clean and organized
+
+5. Admin Mobile App
+   Create a separate professional React Admin Mobile App OR role-based app system where:
+
+- Super Admin
+- Admin Staff
+- Rider
+  All have different dashboards and permissions.
+
+6. Important Design Direction
+   We do NOT want:
+
+- Old-style dashboards
+- Messy UI
+- Slow loading
+- Broken syncing
+- Fake realtime updates
+
+We WANT:
+
+- Smooth professional experience
+- Production-level architecture
+- Modern logistics system look
+- Easy daily operations
+- Realtime synchronization everywhere
+
+7. Focus Areas
+
+- Orders
+- Riders
+- Notifications
+- Accounting
+- Shopify Sync
+- WhatsApp integrations
+- Analytics
+- Payment tracking
+- Customer verification uploads
+- Live maps
+
+Everything should work together smoothly with modern UI/UX and proper React architecture.
