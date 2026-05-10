@@ -68,12 +68,17 @@ import {
   DollarSign,
   Wifi,
   MessageSquareDashed,
+  ShieldCheck,
+  UserCog,
+  ListChecks,
+  Crown,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
 import { useNotifications } from "@/context/NotificationContext";
+import { useAdminAuth } from "@/context/AdminAuthContext";
 
 /* ═══════════════════════════════════════════════
    NAV DATA
@@ -193,6 +198,12 @@ const SHOPIFY_NAV_ITEMS = [
 const BRANCHES_NAV_ITEMS = [
   { href: "/branches",      label: "Dashboard",       icon: BarChart2   },
   { href: "/branches/list", label: "All Branches",    icon: Building2   },
+];
+
+const ADMIN_IAM_NAV_ITEMS = [
+  { href: "/admin/users",         label: "Admin Users",     icon: UserCog      },
+  { href: "/admin/roles",         label: "Roles & Perms",   icon: ShieldCheck  },
+  { href: "/admin/activity-logs", label: "Activity Logs",   icon: ListChecks   },
 ];
 
 const LOGISTICS_NAV_ITEMS = [
@@ -427,6 +438,8 @@ interface SidebarContentProps {
   onToggleCollapse?: () => void;
   isCollapsed?: boolean;
   isMobile?: boolean;
+  adminIamOpen: boolean;
+  onToggleAdminIam: () => void;
 }
 function SidebarContent({
   location, expanded,
@@ -435,7 +448,9 @@ function SidebarContent({
   onToggleInvoice, onToggleShopify, onTogglePg, onToggleLogistics, onToggleBranches, onToggleWaChat,
   onToggleCommerce, onToggleStore, onToggleMarketing, onToggleOperations, onToggleSettings,
   onNavClick, onLogout, onToggleCollapse, isCollapsed, isMobile,
+  adminIamOpen, onToggleAdminIam,
 }: SidebarContentProps) {
+  const { hasPermission, user: adminUser } = useAdminAuth();
   const isInvoiceActive    = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
   const isShopifyActive    = location.startsWith("/shopify");
   const isPgActive         = location.startsWith("/payment-gateway");
@@ -572,15 +587,41 @@ function SidebarContent({
           items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
 
         {/* ── Payment Gateway ── */}
-        <SidebarSection label="Payment Gateway" icon={Landmark}
-          accentColor="#2563EB" activeBg="bg-blue-600/15" activeText="text-blue-700" badgeLetter="₨"
-          isActive={isPgActive} expanded={expanded} open={pgOpen} onToggle={onTogglePg}
-          items={PG_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        {hasPermission("merchant_api.manage") && (
+          <SidebarSection label="Payment Gateway" icon={Landmark}
+            accentColor="#2563EB" activeBg="bg-blue-600/15" activeText="text-blue-700" badgeLetter="₨"
+            isActive={isPgActive} expanded={expanded} open={pgOpen} onToggle={onTogglePg}
+            items={PG_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
+
+        {/* ── Admin IAM (Users / Roles / Logs) ── */}
+        {(hasPermission("users.view") || hasPermission("roles.manage") || hasPermission("logs.view")) && (
+          <SidebarSection label="Admin Panel" icon={ShieldCheck}
+            accentColor="#dc2626" activeBg="bg-red-600/10" activeText="text-red-700" badgeLetter="A"
+            isActive={location.startsWith("/admin/")} expanded={expanded} open={adminIamOpen} onToggle={onToggleAdminIam}
+            items={ADMIN_IAM_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
 
       </div>
 
-      {/* Bottom: Logout */}
+      {/* Bottom: User + Logout */}
       <div className={`border-t border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "p-3" : "p-1.5"}`}>
+        {expanded && adminUser && (
+          <div className="flex items-center gap-2.5 px-2 py-2 mb-1 rounded-lg bg-muted/40">
+            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
+              {adminUser.isSuper
+                ? <Crown size={12} className="text-amber-300" />
+                : <span className="text-primary-foreground text-[10px] font-bold">{adminUser.name.charAt(0).toUpperCase()}</span>
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold truncate leading-none">{adminUser.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-none">
+                {adminUser.isSuper ? "Super Admin" : (adminUser.roles?.[0]?.name ?? "Admin")}
+              </p>
+            </div>
+          </div>
+        )}
         <button
           onClick={onLogout}
           title={!expanded ? "Logout" : undefined}
@@ -617,6 +658,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [marketingOpen,  setMarketingOpen]  = useState(() => ["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/")));
   const [operationsOpen, setOperationsOpen] = useState(() => ["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p));
   const [settingsOpen,   setSettingsOpen]   = useState(() => ["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p));
+  const [adminIamOpen,   setAdminIamOpen]   = useState(() => location.startsWith("/admin/"));
   const [mobileOpen,     setMobileOpen]     = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -637,10 +679,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (["/abandoned-checkouts","/ai-content","/blog","/adsense","/social-ai","/bidding","/restock","/seo"].some(p => location === p || location.startsWith(p + "/"))) setMarketingOpen(true);
     if (["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p)) setOperationsOpen(true);
     if (["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p)) setSettingsOpen(true);
+    if (location.startsWith("/admin/")) setAdminIamOpen(true);
   }, [location]);
 
   const handleLogout = () => {
     localStorage.removeItem("kdf_admin_token");
+    localStorage.removeItem("kdf_admin_user");
     setLocation("/login");
   };
 
@@ -683,6 +727,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     onToggleMarketing:  () => setMarketingOpen(o => !o),
     onToggleOperations: () => setOperationsOpen(o => !o),
     onToggleSettings:   () => setSettingsOpen(o => !o),
+    adminIamOpen,
+    onToggleAdminIam:   () => setAdminIamOpen(o => !o),
     onNavClick:         handleNavClick,
     onLogout:           handleLogout,
   };

@@ -72,6 +72,10 @@ import BranchPosPage from "@/pages/BranchPosPage";
 import AdminPOSPage from "@/pages/AdminPOSPage";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
+import { AdminAuthProvider } from "@/context/AdminAuthContext";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import AdminRolesPage from "@/pages/AdminRolesPage";
+import ActivityLogsPage from "@/pages/ActivityLogsPage";
 import StockOverviewPage from "@/pages/StockOverviewPage";
 import StockProductsPage from "@/pages/StockProductsPage";
 import StockMovementPage from "@/pages/StockMovementPage";
@@ -213,6 +217,12 @@ function Router() {
       <Route path="/adsense"><ProtectedRoute component={AdSensePage} /></Route>
       <Route path="/video-banners"><ProtectedRoute component={VideoBannersPage} /></Route>
       <Route path="/mobile-reels"><ProtectedRoute component={MobileReelsPage} /></Route>
+
+      {/* ── Admin IAM (Users, Roles, Activity Logs) ── */}
+      <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} /></Route>
+      <Route path="/admin/roles"><ProtectedRoute component={AdminRolesPage} /></Route>
+      <Route path="/admin/activity-logs"><ProtectedRoute component={ActivityLogsPage} /></Route>
+
       <Route path="/">
         <ProtectedRoute component={DashboardPage} />
       </Route>
@@ -225,13 +235,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BranchAuthProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <NotificationProvider>
-              <Router />
-            </NotificationProvider>
-          </WouterRouter>
-        </BranchAuthProvider>
+        <AdminAuthProvider>
+          <BranchAuthProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <NotificationProvider>
+                <Router />
+              </NotificationProvider>
+            </WouterRouter>
+          </BranchAuthProvider>
+        </AdminAuthProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

@@ -39,3 +39,4 @@ export * from "./branchStock";
 export * from "./videoBanners";
 export * from "./mobileReels";
 export * from "./googleIndexing";
+export * from "./adminManagement";

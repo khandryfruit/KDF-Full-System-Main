@@ -1,102 +1,144 @@
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useLogin } from "@workspace/api-client-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
-
-const loginSchema = z.object({
-  email: z.string().email("Enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { useAdminAuth } from "@/context/AdminAuthContext";
+import { ShieldCheck, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const loginMutation = useLogin();
+  const [, setLocation]    = useLocation();
+  const { toast }          = useToast();
+  const { setUser }        = useAdminAuth();
+  const [email, setEmail]  = useState("");
+  const [password, setPwd] = useState("");
+  const [loading, setLoad] = useState(false);
+  const [showPwd, setShow] = useState(false);
+  const [error, setError]  = useState("");
 
-  const form = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) { setError("Email and password are required"); return; }
+    setError("");
+    setLoad(true);
+    try {
+      /* ── Try new RBAC admin login first ── */
+      const res  = await fetch("/api/admin-auth/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+      const json = await res.json();
 
-  const onSubmit = (data: LoginForm) => {
-    loginMutation.mutate({ data: { phone: data.email, email: data.email, password: data.password } }, {
-      onSuccess: (res) => {
-        if (res.user?.role !== "admin") {
-          toast({ variant: "destructive", title: "Access denied", description: "Admin accounts only." });
+      if (res.ok && json.ok) {
+        localStorage.setItem("kdf_admin_token", json.token);
+        setUser(json.user);
+        toast({ title: `Welcome back, ${json.user.name}!` });
+        setLocation("/dashboard");
+        return;
+      }
+
+      /* ── Fallback: legacy storefront admin (users table) ── */
+      const legacyRes  = await fetch("/api/auth/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email: email.trim(), password }),
+      });
+      const legacyJson = await legacyRes.json();
+
+      if (legacyRes.ok && legacyJson.token) {
+        if (legacyJson.user?.role !== "admin") {
+          setError("Access denied — admin accounts only.");
           return;
         }
-        localStorage.setItem("kdf_admin_token", res.token);
+        localStorage.setItem("kdf_admin_token", legacyJson.token);
         toast({ title: "Logged in successfully" });
         setLocation("/dashboard");
-      },
-      onError: (err) => {
-        toast({
-          variant: "destructive",
-          title: "Login failed",
-          description: (err as any).message || "Invalid credentials",
-        });
-      },
-    });
+        return;
+      }
+
+      setError(json.error ?? legacyJson?.error ?? "Invalid credentials. Please try again.");
+    } catch (err: any) {
+      setError(err.message ?? "Network error — please try again.");
+    } finally {
+      setLoad(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-lg border-primary/10">
-        <CardHeader className="space-y-2 text-center pb-6">
-          <div className="w-16 h-16 bg-primary rounded-xl mx-auto flex items-center justify-center mb-2 shadow-sm">
-            <span className="text-primary-foreground font-bold text-2xl tracking-tighter">KDF</span>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+      <div className="w-full max-w-md space-y-4">
+        {/* Brand */}
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 bg-primary rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-primary/25">
+            <span className="text-primary-foreground font-black text-2xl tracking-tighter">KDF</span>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Admin Login</CardTitle>
-          <CardDescription>Enter your credentials to access the command center</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label>Email Address</Label>
-                    <FormControl>
-                      <Input type="email" placeholder="admin@example.com" {...field} className="h-11" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label>Password</Label>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} className="h-11" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={loginMutation.isPending}>
-                {loginMutation.isPending ? "Authenticating..." : "Sign In"}
+          <h1 className="text-2xl font-bold">KDF NUTS Command Center</h1>
+          <p className="text-muted-foreground text-sm">Enterprise Admin Dashboard</p>
+        </div>
+
+        <Card className="shadow-xl border-border/50">
+          <CardHeader className="pb-4 text-center">
+            <CardTitle className="text-lg flex items-center justify-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-primary" /> Secure Sign In
+            </CardTitle>
+            <CardDescription>Enter your admin credentials to continue</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@kdfnuts.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="h-11"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPwd ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPwd(e.target.value)}
+                    className="h-11 pr-10"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShow(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              {error && (
+                <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                  {error}
+                </p>
+              )}
+              <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={loading}>
+                {loading ? "Authenticating…" : "Sign In"}
               </Button>
             </form>
-          </Form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <p className="text-center text-xs text-muted-foreground">
+          Protected by Enterprise RBAC · KDF NUTS v2.0
+        </p>
+      </div>
     </div>
   );
 }

@@ -55,6 +55,7 @@ import mobileReelsRouter from "./mobileReels";
 import waAutomationRouter from "./waAutomation";
 import chatWidgetRouter from "./chatWidget";
 import googleIndexingRouter from "./googleIndexing";
+import adminManagementRouter from "./adminManagement";
 
 const router: IRouter = Router();
 
@@ -116,5 +117,6 @@ router.use("/branch/stock",         branchStockRouter);
 router.use("/branch/erp-settings",  erpSettingsRouter);
 router.use(chatWidgetRouter);
 router.use(googleIndexingRouter);
+router.use(adminManagementRouter);
 
 export default router;
