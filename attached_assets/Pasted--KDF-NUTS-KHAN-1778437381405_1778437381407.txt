@@ -1,0 +1,379 @@
+یہ آپ کا مکمل پروفیشنل ماسٹر پرومپٹ ہے — اس کو سیدھا اپنے ڈیولپر/ایجنٹ کو بھیج دیں:
+
+KDF NUTS — KHAN BABA ADMIN SUPER SYSTEM (FINAL MASTER DEVELOPMENT INSTRUCTIONS)
+
+PROJECT NAME:
+KHAN BABA ADMIN
+
+MISSION:
+Transform the current admin system into a complete enterprise-grade “Super Admin Ecosystem” with React Admin Dashboard + React Native Mobile APK + Live Realtime Infrastructure.
+
+This is NOT a normal admin panel.
+
+We are building:
+“Khan Baba Admin Super System”
+→ One app to control everything.
+
+==================================================
+CORE OBJECTIVE
+
+Build a powerful centralized ecosystem where the admin can fully control:
+
+- Ecommerce
+- Logistics
+- Rider Operations
+- Billing & Accounting
+- WhatsApp Systems
+- Marketing
+- Store Management
+- Analytics
+- Notifications
+- Payment Gateway
+- Branches
+- Customer Management
+- App Controls
+
+Everything must work from ONE modern mobile admin application.
+
+NO repeated browser usage required.
+
+==================================================
+SUPER ADMIN MOBILE APP
+
+Build a complete React Native / Expo Admin APK.
+
+APP NAME:
+KHAN BABA ADMIN
+
+The app must include:
+
+- Dashboard
+- Ecommerce Orders
+- Shopify Orders
+- Riders Management
+- Live Rider Tracking
+- Billing & Accounting
+- Invoice System
+- WhatsApp Inbox
+- Marketing Hub
+- Notifications
+- Analytics
+- Branch Management
+- Payment Gateway
+- Store Controls
+- App Controls
+- Staff Management
+- Live Activities
+- System Monitoring
+
+The admin must be able to fully operate the business directly from the APK.
+
+==================================================
+ENTERPRISE UI/UX REQUIREMENTS
+
+We need a premium enterprise-grade design.
+
+UI STYLE:
+
+- Apple-level smoothness
+- Modern gradients
+- Glassmorphism cards
+- Professional enterprise feel
+- Smooth transitions
+- Modern icon system
+- Fast navigation
+- Mobile-first responsive layout
+- Elegant animations
+- Clean spacing
+- Smooth scrolling
+- Beautiful dashboards
+- Premium charts/widgets
+
+STRICTLY AVOID:
+
+- Old dashboard styles
+- Cheap templates
+- Laggy experience
+- Broken layouts
+- Fake realtime
+- Poor mobile responsiveness
+
+Everything must feel:
+FAST
+PREMIUM
+MODERN
+SMOOTH
+ENTERPRISE-GRADE
+
+==================================================
+SMART APP CONTROL SYSTEM
+
+Create a centralized App Control Manager.
+
+Admin must dynamically enable/disable features.
+
+Examples:
+
+- Enable Ecommerce Orders
+- Disable Rider Tracking
+- Enable WhatsApp Inbox
+- Disable Marketing
+- Enable Mobile Reels
+- Enable Delivery Verification
+- Enable Notifications
+- Disable Billing Access
+
+Everything should instantly sync across:
+
+- Web Admin
+- Rider App
+- Customer App
+- Admin APK
+
+==================================================
+DYNAMIC MODULE MANAGEMENT SYSTEM
+
+Create:
+system_modules table
+
+Suggested fields:
+
+- module_name
+- module_key
+- status
+- app_visibility
+- web_visibility
+- role_access
+- icon
+- sort_order
+- description
+- updated_by
+- updated_at
+
+This system must control:
+
+- menu visibility
+- module access
+- permissions
+- app visibility
+- web visibility
+- rider visibility
+
+==================================================
+REALTIME LIVE SYNC SYSTEM
+
+When admin changes anything:
+→ update instantly everywhere
+→ no page refresh
+→ realtime synchronization
+
+Use:
+
+- WebSockets
+- Firebase
+- Socket.IO
+- Live Events
+- Queue Workers
+
+Required:
+
+- instant module updates
+- realtime order sync
+- realtime rider tracking
+- realtime notifications
+- realtime analytics
+- realtime payment alerts
+
+==================================================
+NOTIFICATION CENTER
+
+Build centralized smart notification system.
+
+Notifications include:
+
+- New Order Alerts
+- Rider Alerts
+- Pending Payment Alerts
+- Failed Delivery Alerts
+- WhatsApp Alerts
+- Low Stock Alerts
+- Settlement Alerts
+- Branch Alerts
+- Payment Gateway Alerts
+
+Admin should receive:
+
+- popup alerts
+- sound notifications
+- realtime badges
+- background notifications
+- push notifications
+
+==================================================
+RIDER SYSTEM INTEGRATION
+
+Deeply fix and optimize rider system.
+
+Current problems must be solved permanently.
+
+Required:
+
+1. Shopify Lahore orders must instantly auto-assign.
+2. Rider must receive instant push notification.
+3. Notification must include sound/vibration.
+4. New orders must appear on top.
+5. Old orders move automatically to history.
+6. Rider app should sync realtime.
+7. Auto Assign system must work perfectly.
+8. Admin should see realtime rider activity.
+
+==================================================
+DELIVERY VERIFICATION SYSTEM
+
+For PAID orders:
+
+Rider must upload:
+
+- customer image
+  OR
+- house image
+  OR
+- ID verification
+
+Data must store inside admin panel with:
+
+- order ID
+- customer name
+- rider name
+- timestamp
+- GPS location
+- delivery proof image
+
+Purpose:
+Chargeback protection & fraud prevention.
+
+==================================================
+RIDER ACCOUNTING SYSTEM
+
+Build powerful rider accounting dashboard.
+
+Features:
+
+- total cash collected
+- pending settlements
+- zero amount orders
+- rider-wise accounting
+- settlement history
+- auto reminders
+- admin alerts
+- rider alerts
+
+Admin dashboard must continuously alert until payment is settled.
+
+==================================================
+ROLE & PERMISSION SYSTEM
+
+Create advanced RBAC system.
+
+Roles:
+
+- Super Admin
+- Admin
+- Branch Admin
+- Accounts Manager
+- Logistics Manager
+- Marketing Manager
+- Customer Support
+
+Each role should:
+
+- access only allowed modules
+- hide restricted modules
+- restrict actions
+- allow dynamic permissions
+
+==================================================
+SMART NAVIGATION SYSTEM
+
+Upgrade sidebar/menu UX.
+
+Required:
+
+- collapsible sections
+- smooth animations
+- favorite modules
+- quick access
+- smart search
+- recently used modules
+- dynamic menu loading
+
+==================================================
+REACT ADMIN APK
+
+Build:
+
+- React Native APK
+  OR
+- Expo EAS APK
+
+Production-ready build required.
+
+Must support:
+
+- Android phones
+- Tablets
+- Large screens
+
+Performance requirements:
+
+- smooth
+- fast
+- optimized
+- scalable
+- stable
+
+==================================================
+IMPORTANT DEVELOPMENT RULES
+
+DO NOT:
+
+- use fake realtime
+- hardcode systems
+- use temporary fixes
+- create duplicated logic
+- create broken syncing
+
+MUST:
+
+- deeply inspect architecture
+- use production-level coding standards
+- optimize APIs
+- optimize database
+- optimize queues
+- optimize notifications
+- optimize realtime events
+- optimize caching
+- optimize mobile performance
+
+Everything must work together perfectly:
+
+Admin
+↔ Ecommerce
+↔ Logistics
+↔ Rider App
+↔ Billing
+↔ WhatsApp
+↔ Marketing
+↔ Analytics
+↔ Payment Gateway
+
+==================================================
+FINAL TARGET
+
+Build a world-class enterprise ecosystem called:
+
+“Khan Baba Admin Super System”
+
+Goal:
+ONE APP TO CONTROL EVERYTHING
+with premium UI/UX, realtime infrastructure, smart permissions, mobile admin control, and enterprise-grade architecture.
