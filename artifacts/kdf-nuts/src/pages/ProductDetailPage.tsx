@@ -609,6 +609,9 @@ export function ProductDetailPage() {
     return () => {
       document.title = "KDF NUTS";
       document.getElementById("product-jsonld")?.remove();
+      /* reset canonical back to site root so stale product URL never lingers */
+      const canon = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+      if (canon) canon.href = "https://khanbabadryfruits.com";
     };
   }, [product]);
 
