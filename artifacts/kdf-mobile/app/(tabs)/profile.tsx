@@ -2,7 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
+import * as Notifications from "expo-notifications";
+import React, { useState } from "react";
 import {
   Alert,
   Image,
@@ -52,6 +53,51 @@ function StatBox({ label, value, accent }: { label: string; value: string | numb
 export default function ProfileScreen() {
   const { rider, token, logout } = useAuth();
   const insets = useSafeAreaInsets();
+  const [notifState, setNotifState] = useState<"idle" | "sending" | "sent" | "denied">("idle");
+  const [pushToken, setPushToken] = useState<string | null>(null);
+
+  /* Check push permission + token on mount */
+  React.useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === "granted") {
+        try {
+          const t = await Notifications.getExpoPushTokenAsync({
+            projectId: "f5433930-a95c-4ac1-857f-dfdafc2fe4d1",
+          });
+          setPushToken(t.data);
+        } catch { /* simulator/web */ }
+      }
+    })();
+  }, []);
+
+  const testNotification = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") {
+      const { status: newStatus } = await Notifications.requestPermissionsAsync();
+      if (newStatus !== "granted") { setNotifState("denied"); setTimeout(() => setNotifState("idle"), 3000); return; }
+    }
+    setNotifState("sending");
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🛵 نیا آرڈر آیا!",
+          body: "Order #TEST-001 — Rs. 2,500 COD — Test notification is working!",
+          sound: true,
+          data: { test: true },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+        },
+      });
+      setNotifState("sent");
+      setTimeout(() => setNotifState("idle"), 4000);
+    } catch {
+      setNotifState("idle");
+    }
+  };
 
   const { data } = useQuery({
     queryKey: ["rider-stats"],
@@ -230,6 +276,73 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── Notification Settings ── */}
+        <View style={styles.card}>
+          <View style={styles.cardHead}>
+            <View style={[styles.cardHeadIcon, { backgroundColor: "#FFF7ED" }]}>
+              <Feather name="bell" size={15} color="#F97316" />
+            </View>
+            <Text style={styles.cardTitle}>Notifications</Text>
+            <View style={[styles.notifStatusPill,
+              { backgroundColor: pushToken ? "#ECFDF5" : "#FEF2F2",
+                borderColor: pushToken ? "#BBF7D0" : "#FECACA" }]}>
+              <View style={[styles.notifDot, { backgroundColor: pushToken ? "#22C55E" : "#F87171" }]} />
+              <Text style={[styles.notifStatusTxt, { color: pushToken ? "#15803D" : "#B91C1C" }]}>
+                {pushToken ? "Push Active" : "Not Registered"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Push token preview */}
+          {pushToken && (
+            <View style={styles.tokenBox}>
+              <Feather name="shield" size={12} color="#22C55E" />
+              <Text style={styles.tokenTxt} numberOfLines={1}>{pushToken.slice(0, 40)}…</Text>
+            </View>
+          )}
+
+          {/* Status rows */}
+          <View style={styles.notifInfoRow}>
+            <Feather name="volume-2" size={13} color="#6B7280" />
+            <Text style={styles.notifInfoTxt}>Custom chime sound — نیا آرڈر notification tone</Text>
+          </View>
+          <View style={styles.notifInfoRow}>
+            <Feather name="zap" size={13} color="#6B7280" />
+            <Text style={styles.notifInfoTxt}>Haptic vibration on every new order</Text>
+          </View>
+          <View style={styles.notifInfoRow}>
+            <Feather name="refresh-cw" size={13} color="#6B7280" />
+            <Text style={styles.notifInfoTxt}>Auto-poll every 12 seconds when app is open</Text>
+          </View>
+
+          {/* Test button */}
+          <TouchableOpacity
+            style={[styles.testNotifBtn,
+              notifState === "sent"    && { backgroundColor: "#ECFDF5", borderColor: "#86EFAC" },
+              notifState === "denied"  && { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+              notifState === "sending" && { opacity: 0.7 },
+            ]}
+            onPress={testNotification}
+            disabled={notifState === "sending"}
+            activeOpacity={0.8}
+          >
+            <Feather
+              name={notifState === "sent" ? "check-circle" : notifState === "denied" ? "x-circle" : "bell"}
+              size={16}
+              color={notifState === "sent" ? "#16A34A" : notifState === "denied" ? "#DC2626" : "#F97316"}
+            />
+            <Text style={[styles.testNotifTxt,
+              notifState === "sent"   && { color: "#16A34A" },
+              notifState === "denied" && { color: "#DC2626" },
+            ]}>
+              {notifState === "sending" ? "بھیجا جا رہا ہے…"
+               : notifState === "sent"  ? "✅ Notification آ گئی!"
+               : notifState === "denied" ? "⚠ Permission نہیں ملی"
+               : "Test Notification بھیجیں"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Sign Out */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
           <View style={styles.logoutIcon}>
@@ -343,6 +456,36 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
   infoValue: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#0D1F3C", marginTop: 1 },
   rowDivider: { height: 1, backgroundColor: "#F0F3F8" },
+
+  /* Notification card */
+  notifStatusPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4,
+    borderWidth: 1, marginLeft: "auto",
+  },
+  notifDot: { width: 7, height: 7, borderRadius: 4 },
+  notifStatusTxt: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  tokenBox: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "#F0FDF4", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#BBF7D0",
+  },
+  tokenTxt: { flex: 1, fontSize: 10, fontFamily: "Inter_400Regular", color: "#166534" },
+  notifInfoRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 5,
+  },
+  notifInfoTxt: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280", flex: 1 },
+  testNotifBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    backgroundColor: "#FFF7ED", borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "#FED7AA",
+    marginTop: 4,
+  },
+  testNotifTxt: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#F97316",
+  },
 
   /* Logout */
   logoutBtn: {

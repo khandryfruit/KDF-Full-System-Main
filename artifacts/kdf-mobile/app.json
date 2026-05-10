@@ -63,7 +63,7 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#00B85A",
-          "sounds": []
+          "sounds": ["./assets/audio/new_order.wav"]
         }
       ]
     ],

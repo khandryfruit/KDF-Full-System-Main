@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef } from "react";
@@ -46,6 +47,20 @@ export default function NewOrderAlert({ order, onAccept, onView, onDismiss }: Pr
 
   useEffect(() => {
     if (order) {
+      /* Play custom notification chime */
+      (async () => {
+        try {
+          await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+          const { sound } = await Audio.Sound.createAsync(
+            require("../assets/audio/new_order.wav"),
+            { shouldPlay: true, volume: 1.0 },
+          );
+          sound.setOnPlaybackStatusUpdate((st) => {
+            if (st.isLoaded && st.didJustFinish) sound.unloadAsync();
+          });
+        } catch { /* silent fallback */ }
+      })();
+
       /* Haptic burst */
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 250);
