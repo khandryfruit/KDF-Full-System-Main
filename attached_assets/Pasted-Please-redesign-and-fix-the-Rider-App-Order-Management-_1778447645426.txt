@@ -1,0 +1,147 @@
+Please redesign and fix the Rider App Order Management System properly.
+
+Current Problem:
+The Rider App main dashboard is showing very old orders (2–3 months old orders) on the main screen, which is creating confusion and bad UX.
+
+This is NOT correct behavior.
+
+Required System Logic:
+
+1. Main Dashboard Should Show Only Active Orders
+On Rider App main screen, only show:
+
+- Today Orders
+- Active Orders
+- Orders from last 24–48 hours
+- Assigned & Pending Deliveries
+
+DO NOT show:
+- Old completed orders
+- 2–3 month old orders
+- Archived orders
+- Delivered old history on main dashboard
+
+2. Create Separate Sections
+Please separate orders properly into tabs/sections:
+
+A) Today Orders
+- Orders received today
+- Show count
+- Show total amount
+- Show delivered count
+- Show pending count
+
+B) Active Orders
+- Assigned
+- Out for delivery
+- Pending
+- In progress
+
+C) Completed Orders
+- Delivered orders
+- Rider completed history
+
+D) Old/Archived Orders
+- Older than 48 hours
+- Hidden from main dashboard
+- Accessible only from history/archive section
+
+3. Required Dashboard Summary Cards
+At top of Rider App dashboard show:
+
+- Total Today Orders
+- Total Pending Orders
+- Total Delivered Orders
+- Total Earnings/Amount
+- Active Deliveries
+
+Professional dashboard UI/UX required.
+
+4. Auto Assign Logic Fix
+When Shopify order comes:
+
+Shopify → Admin → Auto Assign → Rider App
+
+Flow should work instantly.
+
+Logic:
+- If Auto Assign enabled:
+   - Lahore local orders automatically assign to Lahore rider
+   - Order instantly appears in rider active orders
+- If Auto Assign disabled:
+   - Order stays pending in admin
+
+5. Real-Time Sync Fix
+Currently orders are delayed or not updating correctly.
+
+Please check:
+- WebSockets / Firebase / Pusher
+- API caching
+- Laravel queues/jobs
+- Background sync
+- Notification listeners
+- Token/session issues
+
+Orders should appear instantly without app refresh.
+
+6. Search & Filter Bugs Fix
+Please fix all search/filter bugs:
+
+- Search by Order ID
+- Search by customer name
+- Search by phone number
+- Filter by status
+- Filter by date
+- Filter by rider
+- Filter by city
+
+Current filtering/search behavior is buggy and inconsistent.
+
+7. Performance Optimization
+App should:
+- Load fast
+- Avoid duplicate orders
+- Avoid old order rendering
+- Use pagination/lazy loading
+- Optimize API queries
+- Reduce unnecessary database calls
+
+8. Status Flow Logic
+When rider changes status:
+- Assigned
+- Picked
+- Out for Delivery
+- Delivered
+
+System should:
+- Update Admin instantly
+- Send WhatsApp automation
+- Remove completed order from active dashboard
+- Move delivered order to completed/history section automatically
+
+9. Important UI Requirement
+Main rider dashboard should feel clean and professional.
+
+Main screen should only focus on:
+- Today deliveries
+- Pending tasks
+- Active assigned orders
+
+NOT old history clutter.
+
+10. Full Bug Audit Required
+Please do a complete audit of:
+- Admin panel
+- Shopify sync
+- Rider App
+- Auto assignment
+- WhatsApp automation
+- APIs
+- Database relations
+- Notification system
+
+Fix all existing bugs and broken flows completely.
+
+Priority:
+HIGH PRIORITY
+Because live operations and delivery management are affected.

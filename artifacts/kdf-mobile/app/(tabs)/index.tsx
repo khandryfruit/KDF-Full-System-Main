@@ -191,20 +191,28 @@ export default function DashboardScreen() {
   });
 
   const { data: delData, isLoading: dl, refetch: rd } = useQuery({
-    queryKey: ["rider-deliveries-all"],
-    queryFn: async () => { const r = await riderFetch("/rider/deliveries", token); return r.json(); },
+    queryKey: ["rider-deliveries-dashboard"],
+    queryFn: async () => { const r = await riderFetch("/rider/deliveries?period=dashboard", token); return r.json(); },
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
 
-  const s      = statsData?.stats ?? {};
+  const s       = statsData?.stats ?? {};
   const allDels = delData?.deliveries ?? [];
-  const active  = [...allDels
-    .filter((d: any) => ["assigned", "picked", "out_for_delivery"].includes(d.status))]
-    .sort((a: any, b: any) =>
-      new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime()
-    );
-  const criticalCount = active.filter((d: any) =>
+
+  /* In-progress: picked/on-route — need IMMEDIATE attention */
+  const inProgress = [...allDels
+    .filter((d: any) => ["picked", "out_for_delivery", "near_customer", "delayed", "rescheduled"].includes(d.status))]
+    .sort((a: any, b: any) => new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime());
+
+  /* Today's assigned — new orders awaiting pickup */
+  const todayAssigned = [...allDels
+    .filter((d: any) => d.status === "assigned")]
+    .sort((a: any, b: any) => new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime());
+
+  const active = [...inProgress, ...todayAssigned];
+
+  const criticalCount = inProgress.filter((d: any) =>
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
   ).length;
 
@@ -274,7 +282,7 @@ export default function DashboardScreen() {
               <View style={styles.heroMetaDivider} />
               <View style={styles.heroMetaItem}>
                 <Feather name="zap" size={11} color="rgba(255,255,255,0.55)" />
-                <Text style={styles.heroMetaTxt}>{active.length} active</Text>
+                <Text style={styles.heroMetaTxt}>{inProgress.length} in-progress</Text>
               </View>
               {codCollected > 0 && (
                 <>
@@ -390,10 +398,10 @@ export default function DashboardScreen() {
           </>
         )}
 
-        {/* ── ACTIVE DELIVERIES ── */}
+        {/* ── IN PROGRESS (Picked / On Route) ── */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Active Deliveries</Text>
-          {active.length > 0 && (
+          <Text style={styles.sectionTitle}>🚚 In Progress</Text>
+          {inProgress.length > 0 && (
             <TouchableOpacity
               style={styles.viewAllBtn}
               onPress={() => { Haptics.selectionAsync(); router.push("/(tabs)/orders" as any); }}
@@ -404,7 +412,7 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {active.length === 0 ? (
+        {inProgress.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIconWrap}>
               <Feather name="check-circle" size={38} color="#10B981" />
@@ -414,26 +422,76 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <View style={styles.cardList}>
-            {active.slice(0, 7).map((d: any) => (
+            {inProgress.slice(0, 5).map((d: any) => (
               <DeliveryCard
                 key={d.id}
                 d={d}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push(`/order/${d.id}` as any);
-                }}
+                onPress={() => { Haptics.selectionAsync(); router.push(`/order/${d.id}` as any); }}
               />
             ))}
-            {active.length > 7 && (
-              <TouchableOpacity
-                style={styles.moreBtn}
-                onPress={() => router.push("/(tabs)/orders" as any)}
-              >
-                <Text style={styles.moreBtnTxt}>+{active.length - 7} مزید orders</Text>
+            {inProgress.length > 5 && (
+              <TouchableOpacity style={styles.moreBtn} onPress={() => router.push("/(tabs)/orders" as any)}>
+                <Text style={styles.moreBtnTxt}>+{inProgress.length - 5} مزید in-progress orders</Text>
                 <Feather name="arrow-right" size={14} color="#00C562" />
               </TouchableOpacity>
             )}
           </View>
+        )}
+
+        {/* ── TODAY'S NEW ASSIGNED ORDERS ── */}
+        {todayAssigned.length > 0 && (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>📦 Today's New Orders</Text>
+              <TouchableOpacity
+                style={styles.viewAllBtn}
+                onPress={() => { Haptics.selectionAsync(); router.push("/(tabs)/orders" as any); }}
+              >
+                <Text style={styles.viewAllTxt}>See all {todayAssigned.length}</Text>
+                <Feather name="arrow-right" size={12} color="#00C562" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Summary tap card */}
+            <TouchableOpacity
+              style={styles.todayCard}
+              onPress={() => { Haptics.selectionAsync(); router.push("/(tabs)/orders" as any); }}
+              activeOpacity={0.84}
+            >
+              <View style={styles.todayCardBadge}>
+                <Text style={styles.todayCardBadgeNum}>{todayAssigned.length}</Text>
+                <Text style={styles.todayCardBadgeLbl}>آرڈر</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.todayCardTitle}>آج کے نئے آرڈر</Text>
+                <Text style={styles.todayCardSub}>
+                  Rs.{" "}
+                  {todayAssigned
+                    .reduce((s: number, d: any) => s + Number(d.cod_amount ?? 0), 0)
+                    .toLocaleString()}{" "}
+                  COD pending pickup
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color="#00C562" />
+            </TouchableOpacity>
+
+            {/* Show first 3 assigned orders */}
+            <View style={styles.cardList}>
+              {todayAssigned.slice(0, 3).map((d: any) => (
+                <DeliveryCard
+                  key={d.id}
+                  d={d}
+                  onPress={() => { Haptics.selectionAsync(); router.push(`/order/${d.id}` as any); }}
+                />
+              ))}
+              {todayAssigned.length > 3 && (
+                <TouchableOpacity style={styles.moreBtn} onPress={() => router.push("/(tabs)/orders" as any)}>
+                  <Text style={styles.moreBtnTxt}>+{todayAssigned.length - 3} مزید نئے آرڈر دیکھیں</Text>
+                  <Feather name="arrow-right" size={14} color="#00C562" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
         )}
       </ScrollView>
     </View>
@@ -626,4 +684,22 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#065F46" },
   emptySubtxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6EE7B7" },
+
+  /* Today's Orders summary card */
+  todayCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#fff", borderRadius: 20, padding: 16,
+    borderWidth: 1.5, borderColor: "#D1FAE5",
+    shadowColor: "#10B981", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 4,
+  },
+  todayCardBadge: {
+    width: 54, height: 54, borderRadius: 16,
+    backgroundColor: "#ECFDF5", borderWidth: 2, borderColor: "#6EE7B7",
+    alignItems: "center", justifyContent: "center",
+  },
+  todayCardBadgeNum: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#059669" },
+  todayCardBadgeLbl: { fontSize: 8, fontFamily: "Inter_700Bold", color: "#34D399", letterSpacing: 0.5 },
+  todayCardTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
+  todayCardSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#6B7A99", marginTop: 2 },
 });

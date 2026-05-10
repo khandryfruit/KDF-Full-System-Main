@@ -15,6 +15,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -477,6 +478,7 @@ export default function TasksScreen() {
   const qc        = useQueryClient();
   const [activeSection, setActiveSection] = useState<SectionKey>("new");
   const [activePeriod,  setActivePeriod]  = useState<PeriodKey>("today");
+  const [search,        setSearch]        = useState("");
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   /* "new" section fetches only last-7-day assigned orders (avoids flooding with 400+ old assignments)
@@ -510,7 +512,21 @@ export default function TasksScreen() {
     returned:  sortNewest(allDeliveries.filter(d => d.status === "returned")),
   };
 
-  const current = sections[activeSection];
+  const raw = sections[activeSection];
+
+  /* Client-side search: order #, customer name, phone, address */
+  const filtered = search.trim()
+    ? raw.filter(d => {
+        const q = search.trim().toLowerCase();
+        return (
+          String(d.shopify_order_number ?? d.id).toLowerCase().includes(q) ||
+          (d.customer_name  ?? "").toLowerCase().includes(q) ||
+          (d.customer_phone ?? "").toLowerCase().includes(q) ||
+          (d.delivery_address ?? "").toLowerCase().includes(q)
+        );
+      })
+    : raw;
+  const current = filtered;
   const newOrdersCount = sections.new.length;
   const urgentCount = sections.active.filter(d =>
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
@@ -520,6 +536,7 @@ export default function TasksScreen() {
     Haptics.selectionAsync();
     Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
     setActiveSection(key);
+    setSearch(""); /* clear search when switching tabs */
   }, [slideAnim]);
 
   const switchPeriod = useCallback((key: PeriodKey) => {
@@ -588,6 +605,33 @@ export default function TasksScreen() {
             />
           )}
         />
+
+        {/* Search bar */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Feather name="search" size={14} color="rgba(255,255,255,0.45)" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="آرڈر #، نام، یا فون نمبر"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Feather name="x-circle" size={15} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+            )}
+          </View>
+          {search.trim().length > 0 && (
+            <View style={styles.searchCountBadge}>
+              <Text style={styles.searchCountTxt}>{current.length}</Text>
+            </View>
+          )}
+        </View>
 
         {/* Period filter — shown for history sections only */}
         {activeSection !== "new" && activeSection !== "active" && (
@@ -734,6 +778,27 @@ const styles = StyleSheet.create({
   sectionTabTxt: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   countBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, minWidth: 22, alignItems: "center" },
   countTxt: { fontSize: 10, fontFamily: "Inter_700Bold" },
+
+  /* Search bar */
+  searchRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 16, paddingBottom: 14,
+  },
+  searchBox: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 9,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 14, paddingHorizontal: 12, height: 40,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
+  },
+  searchInput: {
+    flex: 1, color: "#fff", fontSize: 13,
+    fontFamily: "Inter_400Regular", height: 40,
+  },
+  searchCountBadge: {
+    backgroundColor: "#00C562", borderRadius: 10,
+    paddingHorizontal: 9, paddingVertical: 5, minWidth: 34, alignItems: "center",
+  },
+  searchCountTxt: { color: "#fff", fontSize: 11, fontFamily: "Inter_700Bold" },
 
   /* Period tabs */
   periodList: { paddingHorizontal: 16, paddingBottom: 14, gap: 7 },
