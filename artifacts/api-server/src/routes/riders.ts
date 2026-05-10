@@ -638,6 +638,29 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
                 await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
               }
             }
+
+            /* ── Expo Push Notification to Rider App ── */
+            if (rider.expo_push_token) {
+              try {
+                const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Accept: "application/json" },
+                  body: JSON.stringify({
+                    to:    rider.expo_push_token,
+                    title: "🚚 نیا آرڈر ملا!",
+                    body:  `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
+                    sound: "default",
+                    priority: "high",
+                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number) },
+                    badge: 1,
+                  }),
+                });
+                const pushJson = await pushRes.json() as any;
+                logger.info({ riderId: rider_id, pushToken: rider.expo_push_token?.slice(0, 20), status: pushJson?.data?.status }, "Expo push sent");
+              } catch (pushErr) {
+                logger.warn({ pushErr }, "Expo push notification failed (non-critical)");
+              }
+            }
           }
 
           /* ── Auto WA to CUSTOMER — if auto mode or explicitly requested ── */

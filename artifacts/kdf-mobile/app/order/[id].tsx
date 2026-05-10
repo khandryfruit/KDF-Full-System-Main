@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -8,6 +9,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Platform,
   ScrollView,
@@ -113,6 +115,59 @@ export default function OrderDetailScreen() {
   const insets    = useSafeAreaInsets();
   const qc        = useQueryClient();
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
+  const [proofUri, setProofUri]         = useState<string | null>(null);
+  const [uploading, setUploading]       = useState(false);
+
+  /* ── Verification Query (check if proof already uploaded) ── */
+  const { data: verData, refetch: refetchVer } = useQuery({
+    queryKey: ["delivery-verification", id],
+    queryFn:  async () => {
+      const r = await riderFetch(`/rider/deliveries/${id}/verification`, token);
+      if (r.status === 404) return null;
+      return r.json();
+    },
+    enabled: !!id && !!token,
+  });
+
+  /* ── Take + Upload Proof Photo ── */
+  const takeAndUploadProof = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert("Permission Required", "Please allow camera access to upload delivery proof.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality:    0.55,
+        base64:     true,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]?.base64) return;
+
+      setProofUri(result.assets[0].uri);
+      setUploading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const r = await riderFetch(`/rider/deliveries/${id}/verification`, token, {
+        method: "POST",
+        body:   JSON.stringify({
+          photo_base64: result.assets[0].base64,
+          mime_type:    "image/jpeg",
+        }),
+      });
+      if (!r.ok) throw new Error("Upload failed");
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      refetchVer();
+      Alert.alert("✅ Uploaded", "Delivery proof photo uploaded successfully.");
+    } catch (e: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", e.message ?? "Could not upload photo");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["delivery", id],
@@ -435,6 +490,67 @@ export default function OrderDetailScreen() {
           </Section>
         )}
 
+        {/* ── Delivery Proof (Paid Orders / Pre-Delivery Verification) ── */}
+        {(delivery.is_paid || ["out_for_delivery", "picked", "assigned"].includes(delivery.status)) && !isTerminal && (
+          <Section title="📸 Delivery Proof">
+            {verData?.verification ? (
+              /* Already uploaded */
+              <View>
+                <View style={styles.proofUploadedBanner}>
+                  <Feather name="check-circle" size={16} color="#059669" />
+                  <Text style={styles.proofUploadedTxt}>Proof photo uploaded ✓</Text>
+                </View>
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${verData.verification.photo_base64}` }}
+                  style={styles.proofImage}
+                  resizeMode="cover"
+                />
+                <Text style={styles.proofDateTxt}>
+                  Uploaded: {new Date(verData.verification.created_at).toLocaleString("en-PK")}
+                </Text>
+              </View>
+            ) : (
+              /* Not yet uploaded */
+              <View>
+                {proofUri ? (
+                  <View>
+                    <Image source={{ uri: proofUri }} style={styles.proofImage} resizeMode="cover" />
+                    {uploading && (
+                      <View style={styles.proofUploadingOverlay}>
+                        <ActivityIndicator color="#00C562" size="large" />
+                        <Text style={styles.proofUploadingTxt}>Uploading...</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.proofEmptyBox}>
+                    <Feather name="camera" size={28} color="#94A3B8" />
+                    <Text style={styles.proofEmptyTxt}>
+                      {delivery.is_paid ? "Paid order — delivery proof required" : "Take a delivery proof photo"}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[styles.proofCameraBtn, uploading && { opacity: 0.6 }]}
+                  onPress={takeAndUploadProof}
+                  disabled={uploading}
+                  activeOpacity={0.82}
+                >
+                  {uploading
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <>
+                        <Feather name="camera" size={16} color="#fff" />
+                        <Text style={styles.proofCameraBtnTxt}>
+                          {proofUri ? "Retake Photo" : "Take Proof Photo"}
+                        </Text>
+                      </>
+                  }
+                </TouchableOpacity>
+              </View>
+            )}
+          </Section>
+        )}
+
         {/* ── Invoice ── */}
         <Section title="Invoice & Sharing">
           {/* Invoice URL display */}
@@ -460,6 +576,36 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           </View>
         </Section>
+
+        {/* ── Accept Order Hero CTA (only for assigned) ── */}
+        {delivery.status === "assigned" && (
+          <View style={styles.acceptHeroCard}>
+            <View style={styles.acceptHeroIconWrap}>
+              <Feather name="package" size={28} color="#00C562" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.acceptHeroTitle}>نیا آرڈر ملا ہے!</Text>
+              <Text style={styles.acceptHeroSub}>Accept کریں اور pickup کے لیے روانہ ہوں</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.acceptHeroBtn, statusMut.isPending && { opacity: 0.6 }]}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                statusMut.mutate("picked");
+              }}
+              disabled={statusMut.isPending}
+              activeOpacity={0.82}
+            >
+              {statusMut.isPending
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <>
+                    <Feather name="check" size={18} color="#fff" />
+                    <Text style={styles.acceptHeroBtnTxt}>Accept</Text>
+                  </>
+              }
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── Status Workflow ── */}
         {!isTerminal ? (
@@ -664,4 +810,55 @@ const styles = StyleSheet.create({
 
   terminalBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, padding: 16, borderWidth: 1 },
   terminalTxt:    { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+
+  /* Accept Hero CTA */
+  acceptHeroCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#003D1A", borderRadius: 18, padding: 16,
+    borderWidth: 1.5, borderColor: "#00C562",
+    shadowColor: "#00C562", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+  },
+  acceptHeroIconWrap: {
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: "rgba(0,197,98,0.15)",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(0,197,98,0.3)",
+  },
+  acceptHeroTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  acceptHeroSub:   { color: "rgba(255,255,255,0.6)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
+  acceptHeroBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#00C562", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  acceptHeroBtnTxt: { color: "#002D16", fontSize: 13, fontFamily: "Inter_700Bold" },
+
+  /* Delivery Proof */
+  proofUploadedBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#ECFDF5", borderRadius: 10, padding: 10, marginBottom: 12,
+  },
+  proofUploadedTxt: { color: "#059669", fontSize: 13, fontFamily: "Inter_600SemiBold", flex: 1 },
+  proofImage: {
+    width: "100%", height: 180, borderRadius: 12, marginBottom: 8,
+    backgroundColor: "#F1F5F9",
+  },
+  proofDateTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" },
+  proofEmptyBox: {
+    alignItems: "center", justifyContent: "center", gap: 10,
+    backgroundColor: "#F8FAFC", borderRadius: 12, borderWidth: 1,
+    borderColor: "#E2E8F0", borderStyle: "dashed", paddingVertical: 28, marginBottom: 12,
+  },
+  proofEmptyTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" },
+  proofCameraBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#0F172A", borderRadius: 12, paddingVertical: 13, marginTop: 6,
+  },
+  proofCameraBtnTxt: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  proofUploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.8)", borderRadius: 12,
+    alignItems: "center", justifyContent: "center", gap: 8,
+  },
+  proofUploadingTxt: { color: "#00C562", fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

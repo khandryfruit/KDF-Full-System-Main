@@ -627,5 +627,137 @@ router.get("/rider/deliveries/:id/invoice", async (req: any, res): Promise<void>
   }
 });
 
+/* ═══════════════════════════════════════════════════════
+   DELIVERY VERIFICATIONS (Proof Photos)
+═══════════════════════════════════════════════════════ */
+
+/* Ensure table exists on first use */
+async function ensureVerificationsTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS delivery_verifications (
+      id            SERIAL PRIMARY KEY,
+      delivery_id   INTEGER NOT NULL,
+      rider_id      INTEGER NOT NULL,
+      photo_base64  TEXT NOT NULL,
+      mime_type     TEXT NOT NULL DEFAULT 'image/jpeg',
+      notes         TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+ensureVerificationsTable().catch((e) => logger.warn({ e }, "delivery_verifications table init"));
+
+/* POST /api/rider/deliveries/:id/verification — upload proof photo */
+router.post("/rider/deliveries/:id/verification", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId    = req.rider.id;
+    const deliveryId = parseInt(req.params.id);
+    const { photo_base64, mime_type, notes } = req.body;
+
+    if (!photo_base64) { res.status(400).json({ error: "photo_base64 required" }); return; }
+
+    /* Verify the delivery belongs to this rider */
+    const check = await db.execute(sql`
+      SELECT id FROM rider_deliveries WHERE id = ${deliveryId} AND rider_id = ${riderId} LIMIT 1
+    `);
+    if (!check.rows.length) { res.status(403).json({ error: "Not authorized" }); return; }
+
+    /* Upsert — one verification per delivery */
+    await db.execute(sql`
+      INSERT INTO delivery_verifications (delivery_id, rider_id, photo_base64, mime_type, notes)
+      VALUES (${deliveryId}, ${riderId}, ${photo_base64}, ${mime_type ?? "image/jpeg"}, ${notes ?? null})
+      ON CONFLICT DO NOTHING
+    `);
+
+    /* If a row already exists, update it */
+    const existing = await db.execute(sql`
+      SELECT id FROM delivery_verifications WHERE delivery_id = ${deliveryId} LIMIT 1
+    `);
+    if (existing.rows.length) {
+      await db.execute(sql`
+        UPDATE delivery_verifications
+        SET photo_base64 = ${photo_base64}, mime_type = ${mime_type ?? "image/jpeg"},
+            notes = ${notes ?? null}, created_at = NOW()
+        WHERE delivery_id = ${deliveryId}
+      `);
+    }
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/rider/deliveries/:id/verification — get proof photo for this rider */
+router.get("/rider/deliveries/:id/verification", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId    = req.rider.id;
+    const deliveryId = parseInt(req.params.id);
+
+    const rows = await db.execute(sql`
+      SELECT dv.* FROM delivery_verifications dv
+      JOIN rider_deliveries rd ON rd.id = dv.delivery_id
+      WHERE dv.delivery_id = ${deliveryId} AND rd.rider_id = ${riderId}
+      LIMIT 1
+    `);
+
+    if (!rows.rows.length) { res.status(404).json({ error: "No verification found" }); return; }
+
+    /* Don't return the full base64 in the list — just metadata */
+    const v = rows.rows[0] as any;
+    res.json({ verification: v });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/riders/deliveries/:id/verification — admin view of proof photo */
+router.get("/admin/riders/deliveries/:id/verification", adminMiddleware, async (req: any, res) => {
+  try {
+    const deliveryId = parseInt(req.params.id);
+
+    const rows = await db.execute(sql`
+      SELECT dv.*, r.name AS rider_name, rd.shopify_order_number, rd.customer_name
+      FROM delivery_verifications dv
+      JOIN rider_deliveries rd ON rd.id = dv.delivery_id
+      JOIN riders r ON r.id = dv.rider_id
+      WHERE dv.delivery_id = ${deliveryId}
+      LIMIT 1
+    `);
+
+    if (!rows.rows.length) { res.status(404).json({ error: "No verification found" }); return; }
+
+    res.json({ verification: rows.rows[0] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/riders/verifications — list all verifications */
+router.get("/admin/riders/verifications", adminMiddleware, async (req: any, res) => {
+  try {
+    const { date, rider_id } = req.query;
+
+    const rows = await db.execute(sql`
+      SELECT dv.id, dv.delivery_id, dv.rider_id, dv.mime_type, dv.notes, dv.created_at,
+             r.name AS rider_name, rd.shopify_order_number, rd.customer_name, rd.is_paid, rd.status AS delivery_status
+      FROM delivery_verifications dv
+      JOIN rider_deliveries rd ON rd.id = dv.delivery_id
+      JOIN riders r ON r.id = dv.rider_id
+      ${rider_id ? sql`WHERE dv.rider_id = ${parseInt(String(rider_id))}` : sql``}
+      ORDER BY dv.created_at DESC
+      LIMIT 100
+    `);
+
+    res.json({ verifications: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 

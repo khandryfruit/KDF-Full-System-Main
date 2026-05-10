@@ -1,11 +1,12 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Linking,
@@ -84,13 +85,61 @@ function parseAddr(d: any): string {
 }
 
 /* ─── Active Task Card ─── */
-function ActiveCard({ d, onPress }: { d: any; onPress: () => void }) {
+function ActiveCard({ d, onPress, token, qc }: { d: any; onPress: () => void; token: string | null; qc: any }) {
   const sc       = getStatusColor(d.status);
   const sb       = getStatusBg(d.status);
   const cod      = Number(d.cod_amount ?? 0);
   const priority = getPriorityInfo(d.assigned_at);
   const isCrit   = ["critical", "high"].includes(priority.priority);
+  const isNew    = d.status === "assigned";
   const addr     = parseAddr(d);
+
+  /* Glow animation for newly assigned orders */
+  const glowAnim  = useRef(new Animated.Value(0)).current;
+  const glowLoop  = useRef<Animated.CompositeAnimation | null>(null);
+  useEffect(() => {
+    if (isNew) {
+      glowLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 900, useNativeDriver: false }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 900, useNativeDriver: false }),
+        ])
+      );
+      glowLoop.current.start();
+    } else {
+      glowLoop.current?.stop();
+      glowAnim.setValue(0);
+    }
+    return () => glowLoop.current?.stop();
+  }, [isNew]);
+
+  const glowColor = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(0,197,98,0)", "rgba(0,197,98,0.55)"],
+  });
+  const glowElevation = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [5, 14] });
+
+  /* Accept mutation — moves status assigned → picked */
+  const acceptMut = useMutation({
+    mutationFn: async () => {
+      const r = await riderFetch(`/rider/deliveries/${d.id}/status`, token, {
+        method: "PUT",
+        body:   JSON.stringify({ status: "picked" }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+      return r.json();
+    },
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
+      qc.invalidateQueries({ queryKey: ["rider-deliveries-tasks"] });
+      qc.invalidateQueries({ queryKey: ["rider-stats"] });
+    },
+    onError: (e: any) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", e.message);
+    },
+  });
 
   const callCustomer = () => { Haptics.selectionAsync(); Linking.openURL(`tel:${d.customer_phone}`); };
   const waCustomer = () => {
@@ -107,86 +156,125 @@ function ActiveCard({ d, onPress }: { d: any; onPress: () => void }) {
   };
 
   return (
-    <TouchableOpacity
-      style={[styles.card, isCrit && styles.cardCritical]}
-      onPress={onPress}
-      activeOpacity={0.82}
+    <Animated.View
+      style={[
+        styles.card,
+        isCrit && styles.cardCritical,
+        isNew && {
+          borderColor: glowColor,
+          borderWidth: 2,
+          shadowColor: "#00C562",
+          shadowOpacity: glowElevation.interpolate({ inputRange: [5, 14], outputRange: [0.1, 0.45] }),
+          shadowRadius: glowElevation,
+          elevation: glowElevation,
+        },
+      ]}
     >
-      <LinearGradient
-        colors={isCrit ? ["#EF4444", "#DC2626"] : [sc, sc + "88"]}
-        style={styles.accentBar}
-      />
-      <View style={styles.cardBody}>
-        <View style={styles.cardHeader}>
-          <View style={styles.orderIdRow}>
-            <Text style={styles.orderHash}>#</Text>
-            <Text style={styles.orderId}>{d.shopify_order_number ?? d.id}</Text>
-          </View>
-          <View style={styles.badgeRow}>
-            <View style={[styles.statusPill, { backgroundColor: sb }]}>
-              <View style={[styles.statusDot, { backgroundColor: sc }]} />
-              <Text style={[styles.statusTxt, { color: sc }]}>{getStatusLabel(d.status)}</Text>
+      <TouchableOpacity style={{ flex: 1, flexDirection: "row" }} onPress={onPress} activeOpacity={0.82}>
+        <LinearGradient
+          colors={isNew ? ["#00C562", "#007A3D"] : isCrit ? ["#EF4444", "#DC2626"] : [sc, sc + "88"]}
+          style={styles.accentBar}
+        />
+        <View style={styles.cardBody}>
+          <View style={styles.cardHeader}>
+            <View style={styles.orderIdRow}>
+              <Text style={styles.orderHash}>#</Text>
+              <Text style={[styles.orderId, isNew && { color: "#00A552" }]}>{d.shopify_order_number ?? d.id}</Text>
             </View>
-            <PriorityBadge assignedAt={d.assigned_at} />
+            <View style={styles.badgeRow}>
+              {isNew ? (
+                <View style={[styles.statusPill, { backgroundColor: "#D1FAE5" }]}>
+                  <View style={[styles.statusDot, { backgroundColor: "#00C562" }]} />
+                  <Text style={[styles.statusTxt, { color: "#00A552" }]}>نیا آرڈر</Text>
+                </View>
+              ) : (
+                <View style={[styles.statusPill, { backgroundColor: sb }]}>
+                  <View style={[styles.statusDot, { backgroundColor: sc }]} />
+                  <Text style={[styles.statusTxt, { color: sc }]}>{getStatusLabel(d.status)}</Text>
+                </View>
+              )}
+              <PriorityBadge assignedAt={d.assigned_at} />
+            </View>
+            <Feather name="chevron-right" size={14} color="#C0C8D8" style={{ marginLeft: "auto" }} />
           </View>
-          <Feather name="chevron-right" size={14} color="#C0C8D8" style={{ marginLeft: "auto" }} />
-        </View>
 
-        <Text style={styles.custName} numberOfLines={1}>{d.customer_name}</Text>
+          <Text style={styles.custName} numberOfLines={1}>{d.customer_name}</Text>
 
-        {!!addr && addr !== "—" && (
+          {!!addr && addr !== "—" && (
+            <View style={styles.infoRow}>
+              <View style={[styles.infoIconWrap, { backgroundColor: "#EFF6FF" }]}>
+                <Feather name="map-pin" size={10} color="#3B82F6" />
+              </View>
+              <Text style={styles.infoTxt} numberOfLines={1}>{addr}</Text>
+            </View>
+          )}
+
           <View style={styles.infoRow}>
-            <View style={[styles.infoIconWrap, { backgroundColor: "#EFF6FF" }]}>
-              <Feather name="map-pin" size={10} color="#3B82F6" />
+            <View style={[styles.infoIconWrap, { backgroundColor: "#F5F3FF" }]}>
+              <Feather name="clock" size={10} color="#7C3AED" />
             </View>
-            <Text style={styles.infoTxt} numberOfLines={1}>{addr}</Text>
-          </View>
-        )}
-
-        <View style={styles.infoRow}>
-          <View style={[styles.infoIconWrap, { backgroundColor: "#F5F3FF" }]}>
-            <Feather name="clock" size={10} color="#7C3AED" />
-          </View>
-          <Text style={styles.infoTxt}>Assigned: {formatDate(d.assigned_at)}</Text>
-        </View>
-
-        {d.assigned_at && (
-          <View style={{ marginTop: 2 }}>
-            <CountdownLine assignedAt={d.assigned_at} />
-          </View>
-        )}
-
-        <View style={styles.cardFooter}>
-          <View style={[styles.codChip, {
-            backgroundColor: d.is_paid ? "#ECFDF5" : "#FFFBEB",
-            borderColor: d.is_paid ? "#6EE7B7" : "#FCD34D",
-          }]}>
-            <Feather name={d.is_paid ? "check-circle" : "dollar-sign"} size={12} color={d.is_paid ? "#059669" : "#D97706"} />
-            <Text style={[styles.codTxt, { color: d.is_paid ? "#059669" : "#D97706" }]}>
-              {d.is_paid ? "PAID" : `Rs. ${cod.toLocaleString()}`}
-            </Text>
+            <Text style={styles.infoTxt}>Assigned: {formatDate(d.assigned_at)}</Text>
           </View>
 
-          <View style={styles.actionBtns}>
-            {!!d.customer_phone && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#EFF6FF" }]} onPress={callCustomer} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="phone-call" size={13} color="#2563EB" />
-              </TouchableOpacity>
-            )}
-            {!!d.customer_phone && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#F0FDF4" }]} onPress={waCustomer} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="message-circle" size={13} color="#16A34A" />
-              </TouchableOpacity>
-            )}
-            {!!addr && addr !== "—" && (
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#FFF7ED" }]} onPress={navigate} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="navigation" size={13} color="#EA580C" />
-              </TouchableOpacity>
-            )}
+          {d.assigned_at && (
+            <View style={{ marginTop: 2 }}>
+              <CountdownLine assignedAt={d.assigned_at} />
+            </View>
+          )}
+
+          <View style={styles.cardFooter}>
+            <View style={[styles.codChip, {
+              backgroundColor: d.is_paid ? "#ECFDF5" : "#FFFBEB",
+              borderColor: d.is_paid ? "#6EE7B7" : "#FCD34D",
+            }]}>
+              <Feather name={d.is_paid ? "check-circle" : "dollar-sign"} size={12} color={d.is_paid ? "#059669" : "#D97706"} />
+              <Text style={[styles.codTxt, { color: d.is_paid ? "#059669" : "#D97706" }]}>
+                {d.is_paid ? "PAID" : `Rs. ${cod.toLocaleString()}`}
+              </Text>
+            </View>
+
+            <View style={styles.actionBtns}>
+              {!!d.customer_phone && (
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#EFF6FF" }]} onPress={callCustomer} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Feather name="phone-call" size={13} color="#2563EB" />
+                </TouchableOpacity>
+              )}
+              {!!d.customer_phone && (
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#F0FDF4" }]} onPress={waCustomer} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Feather name="message-circle" size={13} color="#16A34A" />
+                </TouchableOpacity>
+              )}
+              {!!addr && addr !== "—" && (
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#FFF7ED" }]} onPress={navigate} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Feather name="navigation" size={13} color="#EA580C" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+
+      {/* Accept quick button — only for assigned orders */}
+      {isNew && (
+        <TouchableOpacity
+          style={styles.acceptQuickBtn}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            acceptMut.mutate();
+          }}
+          disabled={acceptMut.isPending}
+          activeOpacity={0.82}
+        >
+          {acceptMut.isPending
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <>
+                <Feather name="check" size={16} color="#fff" />
+                <Text style={styles.acceptQuickTxt}>قبول</Text>
+              </>
+          }
+        </TouchableOpacity>
+      )}
+    </Animated.View>
   );
 }
 
@@ -433,13 +521,13 @@ export default function TasksScreen() {
 
   const renderItem = useCallback(({ item }: { item: any }) => {
     if (activeSection === "active") {
-      return <ActiveCard d={item} onPress={() => openOrder(item.id)} />;
+      return <ActiveCard d={item} onPress={() => openOrder(item.id)} token={token} qc={qc} />;
     }
     if (activeSection === "completed") {
       return <CompletedCard d={item} onPress={() => openOrder(item.id)} />;
     }
     return <TerminalCard d={item} onPress={() => openOrder(item.id)} section={activeSection} />;
-  }, [activeSection]);
+  }, [activeSection, token]);
 
   const completedEarnings = sections.completed.reduce((s, d) => s + Number(d.delivery_charge ?? 0), 0);
   const completedCOD      = sections.completed.filter(d => !d.is_paid).reduce((s, d) => s + Number(d.cod_amount ?? 0), 0);
@@ -709,6 +797,22 @@ const styles = StyleSheet.create({
   codTxt: { fontSize: 11, fontFamily: "Inter_700Bold" },
   actionBtns: { flexDirection: "row", gap: 7 },
   actionBtn: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+
+  /* Accept quick button (on assigned cards) */
+  acceptQuickBtn: {
+    width: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00C562",
+    gap: 4,
+    paddingVertical: 10,
+  },
+  acceptQuickTxt: {
+    color: "#fff",
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
   earningsChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "#F5F3FF", borderRadius: 10,
