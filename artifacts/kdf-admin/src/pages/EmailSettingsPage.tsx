@@ -137,14 +137,32 @@ export default function EmailSettingsPage() {
             <Input id="smtpUser" value={settings.smtpUser} onChange={e => set("smtpUser", e.target.value)} placeholder="you@gmail.com" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="smtpPass">SMTP Password / App Password</Label>
+            <Label>SMTP Password / App Password</Label>
+            {/* Hidden dummy inputs trick browsers into not attaching autocomplete to the real field */}
+            <input type="text" style={{ display: "none" }} aria-hidden="true" readOnly tabIndex={-1} />
+            <input type="password" style={{ display: "none" }} aria-hidden="true" readOnly tabIndex={-1} />
             <div className="relative">
-              <Input id="smtpPass" type={showPass ? "text" : "password"} value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder={settings.smtpPassSet ? "Enter new password to update" : "Enter password"} className="pr-10" autoComplete="new-password" />
+              <input
+                type={showPass ? "text" : "password"}
+                value={smtpPass}
+                onChange={e => setSmtpPass(e.target.value)}
+                placeholder={settings.smtpPassSet ? "Type new password here to update" : "Type password here"}
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
+                name={`smtp_credential_${Math.random().toString(36).slice(2, 7)}`}
+                spellCheck={false}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors pr-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
               <button type="button" onClick={() => setShowPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">For Gmail, use an App Password (not your account password). Leave blank to keep existing.</p>
+            {settings.smtpPassSet && (
+              <p className="text-xs text-amber-600 font-medium">⚠️ Password already saved — type new one below and click Save Settings to update</p>
+            )}
+            <p className="text-xs text-muted-foreground">For Gmail, use an App Password. Leave blank to keep existing password.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="smtpFrom">From Address (optional)</Label>
