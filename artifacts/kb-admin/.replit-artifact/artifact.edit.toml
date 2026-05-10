@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/kb-admin/"
+title = "Khan Baba Admin"
+version = "1.0.0"
+id = "artifacts/kb-admin"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/kb-admin/" ]
+localPort = 23444
+
+[services.development]
+run = "pnpm --filter @workspace/kb-admin run dev"
+
+[services.env]
+PORT = "23444"
+BASE_PATH = "/kb-admin/"
