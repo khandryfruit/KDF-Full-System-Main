@@ -1,0 +1,117 @@
+IMPORTANT — Rider App میں ابھی proper notification system add نہیں کیا گیا۔
+
+صرف UI کافی نہیں ہے — ہمیں REAL push notification system چاہیے۔
+
+==================================================
+REQUIRED NOTIFICATION SYSTEM
+============================
+
+Please add FULL real-time notification system inside Rider App.
+
+When:
+✅ new order arrives
+✅ urgent order assigned
+✅ order updated
+✅ admin sends message
+
+Then rider must instantly receive:
+
+✅ loud notification sound
+✅ vibration
+✅ popup alert
+✅ lock-screen notification
+✅ background notification
+
+==================================================
+VERY IMPORTANT
+==============
+
+Right now notifications are NOT properly implemented.
+
+Please properly integrate:
+
+✅ Firebase Cloud Messaging (FCM)
+OR
+✅ OneSignal Push Notifications
+
+for real-time rider alerts.
+
+==================================================
+NOTIFICATION SOUND
+==================
+
+Need:
+
+✅ strong order alert sound
+✅ device default tone support
+✅ custom rider order sound
+✅ repeat notification until rider accepts order
+
+==================================================
+NEW ORDER FLOW
+==============
+
+When new order comes:
+
+✅ rider app should ring immediately
+✅ popup should appear
+✅ notification should continue until accepted
+✅ sound + vibration should repeat
+
+==================================================
+BACKGROUND SUPPORT
+==================
+
+Notifications MUST work:
+
+✅ app closed
+✅ app minimized
+✅ screen locked
+✅ background mode
+
+==================================================
+ANDROID REQUIREMENTS
+====================
+
+Please implement:
+
+✅ high priority notification channel
+✅ foreground service support
+✅ wake screen notifications
+✅ battery optimization bypass (if needed)
+
+==================================================
+ADMIN PANEL SYNC
+================
+
+When admin assigns order:
+
+✅ rider instantly receives notification
+✅ admin sees delivery acknowledgment
+✅ real-time socket updates work properly
+
+==================================================
+UI/UX
+=====
+
+Notification popup should look premium:
+
+✅ animated popup
+✅ Accept Order button
+✅ customer details
+✅ COD amount
+✅ order distance
+✅ sound indicator
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+
+✅ professional rider notification system
+✅ loud instant order alerts
+✅ real-time delivery notifications
+✅ Uber/Foodpanda style rider experience
+✅ notifications even when app closed
+✅ repeated alerts until rider accepts

@@ -1,0 +1,152 @@
+IMPORTANT — Please improve the Rider App Order Acceptance Flow professionally.
+
+Right now orders appear, but we need a MUCH better rider workflow and notification system.
+
+==================================================
+
+1. NEW ORDER ACCEPTANCE SYSTEM
+   ==================================================
+
+When a NEW order arrives:
+
+✅ Rider must receive instant notification
+✅ Full-screen alert popup should appear
+✅ Order card should glow/highlight
+✅ Notification sound should repeat until action taken
+
+==================================================
+VERY IMPORTANT
+==============
+
+New order alerts should continue:
+
+✅ every few seconds
+✅ with sound/vibration
+✅ popup reminders
+
+UNTIL rider clicks:
+
+```txt id="6b6v9r"
+CONFIRM ORDER
+```
+
+or
+
+```txt id="26ckmj"
+ACCEPT ORDER
+```
+
+==================================================
+2. ORDER CONFIRM BUTTON
+=======================
+
+Add a large professional button:
+
+✅ Confirm Order
+OR
+✅ Accept Delivery
+
+When rider confirms:
+
+✅ notification stops
+✅ order moves to accepted state
+✅ backend instantly updates
+✅ admin dashboard instantly updates
+
+==================================================
+3. NEXT STEP FLOW
+=================
+
+After rider confirms order:
+
+Order should automatically move to:
+
+```txt id="6j6j3f"
+PACKING / PREPARING
+```
+
+stage.
+
+Then rider can continue delivery workflow normally.
+
+==================================================
+4. REAL-TIME ADMIN UPDATE
+=========================
+
+Every action must instantly sync with backend/admin.
+
+Need real-time updates for:
+
+✅ order accepted
+✅ packing started
+✅ rider assigned
+✅ out for delivery
+✅ delivered
+
+==================================================
+5. UI/UX IMPROVEMENT
+====================
+
+Please redesign order cards professionally.
+
+Need:
+
+✅ beautiful order cards
+✅ modern spacing
+✅ animated highlights
+✅ premium buttons
+✅ clear statuses
+✅ large readable text
+✅ customer quick actions
+
+==================================================
+NEW ORDER DESIGN
+================
+
+New orders should look special:
+
+✅ glowing border
+✅ animated badge
+✅ urgent indicator
+✅ sound alert
+✅ high priority card
+
+==================================================
+6. RIDER EXPERIENCE
+===================
+
+Need rider flow similar to:
+
+✅ Uber Driver
+✅ Foodpanda Rider
+✅ Careem Captain
+
+Simple, fast, professional.
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT BREAK:
+❌ current statuses
+❌ admin logic
+❌ delivery workflow
+
+ONLY IMPROVE:
+✅ rider acceptance flow
+✅ notifications
+✅ order highlighting
+✅ real-time syncing
+✅ UI/UX
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ instant rider alerts
+✅ repeated notifications until accepted
+✅ professional accept-order workflow
+✅ automatic packing stage
+✅ real-time admin synchronization
+✅ premium delivery app experience

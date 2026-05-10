@@ -23,90 +23,110 @@ import { PriorityBadge, CountdownLine } from "@/components/PriorityTimer";
 import { sortByPriority, getPriorityInfo } from "@/utils/priority";
 
 const C = colors.light;
+const NAV_EXTRA = Platform.OS === "android" ? 96 : 108;
 
-const NAV_EXTRA = Platform.OS === "android" ? 84 : 100;
-
-/* ─── Stat Card ─── */
-function StatCard({ label, value, icon, accent, bg }: {
-  label: string; value: string | number; icon: string; accent: string; bg: string;
-}) {
+/* ─── Mini Stat Tile ─── */
+function StatTile({
+  label, value, icon, accent, bg,
+}: { label: string; value: string | number; icon: string; accent: string; bg: string }) {
   return (
-    <View style={[styles.statCard, { backgroundColor: bg, borderColor: accent + "30" }]}>
-      <View style={[styles.statIconWrap, { backgroundColor: accent + "20" }]}>
-        <Feather name={icon as any} size={16} color={accent} />
+    <View style={[styles.statTile, { backgroundColor: bg, borderColor: accent + "25" }]}>
+      <View style={[styles.statIconBox, { backgroundColor: accent + "1A" }]}>
+        <Feather name={icon as any} size={15} color={accent} />
       </View>
-      <Text style={[styles.statValue, { color: accent }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statVal, { color: accent }]}>{value}</Text>
+      <Text style={styles.statLbl}>{label}</Text>
     </View>
   );
 }
 
-/* ─── Premium Delivery Card ─── */
+/* ─── Delivery Card ─── */
 function DeliveryCard({ d, onPress }: { d: any; onPress: () => void }) {
-  const sc      = getStatusColor(d.status);
-  const sb      = getStatusBg(d.status);
+  const sc       = getStatusColor(d.status);
+  const sb       = getStatusBg(d.status);
   const isActive = !["delivered", "failed", "returned"].includes(d.status);
-  const cod     = Number(d.cod_amount ?? 0);
+  const cod      = Number(d.cod_amount ?? 0);
   const priority = getPriorityInfo(d.assigned_at);
-  const isCritical = ["critical", "high"].includes(priority.priority) && isActive;
+  const isCrit   = ["critical", "high"].includes(priority.priority) && isActive;
 
   const addr = (() => {
     try {
-      const a = typeof d.shipping_address === "string" ? JSON.parse(d.shipping_address) : d.shipping_address;
+      const a = typeof d.shipping_address === "string"
+        ? JSON.parse(d.shipping_address)
+        : d.shipping_address;
       return [a?.address1, a?.city].filter(Boolean).join(", ") || d.delivery_address || "—";
     } catch { return d.delivery_address ?? "—"; }
   })();
 
+  const callCustomer = () => {
+    if (d.customer_phone) require("react-native").Linking.openURL(`tel:${d.customer_phone}`);
+  };
+  const waCustomer = () => {
+    if (!d.customer_phone) return;
+    const ph = String(d.customer_phone).replace(/\D/g, "");
+    const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
+    const msg = encodeURIComponent(`السلام علیکم! میں آپ کا KDF NUTS آرڈر #${d.shopify_order_number} ڈیلیور کرنے آ رہا ہوں۔`);
+    require("react-native").Linking.openURL(`https://wa.me/${intl}?text=${msg}`);
+  };
+  const navigate = () => {
+    const q = encodeURIComponent(addr);
+    require("react-native").Linking.openURL(
+      `https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=driving`
+    );
+  };
+
   return (
     <TouchableOpacity
-      style={[styles.card, isCritical && styles.cardCritical]}
+      style={[styles.card, isCrit && styles.cardCritical]}
       onPress={onPress}
-      activeOpacity={0.82}
+      activeOpacity={0.8}
     >
-      {/* Left gradient accent */}
+      {/* Left accent stripe */}
       <LinearGradient
-        colors={isCritical ? ["#EF4444", "#DC2626"] : [sc, sc + "99"]}
-        style={styles.cardAccent}
+        colors={isCrit ? ["#EF4444", "#DC2626"] : [sc, sc + "55"]}
+        style={styles.cardStripe}
       />
 
-      <View style={styles.cardInner}>
+      <View style={styles.cardBody}>
         {/* Top row */}
         <View style={styles.cardTopRow}>
-          <View style={styles.orderNumWrap}>
-            <Text style={styles.orderNumHash}>#</Text>
+          <View style={styles.orderNumRow}>
+            <Text style={styles.orderHash}>#</Text>
             <Text style={styles.orderNum}>{d.shopify_order_number ?? d.id}</Text>
           </View>
-          <View style={styles.cardBadgesRow}>
+          <View style={styles.badgesRow}>
             <View style={[styles.statusPill, { backgroundColor: sb }]}>
-              <View style={[styles.statusDot, { backgroundColor: sc }]} />
+              <View style={[styles.dot, { backgroundColor: sc }]} />
               <Text style={[styles.statusTxt, { color: sc }]}>{getStatusLabel(d.status)}</Text>
             </View>
             {isActive && <PriorityBadge assignedAt={d.assigned_at} />}
           </View>
-          <Feather name="chevron-right" size={14} color="#C0C8D8" style={{ marginLeft: "auto" }} />
+          <Feather name="chevron-right" size={13} color="#C0C8D8" style={{ marginLeft: "auto" }} />
         </View>
 
-        {/* Customer name */}
+        {/* Customer */}
         <Text style={styles.custName} numberOfLines={1}>{d.customer_name}</Text>
 
         {/* Address */}
-        <View style={styles.addrRow}>
-          <View style={styles.addrIconWrap}>
-            <Feather name="map-pin" size={10} color={C.primary} />
+        {!!addr && addr !== "—" && (
+          <View style={styles.addrRow}>
+            <View style={[styles.miniIconBox, { backgroundColor: "#EFF6FF" }]}>
+              <Feather name="map-pin" size={10} color="#3B82F6" />
+            </View>
+            <Text style={styles.addrTxt} numberOfLines={1}>{addr}</Text>
           </View>
-          <Text style={styles.addrTxt} numberOfLines={1}>{addr}</Text>
-        </View>
+        )}
 
         {/* Countdown */}
         {isActive && d.assigned_at && (
-          <View style={{ marginTop: 2, marginBottom: 2 }}>
+          <View style={{ marginTop: 2 }}>
             <CountdownLine assignedAt={d.assigned_at} />
           </View>
         )}
 
         {/* Footer */}
         <View style={styles.cardFooter}>
-          <View style={[styles.codBadge, {
+          <View style={[styles.codChip, {
             backgroundColor: d.is_paid ? "#ECFDF5" : "#FFFBEB",
             borderColor: d.is_paid ? "#6EE7B7" : "#FCD34D",
           }]}>
@@ -116,31 +136,36 @@ function DeliveryCard({ d, onPress }: { d: any; onPress: () => void }) {
               color={d.is_paid ? "#059669" : "#D97706"}
             />
             <Text style={[styles.codTxt, { color: d.is_paid ? "#059669" : "#D97706" }]}>
-              {d.is_paid ? "PAID" : `COD: Rs. ${cod.toLocaleString()}`}
+              {d.is_paid ? "PAID" : `COD Rs. ${cod.toLocaleString()}`}
             </Text>
           </View>
 
-          {/* Quick actions */}
-          <View style={styles.quickRow}>
+          <View style={styles.actionRow}>
             {!!d.customer_phone && (
               <TouchableOpacity
-                style={[styles.miniBtn, { backgroundColor: "#EFF6FF" }]}
-                onPress={(e) => { e.stopPropagation(); require("react-native").Linking.openURL(`tel:${d.customer_phone}`); }}
+                style={[styles.actionBtn, { backgroundColor: "#EFF6FF" }]}
+                onPress={(e) => { e.stopPropagation(); callCustomer(); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Feather name="phone-call" size={12} color="#2563EB" />
               </TouchableOpacity>
             )}
             {!!d.customer_phone && (
               <TouchableOpacity
-                style={[styles.miniBtn, { backgroundColor: "#F0FDF4" }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  const ph = String(d.customer_phone ?? "").replace(/\D/g, "");
-                  const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
-                  require("react-native").Linking.openURL(`https://wa.me/${intl}`);
-                }}
+                style={[styles.actionBtn, { backgroundColor: "#F0FDF4" }]}
+                onPress={(e) => { e.stopPropagation(); waCustomer(); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Feather name="message-circle" size={12} color="#16A34A" />
+              </TouchableOpacity>
+            )}
+            {!!addr && addr !== "—" && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: "#FFF7ED" }]}
+                onPress={(e) => { e.stopPropagation(); navigate(); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="navigation" size={12} color="#EA580C" />
               </TouchableOpacity>
             )}
           </View>
@@ -150,13 +175,13 @@ function DeliveryCard({ d, onPress }: { d: any; onPress: () => void }) {
   );
 }
 
-/* ─── Main Screen ─── */
+/* ─── Main Dashboard ─── */
 export default function DashboardScreen() {
   const { rider } = useAuth();
   const { token } = useAuth();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const router    = useRouter();
+  const insets    = useSafeAreaInsets();
+  const topPad    = insets.top + (Platform.OS === "web" ? 67 : 0);
 
   const { data: statsData, isLoading: sl, refetch: rs } = useQuery({
     queryKey: ["rider-stats"],
@@ -172,94 +197,103 @@ export default function DashboardScreen() {
     refetchIntervalInBackground: false,
   });
 
-  const s = statsData?.stats ?? {};
+  const s      = statsData?.stats ?? {};
   const allDels = delData?.deliveries ?? [];
-  /* Active tasks — newest assigned_at first */
-  const active = [...allDels
+  const active  = [...allDels
     .filter((d: any) => ["assigned", "picked", "out_for_delivery"].includes(d.status))]
-    .sort((a: any, b: any) => new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime());
+    .sort((a: any, b: any) =>
+      new Date(b.assigned_at ?? 0).getTime() - new Date(a.assigned_at ?? 0).getTime()
+    );
   const criticalCount = active.filter((d: any) =>
     ["critical", "high"].includes(getPriorityInfo(d.assigned_at).priority)
   ).length;
 
   const isLoading = sl || dl;
-  const refetch = () => { rs(); rd(); };
+  const refetch   = () => { rs(); rd(); };
 
-  const hour = new Date().getHours();
+  const hour     = new Date().getHours();
   const greeting = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const initials = (rider?.name ?? "R").split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
-  const todayEarnings   = Number(s.earnings_today ?? 0);
-  const codPending      = Number(s.cod_pending ?? 0);
-  const codCollected    = Number(s.cod_collected_today ?? 0);
+  const todayEarnings = Number(s.earnings_today ?? 0);
+  const codPending    = Number(s.cod_pending ?? 0);
+  const codCollected  = Number(s.cod_collected_today ?? 0);
 
   return (
     <View style={[styles.root, { paddingBottom: Platform.OS === "web" ? 34 : 0 }]}>
-      {/* ── PREMIUM HEADER ── */}
+
+      {/* ── HEADER ── */}
       <LinearGradient
-        colors={["#080F1E", "#0D1F3C", "#0A2A1A"]}
-        locations={[0, 0.6, 1]}
-        style={[styles.header, { paddingTop: topPad + 14 }]}
+        colors={["#060E1C", "#0A1A35", "#071A10"]}
+        locations={[0, 0.55, 1]}
+        style={[styles.header, { paddingTop: topPad + 16 }]}
       >
         {/* Top bar */}
-        <View style={styles.headerTopBar}>
+        <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <View style={styles.logoWrap}>
-              <Image
-                source={require("../../assets/images/icon.png")}
-                style={styles.logoImg}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require("../../assets/images/icon.png")}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
             <View>
               <Text style={styles.greetTxt}>{greeting} 👋</Text>
-              <Text style={styles.riderNameTxt} numberOfLines={1}>{rider?.name}</Text>
+              <Text style={styles.riderName} numberOfLines={1}>{rider?.name}</Text>
             </View>
           </View>
+
           <TouchableOpacity
             style={styles.avatarBtn}
             onPress={() => router.push("/(tabs)/profile" as any)}
             activeOpacity={0.8}
           >
-            <Text style={styles.avatarTxt}>{initials}</Text>
+            <LinearGradient colors={["#00C562", "#00A050"]} style={styles.avatarGrad}>
+              <Text style={styles.avatarTxt}>{initials}</Text>
+            </LinearGradient>
             <View style={styles.onlineDot} />
           </TouchableOpacity>
         </View>
 
-        {/* Earnings Hero */}
-        <View style={styles.earningsHero}>
-          <View style={styles.earningsHeroLeft}>
-            <Text style={styles.earningsHeroLabel}>Today's Earnings</Text>
-            <Text style={styles.earningsHeroAmount}>
-              Rs. {isLoading ? "..." : todayEarnings.toLocaleString()}
+        {/* Earnings hero card */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroLeft}>
+            <Text style={styles.heroLbl}>Today's Earnings</Text>
+            <Text style={styles.heroAmount}>
+              Rs.{" "}
+              {isLoading ? (
+                <Text style={{ fontSize: 24 }}>...</Text>
+              ) : (
+                todayEarnings.toLocaleString()
+              )}
             </Text>
-            <View style={styles.earningsHeroMeta}>
-              <View style={styles.earningsMetaItem}>
-                <Feather name="package" size={11} color="rgba(255,255,255,0.6)" />
-                <Text style={styles.earningsMetaTxt}>{s.delivered_today ?? 0} delivered</Text>
+            <View style={styles.heroMeta}>
+              <View style={styles.heroMetaItem}>
+                <Feather name="package" size={11} color="rgba(255,255,255,0.55)" />
+                <Text style={styles.heroMetaTxt}>{s.delivered_today ?? 0} delivered</Text>
               </View>
-              <View style={styles.earningsMetaDivider} />
-              <View style={styles.earningsMetaItem}>
-                <Feather name="activity" size={11} color="rgba(255,255,255,0.6)" />
-                <Text style={styles.earningsMetaTxt}>{active.length} active</Text>
+              <View style={styles.heroMetaDivider} />
+              <View style={styles.heroMetaItem}>
+                <Feather name="zap" size={11} color="rgba(255,255,255,0.55)" />
+                <Text style={styles.heroMetaTxt}>{active.length} active</Text>
               </View>
               {codCollected > 0 && (
                 <>
-                  <View style={styles.earningsMetaDivider} />
-                  <View style={styles.earningsMetaItem}>
+                  <View style={styles.heroMetaDivider} />
+                  <View style={styles.heroMetaItem}>
                     <Feather name="dollar-sign" size={11} color="#4ADE80" />
-                    <Text style={[styles.earningsMetaTxt, { color: "#4ADE80" }]}>
-                      Rs. {codCollected.toLocaleString()} COD
+                    <Text style={[styles.heroMetaTxt, { color: "#4ADE80" }]}>
+                      Rs. {codCollected.toLocaleString()}
                     </Text>
                   </View>
                 </>
               )}
             </View>
           </View>
-          <View style={styles.earningsHeroRight}>
-            <View style={styles.earningsMiniStat}>
-              <Text style={styles.earningsMiniVal}>{s.assigned_today ?? 0}</Text>
-              <Text style={styles.earningsMiniLbl}>Today</Text>
+
+          <View style={styles.heroRight}>
+            <View style={styles.heroRingWrap}>
+              <Text style={styles.heroRingNum}>{s.assigned_today ?? 0}</Text>
+              <Text style={styles.heroRingLbl}>TODAY</Text>
             </View>
           </View>
         </View>
@@ -272,8 +306,8 @@ export default function DashboardScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={refetch}
-            tintColor={C.primary}
-            colors={[C.primary]}
+            tintColor="#00C562"
+            colors={["#00C562"]}
           />
         }
       >
@@ -287,19 +321,21 @@ export default function DashboardScreen() {
             }}
             activeOpacity={0.88}
           >
-            <LinearGradient colors={["#DC2626", "#B91C1C"]} style={StyleSheet.absoluteFill} borderRadius={18} />
-            <View style={styles.urgentIconWrap}>
+            <LinearGradient colors={["#DC2626", "#991B1B"]} style={StyleSheet.absoluteFill} borderRadius={18} />
+            <View style={styles.urgentIcon}>
               <Feather name="alert-octagon" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.urgentTitle}>{criticalCount} Urgent {criticalCount === 1 ? "Delivery" : "Deliveries"}</Text>
+              <Text style={styles.urgentTitle}>
+                {criticalCount} Urgent {criticalCount === 1 ? "Delivery" : "Deliveries"}
+              </Text>
               <Text style={styles.urgentSub}>فوری توجہ درکار ہے</Text>
             </View>
-            <Feather name="arrow-right" size={18} color="rgba(255,255,255,0.8)" />
+            <Feather name="arrow-right" size={18} color="rgba(255,255,255,0.75)" />
           </TouchableOpacity>
         )}
 
-        {/* ── COD ALERT ── */}
+        {/* ── COD BANNER ── */}
         {codPending > 0 && (
           <View style={styles.codBanner}>
             <View style={styles.codBannerIcon}>
@@ -309,28 +345,32 @@ export default function DashboardScreen() {
               <Text style={styles.codBannerLabel}>COD جمع باقی ہے</Text>
               <Text style={styles.codBannerAmount}>Rs. {codPending.toLocaleString()}</Text>
             </View>
-            <Feather name="info" size={14} color="#D97706" />
+            <View style={styles.codBannerBadge}>
+              <Text style={styles.codBannerBadgeTxt}>Pending</Text>
+            </View>
           </View>
         )}
 
         {/* ── STATS GRID ── */}
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator color={C.primary} size="large" />
-            <Text style={styles.loadingTxt}>Loading your dashboard...</Text>
+            <ActivityIndicator color="#00C562" size="large" />
+            <Text style={styles.loadingTxt}>Loading dashboard...</Text>
           </View>
         ) : (
           <>
-            <Text style={styles.sectionHeading}>Today's Overview</Text>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Today's Overview</Text>
+            </View>
             <View style={styles.statsGrid}>
-              <StatCard label="Assigned"  value={s.assigned_today ?? 0}  icon="package"      accent="#3B82F6" bg="#EFF6FF" />
-              <StatCard label="On Route"  value={s.on_route ?? 0}         icon="truck"        accent="#8B5CF6" bg="#F5F3FF" />
-              <StatCard label="Delivered" value={s.delivered_today ?? 0}  icon="check-circle" accent="#10B981" bg="#ECFDF5" />
-              <StatCard label="Pending"   value={s.pending ?? 0}          icon="clock"        accent="#F59E0B" bg="#FFFBEB" />
-              <StatCard label="Failed"    value={s.failed ?? 0}           icon="x-circle"     accent="#EF4444" bg="#FEF2F2" />
-              <StatCard
+              <StatTile label="Assigned"  value={s.assigned_today ?? 0}  icon="package"      accent="#3B82F6" bg="#EFF6FF" />
+              <StatTile label="On Route"  value={s.on_route ?? 0}         icon="truck"        accent="#8B5CF6" bg="#F5F3FF" />
+              <StatTile label="Delivered" value={s.delivered_today ?? 0}  icon="check-circle" accent="#10B981" bg="#ECFDF5" />
+              <StatTile label="Pending"   value={s.pending ?? 0}          icon="clock"        accent="#F59E0B" bg="#FFFBEB" />
+              <StatTile label="Failed"    value={s.failed ?? 0}           icon="x-circle"     accent="#EF4444" bg="#FEF2F2" />
+              <StatTile
                 label="COD Due"
-                value={codPending >= 1000 ? `${Math.round(codPending / 1000)}k` : codPending.toString()}
+                value={codPending >= 1000 ? `${Math.round(codPending / 1000)}k` : (codPending || 0).toString()}
                 icon="dollar-sign"
                 accent="#F97316"
                 bg="#FFF7ED"
@@ -340,28 +380,26 @@ export default function DashboardScreen() {
         )}
 
         {/* ── ACTIVE DELIVERIES ── */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeading}>Active Deliveries</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Active Deliveries</Text>
           {active.length > 0 && (
             <TouchableOpacity
-              onPress={() => { Haptics.selectionAsync(); router.push("/(tabs)/orders" as any); }}
               style={styles.viewAllBtn}
+              onPress={() => { Haptics.selectionAsync(); router.push("/(tabs)/orders" as any); }}
             >
               <Text style={styles.viewAllTxt}>View all</Text>
-              <Feather name="arrow-right" size={13} color={C.primary} />
+              <Feather name="arrow-right" size={12} color="#00C562" />
             </TouchableOpacity>
           )}
         </View>
 
         {active.length === 0 ? (
           <View style={styles.emptyCard}>
-            <LinearGradient colors={["#ECFDF5", "#F0FFF4"]} style={styles.emptyGrad}>
-              <View style={styles.emptyIconWrap}>
-                <Feather name="check-circle" size={36} color="#10B981" />
-              </View>
-              <Text style={styles.emptyTitle}>All Clear!</Text>
-              <Text style={styles.emptySubtxt}>کوئی active delivery نہیں</Text>
-            </LinearGradient>
+            <View style={styles.emptyIconWrap}>
+              <Feather name="check-circle" size={38} color="#10B981" />
+            </View>
+            <Text style={styles.emptyTitle}>All Clear!</Text>
+            <Text style={styles.emptySubtxt}>کوئی active delivery نہیں</Text>
           </View>
         ) : (
           <View style={styles.cardList}>
@@ -369,16 +407,19 @@ export default function DashboardScreen() {
               <DeliveryCard
                 key={d.id}
                 d={d}
-                onPress={() => { Haptics.selectionAsync(); router.push(`/order/${d.id}` as any); }}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push(`/order/${d.id}` as any);
+                }}
               />
             ))}
             {active.length > 7 && (
               <TouchableOpacity
-                style={styles.showMoreBtn}
+                style={styles.moreBtn}
                 onPress={() => router.push("/(tabs)/orders" as any)}
               >
-                <Text style={styles.showMoreTxt}>+{active.length - 7} مزید orders</Text>
-                <Feather name="arrow-right" size={14} color={C.primary} />
+                <Text style={styles.moreBtnTxt}>+{active.length - 7} مزید orders</Text>
+                <Feather name="arrow-right" size={14} color="#00C562" />
               </TouchableOpacity>
             )}
           </View>
@@ -389,79 +430,83 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#F1F4F9" },
+  root: { flex: 1, backgroundColor: "#F0F3F8" },
 
   /* Header */
-  header: {
-    paddingHorizontal: 18,
-    paddingBottom: 22,
+  header: { paddingHorizontal: 18, paddingBottom: 24 },
+
+  headerRow: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 20,
   },
-  headerTopBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 22,
-  },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 11 },
-  logoWrap: {
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  logoImg: {
     width: 44, height: 44, borderRadius: 12,
     backgroundColor: "#fff",
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#00C562", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  logoImg: { width: 40, height: 40, borderRadius: 10 },
-  greetTxt: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontFamily: "Inter_400Regular" },
-  riderNameTxt: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold", marginTop: 1, maxWidth: 180 },
+  greetTxt: { color: "rgba(255,255,255,0.45)", fontSize: 11, fontFamily: "Inter_400Regular" },
+  riderName: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 2, maxWidth: 190 },
 
-  avatarBtn: {
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: "#00C562",
+  avatarBtn: { position: "relative" },
+  avatarGrad: {
+    width: 48, height: 48, borderRadius: 24,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 2.5, borderColor: "rgba(255,255,255,0.25)",
+    borderWidth: 2.5, borderColor: "rgba(255,255,255,0.2)",
   },
-  avatarTxt: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  avatarTxt: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
   onlineDot: {
     position: "absolute", bottom: 1, right: 1,
-    width: 11, height: 11, borderRadius: 6,
-    backgroundColor: "#4ADE80", borderWidth: 2, borderColor: "#0A1628",
+    width: 13, height: 13, borderRadius: 7,
+    backgroundColor: "#4ADE80", borderWidth: 2.5, borderColor: "#060E1C",
   },
 
-  /* Earnings Hero */
-  earningsHero: {
+  /* Hero card */
+  heroCard: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderRadius: 20, padding: 18,
+    backgroundColor: "rgba(255,255,255,0.075)",
+    borderRadius: 22, padding: 20,
     borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
-  earningsHeroLeft: { flex: 1 },
-  earningsHeroLabel: {
-    color: "rgba(255,255,255,0.55)", fontSize: 11,
-    fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4,
+  heroLeft: { flex: 1 },
+  heroLbl: {
+    color: "rgba(255,255,255,0.5)", fontSize: 11, fontFamily: "Inter_500Medium",
+    textTransform: "uppercase", letterSpacing: 1, marginBottom: 5,
   },
-  earningsHeroAmount: { color: "#fff", fontSize: 32, fontFamily: "Inter_700Bold", marginBottom: 10 },
-  earningsHeroMeta: { flexDirection: "row", alignItems: "center", gap: 0 },
-  earningsMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  earningsMetaTxt: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontFamily: "Inter_400Regular" },
-  earningsMetaDivider: { width: 1, height: 12, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 10 },
-  earningsHeroRight: { alignItems: "flex-end" },
-  earningsMiniStat: { alignItems: "center" },
-  earningsMiniVal: { color: "#00C562", fontSize: 28, fontFamily: "Inter_700Bold" },
-  earningsMiniLbl: { color: "rgba(255,255,255,0.4)", fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
+  heroAmount: { color: "#fff", fontSize: 34, fontFamily: "Inter_700Bold", marginBottom: 12 },
+  heroMeta: { flexDirection: "row", alignItems: "center" },
+  heroMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  heroMetaTxt: { color: "rgba(255,255,255,0.55)", fontSize: 11, fontFamily: "Inter_400Regular" },
+  heroMetaDivider: { width: 1, height: 12, backgroundColor: "rgba(255,255,255,0.18)", marginHorizontal: 10 },
+  heroRight: { paddingLeft: 16 },
+  heroRingWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 3, borderColor: "rgba(0,197,98,0.4)",
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,197,98,0.1)",
+  },
+  heroRingNum: { color: "#00C562", fontSize: 24, fontFamily: "Inter_700Bold" },
+  heroRingLbl: { color: "rgba(255,255,255,0.35)", fontSize: 7, fontFamily: "Inter_700Bold", letterSpacing: 1 },
 
   /* Scroll */
-  scrollContent: { paddingHorizontal: 14, paddingTop: 16, gap: 14 },
+  scrollContent: { paddingHorizontal: 14, paddingTop: 16, gap: 12 },
+
+  /* Sections */
+  sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
+  viewAllBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  viewAllTxt: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#00C562" },
 
   /* Urgent */
   urgentBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 18, padding: 15, overflow: "hidden",
+    borderRadius: 18, padding: 16, overflow: "hidden",
   },
-  urgentIconWrap: {
-    width: 42, height: 42, borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center",
+  urgentIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center",
   },
   urgentTitle: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
-  urgentSub: { color: "rgba(255,255,255,0.75)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  urgentSub: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   /* COD Banner */
   codBanner: {
@@ -469,86 +514,104 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFBEB", borderRadius: 16, padding: 14,
     borderWidth: 1.5, borderColor: "#FCD34D",
   },
-  codBannerIcon: { width: 40, height: 40, borderRadius: 11, backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center" },
+  codBannerIcon: {
+    width: 42, height: 42, borderRadius: 11,
+    backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center",
+  },
   codBannerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#92400E" },
   codBannerAmount: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#D97706", marginTop: 1 },
-
-  /* Loading */
-  loadingWrap: { alignItems: "center", paddingVertical: 36, gap: 12 },
-  loadingTxt: { color: "#6B7A99", fontFamily: "Inter_400Regular", fontSize: 13 },
-
-  /* Sections */
-  sectionHeading: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  viewAllBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  viewAllTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.primary },
+  codBannerBadge: {
+    backgroundColor: "#FDE68A", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  codBannerBadgeTxt: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#92400E" },
 
   /* Stats */
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  statCard: {
+  statTile: {
     width: "30.5%", flexGrow: 1,
-    borderRadius: 16, padding: 14,
-    borderWidth: 1.5, gap: 6,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+    borderRadius: 18, padding: 14, gap: 6,
+    borderWidth: 1.5,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
-  statIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  statValue: { fontSize: 24, fontFamily: "Inter_700Bold" },
-  statLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#6B7A99", textTransform: "uppercase", letterSpacing: 0.3 },
+  statIconBox: { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  statVal: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  statLbl: { fontSize: 9, fontFamily: "Inter_700Bold", color: "#6B7A99", textTransform: "uppercase", letterSpacing: 0.4 },
 
-  /* Cards */
-  cardList: { gap: 12 },
+  /* Loading */
+  loadingWrap: { alignItems: "center", paddingVertical: 40, gap: 12 },
+  loadingTxt: { color: "#6B7A99", fontFamily: "Inter_400Regular", fontSize: 13 },
+
+  /* Card list */
+  cardList: { gap: 10 },
+
+  /* Card */
   card: {
     flexDirection: "row",
     backgroundColor: "#fff",
     borderRadius: 20, overflow: "hidden",
     shadowColor: "#1A2B4A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.09, shadowRadius: 14, elevation: 5,
     borderWidth: 1, borderColor: "rgba(0,0,0,0.04)",
   },
   cardCritical: {
-    shadowColor: "#EF4444", shadowOpacity: 0.2, shadowRadius: 14, elevation: 8,
+    shadowColor: "#EF4444", shadowOpacity: 0.18, shadowRadius: 16, elevation: 8,
     borderColor: "#FECACA",
   },
-  cardAccent: { width: 5 },
-  cardInner: { flex: 1, padding: 14, gap: 6 },
+  cardStripe: { width: 5 },
+  cardBody: { flex: 1, padding: 14, gap: 6 },
 
   cardTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  orderNumWrap: { flexDirection: "row", alignItems: "baseline", gap: 1 },
-  orderNumHash: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94A3B8" },
+  orderNumRow: { flexDirection: "row", alignItems: "baseline", gap: 1 },
+  orderHash: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94A3B8" },
   orderNum: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#3B82F6" },
-  cardBadgesRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusTxt: { fontSize: 10, fontFamily: "Inter_700Bold" },
+
+  badgesRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  statusPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
+  },
+  dot: { width: 5, height: 5, borderRadius: 3 },
+  statusTxt: { fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.3 },
 
   custName: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
 
   addrRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  addrIconWrap: { width: 18, height: 18, borderRadius: 5, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" },
+  miniIconBox: { width: 18, height: 18, borderRadius: 5, alignItems: "center", justifyContent: "center" },
   addrTxt: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7A99" },
 
-  cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
-  codBadge: {
+  cardFooter: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginTop: 4,
+  },
+  codChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1,
   },
-  codTxt: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  quickRow: { flexDirection: "row", gap: 7 },
-  miniBtn: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  codTxt: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  actionRow: { flexDirection: "row", gap: 6 },
+  actionBtn: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
 
-  /* Show More */
-  showMoreBtn: {
+  /* More */
+  moreBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#fff", borderRadius: 16, paddingVertical: 16,
+    backgroundColor: "#fff", borderRadius: 16, paddingVertical: 15,
     borderWidth: 1.5, borderColor: "#E2E8F0",
   },
-  showMoreTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.primary },
+  moreBtnTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#00C562" },
 
   /* Empty */
-  emptyCard: { borderRadius: 20, overflow: "hidden" },
-  emptyGrad: { alignItems: "center", paddingVertical: 44, paddingHorizontal: 20, gap: 10 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  emptyCard: {
+    alignItems: "center", paddingVertical: 48, paddingHorizontal: 20,
+    backgroundColor: "#fff", borderRadius: 22, gap: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
+  },
+  emptyIconWrap: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center", marginBottom: 4,
+  },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#065F46" },
   emptySubtxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6EE7B7" },
 });

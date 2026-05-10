@@ -1,0 +1,187 @@
+IMPORTANT — Please add a PAID ORDER CUSTOMER VERIFICATION system inside the Rider App and Admin Panel.
+
+This feature is VERY important for fraud protection, chargeback disputes, and payment verification.
+
+==================================================
+PAID ORDER VERIFICATION SYSTEM
+==============================
+
+For ALL prepaid / paid orders:
+
+Before marking order as delivered, rider MUST verify customer.
+
+==================================================
+REQUIRED VERIFICATION OPTIONS
+=============================
+
+Rider App should allow:
+
+✅ customer photo capture
+✅ CNIC / ID card photo
+✅ house/front door photo
+✅ parcel handover proof
+✅ optional customer signature
+
+==================================================
+VERY IMPORTANT
+==============
+
+Rider should NOT be able to complete prepaid order UNTIL at least one verification proof is uploaded.
+
+==================================================
+DELIVERY VERIFICATION FLOW
+==========================
+
+STEP 1
+Rider reaches customer.
+
+STEP 2
+App opens verification screen automatically.
+
+STEP 3
+Rider captures:
+
+✅ customer image
+OR
+✅ ID card image
+OR
+✅ house/front image
+
+STEP 4
+Image uploads instantly to server/database.
+
+STEP 5
+Order marked:
+✅ VERIFIED & DELIVERED
+
+==================================================
+ADMIN PANEL STORAGE
+===================
+
+Inside Admin Panel create:
+
+```txt id="6c2g8n"
+Order Verification Files
+```
+
+section.
+
+==================================================
+NEED SEPARATE STORAGE SYSTEM
+============================
+
+Store files separately for each order:
+
+```txt id="3j4k0q"
+/uploads/verifications/order-20101/
+/uploads/verifications/order-20102/
+```
+
+Each order should have its own folder/files.
+
+==================================================
+ADMIN SIDE FEATURES
+===================
+
+Admin must see:
+
+✅ customer verification images
+✅ upload date/time
+✅ rider name
+✅ GPS location
+✅ delivery timestamp
+✅ proof history
+
+==================================================
+IMAGE TYPES
+===========
+
+Need labels:
+
+✅ Customer Photo
+✅ CNIC Front
+✅ CNIC Back
+✅ House Image
+✅ Delivery Proof
+
+==================================================
+FRAUD / CHARGEBACK PROTECTION
+=============================
+
+This system is needed because:
+
+If future:
+✅ chargeback
+✅ fraud claim
+✅ fake complaint
+✅ payment dispute
+
+Then we can show:
+
+✅ delivery proof
+✅ customer image
+✅ address proof
+✅ rider verification
+
+==================================================
+DATABASE STORAGE
+================
+
+Save in database:
+
+✅ order id
+✅ rider id
+✅ image path
+✅ uploaded time
+✅ GPS location
+✅ verification type
+
+==================================================
+RIDER APP UI
+============
+
+Need professional UI:
+
+✅ camera button
+✅ image preview
+✅ retake option
+✅ upload progress
+✅ verification completed badge
+
+==================================================
+SECURITY
+========
+
+Need:
+
+✅ secure upload
+✅ compressed images
+✅ cloud/server storage
+✅ protected admin access
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT BREAK:
+❌ existing delivery flow
+❌ order statuses
+❌ rider app logic
+
+ONLY ADD:
+✅ verification system
+✅ proof capture
+✅ image uploads
+✅ admin proof viewer
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ prepaid order verification
+✅ customer proof system
+✅ fraud protection
+✅ chargeback protection
+✅ admin proof records
+✅ secure verification storage

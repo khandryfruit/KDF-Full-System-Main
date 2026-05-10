@@ -586,60 +586,61 @@ export default function TasksScreen() {
 
 /* ─── Styles ─── */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#F1F4F9" },
+  root: { flex: 1, backgroundColor: "#F0F3F8" },
 
   header: { paddingBottom: 0 },
   headerRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 18, marginBottom: 14,
+    paddingHorizontal: 18, marginBottom: 16,
   },
-  headerTitle: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold" },
-  headerSub: { color: "rgba(255,255,255,0.45)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  headerTitle: { color: "#fff", fontSize: 24, fontFamily: "Inter_700Bold" },
+  headerSub: { color: "rgba(255,255,255,0.4)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
 
   refreshBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 42, height: 42, borderRadius: 21,
     backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
 
   /* Section tabs */
-  tabList: { paddingHorizontal: 16, paddingBottom: 14, gap: 8 },
+  tabList: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
   sectionTab: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22,
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    flexDirection: "row", alignItems: "center", gap: 7,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24,
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   sectionTabTxt: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  countBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, minWidth: 20, alignItems: "center" },
+  countBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, minWidth: 22, alignItems: "center" },
   countTxt: { fontSize: 10, fontFamily: "Inter_700Bold" },
 
   /* Period tabs */
-  periodList: { paddingHorizontal: 16, paddingBottom: 12, gap: 7 },
+  periodList: { paddingHorizontal: 16, paddingBottom: 14, gap: 7 },
   periodTab: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16,
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18,
     borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(255,255,255,0.05)",
   },
   periodTabActive: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderColor: "rgba(255,255,255,0.35)",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.4)",
   },
-  periodTabTxt: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.45)" },
+  periodTabTxt: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.4)" },
   periodTabTxtActive: { color: "#fff", fontFamily: "Inter_700Bold" },
 
   /* Urgent */
   urgentBanner: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FEF2F2", paddingHorizontal: 16, paddingVertical: 10,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#FEF2F2", paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: "#FEE2E2",
   },
-  urgentTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#EF4444", flex: 1 },
+  urgentTxt: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#DC2626", flex: 1 },
 
   /* Section label */
   sectionHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 16, paddingVertical: 10,
+    paddingHorizontal: 16, paddingVertical: 11,
   },
   sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionDot: { width: 8, height: 8, borderRadius: 4 },
@@ -649,71 +650,78 @@ const styles = StyleSheet.create({
   /* Completed summary */
   completedStatsRow: {
     flexDirection: "row", backgroundColor: "#fff",
-    paddingVertical: 12, paddingHorizontal: 16,
-    borderBottomWidth: 1, borderBottomColor: "#F0F0F0",
+    paddingVertical: 14, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: "#F0F3F8",
   },
   completedStat: { flex: 1, alignItems: "center" },
   completedStatDivider: { width: 1, backgroundColor: "#E5E7EB", marginVertical: 4 },
-  completedStatVal: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#10B981" },
-  completedStatLabel: { fontSize: 10, fontFamily: "Inter_500Medium", color: "#6B7A99", marginTop: 2 },
+  completedStatVal: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#10B981" },
+  completedStatLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#6B7A99", marginTop: 3, textTransform: "uppercase", letterSpacing: 0.3 },
 
   /* Loading */
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingTxt: { color: "#6B7A99", fontFamily: "Inter_400Regular", fontSize: 13 },
 
   /* List */
-  list: { padding: 14, gap: 12 },
+  list: { padding: 14, gap: 11 },
 
   /* Cards */
   card: {
     flexDirection: "row", backgroundColor: "#fff",
-    borderRadius: 20, overflow: "hidden",
-    shadowColor: "#1A2B4A", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
+    borderRadius: 22, overflow: "hidden",
+    shadowColor: "#1A2B4A", shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.09, shadowRadius: 14, elevation: 5,
     borderWidth: 1, borderColor: "rgba(0,0,0,0.04)",
   },
   cardCritical: {
-    shadowColor: "#EF4444", shadowOpacity: 0.2, shadowRadius: 14, elevation: 8,
+    shadowColor: "#EF4444", shadowOpacity: 0.18, shadowRadius: 16, elevation: 8,
     borderColor: "#FECACA",
   },
-  completedCard: { opacity: 0.95 },
+  completedCard: { opacity: 0.96 },
   accentBar: { width: 5 },
-  cardBody: { flex: 1, padding: 14, gap: 6 },
+  cardBody: { flex: 1, padding: 14, gap: 7 },
 
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   orderIdRow: { flexDirection: "row", alignItems: "baseline", gap: 1 },
   orderHash: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94A3B8" },
   orderId: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#3B82F6" },
   badgeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusTxt: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  statusTxt: { fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.3 },
 
   custName: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
 
   infoRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  infoIconWrap: { width: 18, height: 18, borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  infoIconWrap: { width: 20, height: 20, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   infoTxt: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7A99" },
 
   completedMetaRow: { flexDirection: "row", gap: 16, marginTop: 2 },
-  completedMetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  completedMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   completedMetaLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
   completedMetaVal: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#475569" },
 
-  cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
+  cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
   codChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1,
   },
-  codTxt: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  codTxt: { fontSize: 11, fontFamily: "Inter_700Bold" },
   actionBtns: { flexDirection: "row", gap: 7 },
-  actionBtn: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  earningsChip: { flexDirection: "row", alignItems: "center", gap: 4 },
+  actionBtn: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  earningsChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#F5F3FF", borderRadius: 10,
+    paddingHorizontal: 9, paddingVertical: 5,
+  },
   earningsTxt: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#7C3AED" },
 
   /* Empty */
-  emptyWrap: { alignItems: "center", paddingVertical: 60, paddingHorizontal: 24, gap: 10 },
-  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  emptyWrap: { alignItems: "center", paddingVertical: 64, paddingHorizontal: 24, gap: 12 },
+  emptyIconWrap: {
+    width: 84, height: 84, borderRadius: 42,
+    alignItems: "center", justifyContent: "center", marginBottom: 4,
+  },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#0D1F3C" },
-  emptyTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" },
+  emptyTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center", lineHeight: 20 },
 });
