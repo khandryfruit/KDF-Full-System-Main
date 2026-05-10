@@ -86,6 +86,7 @@ import RiderLiveMapPage from "@/pages/RiderLiveMapPage";
 import VideoBannersPage from "@/pages/VideoBannersPage";
 import MobileReelsPage from "@/pages/MobileReelsPage";
 import GoogleIndexingPage from "@/pages/GoogleIndexingPage";
+import ModulesPage from "@/pages/ModulesPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -222,6 +223,9 @@ function Router() {
       <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} /></Route>
       <Route path="/admin/roles"><ProtectedRoute component={AdminRolesPage} /></Route>
       <Route path="/admin/activity-logs"><ProtectedRoute component={ActivityLogsPage} /></Route>
+
+      {/* ── Module Control ── */}
+      <Route path="/settings/modules"><ProtectedRoute component={ModulesPage} /></Route>
 
       <Route path="/">
         <ProtectedRoute component={DashboardPage} />

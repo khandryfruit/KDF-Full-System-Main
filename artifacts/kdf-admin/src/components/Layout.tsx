@@ -204,6 +204,7 @@ const ADMIN_IAM_NAV_ITEMS = [
   { href: "/admin/users",         label: "Admin Users",     icon: UserCog      },
   { href: "/admin/roles",         label: "Roles & Perms",   icon: ShieldCheck  },
   { href: "/admin/activity-logs", label: "Activity Logs",   icon: ListChecks   },
+  { href: "/settings/modules",    label: "Module Controls", icon: SlidersHorizontal },
 ];
 
 const LOGISTICS_NAV_ITEMS = [

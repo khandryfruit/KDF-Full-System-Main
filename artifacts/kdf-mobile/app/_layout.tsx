@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
-import { Stack, useRouter } from "expo-router";
+import { Redirect, Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -19,7 +19,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NewOrderAlert, { NewOrderData } from "@/components/NewOrderAlert";
 import { AuthProvider, riderFetch, useAuth } from "@/context/AuthContext";
 
-/* Show notifications when app is in foreground */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert:  true,
@@ -36,7 +35,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 20_000 } },
 });
 
-/* ── Register for Expo Push Notifications ── */
+/* ── Register push token for rider ── */
 async function registerPushToken(): Promise<string | null> {
   if (Platform.OS === "web") return null;
   try {
@@ -47,29 +46,24 @@ async function registerPushToken(): Promise<string | null> {
       finalStatus = status;
     }
     if (finalStatus !== "granted") return null;
-
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: "f5433930-a95c-4ac1-857f-dfdafc2fe4d1",
     });
     return tokenData.data;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-/* ── New-Order Monitor — wraps the entire nav tree ── */
+/* ── New-Order Monitor (riders only) ── */
 function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   const { token, rider } = useAuth();
   const router           = useRouter();
   const qc               = useQueryClient();
   const [alertOrder, setAlertOrder] = useState<NewOrderData | null>(null);
+  const knownIds    = useRef<Set<number>>(new Set());
+  const initialized = useRef(false);
+  const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const acceptBusy  = useRef(false);
 
-  const knownIds     = useRef<Set<number>>(new Set());
-  const initialized  = useRef(false);
-  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const acceptBusy   = useRef(false);
-
-  /* Save push token once rider logs in */
   useEffect(() => {
     if (!token || !rider) return;
     registerPushToken().then(async (pushToken) => {
@@ -83,26 +77,19 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
     });
   }, [token, !!rider]);
 
-  /* Foreground push notification listener */
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener(() => {
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
-      qc.invalidateQueries({ queryKey: ["rider-deliveries-tasks"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     });
-
     const tapSub = Notifications.addNotificationResponseReceivedListener((resp) => {
       const data = resp.notification.request.content.data as any;
-      if (data?.deliveryId) {
-        router.push(`/order/${data.deliveryId}` as any);
-      }
+      if (data?.deliveryId) router.push(`/order/${data.deliveryId}` as any);
     });
-
     return () => { sub.remove(); tapSub.remove(); };
   }, []);
 
-  /* Poll for newly assigned orders while app is open */
   const checkNewOrders = useCallback(async () => {
     if (!token || !rider) return;
     try {
@@ -110,38 +97,30 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       if (!r.ok) return;
       const json = await r.json();
       const deliveries: any[] = json.deliveries ?? [];
-
-      /* First poll — just seed the known IDs, don't alert */
       if (!initialized.current) {
         deliveries.forEach((d) => knownIds.current.add(d.id));
         initialized.current = true;
         return;
       }
-
       const newOnes = deliveries.filter((d) => !knownIds.current.has(d.id));
       if (newOnes.length === 0) return;
-
       newOnes.forEach((d) => knownIds.current.add(d.id));
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
-      qc.invalidateQueries({ queryKey: ["rider-deliveries-tasks"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
-
-      /* Show in-app alert for the first new order */
       const newest = newOnes[0];
       setAlertOrder({
-        id:                   newest.id,
+        id: newest.id,
         shopify_order_number: newest.shopify_order_number ?? String(newest.id),
-        customer_name:        newest.customer_name ?? "Customer",
-        customer_phone:       newest.customer_phone ?? "",
-        cod_amount:           Number(newest.cod_amount ?? 0),
-        is_paid:              newest.is_paid ?? false,
-        delivery_address:     newest.delivery_address ?? "",
-        assigned_at:          newest.assigned_at ?? new Date().toISOString(),
+        customer_name: newest.customer_name ?? "Customer",
+        customer_phone: newest.customer_phone ?? "",
+        cod_amount: Number(newest.cod_amount ?? 0),
+        is_paid: newest.is_paid ?? false,
+        delivery_address: newest.delivery_address ?? "",
+        assigned_at: newest.assigned_at ?? new Date().toISOString(),
       });
     } catch { /* silent */ }
   }, [token, !!rider]);
 
-  /* Start / stop polling based on auth state */
   useEffect(() => {
     if (!token || !rider) {
       initialized.current = false;
@@ -149,7 +128,6 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
-    /* Initial check after a short delay so the app renders first */
     const init = setTimeout(checkNewOrders, 3_000);
     pollRef.current = setInterval(checkNewOrders, 12_000);
     return () => { clearTimeout(init); if (pollRef.current) clearInterval(pollRef.current); };
@@ -162,19 +140,13 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
     try {
       await riderFetch(`/rider/deliveries/${id}/status`, token!, {
         method: "PUT",
-        body:   JSON.stringify({ status: "picked" }),
+        body: JSON.stringify({ status: "picked" }),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
-      qc.invalidateQueries({ queryKey: ["rider-deliveries-tasks"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
     } catch { /* silent */ }
     acceptBusy.current = false;
-  };
-
-  const handleView = (id: number) => {
-    setAlertOrder(null);
-    router.push(`/order/${id}` as any);
   };
 
   return (
@@ -183,28 +155,39 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       <NewOrderAlert
         order={alertOrder}
         onAccept={handleAccept}
-        onView={handleView}
+        onView={(id) => { setAlertOrder(null); router.push(`/order/${id}` as any); }}
         onDismiss={() => setAlertOrder(null)}
       />
     </>
   );
 }
 
-/* ── Root Nav ── */
+/* ── Role-based root nav ── */
 function RootLayoutNav() {
-  const { loading } = useAuth();
+  const { userRole, loading } = useAuth();
   if (loading) return null;
 
   return (
-    <NewOrderMonitor>
-      <Stack>
-        <Stack.Screen name="(tabs)"      options={{ headerShown: false }} />
-        <Stack.Screen name="login"       options={{ headerShown: false, gestureEnabled: false }} />
-        <Stack.Screen name="order/[id]"  options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </NewOrderMonitor>
+    <Stack>
+      {/* Rider tabs */}
+      <Stack.Screen name="(tabs)"   options={{ headerShown: false }} />
+      {/* Admin tabs */}
+      <Stack.Screen name="(admin)"  options={{ headerShown: false }} />
+      {/* Shared */}
+      <Stack.Screen name="login"    options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="+not-found" />
+    </Stack>
   );
+}
+
+/* ── Root redirect based on role ── */
+function RoleRedirect() {
+  const { userRole, loading } = useAuth();
+  if (loading) return null;
+  if (userRole === "admin")  return <Redirect href="/(admin)" />;
+  if (userRole === "rider")  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/login" />;
 }
 
 export default function RootLayout() {
@@ -227,7 +210,9 @@ export default function RootLayout() {
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
-              <RootLayoutNav />
+              <NewOrderMonitor>
+                <RootLayoutNav />
+              </NewOrderMonitor>
             </GestureHandlerRootView>
           </QueryClientProvider>
         </AuthProvider>

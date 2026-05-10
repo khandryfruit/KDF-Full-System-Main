@@ -56,6 +56,7 @@ import waAutomationRouter from "./waAutomation";
 import chatWidgetRouter from "./chatWidget";
 import googleIndexingRouter from "./googleIndexing";
 import adminManagementRouter from "./adminManagement";
+import modulesRouter from "./modules";
 
 const router: IRouter = Router();
 
@@ -118,5 +119,6 @@ router.use("/branch/erp-settings",  erpSettingsRouter);
 router.use(chatWidgetRouter);
 router.use(googleIndexingRouter);
 router.use(adminManagementRouter);
+router.use(modulesRouter);
 
 export default router;
