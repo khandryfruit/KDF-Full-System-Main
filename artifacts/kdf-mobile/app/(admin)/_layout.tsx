@@ -107,6 +107,14 @@ export default function AdminTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="whatsapp"
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <AdminTabIcon name="message-circle" label="WhatsApp" color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="modules"
         options={{
           tabBarIcon: ({ color, focused }) => (
