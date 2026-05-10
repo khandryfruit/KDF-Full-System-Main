@@ -202,6 +202,17 @@ export default function AdminUsersPage() {
     onError: () => toast({ title: "Login As failed", variant: "destructive" }),
   });
 
+  const resetPwMut = useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      apiFetch(`/api/admin/iam/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
+    onSuccess: (d) => {
+      if (!d.ok) { toast({ title: d.error ?? "Failed", variant: "destructive" }); return; }
+      setResetTarget(null);
+      toast({ title: "✅ Password reset successfully" });
+    },
+    onError: () => toast({ title: "Failed to reset password", variant: "destructive" }),
+  });
+
   const users = (usersData?.users ?? []).filter((u: any) =>
     !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
   );
@@ -302,6 +313,12 @@ export default function AdminUsersPage() {
                     <Button size="sm" variant="ghost" title="Edit user" onClick={() => { setTarget(user); setModal("edit"); }}>
                       <Edit2 className="w-3.5 h-3.5" />
                     </Button>
+                    {(me?.isSuper || hasPermission?.("users.reset_password")) && me?.id !== user.id && (
+                      <Button size="sm" variant="ghost" title="Reset password"
+                        onClick={() => setResetTarget(user)}>
+                        <Key className="w-3.5 h-3.5 text-blue-500" />
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" title={user.isActive ? "Deactivate" : "Activate"}
                       onClick={() => toggleMut.mutate({ id: user.id, isActive: !user.isActive })}>
                       {user.isActive ? <ToggleRight className="w-4 h-4 text-green-600" /> : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
@@ -326,13 +343,22 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* Modal */}
+      {/* User create/edit modal */}
       {modal && (
         <UserModal
           user={modal === "edit" ? editTarget : undefined}
           roles={roles}
           onClose={() => { setModal(null); setTarget(null); }}
           onSave={handleSave}
+        />
+      )}
+
+      {/* Reset password modal */}
+      {resetTarget && (
+        <ResetPasswordModal
+          user={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onSave={(pw) => resetPwMut.mutate({ id: resetTarget.id, password: pw })}
         />
       )}
     </div>

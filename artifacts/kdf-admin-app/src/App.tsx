@@ -62,12 +62,16 @@ function ModuleProvider({ children }: { children: ReactNode }) {
   return <ModuleContext.Provider value={{ activeModules, loading }}>{children}</ModuleContext.Provider>;
 }
 
-/* ─── Pages (lazy-loaded inline) ────────────────────────────────────────── */
+/* ─── Pages ─────────────────────────────────────────────────────────────── */
 import LoginPage     from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import OrdersPage    from "@/pages/OrdersPage";
 import RidersPage    from "@/pages/RidersPage";
 import ModulesPage   from "@/pages/ModulesPage";
+import WhatsAppPage  from "@/pages/WhatsAppPage";
+import CustomersPage from "@/pages/CustomersPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
+import MorePage      from "@/pages/MorePage";
 
 function ProtectedRoute({ component: C }: { component: React.ComponentType }) {
   const { token } = useAuth();
@@ -86,12 +90,16 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/login" component={LoginPage} />
-      <Route path="/" component={() => <ProtectedRoute component={DashboardPage} />} />
-      <Route path="/orders" component={() => <ProtectedRoute component={OrdersPage} />} />
-      <Route path="/riders" component={() => <ProtectedRoute component={RidersPage} />} />
-      <Route path="/modules" component={() => <ProtectedRoute component={ModulesPage} />} />
-      <Route component={() => <ProtectedRoute component={DashboardPage} />} />
+      <Route path="/login"     component={LoginPage} />
+      <Route path="/"          component={() => <ProtectedRoute component={DashboardPage} />} />
+      <Route path="/orders"    component={() => <ProtectedRoute component={OrdersPage}    />} />
+      <Route path="/riders"    component={() => <ProtectedRoute component={RidersPage}    />} />
+      <Route path="/wa"        component={() => <ProtectedRoute component={WhatsAppPage}  />} />
+      <Route path="/customers" component={() => <ProtectedRoute component={CustomersPage} />} />
+      <Route path="/analytics" component={() => <ProtectedRoute component={AnalyticsPage} />} />
+      <Route path="/more"      component={() => <ProtectedRoute component={MorePage}      />} />
+      <Route path="/modules"   component={() => <ProtectedRoute component={ModulesPage}   />} />
+      <Route                   component={() => <ProtectedRoute component={DashboardPage} />} />
     </Switch>
   );
 }

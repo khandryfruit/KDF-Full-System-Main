@@ -22,13 +22,13 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<any>({
     queryKey: ["admin-orders-app", page, search],
     queryFn: () =>
       fetch(`/api/admin/shopify/orders?page=${page}&limit=20${search ? `&search=${encodeURIComponent(search)}` : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
       }).then(r => r.json()),
-    keepPreviousData: true,
+    placeholderData: (prev: any) => prev,
     refetchInterval: 30_000,
   });
 

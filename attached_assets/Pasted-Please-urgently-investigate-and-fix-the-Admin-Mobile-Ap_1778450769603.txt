@@ -1,0 +1,193 @@
+Please urgently investigate and fix the Admin Mobile App permissions and module access issues.
+
+Current Situation:
+I already assigned many permissions to the admin mobile user, but after login:
+
+- Nothing is clickable
+- Orders are not showing
+- Shopify orders not visible
+- Invoices not visible
+- Dashboard modules empty
+- Buttons/actions not working
+- User experience completely broken
+
+This means the permission system, API access, or mobile module handling is not working correctly.
+
+━━━━━━━━━━━━━━━━━━━━
+1. MOBILE ADMIN ACCESS ISSUE
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+After login, the mobile admin app looks empty or partially broken even though permissions are enabled.
+
+Possible Causes:
+- Permission middleware issue
+- Mobile API response filtering
+- Wrong role mapping
+- Missing module sync
+- Frontend permission checks failing
+- API returning empty data
+- Route guards blocking modules
+- Cache/session issue
+
+Please debug complete flow.
+
+━━━━━━━━━━━━━━━━━━━━
+2. VERIFY ROLE & PERMISSION MAPPING
+━━━━━━━━━━━━━━━━━━━━
+
+Check:
+- User role assignment
+- Permission table mapping
+- API permission response
+- Module visibility logic
+- Mobile sidebar rendering
+- Dynamic menu generation
+
+Ensure:
+If permission enabled → module MUST show and work properly.
+
+━━━━━━━━━━━━━━━━━━━━
+3. ALL IMPORTANT MODULES MUST WORK
+━━━━━━━━━━━━━━━━━━━━
+
+Admin mobile user should properly access:
+
+━━━━━━━━━
+A) SHOPIFY
+━━━━━━━━━
+
+- Shopify Dashboard
+- Orders
+- Order Details
+- Complete Orders
+- Pending Orders
+- Refunds
+- Sync Status
+
+━━━━━━━━━
+B) POS / INVOICES
+━━━━━━━━━
+
+- Create Invoice
+- View Invoice
+- Edit Invoice
+- Sales History
+- POS Dashboard
+
+━━━━━━━━━
+C) WHATSAPP & MESSAGING
+━━━━━━━━━
+
+- Messaging Dashboard
+- Conversations
+- Broadcast Campaigns
+- Auto Reply
+- Chatbot
+
+━━━━━━━━━
+D) DELIVERY / RIDER
+━━━━━━━━━
+
+- Rider Dashboard
+- Assign Orders
+- Delivery Status
+- Tracking
+
+━━━━━━━━━
+E) CUSTOMER MANAGEMENT
+━━━━━━━━━
+
+- Customer List
+- Customer Details
+- Order History
+
+━━━━━━━━━
+F) ANALYTICS & DASHBOARD
+━━━━━━━━━
+
+- Sales Analytics
+- Revenue
+- Orders Summary
+- Reports
+
+━━━━━━━━━━━━━━━━━━━━
+4. MOBILE UI ACTIONS NOT CLICKABLE
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Buttons/modules/cards are visible but not clickable or not responding.
+
+Please check:
+- Overlay issues
+- z-index issues
+- Touch event blocking
+- Gesture conflicts
+- Disabled states
+- Permission wrappers
+- Flutter navigation bugs
+
+All cards/buttons must work properly on:
+- Android
+- iPhone
+- Tablets
+
+━━━━━━━━━━━━━━━━━━━━
+5. DATA NOT SHOWING ISSUE
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Orders/invoices not loading even though data exists.
+
+Please verify:
+- API authentication
+- Token/session handling
+- Pagination logic
+- Mobile API endpoints
+- Database query filtering
+- Role-based query restrictions
+
+Ensure:
+Authorized users can properly view assigned data.
+
+━━━━━━━━━━━━━━━━━━━━
+6. MOBILE APP SHOULD FEEL COMPLETE
+━━━━━━━━━━━━━━━━━━━━
+
+Currently app feels partially broken.
+
+Need:
+- Fully working dashboard
+- Functional modules
+- Real-time data
+- Clickable navigation
+- Fast loading
+- Proper sync
+
+━━━━━━━━━━━━━━━━━━━━
+7. ERROR LOGGING & DEBUGGING
+━━━━━━━━━━━━━━━━━━━━
+
+Please add proper logging for:
+- Permission failures
+- API access denied
+- Route blocking
+- Mobile rendering errors
+- Empty responses
+
+Need easier debugging for future issues.
+
+━━━━━━━━━━━━━━━━━━━━
+8. FINAL GOAL
+━━━━━━━━━━━━━━━━━━━━
+
+Admin Mobile App should provide full operational access according to assigned permissions.
+
+If user has permission:
+- Module should appear
+- Data should load
+- Buttons should work
+- APIs should respond
+- Navigation should function correctly
+
+Current system is inconsistent and needs full debugging + fixing.
