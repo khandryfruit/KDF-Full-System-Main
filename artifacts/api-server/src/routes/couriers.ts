@@ -2433,6 +2433,7 @@ router.get("/admin/couriers/tcs/track/:cn", adminMiddleware as any, async (req: 
 router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
+    const fmt = (typeof req.query.format === "string" ? req.query.format : "standard").toLowerCase(); /* thermal | a4 | standard */
     if (isNaN(id)) { res.status(400).json({ error: "Invalid shipment id" }); return; }
 
     const [shipment] = await db.select().from(shipmentsTable).where(eq(shipmentsTable.id, id)).limit(1);
@@ -2494,6 +2495,11 @@ router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (re
     .row3 .cell{padding:6px 12px;border-bottom:1.5px solid #ddd}
     .row3 .cell:not(:last-child){border-right:1.5px solid #ddd}
     .ftr{padding:5px 12px;text-align:center;font-size:6.5px;color:#888;line-height:1.5}
+    ${fmt === "thermal"
+      ? `@page{size:100mm 152mm;margin:0}body{background:#fff!important;padding:2px!important}`
+      : fmt === "a4"
+        ? `@page{size:A4;margin:12mm}body{background:#fff;padding:0}`
+        : ""}
     @media print{
       body{background:#fff;padding:0}
       .actions{display:none!important}
@@ -2504,7 +2510,7 @@ router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (re
 <body>
 
 <div class="actions">
-  <button class="btn btn-print" onclick="window.print()">🖨️ Print Label</button>
+  <button class="btn btn-print" onclick="window.print()">${fmt === "thermal" ? "🖨️ Thermal Print (100mm)" : fmt === "a4" ? "🖨️ A4 Print" : "🖨️ Print Label"}</button>
   <button class="btn btn-close" onclick="window.close()">✕ Close</button>
 </div>
 
@@ -2617,6 +2623,60 @@ router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (re
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message ?? "Label generation failed" });
+  }
+});
+
+/* ─── GET /admin/couriers/tcs/label/:cn ──────────────────────────────────
+ * Official TCS ECOM label endpoint — tries POST /ecom/api/print/label.
+ * Streams PDF if API returns one; returns JSON fallback otherwise.
+ * Logs: CN, label request, response, PDF detection, errors.
+ */
+router.get("/admin/couriers/tcs/label/:cn", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  const cn = String(req.params.cn ?? "").trim();
+  if (!cn) { res.status(400).json({ error: "CN number required" }); return; }
+
+  req.log.info({ cn }, "TCS ECOM label — request received");
+
+  try {
+    const s = await getTcsSettings();
+    if (!s) {
+      req.log.warn({ cn }, "TCS ECOM label — TCS not configured");
+      res.status(404).json({ ok: false, fallback: true, error: "TCS courier not configured" });
+      return;
+    }
+
+    req.log.info({ cn, username: s.username }, "TCS ECOM label — calling fetchTcsEcomLabel");
+
+    const result = await Tcs.fetchTcsEcomLabel(s, cn);
+
+    req.log.info({
+      cn, ok: result.ok, isPdf: result.isPdf,
+      durationMs: result.durationMs, sizeBytes: result.data?.length ?? 0,
+      error: result.error ?? null,
+    }, "TCS ECOM label — fetchTcsEcomLabel complete");
+
+    if (result.ok && result.isPdf && result.data) {
+      req.log.info({ cn, sizeBytes: result.data.length }, "TCS ECOM label — streaming PDF");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="tcs-label-${cn}.pdf"`);
+      res.setHeader("Cache-Control", "no-cache");
+      res.send(result.data);
+      return;
+    }
+
+    /* API responded but not PDF — frontend should fall back to HTML label */
+    req.log.warn({ cn, ok: result.ok, error: result.error }, "TCS ECOM label — no PDF, returning fallback");
+    res.status(200).json({
+      ok: false,
+      fallback: true,
+      cn,
+      apiOk: result.ok,
+      error: result.error ?? "TCS label API did not return a PDF",
+      durationMs: result.durationMs,
+    });
+  } catch (err: any) {
+    req.log.error({ cn, err: err.message }, "TCS ECOM label — unexpected error");
+    res.status(200).json({ ok: false, fallback: true, error: err.message });
   }
 });
 

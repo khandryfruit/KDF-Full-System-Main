@@ -3,7 +3,7 @@ import { COURIER_CONFIGS, buildLabelHtml } from "@/lib/courierLabel";
 import {
   Search, Package, Truck, MapPin, Edit2, X, Loader2,
   RefreshCw, Plus, Minus, Trash2, FileText, CreditCard, CheckCircle2, Printer,
-  Home, Clock, ExternalLink, User, Phone, MessageCircle, Send,
+  Home, Clock, ExternalLink, User, Phone, MessageCircle, Send, Download,
 } from "lucide-react";
 import {
   useListOrders,
@@ -749,7 +749,7 @@ export default function OrdersPage() {
                           <p className="font-mono text-base font-black text-green-700">{courierBookingResult.trackingId}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <Button size="sm" variant="outline" className="border-green-300 text-green-700"
                           disabled={isPrintingLabel}
                           onClick={() => handlePrintLabel({
@@ -761,8 +761,31 @@ export default function OrdersPage() {
                           {isPrintingLabel
                             ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                             : <Printer className="w-3.5 h-3.5 mr-1.5" />}
-                          Print Label
+                          {courierBookingForm.courierSlug === "postex" ? "Print Official Label (PDF)" : "Print Label"}
                         </Button>
+                        {courierBookingResult.trackingId && (
+                          <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                            onClick={async () => {
+                              const { downloadTcsLabel: dl } = await import("@/lib/courierLabel");
+                              const result = await dl(courierBookingResult.trackingId, courierBookingResult.shipmentId);
+                              if (result.success && !result.fallback) toast({ title: "✅ PDF downloaded" });
+                              else if (result.success) toast({ title: "Label saved", description: "Open → Print → Save as PDF" });
+                              else toast({ title: "Download failed", variant: "destructive" });
+                            }}
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1.5" />Download PDF
+                          </Button>
+                        )}
+                        {courierBookingResult.shipmentId && (
+                          <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                            onClick={async () => {
+                              const { openThermalLabel: ot } = await import("@/lib/courierLabel");
+                              await ot(courierBookingResult.shipmentId);
+                            }}
+                          >
+                            <Printer className="w-3.5 h-3.5 mr-1.5 text-purple-600" />Thermal
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => setShowBookCourier(false)}>Done</Button>
                       </div>
                     </div>
@@ -1045,7 +1068,7 @@ export default function OrdersPage() {
                                 </div>
                               )}
                               {viewOrder.trackingId && (
-                                <div className="pt-1">
+                                <div className="pt-1 flex flex-col gap-1.5">
                                   <button
                                     disabled={isPrintingLabel}
                                     onClick={() => handlePrintLabel({
@@ -1060,6 +1083,29 @@ export default function OrdersPage() {
                                       : <Printer className="w-3 h-3" />}
                                     {viewOrder.courier === "postex" ? "Print Official Label (PDF)" : "Print Label"}
                                   </button>
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      onClick={async () => {
+                                        const { downloadTcsLabel: dl } = await import("@/lib/courierLabel");
+                                        const result = await dl(viewOrder.trackingId ?? "", viewOrder.shipmentId);
+                                        if (result.success && !result.fallback) toast({ title: "✅ PDF downloaded" });
+                                        else if (result.success) toast({ title: "Label saved", description: "Open → Print → Save as PDF" });
+                                        else toast({ title: "Download failed", variant: "destructive" });
+                                      }}
+                                      className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg border-2 border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-all"
+                                    >
+                                      <Download className="w-3 h-3" /> Download PDF
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        const { openThermalLabel: ot } = await import("@/lib/courierLabel");
+                                        if (viewOrder.shipmentId) await ot(viewOrder.shipmentId);
+                                      }}
+                                      className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg border-2 border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 transition-all"
+                                    >
+                                      <Printer className="w-3 h-3 text-purple-600" /> Thermal
+                                    </button>
+                                  </div>
                                 </div>
                               )}
 

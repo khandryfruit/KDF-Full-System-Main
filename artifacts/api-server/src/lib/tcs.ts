@@ -636,6 +636,145 @@ export async function trackShipment(
   };
 }
 
+/* ─── httpReqBuffer — binary-safe HTTP (for PDF responses) ──────────────
+ * Like httpReq but returns raw Buffer + content-type instead of text/JSON.
+ */
+export function httpReqBuffer(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body?: Record<string, any> | null,
+  timeoutMs = 20000,
+): Promise<{ status: number; contentType: string; data: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const parsed  = new URL(url);
+    const isHttps = parsed.protocol === "https:";
+    const bodyStr = body != null ? JSON.stringify(body) : null;
+    const reqHeaders: Record<string, string> = { ...headers };
+    if (bodyStr != null) reqHeaders["Content-Length"] = Buffer.byteLength(bodyStr).toString();
+    const mod = isHttps ? https : http;
+    const req = mod.request({
+      hostname: parsed.hostname,
+      port:     parsed.port || (isHttps ? 443 : 80),
+      path:     parsed.pathname + parsed.search,
+      method:   method.toUpperCase(),
+      headers:  reqHeaders,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", c => chunks.push(Buffer.from(c)));
+      res.on("end", () => resolve({
+        status:      res.statusCode ?? 0,
+        contentType: String(res.headers["content-type"] ?? ""),
+        data:        Buffer.concat(chunks),
+      }));
+      res.on("error", reject);
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`TCS HTTP timeout after ${timeoutMs}ms`)));
+    req.on("error", reject);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+/* ─── fetchTcsEcomLabel — POST /ecom/api/print/label ────────────────────
+ * Calls the TCS ECOM label printing endpoint.
+ * Returns { ok, isPdf, data: Buffer, contentType, error? }.
+ * Comprehensive logs: CN, request URL, response status, PDF/base64 detection.
+ */
+export async function fetchTcsEcomLabel(
+  settings: TcsSettings,
+  cn: string,
+): Promise<{ ok: boolean; isPdf: boolean; data: Buffer | null; contentType: string; error?: string; durationMs: number }> {
+  const baseUrl  = settings.sandbox ? TCS_ECOM_DEV_URL : TCS_ECOM_URL;
+  const labelUrl = `${baseUrl}/print/label`;
+  const clientId = resolveClientId(settings);
+  const t0 = Date.now();
+
+  /* ── Auth headers ── */
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept":       "application/pdf, application/json, */*",
+  };
+  if (clientId) headers["X-IBM-Client-Id"] = clientId;
+  if (settings.bearerToken?.trim()) headers["Authorization"] = `Bearer ${settings.bearerToken.trim()}`;
+
+  /* ── Step 1: get ECOM accesstoken ── */
+  let accessToken = "";
+  try {
+    accessToken = await getEcomAccessToken(settings);
+    logger.info({ cn }, "TCS ECOM label — accesstoken obtained");
+  } catch (authErr: any) {
+    logger.warn({ cn, err: authErr.message }, "TCS ECOM label — accesstoken fetch failed, proceeding without");
+  }
+
+  /* ── Step 2: POST /print/label ── */
+  const body = {
+    accesstoken:    accessToken,
+    userName:       settings.username,
+    trackingNumber: cn,
+    cn,
+    consignmentNo:  cn,
+  };
+
+  logger.info({ url: labelUrl, cn, method: "POST" }, "TCS ECOM — label API request");
+  pushLog({
+    ts: new Date().toISOString(), step: "label-request",
+    url: labelUrl, method: "POST",
+    reqBody: JSON.stringify({ ...body, accesstoken: "●●●" }),
+    success: false,
+  });
+
+  let result: { status: number; contentType: string; data: Buffer };
+  try {
+    result = await httpReqBuffer(labelUrl, "POST", headers, body, 20000);
+  } catch (netErr: any) {
+    const durationMs = Date.now() - t0;
+    const errMsg = `TCS ECOM label network error: ${netErr.message}`;
+    pushLog({ ts: new Date().toISOString(), step: "label-request", url: labelUrl, method: "POST", httpStatus: null, success: false, error: errMsg, durationMs });
+    logger.warn({ cn, err: netErr.message }, "TCS ECOM label — network error");
+    return { ok: false, isPdf: false, data: null, contentType: "", error: errMsg, durationMs };
+  }
+
+  const durationMs = Date.now() - t0;
+  const { status, contentType, data } = result;
+  const preview = data.slice(0, 200).toString("utf8");
+  const isPdf   = contentType.includes("pdf") || contentType.includes("octet-stream") || data.slice(0, 4).toString() === "%PDF";
+
+  pushLog({
+    ts: new Date().toISOString(), step: "label-response",
+    url: labelUrl, method: "POST",
+    httpStatus: status, resBody: preview, durationMs,
+    success: status < 300,
+  });
+
+  logger.info({ cn, status, contentType, isPdf, durationMs, sizeBytes: data.length }, "TCS ECOM — label API response");
+
+  if (status === 200) {
+    /* Direct PDF binary */
+    if (isPdf) {
+      return { ok: true, isPdf: true, data, contentType: "application/pdf", durationMs };
+    }
+    /* Try base64 JSON payload */
+    try {
+      const parsed = JSON.parse(data.toString("utf8")) as Record<string, any>;
+      const b64 = parsed?.result?.labelData ?? parsed?.labelData ?? parsed?.data ?? parsed?.label ?? null;
+      if (typeof b64 === "string" && b64.length > 100) {
+        const buf = Buffer.from(b64, "base64");
+        logger.info({ cn, durationMs }, "TCS ECOM label — base64 decoded successfully");
+        return { ok: true, isPdf: true, data: buf, contentType: "application/pdf", durationMs };
+      }
+      /* Label came back as JSON (non-PDF) — still "ok" but not PDF */
+      return { ok: true, isPdf: false, data, contentType, durationMs };
+    } catch {
+      return { ok: true, isPdf: false, data, contentType, durationMs };
+    }
+  }
+
+  const errMsg = `TCS ECOM label HTTP ${status}`;
+  logger.warn({ cn, status, durationMs }, "TCS ECOM label — non-200 response");
+  return { ok: false, isPdf: false, data: null, contentType, error: errMsg, durationMs };
+}
+
 /* ─── fetchCities — GET /ecom/api/cities ─────────────────────────────────
  * Returns TCS's full serviceable city list: [{ cityID, cityName, cityCode, area }]
  * Requires bearer token + X-IBM-Client-Id; accesstoken optional.

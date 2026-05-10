@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
-import { COURIER_CONFIGS, COURIER_ICONS, printShipmentLabel } from "@/lib/courierLabel";
+import { COURIER_CONFIGS, COURIER_ICONS, printShipmentLabel, openThermalLabel, downloadTcsLabel } from "@/lib/courierLabel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Truck, Package, CheckCircle2, XCircle, RotateCcw, Clock, AlertTriangle,
   RefreshCw, TrendingUp, BarChart2, Search, Bell, DollarSign, Wallet,
   ChevronDown, Loader2, ArrowUpRight, ArrowDownRight, Printer, Sparkles,
   Users, Settings, Wifi, WifiOff, Eye, EyeOff, AlertCircle, MapPin,
-  Filter, BookOpen, Star, FileText, Zap, Terminal, Activity, FlaskConical, ListChecks,
+  Filter, BookOpen, Star, FileText, Zap, Terminal, Activity, FlaskConical, ListChecks, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1268,9 +1268,28 @@ function ShipmentCard({ shipment }: { shipment: any }) {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => printShipmentLabel(shipment.id)} title="Print Label">
+          <Button variant="ghost" size="sm" onClick={() => printShipmentLabel(shipment.id)} title="Print Label (A4)">
             <Printer className="w-3.5 h-3.5" />
           </Button>
+          {shipment.trackingId && (
+            <Button variant="ghost" size="sm" title="Download PDF"
+              onClick={async () => {
+                const result = await downloadTcsLabel(String(shipment.trackingId), shipment.id);
+                if (result.success && !result.fallback) toast({ title: "✅ PDF downloaded" });
+                else if (result.success) toast({ title: "Label saved", description: "Open → Print → Save as PDF" });
+                else toast({ title: "Download failed", variant: "destructive" });
+              }}
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+            </Button>
+          )}
+          {shipment.trackingId && (
+            <Button variant="ghost" size="sm" title="Thermal Print (100mm × 152mm)"
+              onClick={() => openThermalLabel(shipment.id)}
+            >
+              <Printer className="w-3.5 h-3.5 text-purple-600" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title="Refresh Tracking">
             <RefreshCw className={`w-3.5 h-3.5 ${refresh.isPending ? "animate-spin" : ""}`} />
           </Button>
@@ -1778,6 +1797,21 @@ export default function CouriersPage() {
               <div className="flex gap-3 justify-center flex-wrap">
                 <Button onClick={() => printShipmentLabel(bookingResult.shipmentId)} className="bg-green-600 hover:bg-green-700">
                   <Printer className="w-4 h-4 mr-2" />Print Label
+                </Button>
+                <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  onClick={async () => {
+                    const result = await downloadTcsLabel(bookingResult.trackingId, bookingResult.shipmentId);
+                    if (result.success && !result.fallback) toast({ title: "✅ TCS PDF downloaded" });
+                    else if (result.success) toast({ title: "Label saved", description: "Open → Print → Save as PDF" });
+                    else toast({ title: "Download failed", variant: "destructive" });
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />Download PDF
+                </Button>
+                <Button variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  onClick={() => openThermalLabel(bookingResult.shipmentId)}
+                >
+                  <Printer className="w-4 h-4 mr-2 text-purple-600" />Thermal
                 </Button>
                 <Button variant="outline" onClick={() => { setBookingResult(null); setBooking(p => ({ ...p, customerName: "", phone: "", address: "", city: "", codAmount: "", remarks: "" })); }}>
                   Book Another

@@ -321,12 +321,133 @@ export function buildLabelHtml(d: Record<string, unknown>): string {
 
 export async function printShipmentLabel(shipmentId: number): Promise<void> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`/api/admin/shipments/${shipmentId}/label`, {
+  const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) { alert("Could not load label data"); return; }
-  const d = await res.json() as Record<string, unknown>;
-  const html = buildLabelHtml(d);
-  const w = window.open("", "_blank", "width=420,height=650");
+  if (!res.ok) {
+    /* fallback: JSON label data → HTML */
+    const res2 = await fetch(`/api/admin/shipments/${shipmentId}/label`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res2.ok) { alert("Could not load label data"); return; }
+    const d = await res2.json() as Record<string, unknown>;
+    const html = buildLabelHtml(d);
+    const w = window.open("", "_blank", "width=900,height=650");
+    if (w) { w.document.write(html); w.document.close(); }
+    return;
+  }
+  const html = await res.text();
+  const w = window.open("", "_blank", "width=900,height=700");
   if (w) { w.document.write(html); w.document.close(); }
+}
+
+/**
+ * openThermalLabel — opens thermal-optimised label (100mm × 152mm).
+ * Perfect for Zebra, Brother, and other thermal label printers.
+ */
+export async function openThermalLabel(shipmentId: number): Promise<void> {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+  const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label?format=thermal`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) { alert("Could not load thermal label"); return; }
+  const html = await res.text();
+  const w = window.open("", "_blank", "width=500,height=720");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
+/**
+ * downloadTcsLabel — download TCS label as PDF (via official ECOM API)
+ * or as an HTML file if the API is unavailable.
+ * Returns { success, fallback } — fallback=true means HTML was downloaded instead.
+ */
+export async function downloadTcsLabel(
+  cn: string,
+  shipmentId?: number,
+): Promise<{ success: boolean; fallback?: boolean }> {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+
+  /* Step 1 — try official ECOM label API */
+  if (cn) {
+    try {
+      const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const ct = res.headers.get("content-type") ?? "";
+        if (ct.includes("pdf")) {
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement("a");
+          a.href = url; a.download = `tcs-label-${cn}.pdf`; a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 30000);
+          return { success: true };
+        }
+        /* API returned JSON fallback — skip to HTML fallback */
+      }
+    } catch { /* fall through */ }
+  }
+
+  /* Step 2 — fall back to HTML label download */
+  if (shipmentId) {
+    try {
+      const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const blob = new Blob([html], { type: "text/html" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href = url; a.download = `tcs-label-${cn || shipmentId}.html`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return { success: true, fallback: true };
+      }
+    } catch { /* ignore */ }
+  }
+
+  return { success: false };
+}
+
+/**
+ * openTcsOfficialLabel — opens the TCS official ECOM label in a new tab.
+ * Tries the ECOM /print/label API first (returns PDF), falls back to HTML.
+ * format: "standard" | "thermal" | "a4"
+ */
+export async function openTcsOfficialLabel(
+  cn: string,
+  shipmentId?: number,
+  format: "standard" | "thermal" | "a4" = "standard",
+): Promise<void> {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+
+  /* Step 1 — try ECOM PDF */
+  if (cn) {
+    try {
+      const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const ct = res.headers.get("content-type") ?? "";
+        if (ct.includes("pdf")) {
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const w    = window.open(url, "_blank");
+          if (w) setTimeout(() => URL.revokeObjectURL(url), 120000);
+          return;
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
+  /* Step 2 — fall back to HTML label */
+  if (shipmentId) {
+    const fmtParam = format !== "standard" ? `?format=${format}` : "";
+    const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label${fmtParam}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const w = window.open("", "_blank", format === "thermal" ? "width=500,height=720" : "width=900,height=700");
+      if (w) { w.document.write(html); w.document.close(); }
+    }
+  }
 }

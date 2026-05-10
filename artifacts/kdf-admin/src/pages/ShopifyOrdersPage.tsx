@@ -8,7 +8,7 @@ import {
   ChevronDown, ArrowRight, Ban, Bell, Copy, ExternalLink, Boxes,
   Zap, Weight, Star, Info, ShieldCheck, UserCheck, Bike, FileText,
   Navigation, CalendarCheck, TriangleAlert, CircleCheck, Loader2,
-  Settings, AlertTriangle, Code2, CheckCheck, Satellite,
+  Settings, AlertTriangle, Code2, CheckCheck, Satellite, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -708,30 +708,88 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
               {trackMutation.isPending ? "Syncing…" : "Live Track"}
             </Button>
           )}
-          {/* Print Label — all shipments with tracking ID */}
+          {/* Print Label + Download PDF + Thermal — all shipments with tracking ID */}
           {shipment.trackingId && (
-            <Button
-              size="sm" variant="outline"
-              className="h-7 text-xs gap-1 text-orange-700 hover:text-orange-800 hover:bg-orange-50 border-orange-200"
-              onClick={async () => {
-                try {
-                  const token = localStorage.getItem("admin_token") ?? "";
-                  const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (!resp.ok) { toast({ title: "Label generation failed", variant: "destructive" }); return; }
-                  const blob = await resp.blob();
-                  const url = URL.createObjectURL(blob);
-                  const win = window.open(url, "_blank");
-                  if (win) setTimeout(() => URL.revokeObjectURL(url), 60000);
-                } catch {
-                  toast({ title: "Label failed to open", variant: "destructive" });
-                }
-              }}
-            >
-              <Printer className="w-3 h-3" />
-              Print Label
-            </Button>
+            <>
+              <Button
+                size="sm" variant="outline"
+                className="h-7 text-xs gap-1 text-orange-700 hover:text-orange-800 hover:bg-orange-50 border-orange-200"
+                title="Print Label"
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem("kdf_admin_token") ?? "";
+                    const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!resp.ok) { toast({ title: "Label generation failed", variant: "destructive" }); return; }
+                    const html = await resp.text();
+                    const w = window.open("", "_blank", "width=900,height=700");
+                    if (w) { w.document.write(html); w.document.close(); }
+                  } catch {
+                    toast({ title: "Label failed to open", variant: "destructive" });
+                  }
+                }}
+              >
+                <Printer className="w-3 h-3" /> Print Label
+              </Button>
+              {isTcsReal && (
+                <>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 text-xs gap-1 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200"
+                    title="Download PDF (Official TCS Label)"
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("kdf_admin_token") ?? "";
+                        const cn = shipment.trackingId!;
+                        const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (res.ok && res.headers.get("content-type")?.includes("pdf")) {
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = `tcs-${cn}.pdf`; a.click();
+                          setTimeout(() => URL.revokeObjectURL(url), 30000);
+                          toast({ title: "✅ TCS PDF downloaded" });
+                        } else {
+                          /* Fallback — download HTML label */
+                          const r2 = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, { headers: { Authorization: `Bearer ${token}` } });
+                          const html = await r2.text();
+                          const blob = new Blob([html], { type: "text/html" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = `tcs-${cn}.html`; a.click();
+                          setTimeout(() => URL.revokeObjectURL(url), 30000);
+                          toast({ title: "Label saved", description: "Open in browser → Print → Save as PDF" });
+                        }
+                      } catch { toast({ title: "Download failed", variant: "destructive" }); }
+                    }}
+                  >
+                    <Download className="w-3 h-3" /> PDF
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 text-xs gap-1 text-purple-700 hover:text-purple-800 hover:bg-purple-50 border-purple-200"
+                    title="Thermal Print — 100mm × 152mm (Zebra / Brother)"
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("kdf_admin_token") ?? "";
+                        const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label?format=thermal`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (!resp.ok) { toast({ title: "Thermal label failed", variant: "destructive" }); return; }
+                        const html = await resp.text();
+                        const w = window.open("", "_blank", "width=500,height=720");
+                        if (w) { w.document.write(html); w.document.close(); }
+                      } catch { toast({ title: "Thermal error", variant: "destructive" }); }
+                    }}
+                  >
+                    <Printer className="w-3 h-3 text-purple-600" /> Thermal
+                  </Button>
+                </>
+              )}
+            </>
           )}
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => {
             if (confirm("Cancel this shipment?")) cancelMutation.mutate();
