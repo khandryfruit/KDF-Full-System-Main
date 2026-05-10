@@ -283,20 +283,24 @@ function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavIt
       <div
         title={!expanded ? label : undefined}
         className={`
-          flex items-center rounded-lg transition-all duration-200 cursor-pointer group
-          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center px-0 py-2.5 mx-auto w-10"}
+          relative flex items-center rounded-lg transition-all duration-150 cursor-pointer group
+          ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
           ${isActive
-            ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
           }
         `}
       >
+        {/* Left active accent bar */}
+        {isActive && expanded && (
+          <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary" />
+        )}
         <Icon
-          size={18}
-          className={`shrink-0 transition-colors ${isActive ? "text-sidebar-primary-foreground" : "text-muted-foreground group-hover:text-sidebar-accent-foreground"}`}
+          size={15}
+          className={`shrink-0 transition-colors ${isActive ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"}`}
         />
         <span
-          className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${
+          className={`text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${
             expanded ? "opacity-100 max-w-[180px] w-auto" : "opacity-0 max-w-0 w-0"
           }`}
         >
@@ -313,11 +317,8 @@ function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavIt
 interface SidebarSectionProps {
   label: string;
   icon: React.ElementType;
-  /** hex color e.g. "#3B82F6" */
   accentColor: string;
-  /** tailwind bg class for header active state e.g. "bg-blue-600/15" */
   activeBg: string;
-  /** tailwind text class for header active state e.g. "text-blue-700" */
   activeText: string;
   badgeLetter: string;
   isActive: boolean;
@@ -329,57 +330,54 @@ interface SidebarSectionProps {
   onNavClick?: () => void;
 }
 function SidebarSection({
-  label, icon: Icon, accentColor, activeBg, activeText,
-  badgeLetter, isActive, expanded, open, onToggle, items, location, onNavClick,
+  label, icon: Icon, accentColor,
+  isActive, expanded, open, onToggle, items, location, onNavClick,
 }: SidebarSectionProps) {
   return (
     <div>
+      {/* Section header trigger */}
       <button
         onClick={onToggle}
         title={!expanded ? label : undefined}
         className={`
-          w-full flex items-center rounded-lg transition-all duration-200
-          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center px-0 py-2.5 mx-auto w-10"}
+          w-full flex items-center rounded-lg transition-all duration-150 group
+          ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
           ${isActive
-            ? `${activeBg} ${activeText} font-medium`
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            ? "text-foreground"
+            : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
           }
         `}
       >
-        <Icon
-          size={18}
-          className="shrink-0"
-          style={{ color: isActive ? accentColor : undefined }}
-        />
-        <span className={`flex-1 text-sm text-left whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[120px]" : "opacity-0 max-w-0"}`}>
+        {/* Icon with colored bg when active */}
+        <div
+          className={`w-[26px] h-[26px] rounded-md flex items-center justify-center shrink-0 transition-all duration-150 ${
+            isActive ? "shadow-sm" : "group-hover:bg-accent"
+          }`}
+          style={isActive ? { backgroundColor: `${accentColor}1A` } : {}}
+        >
+          <Icon size={14} className="shrink-0" style={{ color: isActive ? accentColor : undefined }} />
+        </div>
+
+        <span className={`flex-1 text-[13px] font-medium text-left whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[130px]" : "opacity-0 max-w-0"}`}>
           {label}
         </span>
-        {/* Badge dot */}
-        <div
-          className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${expanded ? "opacity-100" : "opacity-0 w-0"}`}
-          style={{ backgroundColor: accentColor }}
-        >
-          <span className="text-white text-[9px] font-bold">{badgeLetter}</span>
-        </div>
-        <ChevronDown
+
+        <ChevronRight
           size={12}
-          className={`shrink-0 transition-all duration-200 ${open ? "rotate-180" : ""} ${expanded ? "opacity-100" : "opacity-0 w-0"}`}
-          style={{ color: isActive ? accentColor : undefined }}
+          className={`shrink-0 transition-all duration-200 text-muted-foreground/50 ${open ? "rotate-90" : ""} ${expanded ? "opacity-100" : "opacity-0 w-0"}`}
         />
       </button>
 
-      {/* Sub-items */}
-      <div className={`overflow-hidden transition-all duration-500 ${open && expanded ? "max-h-[1200px] mt-1" : "max-h-0"}`}>
-        <div className="ml-4 pl-3 border-l-2 space-y-0.5" style={{ borderColor: `${accentColor}66` }}>
+      {/* Sub-items panel */}
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${open && expanded ? "max-h-[1200px] mt-0.5" : "max-h-0"}`}>
+        <div className="ml-[13px] pl-3 border-l space-y-px" style={{ borderColor: `${accentColor}30` }}>
           {items.map((item, idx) => {
             if (item.divider) {
               return (
-                <div key={`divider-${idx}`} className="flex items-center gap-2 px-2 pt-3 pb-1">
-                  <div className="h-px flex-1" style={{ backgroundColor: `${accentColor}44` }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: `${accentColor}99` }}>
+                <div key={`divider-${idx}`} className="px-2 pt-3 pb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
                     {item.label}
                   </span>
-                  <div className="h-px flex-1" style={{ backgroundColor: `${accentColor}44` }} />
                 </div>
               );
             }
@@ -388,14 +386,17 @@ function SidebarSection({
             return (
               <Link key={item.href} href={item.href} onClick={onNavClick} className="block">
                 <div
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors text-sm ${
+                  className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-all duration-150 text-[12.5px] ${
                     subActive
-                      ? "text-white font-medium shadow-sm"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      ? "font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
                   }`}
-                  style={subActive ? { backgroundColor: accentColor } : {}}
+                  style={subActive ? { color: accentColor, backgroundColor: `${accentColor}12` } : {}}
                 >
-                  <SubIcon size={14} className={subActive ? "text-white" : "text-muted-foreground"} />
+                  {subActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full" style={{ backgroundColor: accentColor }} />
+                  )}
+                  <SubIcon size={12} className="shrink-0" style={subActive ? { color: accentColor } : {}} />
                   <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
                 </div>
               </Link>
@@ -470,43 +471,44 @@ function SidebarContent({
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden">
 
       {/* Logo area */}
-      <div className={`h-14 flex items-center border-b border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "px-5 gap-3 justify-between" : "px-0 justify-center"}`}>
+      <div className={`h-[52px] flex items-center border-b border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "px-4 gap-3 justify-between" : "px-0 justify-center"}`}>
         {expanded ? (
           <>
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
-                <span className="text-sidebar-primary-foreground text-xs font-black">KD</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              {/* Brand mark */}
+              <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-sm">
+                <span className="text-primary-foreground text-[11px] font-black tracking-tight">KD</span>
               </div>
               <div className="min-w-0">
-                <p className="font-bold text-sm text-sidebar-primary leading-none truncate">KDF NUTS</p>
-                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Admin</p>
+                <p className="font-bold text-[13px] text-foreground leading-none truncate tracking-tight">KDF NUTS</p>
+                <p className="text-[10px] text-muted-foreground/70 leading-none mt-[3px] font-medium">Admin Console</p>
               </div>
             </div>
             {!isMobile && onToggleCollapse && (
               <button
                 onClick={onToggleCollapse}
-                className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-sidebar-accent text-muted-foreground transition-colors shrink-0"
+                className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-accent text-muted-foreground/60 hover:text-muted-foreground transition-colors shrink-0"
                 title="Collapse sidebar"
               >
-                <PanelLeftClose size={14} />
+                <PanelLeftClose size={13} />
               </button>
             )}
           </>
         ) : (
           <button
             onClick={onToggleCollapse}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-sidebar-accent text-muted-foreground transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent transition-colors"
             title="Expand sidebar"
           >
-            <div className="w-6 h-6 rounded-md bg-sidebar-primary flex items-center justify-center">
-              <span className="text-sidebar-primary-foreground text-[9px] font-black">KD</span>
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+              <span className="text-primary-foreground text-[10px] font-black">KD</span>
             </div>
           </button>
         )}
       </div>
 
       {/* Scrollable nav */}
-      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-0.5 ${expanded ? "px-2" : "px-1"}`}>
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-px ${expanded ? "px-2" : "px-1.5"}`}>
 
         {/* ── Dashboard (standalone top link) ── */}
         <NavItem href="/dashboard" label="Dashboard" icon={LayoutDashboard}
@@ -607,34 +609,61 @@ function SidebarContent({
       </div>
 
       {/* Bottom: User + Logout */}
-      <div className={`border-t border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "p-3" : "p-1.5"}`}>
+      <div className={`border-t border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "p-2.5" : "p-1.5"}`}>
+
+        {/* Profile card — expanded */}
         {expanded && adminUser && (
-          <div className="flex items-center gap-2.5 px-2 py-2 mb-1 rounded-lg bg-muted/40">
-            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
-              {adminUser.isSuper
-                ? <Crown size={12} className="text-amber-300" />
-                : <span className="text-primary-foreground text-[10px] font-bold">{adminUser.name.charAt(0).toUpperCase()}</span>
-              }
+          <div className="flex items-center gap-2.5 px-2.5 py-2.5 mb-1.5 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/60">
+            {/* Avatar */}
+            <div className="relative shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm">
+                {adminUser.isSuper
+                  ? <Crown size={13} className="text-amber-300" />
+                  : <span className="text-primary-foreground text-xs font-bold leading-none">{adminUser.name.charAt(0).toUpperCase()}</span>
+                }
+              </div>
+              {/* Online dot */}
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-sidebar" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold truncate leading-none">{adminUser.name}</p>
-              <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-none">
-                {adminUser.isSuper ? "Super Admin" : (adminUser.roles?.[0]?.name ?? "Admin")}
-              </p>
+              <p className="text-[12.5px] font-semibold truncate leading-tight text-foreground">{adminUser.name}</p>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-px rounded-full leading-none ${adminUser.isSuper ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-primary/10 text-primary"}`}>
+                  {adminUser.isSuper ? "Super Admin" : (adminUser.roles?.[0]?.name ?? "Admin")}
+                </span>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Collapsed avatar only */}
+        {!expanded && adminUser && (
+          <div className="flex justify-center mb-1.5">
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm" title={adminUser.name}>
+                {adminUser.isSuper
+                  ? <Crown size={12} className="text-amber-300" />
+                  : <span className="text-primary-foreground text-[10px] font-bold">{adminUser.name.charAt(0).toUpperCase()}</span>
+                }
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-sidebar" />
+            </div>
+          </div>
+        )}
+
+        {/* Logout button */}
         <button
           onClick={onLogout}
           title={!expanded ? "Logout" : undefined}
           className={`
-            flex items-center rounded-lg w-full transition-all duration-200 text-muted-foreground hover:bg-red-50 hover:text-red-600 group
-            ${expanded ? "gap-3 px-3 py-2.5" : "justify-center px-0 py-2.5"}
+            flex items-center rounded-lg w-full transition-all duration-150 group
+            text-muted-foreground hover:bg-red-500/8 hover:text-red-500
+            ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
           `}
         >
-          <LogOut size={16} className="shrink-0 group-hover:text-red-600" />
-          <span className={`text-sm whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[120px]" : "opacity-0 max-w-0"}`}>
-            Logout
+          <LogOut size={14} className="shrink-0 transition-colors group-hover:text-red-500" />
+          <span className={`text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[120px]" : "opacity-0 max-w-0"}`}>
+            Sign out
           </span>
         </button>
       </div>
