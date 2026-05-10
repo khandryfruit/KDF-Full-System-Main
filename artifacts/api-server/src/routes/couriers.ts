@@ -3,6 +3,7 @@ import { db, couriersTable, shipmentsTable, ordersTable, usersTable, whatsappSet
 import { eq, desc, sql, and, gte, lte, ne } from "drizzle-orm";
 import { adminMiddleware, authMiddleware, type AuthRequest } from "../lib/auth";
 import { sendOrderStatusUpdate } from "../lib/whatsapp";
+import { sendTrackingUpdateWA } from "../lib/ondriveEngine";
 import { logger } from "../lib/logger";
 import OpenAI from "openai";
 import type { Response } from "express";
@@ -633,6 +634,23 @@ router.post("/admin/shipments", adminMiddleware as any, async (req: AuthRequest,
 
     await db.update(ordersTable).set({ trackingId, courier: slug, updatedAt: new Date() }).where(eq(ordersTable.id, orderId));
 
+    /* Auto-send WhatsApp tracking message if WA active and phone available */
+    try {
+      const [waSettings] = await db.select().from(whatsappSettingsTable).limit(1);
+      if (waSettings?.isActive) {
+        const addr = (order.shippingAddress as any) ?? {};
+        const phone = addr.phone ?? "";
+        const customerName = addr.name ?? "Customer";
+        const orderNumber = String(order.orderNumber ?? orderId);
+        const [courierInfo] = await db.select().from(couriersTable).where(eq(couriersTable.slug, slug)).limit(1);
+        const courierName = courierInfo?.name ?? slug.toUpperCase();
+        if (phone) {
+          sendTrackingUpdateWA({ phone, customerName, orderNumber, trackingId, courierName, courierSlug: slug }).catch(() => {});
+          req.log.info({ phone, trackingId, courierSlug: slug }, "Auto-sent WA tracking after booking");
+        }
+      }
+    } catch { /* non-blocking */ }
+
     res.json(shipment);
     return;
   } catch (err) {
@@ -727,6 +745,16 @@ router.post("/admin/couriers/manual-book", adminMiddleware as any, async (req: A
     if (orderId) {
       await db.update(ordersTable).set({ trackingId, courier: courierSlug, updatedAt: new Date() }).where(eq(ordersTable.id, orderId));
     }
+
+    /* Auto-send WhatsApp tracking message if WA active and phone available */
+    try {
+      const [waSettings] = await db.select().from(whatsappSettingsTable).limit(1);
+      if (waSettings?.isActive && phone) {
+        const courierName = courierRow.name ?? courierSlug.toUpperCase();
+        sendTrackingUpdateWA({ phone, customerName, orderNumber: shipment.orderId ? `ORD-${shipment.orderId}` : `MAN-${shipment.id}`, trackingId, courierName, courierSlug }).catch(() => {});
+        req.log.info({ phone, trackingId, courierSlug }, "Auto-sent WA tracking after manual booking");
+      }
+    } catch { /* non-blocking */ }
 
     res.json({ ok: true, shipment, trackingId });
     return;
@@ -2288,6 +2316,56 @@ router.get("/admin/shipments/debug-logs", adminMiddleware as any, async (req: Au
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to fetch debug logs" });
+  }
+});
+
+/* ─── Admin: Send/Resend WhatsApp tracking message ──────── */
+router.post("/admin/shipments/:id/send-tracking-wa", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const [shipment] = await db.select().from(shipmentsTable).where(eq(shipmentsTable.id, id)).limit(1);
+    if (!shipment) { res.status(404).json({ error: "Shipment not found" }); return; }
+    if (!shipment.trackingId) { res.status(400).json({ error: "Shipment has no tracking ID" }); return; }
+
+    /* Resolve customer phone */
+    let phone = (shipment as any).customerPhone ?? "";
+    let customerName = (shipment as any).customerName ?? "Customer";
+    let orderNumber = shipment.orderId ? String(shipment.orderId) : `SHIP-${shipment.id}`;
+
+    if (!phone && shipment.orderId) {
+      const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, shipment.orderId)).limit(1);
+      if (order) {
+        const addr = (order.shippingAddress as any) ?? {};
+        phone = addr.phone ?? "";
+        customerName = addr.name ?? "Customer";
+        orderNumber = String(order.orderNumber ?? shipment.orderId);
+      }
+    }
+
+    if (!phone) { res.status(400).json({ error: "No customer phone number available" }); return; }
+
+    const [courierRow] = await db.select().from(couriersTable).where(eq(couriersTable.slug, shipment.courierSlug ?? "tcs")).limit(1);
+    const courierName = courierRow?.name ?? (shipment.courierSlug ?? "Courier").toUpperCase();
+
+    req.log.info({ shipmentId: id, phone, trackingId: shipment.trackingId, courierSlug: shipment.courierSlug }, "Sending WA tracking message");
+
+    const ok = await sendTrackingUpdateWA({
+      phone,
+      customerName,
+      orderNumber,
+      trackingId: shipment.trackingId,
+      courierName,
+      courierSlug: shipment.courierSlug ?? "tcs",
+    });
+
+    if (ok) {
+      res.json({ ok: true, message: `WhatsApp tracking sent to ${phone}`, trackingId: shipment.trackingId });
+    } else {
+      res.status(500).json({ error: "WhatsApp send failed — check WA settings" });
+    }
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message ?? "Failed to send tracking WA" });
   }
 });
 

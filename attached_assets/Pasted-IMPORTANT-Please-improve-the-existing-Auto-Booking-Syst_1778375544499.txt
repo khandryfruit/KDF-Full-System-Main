@@ -1,0 +1,241 @@
+IMPORTANT — Please improve the existing Auto Booking System professionally.
+
+The basic auto-booking feature already exists inside admin, but now we need a FULL intelligent automation workflow integrated with:
+
+✅ WhatsApp automation
+✅ Order templates
+✅ Rider assignment
+✅ TCS auto booking
+✅ Labels
+✅ Tracking system
+
+==================================================
+CURRENT FLOW
+============
+
+Right now:
+
+✅ customer receives WhatsApp template
+✅ customer confirms order
+✅ confirmation returns to admin dashboard
+
+NOW after confirmation we want AUTOMATIC ACTIONS.
+
+==================================================
+REQUIRED PROFESSIONAL FLOW
+==========================
+
+STEP 1
+Customer receives WhatsApp order confirmation template.
+
+STEP 2
+Customer clicks:
+✅ Confirm Order
+
+STEP 3
+Admin dashboard receives:
+✅ confirmed status
+
+# STEP 4 — AUTOMATIC ACTIONS START
+
+IF order type = Local Delivery:
+
+✅ auto assign rider
+✅ notify rider
+✅ generate local delivery tracking
+✅ update delivery status
+
+---
+
+IF order type = Courier / Pending:
+
+✅ auto start TCS booking
+✅ auto generate CN
+✅ auto generate label
+✅ auto send tracking number on WhatsApp
+✅ auto send label on email
+✅ update order status automatically
+
+==================================================
+AUTO BOOKING LOGIC
+==================
+
+For pending courier orders:
+
+When:
+✅ customer confirms order
+OR
+✅ order status becomes confirmed
+
+THEN automatically:
+
+```txt id="y2r9w1"
+Start TCS Booking Process
+```
+
+without manual intervention.
+
+==================================================
+WHATSAPP AUTOMATION
+===================
+
+After successful booking:
+
+Automatically send:
+
+✅ Tracking Number
+✅ Courier Name
+✅ Tracking Link
+✅ Shipment Status
+✅ Estimated Delivery
+
+==================================================
+EMAIL AUTOMATION
+================
+
+After successful booking:
+
+Automatically send customer:
+
+✅ PDF label
+✅ invoice
+✅ CN number
+✅ shipment details
+
+==================================================
+AUTO ACTION SETTINGS
+====================
+
+Inside Admin → Courier Automation
+
+Add ON/OFF toggles for:
+
+✅ Auto Booking
+✅ Auto Rider Assignment
+✅ Auto WhatsApp Tracking
+✅ Auto Email Label
+✅ Auto CN Generation
+✅ Auto Status Sync
+✅ Auto Delivery Updates
+
+==================================================
+DYNAMIC RULE SYSTEM
+===================
+
+Please create dynamic automation rules.
+
+Examples:
+
+---
+
+## RULE 1
+
+IF city = Lahore
+THEN:
+✅ assign local rider
+
+---
+
+## RULE 2
+
+IF city != Lahore
+THEN:
+✅ auto TCS booking
+
+---
+
+## RULE 3
+
+IF payment = COD
+THEN:
+✅ send COD template
+
+==================================================
+WHATSAPP TEMPLATE SUPPORT
+=========================
+
+Support templates for:
+
+✅ Order Confirmed
+✅ Order Cancelled
+✅ Order Shipped
+✅ Rider Assigned
+✅ Out For Delivery
+✅ Delivered
+✅ Returned
+
+==================================================
+ORDER STATUS AUTOMATION
+=======================
+
+Auto update statuses:
+
+✅ Pending
+✅ Confirmed
+✅ Booked
+✅ In Transit
+✅ Out For Delivery
+✅ Delivered
+✅ Returned
+✅ Cancelled
+
+==================================================
+UI/UX IMPROVEMENT
+=================
+
+Please improve the Auto Booking UI professionally.
+
+Need:
+
+✅ workflow cards
+✅ automation status
+✅ activity timeline
+✅ logs
+✅ retry buttons
+✅ automation history
+✅ queue system
+
+==================================================
+DEBUGGING REQUIRED
+==================
+
+Inside logs show:
+
+✅ customer confirmation
+✅ WhatsApp events
+✅ booking started
+✅ CN generated
+✅ rider assigned
+✅ label generated
+✅ email sent
+✅ tracking sent
+✅ failures/retries
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT break:
+❌ current TCS booking
+❌ tracking system
+❌ labels
+❌ WhatsApp templates
+
+Only IMPROVE:
+✅ automation workflow
+✅ dynamic booking system
+✅ rider assignment
+✅ WhatsApp integration
+✅ auto courier processing
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ fully automated order workflow
+✅ smart courier automation
+✅ auto rider assignment
+✅ auto TCS booking
+✅ automatic tracking messages
+✅ professional ecommerce logistics system

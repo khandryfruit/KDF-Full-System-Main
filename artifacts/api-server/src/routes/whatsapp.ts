@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable } from "@workspace/db";
-import { ordersTable, usersTable, productsTable } from "@workspace/db";
-import { shopifyProductsTable } from "@workspace/db";
+import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
+import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
@@ -584,9 +584,9 @@ async function handleTrackOrder(phone: string, input: string, waSettings: any): 
   try {
     const normalizedPhone = normalizePhone(phone);
     const altPhone = normalizedPhone.startsWith("92") ? "0" + normalizedPhone.slice(2) : phone;
-
-    /* Try to find order by number OR by phone */
     const cleanInput = input.replace(/^kdf[-\s]?/i, "").toUpperCase().trim();
+
+    /* ── 1. Search ecommerce orders (by order number or phone) ── */
     const [order] = await db.select({
       orderNumber: ordersTable.orderNumber,
       status:      ordersTable.status,
@@ -602,44 +602,130 @@ async function handleTrackOrder(phone: string, input: string, waSettings: any): 
       .orderBy(desc(ordersTable.createdAt))
       .limit(1);
 
-    if (!order) {
+    if (order) {
+      const STATUS_EMOJI: Record<string, string> = {
+        pending:          "⏳ Pending",
+        processing:       "🔧 Processing",
+        shipped:          "🚚 Shipped",
+        out_for_delivery: "🛵 Out for Delivery",
+        delivered:        "✅ Delivered",
+        cancelled:        "❌ Cancelled",
+      };
+      const statusLabel = STATUS_EMOJI[order.status ?? ""] ?? `📦 ${order.status}`;
+      const trackingLine = order.trackingId ? `\n🔍 *Tracking No:* *${order.trackingId}*` : "";
+      const dateLine = `📅 Placed: ${new Date(order.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}`;
+
       await sendInteractiveButtons({
         phone,
-        text: `❌ I couldn't find an order matching *"${input}"*.\n\nPlease check the order ID and try again, or browse our store 🛒`,
+        text: `📦 *Order Status*\n\n🧾 *Order:* ${order.orderNumber}\n💰 *Total:* Rs. ${order.total}\n📊 *Status:* ${statusLabel}${trackingLine}\n${dateLine}`,
         buttons: [
-          { id: "track_again",  title: "🔄 Try Again" },
-          { id: "talk_support", title: "💬 Support" },
-          { id: "main_menu",    title: "🏠 Main Menu" },
+          { id: "track_again", title: "🔄 Track Another" },
+          { id: "main_menu",   title: "🏠 Main Menu" },
         ],
+        footer: "Reply anytime to track another order",
         settings: waSettings,
-        templateName: "menu_track_not_found",
+        templateName: "menu_track_result",
       });
       return;
     }
 
-    const STATUS_EMOJI: Record<string, string> = {
-      pending:          "⏳ Pending",
-      processing:       "🔧 Processing",
-      shipped:          "🚚 Shipped",
-      out_for_delivery: "🛵 Out for Delivery",
-      delivered:        "✅ Delivered",
-      cancelled:        "❌ Cancelled",
-    };
+    /* ── 2. Search shipments by CN/tracking ID ── */
+    const [shipment] = await db.select({
+      id:           shipmentsTable.id,
+      trackingId:   shipmentsTable.trackingId,
+      courierSlug:  shipmentsTable.courierSlug,
+      status:       shipmentsTable.status,
+      customerName: (shipmentsTable as any).customerName,
+      createdAt:    shipmentsTable.createdAt,
+    }).from(shipmentsTable)
+      .where(sql`UPPER(tracking_id) = ${cleanInput}`)
+      .orderBy(desc(shipmentsTable.createdAt))
+      .limit(1);
 
-    const statusLabel = STATUS_EMOJI[order.status ?? ""] ?? `📦 ${order.status}`;
-    const trackingLine = order.trackingId ? `\n🔍 *Tracking ID:* ${order.trackingId}` : "";
-    const dateLine = `📅 Placed: ${new Date(order.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}`;
+    if (shipment) {
+      const SHIP_STATUS: Record<string, string> = {
+        pending:          "⏳ Booked",
+        in_transit:       "🚚 In Transit",
+        out_for_delivery: "🛵 Out for Delivery",
+        delivered:        "✅ Delivered",
+        returned:         "↩️ Returned",
+        failed:           "❌ Failed",
+      };
+      const statusLabel = SHIP_STATUS[shipment.status ?? ""] ?? `📦 ${shipment.status}`;
+      const trackingUrls: Record<string, string> = {
+        tcs:      `https://www.tcsexpress.com/track/${shipment.trackingId}`,
+        postex:   `https://postex.pk/tracking/${shipment.trackingId}`,
+        leopards: `https://leopardscourier.com/tracking?tracking_number=${shipment.trackingId}`,
+        trax:     `https://trax.pk/tracking/${shipment.trackingId}`,
+      };
+      const trackUrl = trackingUrls[shipment.courierSlug ?? ""] ?? "";
+      const couriersLabel = (shipment.courierSlug ?? "courier").toUpperCase();
+      const dateLine = `📅 Booked: ${new Date(shipment.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}`;
 
+      await sendInteractiveButtons({
+        phone,
+        text: `🚚 *Shipment Tracking*\n\n🔍 *CN:* *${shipment.trackingId}*\n🏢 *Courier:* ${couriersLabel}\n📊 *Status:* ${statusLabel}\n${dateLine}${trackUrl ? `\n\n🌐 *Track:* ${trackUrl}` : ""}`,
+        buttons: [
+          { id: "track_again", title: "🔄 Track Another" },
+          { id: "main_menu",   title: "🏠 Main Menu" },
+        ],
+        footer: "Expected delivery: 2-3 working days",
+        settings: waSettings,
+        templateName: "menu_track_shipment",
+      });
+      return;
+    }
+
+    /* ── 3. Search Shopify orders by order number or phone ── */
+    const [shopifyOrder] = await db.select({
+      orderNumber:     shopifyOrdersTable.orderNumber,
+      financialStatus: shopifyOrdersTable.financialStatus,
+      fulfillmentStatus: shopifyOrdersTable.fulfillmentStatus,
+      totalPrice:      shopifyOrdersTable.totalPrice,
+      createdAt:       shopifyOrdersTable.createdAt,
+      shippingAddress: shopifyOrdersTable.shippingAddress,
+      trackingNumber: shopifyOrdersTable.trackingNumber,
+      trackingUrl:    shopifyOrdersTable.trackingUrl,
+    }).from(shopifyOrdersTable)
+      .where(
+        sql`(UPPER(order_number) LIKE ${"%" + cleanInput + "%"}
+            OR shipping_address->>'phone' = ${normalizedPhone}
+            OR shipping_address->>'phone' = ${altPhone})`
+      )
+      .orderBy(desc(shopifyOrdersTable.createdAt))
+      .limit(1);
+
+    if (shopifyOrder) {
+      const fulfillLabel = shopifyOrder.fulfillmentStatus === "fulfilled" ? "✅ Fulfilled" : shopifyOrder.fulfillmentStatus === "partial" ? "🔄 Partially Fulfilled" : "⏳ Unfulfilled";
+      const trackLine = shopifyOrder.trackingNumber ? `\n🔍 *Tracking:* *${shopifyOrder.trackingNumber}*` : "";
+      const trackLinkLine = shopifyOrder.trackingUrl ? `\n🌐 *Track:* ${shopifyOrder.trackingUrl}` : "";
+      const dateLine = `📅 Placed: ${new Date(shopifyOrder.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}`;
+
+      await sendInteractiveButtons({
+        phone,
+        text: `🛒 *Shopify Order Status*\n\n🧾 *Order:* ${shopifyOrder.orderNumber}\n💰 *Total:* Rs. ${shopifyOrder.totalPrice}\n📊 *Fulfillment:* ${fulfillLabel}${trackLine}${trackLinkLine}\n${dateLine}`,
+        buttons: [
+          { id: "track_again", title: "🔄 Track Another" },
+          { id: "main_menu",   title: "🏠 Main Menu" },
+        ],
+        footer: "Reply anytime to track another order",
+        settings: waSettings,
+        templateName: "menu_track_shopify",
+      });
+      return;
+    }
+
+    /* ── 4. Nothing found ── */
     await sendInteractiveButtons({
       phone,
-      text: `📦 *Order Status*\n\n🧾 *Order:* ${order.orderNumber}\n💰 *Total:* Rs. ${order.total}\n📊 *Status:* ${statusLabel}${trackingLine}\n${dateLine}`,
+      text: `❌ I couldn't find any order or shipment matching *"${input}"*.\n\nYou can search by:\n• Order number (e.g. KDF-1234)\n• Tracking / CN number\n• Your phone number`,
       buttons: [
-        { id: "track_again", title: "🔄 Track Another" },
-        { id: "main_menu",   title: "🏠 Main Menu" },
+        { id: "track_again",  title: "🔄 Try Again" },
+        { id: "talk_support", title: "💬 Support" },
+        { id: "main_menu",    title: "🏠 Main Menu" },
       ],
-      footer: "Reply anytime to track another order",
       settings: waSettings,
-      templateName: "menu_track_result",
+      templateName: "menu_track_not_found",
     });
   } catch (err) {
     await sendWhatsAppMessage({

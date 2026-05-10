@@ -7,7 +7,7 @@ import {
   ChevronDown, Loader2, ArrowUpRight, ArrowDownRight, Printer, Sparkles,
   Users, Settings, Wifi, WifiOff, Eye, EyeOff, AlertCircle, MapPin,
   Filter, BookOpen, Star, FileText, Zap, Terminal, Activity, FlaskConical, ListChecks, Download,
-  Satellite, Copy, ExternalLink, Navigation,
+  Satellite, Copy, ExternalLink, Navigation, MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1254,6 +1254,13 @@ function ShipmentCard({ shipment }: { shipment: any }) {
   const qc = useQueryClient();
 
   const isTcs = shipment.courierSlug === "tcs" && !!shipment.trackingId;
+  const hasPhone = !!shipment.customerPhone;
+
+  const sendWaMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/admin/shipments/${shipment.id}/send-tracking-wa`, { method: "POST" }),
+    onSuccess: (d: any) => toast({ title: "✅ WhatsApp Sent!", description: d.message ?? `Tracking sent to ${shipment.customerPhone}` }),
+    onError: (e: any) => toast({ variant: "destructive", title: "WA Send Failed", description: e.message }),
+  });
 
   const refresh = useMutation({
     mutationFn: () => apiFetch(`/api/admin/shipments/${shipment.id}/refresh`, { method: "POST" }),
@@ -1320,6 +1327,18 @@ function ShipmentCard({ shipment }: { shipment: any }) {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* Send WhatsApp Tracking — any shipment with phone */}
+          {shipment.trackingId && (
+            <Button
+              variant="ghost" size="sm"
+              className={`${hasPhone ? "text-green-600 hover:text-green-800 hover:bg-green-50" : "text-muted-foreground opacity-40 cursor-not-allowed"}`}
+              onClick={() => hasPhone && sendWaMutation.mutate()}
+              disabled={sendWaMutation.isPending || !hasPhone}
+              title={hasPhone ? `Send WA tracking to ${shipment.customerPhone}` : "No phone number — cannot send WA"}
+            >
+              <MessageSquare className={`w-3.5 h-3.5 ${sendWaMutation.isPending ? "animate-pulse" : ""}`} />
+            </Button>
+          )}
           {/* Track Shipment — TCS only */}
           {isTcs && (
             <Button
