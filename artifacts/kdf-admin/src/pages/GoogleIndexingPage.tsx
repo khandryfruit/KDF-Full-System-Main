@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -26,7 +26,7 @@ import {
   Zap, Settings, FileText, BookOpen, RefreshCw, Trash2, Upload, CheckCircle2,
   XCircle, Clock, AlertTriangle, Send, Globe, Package, Tag, BarChart2,
   ChevronDown, ChevronUp, Copy, ExternalLink, Info, Shield, Key, Database,
-  Layers, Activity, TrendingUp,
+  Layers, Activity, TrendingUp, Wifi, WifiOff, FolderOpen,
 } from "lucide-react";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -267,32 +267,75 @@ function DashboardTab({ stats, settings }: { stats?: Stats; settings?: IndexingS
 }
 
 /* ═══ Settings Tab ═══════════════════════════════════════ */
+interface TestResult { ok: boolean; clientEmail?: string; projectId?: string; tokenPreview?: string; error?: string; }
+
 function SettingsTab({ settings, onSaved }: { settings?: IndexingSettings; onSaved: () => void }) {
-  const [siteUrl, setSiteUrl] = useState(settings?.siteUrl ?? "");
+  const [siteUrl, setSiteUrl]     = useState(settings?.siteUrl ?? "");
   const [autoIndex, setAutoIndex] = useState(settings?.autoIndexEnabled ?? false);
-  const [saJson, setSaJson] = useState("");
-  const [showJson, setShowJson] = useState(false);
+  const [saJson, setSaJson]       = useState("");
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
   // Sync when settings load
   useState(() => { if (settings) { setSiteUrl(settings.siteUrl ?? ""); setAutoIndex(settings.autoIndexEnabled); } });
 
+  /* ── read JSON file helper ── */
+  const loadFile = (file: File) => {
+    if (!file.name.endsWith(".json")) { toast({ variant: "destructive", title: "Please select a .json file" }); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target?.result as string;
+      try {
+        JSON.parse(text); // validate JSON
+        setSaJson(text);
+        setTestResult(null);
+        toast({ title: "✅ JSON file loaded — review and save" });
+      } catch {
+        toast({ variant: "destructive", title: "Invalid JSON file" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) loadFile(file);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) loadFile(file);
+  };
+
+  /* ── mutations ── */
   const saveMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       apiFetch("/api/admin/seo/indexing/settings", { method: "PUT", body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/seo/indexing/settings"] });
-      onSaved();
-      setSaJson("");
+      onSaved(); setSaJson(""); setTestResult(null);
       toast({ title: "✅ Settings saved" });
     },
     onError: (e: any) => toast({ variant: "destructive", title: e.message ?? "Save failed" }),
   });
 
+  const testMutation = useMutation({
+    mutationFn: () => apiFetch("/api/admin/seo/indexing/test-connection", {
+      method: "POST",
+      body: JSON.stringify(saJson.trim() ? { serviceAccountJson: saJson.trim() } : {}),
+    }),
+    onSuccess: (r: TestResult) => setTestResult(r),
+    onError: (e: any) => setTestResult({ ok: false, error: e.message }),
+  });
+
   const removeCreds = useMutation({
     mutationFn: () => apiFetch("/api/admin/seo/indexing/credentials", { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/seo/indexing/settings"] }); onSaved(); toast({ title: "Credentials removed" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/seo/indexing/settings"] }); onSaved(); setSaJson(""); setTestResult(null); toast({ title: "Credentials removed" }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
 
@@ -302,99 +345,189 @@ function SettingsTab({ settings, onSaved }: { settings?: IndexingSettings; onSav
     saveMutation.mutate(body);
   };
 
+  const jsonPlaceholder = `{
+  "type": "service_account",
+  "project_id": "your-project-id",
+  "private_key_id": "...",
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\\n...\\n-----END RSA PRIVATE KEY-----\\n",
+  "client_email": "kdf-indexing@your-project.iam.gserviceaccount.com",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  ...
+}`;
+
   return (
     <div className="space-y-5">
-      {/* Site URL */}
+
+      {/* ── Service Account Credentials ── */}
+      <Card className="border-2 border-violet-100">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Key className="w-4 h-4 text-violet-500" /> Google Service Account Credentials
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Upload the <code className="bg-muted px-1 rounded">service-account.json</code> file downloaded from Google Cloud Console
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+
+          {/* Current credential status */}
+          {settings?.hasCredentials ? (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-green-700 font-bold">
+                  <CheckCircle2 className="w-4 h-4" /> Service Account Connected
+                </div>
+                <Button
+                  variant="outline" size="sm"
+                  className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                  onClick={() => removeCreds.mutate()}
+                  disabled={removeCreds.isPending}
+                >
+                  <Trash2 className="w-3 h-3" /> Remove
+                </Button>
+              </div>
+              {settings.clientEmail && (
+                <p className="font-mono bg-white/80 border border-green-100 rounded px-2 py-1 text-green-800 break-all">{settings.clientEmail}</p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+              <p className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> No credentials configured</p>
+              <p className="mt-1">Upload your <strong>service-account.json</strong> below, then click <strong>Test Connection</strong> before saving.</p>
+            </div>
+          )}
+
+          {/* ── File upload zone ── */}
+          <div
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={`relative border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer ${
+              isDragging ? "border-violet-400 bg-violet-50" : "border-border hover:border-violet-300 hover:bg-violet-50/30"
+            }`}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileChange} />
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center">
+                <FolderOpen className="w-5 h-5 text-violet-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {isDragging ? "Drop JSON file here" : "Click to upload or drag & drop"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">service-account.json from Google Cloud Console</p>
+              </div>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 mt-1 pointer-events-none">
+                <Upload className="w-3.5 h-3.5" /> Browse File
+              </Button>
+            </div>
+          </div>
+
+          {/* ── OR paste JSON ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">or paste JSON directly</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <Textarea
+              placeholder={jsonPlaceholder}
+              value={saJson}
+              onChange={e => { setSaJson(e.target.value); setTestResult(null); }}
+              className="font-mono text-xs h-44 resize-y"
+            />
+            {saJson.trim() && (
+              <p className="text-[10px] text-green-600 font-medium">✅ JSON loaded ({saJson.length.toLocaleString()} chars) — test connection before saving</p>
+            )}
+          </div>
+
+          {/* ── Test Connection ── */}
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending || (!saJson.trim() && !settings?.hasCredentials)}
+              className="gap-2 w-full sm:w-auto"
+            >
+              {testMutation.isPending
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Testing…</>
+                : <><Wifi className="w-4 h-4" /> Test Google Connection</>}
+            </Button>
+
+            {testResult && (
+              <div className={`rounded-xl border p-3 text-xs space-y-1.5 ${testResult.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+                {testResult.ok ? (
+                  <>
+                    <p className="font-bold text-green-700 flex items-center gap-1.5"><Wifi className="w-3.5 h-3.5" /> Connection Successful ✅</p>
+                    {testResult.clientEmail && <p className="text-green-700">Account: <span className="font-mono bg-white/60 px-1 rounded">{testResult.clientEmail}</span></p>}
+                    {testResult.projectId && <p className="text-green-700">Project: <span className="font-mono bg-white/60 px-1 rounded">{testResult.projectId}</span></p>}
+                    {testResult.tokenPreview && <p className="text-green-600">OAuth Token: <span className="font-mono">{testResult.tokenPreview}</span></p>}
+                    <p className="text-green-600 font-medium">Google Indexing API is ready to use!</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-red-700 flex items-center gap-1.5"><WifiOff className="w-3.5 h-3.5" /> Connection Failed ❌</p>
+                    <p className="text-red-600 font-mono bg-red-100/60 rounded px-2 py-1">{testResult.error}</p>
+                    <p className="text-red-600">Check: correct JSON file, Indexing API enabled, service account added to Search Console</p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Site URL ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-blue-500" /> Site URL</CardTitle>
-          <CardDescription className="text-xs">The public domain of your storefront (used to build indexing URLs)</CardDescription>
+          <CardDescription className="text-xs">Your storefront's public domain (used to build full indexing URLs)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Site URL</Label>
             <Input
-              placeholder="https://yourstore.com"
+              placeholder="https://kdfnuts.com"
               value={siteUrl}
               onChange={e => setSiteUrl(e.target.value)}
               className="text-sm font-mono"
             />
-            <p className="text-[10px] text-muted-foreground">Example: https://kdfnuts.com — products will index as /products/slug, blogs as /blog/slug</p>
+            <p className="text-[10px] text-muted-foreground">
+              Products: <code className="bg-muted px-1 rounded">{siteUrl || "https://yourstore.com"}/products/slug</code>
+              {" · "}Blog: <code className="bg-muted px-1 rounded">{siteUrl || "https://yourstore.com"}/blog/slug</code>
+            </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Auto-index toggle */}
+      {/* ── Auto-Indexing ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-green-500" /> Auto-Indexing</CardTitle>
-          <CardDescription className="text-xs">Automatically submit URLs to Google when content is created or updated</CardDescription>
+          <CardDescription className="text-xs">Automatically notify Google when products, categories, or blog posts are created/updated</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <p className="text-sm font-medium">Enable Auto-Indexing</p>
-              <p className="text-xs text-muted-foreground">When ON: products, categories, and published blog posts are auto-submitted to Google</p>
+              <p className="text-xs text-muted-foreground">
+                Covers: Products, Categories, Blog Posts · Max 180 requests/day · 1 req/sec queue
+              </p>
             </div>
             <Switch checked={autoIndex} onCheckedChange={setAutoIndex} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Service Account */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2"><Key className="w-4 h-4 text-violet-500" /> Google Service Account</CardTitle>
-          <CardDescription className="text-xs">Upload your Google Cloud service account JSON key for Indexing API access</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {settings?.hasCredentials ? (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs space-y-2">
-              <div className="flex items-center gap-2 text-green-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4" /> Service account connected
-              </div>
-              {settings.clientEmail && (
-                <p className="font-mono bg-white/80 border border-green-100 rounded px-2 py-1 text-green-800">{settings.clientEmail}</p>
-              )}
-              <Button
-                variant="outline" size="sm"
-                className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
-                onClick={() => removeCreds.mutate()}
-                disabled={removeCreds.isPending}
-              >
-                <Trash2 className="w-3 h-3" /> Remove Credentials
-              </Button>
-            </div>
-          ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-              <p className="font-semibold">No credentials uploaded</p>
-              <p className="mt-0.5">See the <strong>Setup Guide</strong> tab for step-by-step instructions.</p>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">{settings?.hasCredentials ? "Replace Service Account JSON" : "Paste Service Account JSON"}</Label>
-              <button onClick={() => setShowJson(!showJson)} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5">
-                {showJson ? <><ChevronUp className="w-3 h-3" /> Hide</> : <><ChevronDown className="w-3 h-3" /> Show</>}
-              </button>
-            </div>
-            {showJson && (
-              <Textarea
-                placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key": "...",\n  "client_email": "...@....iam.gserviceaccount.com",\n  ...\n}'}
-                value={saJson}
-                onChange={e => setSaJson(e.target.value)}
-                className="font-mono text-xs h-48"
-              />
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
-        {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-        Save Settings
-      </Button>
+      {/* ── Save button ── */}
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
+          {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          Save Settings
+        </Button>
+        <p className="text-xs text-muted-foreground">Test connection first, then save.</p>
+      </div>
     </div>
   );
 }

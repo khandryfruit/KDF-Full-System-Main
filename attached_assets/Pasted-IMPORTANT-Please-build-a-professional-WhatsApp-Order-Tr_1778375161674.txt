@@ -1,0 +1,209 @@
+IMPORTANT — Please build a professional WhatsApp Order Tracking Automation system.
+
+This feature is VERY IMPORTANT.
+
+Now that:
+
+✅ courier booking works
+✅ tracking works
+✅ CN generation works
+
+we need to connect the FULL tracking system with WhatsApp automation.
+
+==================================================
+GOAL
+====
+
+Any customer should be able to:
+
+✅ get tracking number automatically
+✅ track shipment from WhatsApp
+✅ receive shipment updates
+✅ get live courier status
+✅ receive CN automatically
+
+==================================================
+SUPPORTED ORDERS
+================
+
+Please support BOTH:
+
+✅ Ecommerce Orders
+✅ Shopify Orders
+
+Tracking + WhatsApp must work for BOTH systems.
+
+==================================================
+AUTOMATIC WHATSAPP TRACKING
+===========================
+
+After successful booking:
+
+Automatically send WhatsApp message containing:
+
+✅ Customer Name
+✅ Order Number
+✅ Tracking Number (CN)
+✅ Courier Name
+✅ Tracking Link
+✅ Shipment Status
+✅ Estimated Delivery
+✅ Support Contact
+
+==================================================
+TRACKING MESSAGE FORMAT
+=======================
+
+Example:
+
+```txt id="3d7y4r"
+📦 Your Order Has Been Shipped!
+
+Hello {CustomerName},
+
+Your order #{OrderNo} has been booked successfully.
+
+🚚 Courier: TCS
+🔢 Tracking No: {CN}
+📍 Status: Booked
+
+Track Your Shipment:
+https://ociconnect.tcscourier.com/tracking/index.html
+
+Thank you for shopping with Khan Baba Dry Fruits 🌰
+```
+
+==================================================
+WHATSAPP BOT FEATURES
+=====================
+
+Inside WhatsApp automation/chatbot:
+
+Customer should be able to send:
+
+✅ Order Number
+✅ Tracking Number
+✅ Phone Number
+✅ Customer Name
+
+and bot should automatically:
+
+✅ search order
+✅ fetch tracking
+✅ return shipment details
+
+==================================================
+SEARCH SYSTEM
+=============
+
+Bot should intelligently search by:
+
+✅ order ID
+✅ CN number
+✅ phone number
+✅ customer name
+✅ email
+
+==================================================
+BOT RESPONSE SHOULD SHOW
+========================
+
+✅ Customer Name
+✅ Order Status
+✅ Courier Name
+✅ Tracking Number
+✅ Current Shipment Status
+✅ Last Tracking Update
+✅ Tracking Link
+✅ Estimated Delivery
+
+==================================================
+LIVE TRACKING SYNC
+==================
+
+Please connect live courier tracking API with WhatsApp system.
+
+When shipment status changes:
+
+Automatically send WhatsApp updates:
+
+✅ Booked
+✅ In Transit
+✅ Out For Delivery
+✅ Delivered
+✅ Returned
+
+==================================================
+ADMIN FEATURES
+==============
+
+Inside admin panel add:
+
+✅ Send Tracking Manually
+✅ Resend Tracking
+✅ Copy Tracking Link
+✅ Open Tracking
+✅ WhatsApp Delivery Logs
+
+==================================================
+WHATSAPP TEMPLATE SUPPORT
+=========================
+
+Use official WhatsApp templates for:
+
+✅ Order Confirmed
+✅ Order Shipped
+✅ Out For Delivery
+✅ Delivered
+✅ Tracking Update
+
+==================================================
+UI/UX REQUIREMENT
+=================
+
+Please make system:
+
+✅ professional
+✅ modern
+✅ easy to use
+✅ mobile-friendly
+✅ fast
+
+==================================================
+IMPORTANT
+=========
+
+Do NOT modify:
+❌ booking system
+❌ TCS auth flow
+❌ tracking APIs
+
+Only ADD:
+✅ WhatsApp tracking automation
+✅ tracking chatbot
+✅ live shipment notifications
+
+==================================================
+DEBUGGING REQUIRED
+==================
+
+Inside logs show:
+
+✅ WhatsApp request
+✅ tracking lookup
+✅ CN searched
+✅ customer matched
+✅ tracking response
+✅ message sent status
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+
+✅ automatic tracking messages
+✅ smart WhatsApp tracking bot
+✅ live shipment notifications
+✅ Shopify + Ecommerce support
+✅ professional customer experience

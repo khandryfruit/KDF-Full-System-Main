@@ -83,6 +83,35 @@ async function getAccessToken(sa: ServiceAccount): Promise<string> {
   return tokenData.access_token;
 }
 
+/* ─── Connection test (exported) ─────────────────────── */
+
+export async function testGoogleConnection(overrideJson?: string): Promise<{
+  ok: boolean;
+  clientEmail?: string;
+  projectId?: string;
+  tokenPreview?: string;
+  error?: string;
+}> {
+  try {
+    let saJson: string | null | undefined = overrideJson;
+    if (!saJson) {
+      const rows = await db.select().from(googleIndexingSettingsTable).limit(1);
+      saJson = rows[0]?.serviceAccountJson;
+    }
+    if (!saJson) return { ok: false, error: "No service account credentials configured" };
+    const sa = parseServiceAccount(saJson);
+    const token = await getAccessToken(sa);
+    return {
+      ok: true,
+      clientEmail: sa.client_email,
+      projectId: sa.project_id,
+      tokenPreview: token.slice(0, 24) + "…",
+    };
+  } catch (err: any) {
+    return { ok: false, error: err.message ?? "Connection test failed" };
+  }
+}
+
 /* ─── Settings helpers ───────────────────────────────── */
 
 async function getSettings() {

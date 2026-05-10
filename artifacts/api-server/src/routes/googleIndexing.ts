@@ -14,6 +14,7 @@ import {
   getSafeSettings,
   getIndexingLogs,
   getQueueLength,
+  testGoogleConnection,
 } from "../lib/googleIndexing";
 
 const router: IRouter = Router();
@@ -88,6 +89,18 @@ router.delete("/admin/seo/indexing/credentials", adminMiddleware as any, async (
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to remove credentials" });
+  }
+});
+
+/** POST /admin/seo/indexing/test-connection */
+router.post("/admin/seo/indexing/test-connection", adminMiddleware as any, async (req: Request, res: Response) => {
+  try {
+    const { serviceAccountJson } = req.body as { serviceAccountJson?: string };
+    const result = await testGoogleConnection(serviceAccountJson || undefined);
+    res.json(result);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ ok: false, error: "Test failed unexpectedly" });
   }
 });
 
