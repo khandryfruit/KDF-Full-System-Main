@@ -1,0 +1,134 @@
+GOOD — now use this OFFICIAL TCS Tracking API that I authorized successfully.
+
+==================================================
+OFFICIAL TRACKING API
+=====================
+
+Base URL:
+
+```txt id="v7g2dp"
+https://ociconnect.tcscourier.com/tracking
+```
+
+Tracking Endpoint:
+
+```txt id="lq1p7s"
+/api/Tracking/GetDynamicTrackDetail
+```
+
+==================================================
+REQUEST METHOD
+==============
+
+```http id="8b9x3e"
+GET
+```
+
+==================================================
+QUERY PARAMS
+============
+
+```txt id="fw0w6h"
+consignee = CN_NUMBER
+timezone = false
+```
+
+Example:
+
+```txt id="9k7l1m"
+https://ociconnect.tcscourier.com/tracking/api/Tracking/GetDynamicTrackDetail?consignee=123456789&timezone=false
+```
+
+==================================================
+IMPORTANT
+=========
+
+I already authorized the API successfully.
+
+When GET request is sent correctly:
+✅ full tracking details return below
+✅ shipment timeline returns
+✅ delivery statuses return
+
+==================================================
+PLEASE ADD THIS INTO SYSTEM
+===========================
+
+Inside:
+✅ Shopify Orders
+✅ Ecommerce Orders
+✅ Courier Dashboard
+
+Add:
+
+---
+
+## TRACK BUTTON
+
+✅ Track Shipment
+✅ Refresh Tracking
+✅ Open TCS Tracking
+✅ Copy CN
+
+==================================================
+SHOW THESE DETAILS
+==================
+
+✅ Booking Status
+✅ In Transit
+✅ Out For Delivery
+✅ Delivered
+✅ Returned
+✅ Delivery Date
+✅ Last Tracking Update
+✅ CN Number
+✅ Shipment Timeline
+
+==================================================
+AUTO TRACKING SYNC
+==================
+
+Please add:
+
+✅ Auto Sync every few minutes
+OR
+✅ Manual Refresh button
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT modify:
+❌ booking system
+❌ auth system
+❌ payload logic
+
+Current booking system is working properly now.
+
+Only ADD:
+✅ tracking integration
+✅ tracking UI
+✅ tracking sync
+
+==================================================
+DEBUGGING
+=========
+
+Inside API Logs show:
+
+✅ tracking URL
+✅ query params
+✅ CN used
+✅ tracking response
+✅ tracking errors
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ live shipment tracking
+✅ professional courier dashboard
+✅ shipment timeline
+✅ real-time status updates
+✅ stable production tracking

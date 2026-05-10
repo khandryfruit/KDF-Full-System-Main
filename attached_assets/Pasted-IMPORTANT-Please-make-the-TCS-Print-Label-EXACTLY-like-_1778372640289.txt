@@ -1,0 +1,143 @@
+IMPORTANT — Please make the TCS Print Label EXACTLY like the original official TCS label format.
+
+I attached the reference screenshot.
+
+The current label design must match the official TCS courier layout professionally.
+
+==================================================
+LABEL DESIGN REQUIREMENT
+========================
+
+Generate the label EXACTLY similar to official TCS format:
+
+✅ table layout
+✅ boxed sections
+✅ barcode
+✅ QR code
+✅ parcel info
+✅ shipper info
+✅ customer info
+✅ COD amount
+✅ CN number
+✅ TCS logo
+✅ weight
+✅ pieces
+✅ quantity
+✅ remarks
+✅ products section
+
+==================================================
+SECTION STRUCTURE
+=================
+
+TOP ROW:
+
+---
+
+## LEFT SIDE
+
+Customer Information
+
+✅ Customer Name
+✅ Customer Phone
+✅ Full Address
+✅ Destination City
+✅ Order Number
+✅ Barcode
+✅ QR code
+
+---
+
+## CENTER
+
+Brand / Shipper Information
+
+✅ Store Name
+✅ Store Phone
+✅ Pickup Address
+✅ COD Amount
+✅ Barcode
+
+---
+
+## RIGHT SIDE
+
+Parcel Information
+
+✅ TCS Logo
+✅ QR Code
+✅ Main Barcode
+✅ Consignment Number
+✅ Service Type
+✅ Fragile Status
+✅ Date
+✅ Weight
+✅ Pieces
+✅ Quantity
+
+==================================================
+BOTTOM SECTION
+==============
+
+✅ Remarks
+✅ Product List
+✅ Product Quantities
+
+==================================================
+PRINT REQUIREMENTS
+==================
+
+Please support:
+
+✅ Thermal label printing
+✅ A4 PDF printing
+✅ Mobile preview
+✅ Browser preview
+✅ Download PDF
+✅ Direct print
+
+==================================================
+IMPORTANT
+=========
+
+Use:
+✅ proper spacing
+✅ aligned tables
+✅ bold headings
+✅ barcode library
+✅ QR generator
+
+Label must look:
+✅ professional
+✅ courier-standard
+✅ production-ready
+
+==================================================
+GENERATE ONLY AFTER
+===================
+
+✅ successful booking
+✅ real CN number
+
+==================================================
+DO NOT MODIFY
+=============
+
+❌ booking flow
+❌ auth logic
+❌ tracking system
+
+Only improve:
+✅ label design
+✅ PDF output
+✅ print layout
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ original-style TCS labels
+✅ professional courier print format
+✅ exact courier-style layout
+✅ production-safe PDF labels

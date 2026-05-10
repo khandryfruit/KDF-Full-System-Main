@@ -2439,25 +2439,59 @@ router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (re
     const [shipment] = await db.select().from(shipmentsTable).where(eq(shipmentsTable.id, id)).limit(1);
     if (!shipment) { res.status(404).json({ error: "Shipment not found" }); return; }
 
-    const cn           = shipment.trackingId ?? "";
-    const raw          = (shipment.rawResponse ?? {}) as Record<string, any>;
+    const cn            = shipment.trackingId ?? "";
+    const raw           = (shipment.rawResponse ?? {}) as Record<string, any>;
     const customerName  = (shipment.customerName  ?? raw.customerName  ?? "—").toString();
     const customerPhone = (shipment.customerPhone ?? raw.customerPhone ?? "—").toString();
     const customerAddr  = (shipment.customerAddress ?? "—").toString();
     const customerCity  = (shipment.customerCity  ?? raw.customerCity  ?? "—").toString();
-    const codAmount     = shipment.isCod && shipment.codAmount ? `PKR ${Number(shipment.codAmount).toLocaleString()}` : null;
-    const weight        = shipment.weight ? `${Number(shipment.weight).toFixed(2)} kg` : "0.50 kg";
-    const pieces        = shipment.pieces ?? 1;
+    const codAmountNum  = shipment.isCod && shipment.codAmount ? Number(shipment.codAmount) : 0;
+    const codAmountStr  = codAmountNum > 0 ? codAmountNum.toLocaleString() : "0";
+    const weight        = shipment.weight ? `${Number(shipment.weight).toFixed(2)} KG` : "0.50 KG";
+    const pieces        = Number(shipment.pieces ?? raw.pieces ?? 1);
+    const qty           = Number(raw.qty ?? raw.quantity ?? pieces);
     const orderRef      = (shipment.shopifyOrderNumber ?? String(shipment.orderId ?? id)).toString();
-    const contentDesc   = (shipment.contentDesc ?? "Dry Fruits").toString().slice(0, 60);
-    const bookedAt      = shipment.createdAt ? new Date(shipment.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    const contentDesc   = (shipment.contentDesc ?? "—").toString().slice(0, 80);
+    const remarks       = (raw.remarks ?? raw.specialInstructions ?? shipment.specialInstructions ?? "").toString();
+    const fragile       = raw.fragile ? "true" : "false";
+    const courierSlug   = (shipment.courierSlug ?? "tcs").toLowerCase();
+    const bookedAt      = shipment.createdAt
+      ? new Date(shipment.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : "—";
     const serviceCode   = (shipment.serviceCode ?? "O").toUpperCase();
     const serviceLabel  = serviceCode === "O" ? "Overnight" : serviceCode === "E" ? "Economy" : serviceCode === "S" ? "Same-Day" : serviceCode;
+
+    /* ─── Shipper info from courier settings ─── */
+    const tcsS = courierSlug === "tcs" ? await getTcsSettings().catch(() => null) : null;
+    const shipperName  = (tcsS?.shipperName  ?? raw.shipperName  ?? "KDF NUTS").toString();
+    const shipperPhone = (tcsS?.shipperPhone ?? raw.shipperPhone ?? "03049996000").toString();
+    const shipperAddr  = (tcsS?.pickupAddress ?? raw.pickupAddress ?? "Lahore, Pakistan").toString();
+
+    /* ─── Courier logo block (right col) ─── */
+    const courierLogoHtml = courierSlug === "tcs"
+      ? `<div class="tcs-logo"><span class="tcs-check">✓</span>TCS<span class="tcs-reg">®</span></div>`
+      : courierSlug === "postex"
+        ? `<div class="tcs-logo" style="background:#1a4b8c;font-size:17px">PostEx<span class="tcs-reg">®</span></div>`
+        : courierSlug === "leopards"
+          ? `<div class="tcs-logo" style="background:#c8a000;font-size:15px">LEOPARDS</div>`
+          : courierSlug === "trax"
+            ? `<div class="tcs-logo" style="background:#b84500;font-size:17px">TRAX</div>`
+            : `<div class="tcs-logo" style="background:#333">${esc(courierSlug.toUpperCase())}</div>`;
 
     req.log.info({ id, cn, orderRef, customerCity }, "TCS — label generation");
 
     /* ─── Escape HTML special chars ─── */
-    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    /* ─── JS string escape (for inline script values) ─── */
+    const jsStr = (s: string) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "").replace(/\r/g, "");
+
+    const thermalCss = fmt === "thermal"
+      ? `@page{size:100mm 200mm;margin:0}body{background:#fff!important;padding:2px!important}.label-wrap{width:96mm!important;font-size:9px!important}.amount-text{font-size:15px!important}`
+      : fmt === "a4"
+        ? `@page{size:A4;margin:10mm}body{background:#fff;padding:0}`
+        : "";
+
+    const printBtnLabel = fmt === "thermal" ? "🖨️ Thermal Print" : fmt === "a4" ? "🖨️ A4 Print" : "🖨️ Print Label";
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -2466,154 +2500,177 @@ router.get("/admin/shipments/:id/print-label", adminMiddleware as any, async (re
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TCS Label — ${esc(cn || orderRef)}</title>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,Helvetica,sans-serif;background:#e5e5e5;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+    body{font-family:Arial,Helvetica,sans-serif;background:#d8d8d8;display:flex;flex-direction:column;align-items:center;padding:20px;min-height:100vh}
     .actions{display:flex;gap:10px;margin-bottom:16px}
-    .btn{padding:10px 22px;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px}
+    .btn{padding:9px 20px;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer}
     .btn-print{background:#c62828;color:#fff}
-    .btn-close{background:#424242;color:#fff}
-    .label{width:100mm;background:#fff;border:2.5px solid #000;font-family:Arial,sans-serif}
-    .hdr{background:#c62828;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
-    .hdr-name{font-size:26px;font-weight:900;letter-spacing:3px;line-height:1}
-    .hdr-sub{font-size:7px;margin-top:2px;letter-spacing:0.5px;opacity:.9}
-    .hdr-right{text-align:right;font-size:7px;line-height:1.6;opacity:.9}
-    .svc-bar{background:#212121;color:#fff;text-align:center;font-size:10px;font-weight:700;padding:3px 0;letter-spacing:3px}
-    .bc-wrap{padding:10px 12px 6px;text-align:center;border-bottom:1.5px solid #ddd}
-    .bc-wrap svg{max-width:100%;height:65px}
-    .cn-txt{font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:2.5px;margin-top:3px}
-    .cod-bar{background:#c62828;color:#fff;text-align:center;font-size:16px;font-weight:900;padding:7px;letter-spacing:1px}
-    .prepaid-bar{background:#2e7d32;color:#fff;text-align:center;font-size:11px;font-weight:700;padding:5px;letter-spacing:2px}
-    .sec{padding:6px 12px;border-bottom:1.5px solid #ddd}
-    .sec-lbl{font-size:6.5px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
-    .sec-val{font-size:11px;font-weight:600;color:#111;line-height:1.45}
-    .sec-val.xl{font-size:14px;font-weight:900}
-    .row2{display:grid;grid-template-columns:1fr 1fr}
-    .row2 .cell{padding:6px 12px;border-bottom:1.5px solid #ddd}
-    .row2 .cell:first-child{border-right:1.5px solid #ddd}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr}
-    .row3 .cell{padding:6px 12px;border-bottom:1.5px solid #ddd}
-    .row3 .cell:not(:last-child){border-right:1.5px solid #ddd}
-    .ftr{padding:5px 12px;text-align:center;font-size:6.5px;color:#888;line-height:1.5}
-    ${fmt === "thermal"
-      ? `@page{size:100mm 152mm;margin:0}body{background:#fff!important;padding:2px!important}`
-      : fmt === "a4"
-        ? `@page{size:A4;margin:12mm}body{background:#fff;padding:0}`
-        : ""}
+    .btn-close{background:#444;color:#fff}
+    /* ── Label wrapper ── */
+    .label-wrap{background:#fff;border:1.5px solid #000;width:21cm;font-size:10.5px;font-family:Arial,Helvetica,sans-serif}
+    /* ── 3-column grid ── */
+    .cols{display:table;width:100%;border-collapse:collapse;border-bottom:1.5px solid #000}
+    .col{display:table-cell;vertical-align:top;border-right:1.5px solid #000;width:33.33%}
+    .col:last-child{border-right:none}
+    .col-header{font-weight:700;font-size:11px;text-align:center;background:#efefef;padding:4px 0;border-bottom:1.5px solid #000}
+    .col-body{padding:5px 7px}
+    /* ── fields ── */
+    .field{margin-bottom:3px;font-size:10.5px;line-height:1.45}
+    .field b{font-weight:700}
+    .dest-row{margin:5px 0 4px}
+    .dest-label{font-weight:700;font-size:10.5px}
+    .dest-city{font-size:15px;font-weight:900;text-transform:uppercase;display:inline}
+    /* ── amount ── */
+    .amount-box{text-align:center;margin:7px 0 4px}
+    .amount-text{font-size:22px;font-weight:900;line-height:1.1}
+    /* ── TCS Logo ── */
+    .tcs-logo-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}
+    .tcs-logo{background:#cc0000;color:#fff;font-size:19px;font-weight:900;padding:3px 9px 3px 7px;letter-spacing:1px;display:inline-flex;align-items:center;gap:3px;border-radius:2px;line-height:1}
+    .tcs-check{font-size:11px;opacity:.9}
+    .tcs-reg{font-size:7px;font-weight:400;vertical-align:super;margin-left:1px}
+    /* ── info grid (right col) ── */
+    .info-grid{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
+    .info-grid td{padding:2.5px 3px;border-top:1px solid #ddd}
+    .info-grid td b{font-weight:700}
+    /* ── barcodes ── */
+    .bc-wrap{text-align:center;margin:4px 0 2px;overflow:hidden}
+    .bc-wrap svg{max-width:100%}
+    .cn-num{font-family:'Courier New',monospace;font-size:11px;font-weight:700;text-align:center;letter-spacing:2px;margin-top:2px;margin-bottom:1px}
+    /* ── QR ── */
+    .bc-qr-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:5px;gap:4px}
+    /* ── bottom rows ── */
+    .bottom-row{border-top:1.5px solid #000;padding:4px 8px;font-size:10.5px;min-height:24px}
+    .bottom-row b{font-weight:700}
+    /* ── print ── */
     @media print{
       body{background:#fff;padding:0}
       .actions{display:none!important}
-      .label{border:2px solid #000;box-shadow:none}
     }
+    ${thermalCss}
   </style>
 </head>
 <body>
 
 <div class="actions">
-  <button class="btn btn-print" onclick="window.print()">${fmt === "thermal" ? "🖨️ Thermal Print (100mm)" : fmt === "a4" ? "🖨️ A4 Print" : "🖨️ Print Label"}</button>
+  <button class="btn btn-print" onclick="window.print()">${printBtnLabel}</button>
   <button class="btn btn-close" onclick="window.close()">✕ Close</button>
 </div>
 
-<div class="label">
+<div class="label-wrap">
 
-  <!-- Header -->
-  <div class="hdr">
-    <div>
-      <div class="hdr-name">TCS</div>
-      <div class="hdr-sub">COURIER SERVICES</div>
+  <!-- 3-column header row -->
+  <div class="cols">
+
+    <!-- LEFT: Customer Information -->
+    <div class="col">
+      <div class="col-header">Customer Information</div>
+      <div class="col-body">
+        <div class="field"><b>Name:</b> ${esc(customerName)}</div>
+        <div class="field"><b>Phone:</b> ${esc(customerPhone)}</div>
+        <div class="field"><b>Address:</b> ${esc(customerAddr)}</div>
+        <div class="dest-row"><span class="dest-label">Destination: </span><span class="dest-city">${esc(customerCity)}</span></div>
+        <div class="field"><b>Order:</b> ${esc(orderRef)}</div>
+        <div class="bc-wrap"><svg id="bc-order"></svg></div>
+        <div class="bc-qr-row">
+          <div id="qr-left" style="width:52px;height:52px;flex-shrink:0"></div>
+        </div>
+      </div>
     </div>
-    <div class="hdr-right">
-      Delivering Excellence<br>
-      www.tcscourier.com<br>
-      0800-TCS-786
+
+    <!-- CENTER: Brand Information -->
+    <div class="col">
+      <div class="col-header">Brand Information</div>
+      <div class="col-body">
+        <div class="field"><b>Shipper:</b> ${esc(shipperName)}&nbsp;&nbsp;&nbsp;${esc(shipperPhone)}</div>
+        <div class="field"><b>Shipper Address:</b> ${esc(shipperAddr)}</div>
+        <div class="amount-box">
+          <div class="amount-text"><b>Amount: Rs ${esc(codAmountStr)}</b></div>
+        </div>
+        <div class="bc-wrap"><svg id="bc-cod"></svg></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Service Bar -->
-  <div class="svc-bar">${esc(serviceLabel)} — ECOM</div>
-
-  <!-- Barcode -->
-  <div class="bc-wrap">
-    <svg id="bc"></svg>
-    <div class="cn-txt">CN: ${esc(cn)}</div>
-  </div>
-
-  <!-- COD / Prepaid -->
-  ${codAmount
-    ? `<div class="cod-bar">💰 COD: ${esc(codAmount)}</div>`
-    : `<div class="prepaid-bar">✓ PREPAID</div>`}
-
-  <!-- Consignee -->
-  <div class="sec">
-    <div class="sec-lbl">📦 Consignee (To)</div>
-    <div class="sec-val xl">${esc(customerName)}</div>
-    <div class="sec-val">${esc(customerPhone)}</div>
-    <div class="sec-val">${esc(customerAddr)}</div>
-    <div class="sec-val xl">${esc(customerCity)}</div>
-  </div>
-
-  <!-- Order Ref / Date -->
-  <div class="row2">
-    <div class="cell">
-      <div class="sec-lbl">Order #</div>
-      <div class="sec-val">${esc(orderRef)}</div>
+    <!-- RIGHT: Parcel Information -->
+    <div class="col">
+      <div class="col-header">Parcel Information</div>
+      <div class="col-body">
+        <div class="tcs-logo-row">
+          ${courierLogoHtml}
+          <div id="qr-right" style="width:54px;height:54px;flex-shrink:0"></div>
+        </div>
+        <div class="bc-wrap"><svg id="bc-cn"></svg></div>
+        <div class="cn-num">${esc(cn)}</div>
+        <table class="info-grid">
+          <tr>
+            <td><b>Service:</b> ${esc(serviceLabel)}</td>
+            <td><b>Fragile:</b> ${esc(fragile)}</td>
+          </tr>
+          <tr>
+            <td><b>Date:</b> ${esc(bookedAt)}</td>
+            <td><b>Weight:</b> ${esc(weight)}</td>
+          </tr>
+          <tr>
+            <td><b>Pieces:</b> ${pieces}</td>
+            <td><b>Qty:</b> ${qty}</td>
+          </tr>
+        </table>
+      </div>
     </div>
-    <div class="cell">
-      <div class="sec-lbl">Date Booked</div>
-      <div class="sec-val">${esc(bookedAt)}</div>
-    </div>
-  </div>
 
-  <!-- Weight / Pieces / Contents -->
-  <div class="row3">
-    <div class="cell">
-      <div class="sec-lbl">Weight</div>
-      <div class="sec-val">${esc(weight)}</div>
-    </div>
-    <div class="cell">
-      <div class="sec-lbl">Pieces</div>
-      <div class="sec-val">${pieces}</div>
-    </div>
-    <div class="cell">
-      <div class="sec-lbl">Service</div>
-      <div class="sec-val">${esc(serviceCode)}</div>
-    </div>
-  </div>
+  </div><!-- /cols -->
 
-  <!-- Contents -->
-  <div class="sec">
-    <div class="sec-lbl">Contents</div>
-    <div class="sec-val">${esc(contentDesc)}</div>
-  </div>
+  <!-- Remarks -->
+  <div class="bottom-row"><b>Remarks:</b> ${remarks ? esc(remarks) : "-"}</div>
 
-  <!-- Shipper -->
-  <div class="sec">
-    <div class="sec-lbl">🏪 Shipper (From)</div>
-    <div class="sec-val xl">KDF NUTS</div>
-    <div class="sec-val">Lahore, Pakistan</div>
-  </div>
+  <!-- Products -->
+  <div class="bottom-row"><b>Products:</b> ${contentDesc && contentDesc !== "—" ? esc(contentDesc) : "-"}</div>
 
-  <!-- Footer -->
-  <div class="ftr">
-    Track: ociconnect.tcscourier.com/tracking | CN: ${esc(cn)}<br>
-    Generated: ${new Date().toLocaleString("en-PK")}
-  </div>
-
-</div><!-- /label -->
+</div><!-- /label-wrap -->
 
 <script>
-  (function(){
-    var cn="${cn.replace(/"/g, '\\"')}";
-    if(!cn){ return; }
-    try{
-      JsBarcode("#bc", cn, {
-        format:"CODE128", width:2.2, height:65,
-        displayValue:false, margin:4, background:"#ffffff", lineColor:"#000000"
+window.onload = function() {
+  var cn       = "${jsStr(cn)}";
+  var orderRef = "${jsStr(orderRef.replace(/[^A-Za-z0-9]/g, ""))}";
+  var codVal   = "${jsStr(codAmountStr.replace(/,/g, ""))}";
+
+  /* Main CN barcode — right column */
+  if (cn) {
+    try {
+      JsBarcode("#bc-cn", cn, {
+        format:"CODE128", width:2.0, height:58,
+        displayValue:false, margin:2, background:"#fff", lineColor:"#000"
       });
-    }catch(e){
-      document.getElementById("bc").outerHTML='<div style="font-family:monospace;font-size:18px;letter-spacing:4px;padding:10px">'+cn+'</div>';
-    }
-  })();
+    } catch(e) {}
+  }
+
+  /* Order barcode — left column */
+  var orderBcVal = orderRef || "ORDER";
+  try {
+    JsBarcode("#bc-order", orderBcVal, {
+      format:"CODE128", width:1.4, height:32,
+      displayValue:false, margin:2, background:"#fff", lineColor:"#000"
+    });
+  } catch(e) {}
+
+  /* COD barcode — center column */
+  var codBcVal = codVal || "0";
+  try {
+    JsBarcode("#bc-cod", codBcVal || "0", {
+      format:"CODE128", width:1.4, height:32,
+      displayValue:false, margin:2, background:"#fff", lineColor:"#000"
+    });
+  } catch(e) {}
+
+  /* QR codes — left + right */
+  if (cn && typeof QRCode !== "undefined") {
+    try { new QRCode(document.getElementById("qr-left"),  { text: cn, width:52, height:52, colorDark:"#000", colorLight:"#fff", correctLevel: QRCode.CorrectLevel.M }); } catch(e) {}
+    try { new QRCode(document.getElementById("qr-right"), { text: cn, width:54, height:54, colorDark:"#000", colorLight:"#fff", correctLevel: QRCode.CorrectLevel.M }); } catch(e) {}
+  }
+
+  window.print();
+};
 <\/script>
 </body></html>`;
 
