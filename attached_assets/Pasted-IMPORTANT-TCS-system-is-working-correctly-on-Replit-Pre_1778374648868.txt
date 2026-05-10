@@ -1,0 +1,195 @@
+IMPORTANT — TCS system is working correctly on Replit Preview/Development environment, but failing ONLY after production publish.
+
+Please DO NOT modify the working booking/authentication logic.
+
+Current status:
+
+✅ Replit Preview booking works
+✅ Real CN generation works
+✅ Tracking works
+✅ Labels work
+❌ Production domain fails after publish
+
+==================================================
+WORKING ENVIRONMENT
+===================
+
+Working correctly on:
+
+```txt id="j3x8vf"
+https://replit.com/@tariqkhanapple1/Premium-Performance
+```
+
+Inside Preview/Development:
+✅ booking works
+✅ auth works
+✅ tracking works
+✅ labels work
+
+==================================================
+FAILING ENVIRONMENT
+===================
+
+Failing ONLY on production domain:
+
+```txt id="v2l6oz"
+https://admin.khanbabadryfruits.com/admin/couriers
+```
+
+Error appears ONLY after publish/deployment.
+
+==================================================
+IMPORTANT
+=========
+
+DO NOT rewrite:
+❌ TCS auth logic
+❌ booking flow
+❌ tracking flow
+❌ payload structure
+
+These are already working correctly in development.
+
+The issue is ONLY in:
+✅ production deployment
+✅ server environment
+✅ production config
+✅ publish/runtime environment
+
+==================================================
+PLEASE CHECK THESE CAREFULLY
+============================
+
+1️⃣ Environment Variables
+
+Compare:
+
+✅ Replit Preview ENV
+VS
+❌ Production Published ENV
+
+Check if these exist in production:
+
+```env id="vx2t4d"
+TCS_USERNAME
+TCS_PASSWORD
+TCS_STATIC_BEARER_TOKEN
+X_IBM_CLIENT_ID
+```
+
+==================================================
+2️⃣ Production Secrets Loading
+==============================
+
+Check whether published deployment is loading secrets correctly.
+
+Possibly:
+❌ env vars missing
+❌ old cached values
+❌ stale runtime config
+❌ deployment secrets not synced
+
+==================================================
+3️⃣ DOMAIN / SSL / PROXY ISSUE
+==============================
+
+Check:
+
+✅ reverse proxy
+✅ SSL headers
+✅ CORS
+✅ Cloudflare/proxy
+✅ deployment gateway
+✅ request rewriting
+
+Production domain may be modifying API headers.
+
+==================================================
+4️⃣ REQUEST HEADER DIFFERENCE
+=============================
+
+Compare:
+✅ Preview request headers
+VS
+❌ Production request headers
+
+Especially:
+
+```http id="sl0yhs"
+Authorization: Bearer TOKEN
+X-IBM-Client-Id
+Content-Type
+```
+
+==================================================
+5️⃣ SERVER-SIDE LOGGING
+=======================
+
+Inside production logs show:
+
+✅ final request URL
+✅ headers
+✅ env vars loaded
+✅ deployment hostname
+✅ response body
+✅ status code
+✅ runtime environment
+
+==================================================
+6️⃣ VERY IMPORTANT
+==================
+
+Please DO NOT break existing code.
+
+Current code is already working.
+
+Need ONLY:
+✅ production deployment fix
+✅ runtime environment fix
+✅ publish config fix
+
+==================================================
+7️⃣ TEST DIRECTLY ON LIVE SERVER
+================================
+
+Please test directly on:
+
+```txt id="7j9mca"
+https://admin.khanbabadryfruits.com/admin/couriers
+```
+
+NOT just local preview.
+
+==================================================
+8️⃣ POSSIBLE ROOT CAUSE
+=======================
+
+Most likely:
+
+❌ production deployment using stale env
+❌ old deployment cache
+❌ publish container missing secrets
+❌ production runtime different from preview runtime
+
+==================================================
+9️⃣ REQUIRED ACTION
+===================
+
+Please:
+
+✅ compare preview vs production requests
+✅ compare env vars
+✅ compare deployment headers
+✅ compare server runtime
+✅ compare build configs
+
+==================================================
+FINAL GOAL
+==========
+
+Need:
+✅ production booking working
+✅ live CN generation
+✅ same behavior as Preview mode
+✅ stable production courier system
+✅ no code regression
