@@ -4,6 +4,7 @@ import {
   Search, Package, Truck, MapPin, Edit2, X, Loader2,
   RefreshCw, Plus, Minus, Trash2, FileText, CreditCard, CheckCircle2, Printer,
   Home, Clock, ExternalLink, User, Phone, MessageCircle, Send, Download,
+  Satellite, Copy, Navigation,
 } from "lucide-react";
 import {
   useListOrders,
@@ -209,6 +210,42 @@ export default function OrdersPage() {
   });
   const [courierBookingResult, setCourierBookingResult] = useState<{ trackingId: string; shipmentId: number } | null>(null);
   const activeCourierConf = COURIER_CONFIGS[courierBookingForm.courierSlug] ?? COURIER_CONFIGS.tcs;
+
+  /* ── TCS Live Tracking ─── */
+  const [orderTrack, setOrderTrack] = useState<{
+    status: string;
+    events: Array<{ dateTime: string; status: string; location: string; description: string }>;
+    deliveryDate?: string;
+    bookingDate?: string;
+    consigneeName?: string;
+    origin?: string;
+    destination?: string;
+    syncedAt: string;
+  } | null>(null);
+  const trackOrderMutation = useMutation({
+    mutationFn: (cn: string) =>
+      apiFetch(`/api/admin/couriers/tcs/track/${encodeURIComponent(cn)}`),
+    onSuccess: (d: any) => {
+      if (d.ok) {
+        setOrderTrack({
+          status:        d.status,
+          events:        d.events ?? [],
+          deliveryDate:  d.deliveryDate ?? undefined,
+          bookingDate:   d.bookingDate  ?? undefined,
+          consigneeName: d.consigneeName ?? undefined,
+          origin:        d.origin       ?? undefined,
+          destination:   d.destination  ?? undefined,
+          syncedAt:      d.syncedAt,
+        });
+        toast({ title: "✅ Live tracking synced", description: `Status: ${d.status.replace(/_/g, " ")}` });
+      } else {
+        toast({ title: "Tracking returned no data", variant: "destructive" });
+      }
+    },
+    onError: (e: any) => toast({ title: "Tracking failed", description: e.message, variant: "destructive" }),
+  });
+  /* Reset track when switching orders */
+  useEffect(() => { setOrderTrack(null); }, [viewOrder?.id]);
   const bookCourier = useMutation({
     mutationFn: (order: any) => apiFetch("/api/admin/couriers/manual-book", {
       method: "POST",
@@ -1106,6 +1143,99 @@ export default function OrdersPage() {
                                       <Printer className="w-3 h-3 text-purple-600" /> Thermal
                                     </button>
                                   </div>
+
+                                  {/* TCS Track Shipment buttons */}
+                                  {(viewOrder.courier === "tcs" || !viewOrder.courier) && (
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        disabled={trackOrderMutation.isPending}
+                                        onClick={() => trackOrderMutation.mutate(viewOrder.trackingId)}
+                                        className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg border-2 border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-all disabled:opacity-50"
+                                      >
+                                        <Satellite className={`w-3 h-3 ${trackOrderMutation.isPending ? "animate-pulse" : ""}`} />
+                                        {trackOrderMutation.isPending ? "Tracking…" : orderTrack ? "Refresh Track" : "Track Shipment"}
+                                      </button>
+                                      <button
+                                        onClick={() => { navigator.clipboard.writeText(viewOrder.trackingId); toast({ title: "CN Copied!" }); }}
+                                        className="flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] font-bold rounded-lg border-2 border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all"
+                                        title="Copy CN"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </button>
+                                      <a
+                                        href={`https://ociconnect.tcscourier.com/tracking/index.html?cg=${encodeURIComponent(viewOrder.trackingId)}`}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] font-bold rounded-lg border-2 border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all"
+                                        title="Open TCS Tracking"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Live Tracking Panel */}
+                              {orderTrack && (
+                                <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 space-y-2.5 text-xs mt-1">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 font-semibold text-violet-800">
+                                      <Satellite className="w-3.5 h-3.5" /> TCS Live Tracking
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-violet-400 font-mono text-[10px]">{new Date(orderTrack.syncedAt).toLocaleTimeString()}</span>
+                                      <button onClick={() => trackOrderMutation.mutate(viewOrder.trackingId)} disabled={trackOrderMutation.isPending} className="text-violet-400 hover:text-violet-700 disabled:opacity-40">
+                                        <RefreshCw className={`w-3 h-3 ${trackOrderMutation.isPending ? "animate-spin" : ""}`} />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      orderTrack.status === "delivered" ? "bg-green-100 text-green-700 border-green-200" :
+                                      orderTrack.status.includes("transit") ? "bg-blue-100 text-blue-700 border-blue-200" :
+                                      orderTrack.status.includes("delivery") ? "bg-orange-100 text-orange-700 border-orange-200" :
+                                      orderTrack.status === "returned" ? "bg-rose-100 text-rose-700 border-rose-200" :
+                                      "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}>
+                                      {orderTrack.status.replace(/_/g, " ").toUpperCase()}
+                                    </span>
+                                  </div>
+
+                                  {(orderTrack.origin || orderTrack.destination || orderTrack.deliveryDate) && (
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-violet-700 bg-white/70 rounded-lg p-2 border border-violet-100">
+                                      {orderTrack.origin       && (<><span className="font-semibold text-violet-500">From:</span><span>{orderTrack.origin}</span></>)}
+                                      {orderTrack.destination  && (<><span className="font-semibold text-violet-500">To:</span><span>{orderTrack.destination}</span></>)}
+                                      {orderTrack.bookingDate  && (<><span className="font-semibold text-violet-500">Booked:</span><span>{orderTrack.bookingDate}</span></>)}
+                                      {orderTrack.deliveryDate && (<><span className="font-semibold text-green-600">Delivered:</span><span className="text-green-700 font-bold">{orderTrack.deliveryDate}</span></>)}
+                                    </div>
+                                  )}
+
+                                  {orderTrack.events.length > 0 && (
+                                    <div className="space-y-1">
+                                      <p className="font-semibold text-violet-700 flex items-center gap-1">
+                                        <Navigation className="w-3 h-3" /> Timeline ({orderTrack.events.length})
+                                      </p>
+                                      <div className="max-h-36 overflow-y-auto space-y-1 pr-0.5">
+                                        {orderTrack.events.map((ev, i) => (
+                                          <div key={i} className="flex items-start gap-1.5">
+                                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${i === 0 ? "bg-violet-500" : "bg-violet-200"}`} />
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-semibold text-violet-800 capitalize">{ev.status || ev.description}</span>
+                                                {ev.location && <span className="text-violet-400">— {ev.location}</span>}
+                                              </div>
+                                              {ev.dateTime && <span className="text-violet-400 text-[10px] font-mono">{ev.dateTime}</span>}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {orderTrack.events.length === 0 && (
+                                    <p className="text-violet-400 italic">No timeline events — shipment may be newly booked.</p>
+                                  )}
                                 </div>
                               )}
 

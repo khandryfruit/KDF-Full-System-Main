@@ -636,6 +636,121 @@ export async function trackShipment(
   };
 }
 
+/* ─── TCS Official Dynamic Tracking API ────────────────────────────────────
+ * Public endpoint — no auth required.
+ * GET https://ociconnect.tcscourier.com/tracking/api/Tracking/GetDynamicTrackDetail
+ *   ?consignee=CN_NUMBER&timezone=false
+ *
+ * Logs: tracking URL, query params, CN used, full response, errors.
+ */
+export const TCS_DYNAMIC_TRACK_URL = "https://ociconnect.tcscourier.com/tracking/api/Tracking/GetDynamicTrackDetail";
+
+export interface TcsTrackEvent {
+  dateTime:    string;
+  status:      string;
+  location:    string;
+  description: string;
+}
+
+export interface TcsTrackResult {
+  status:         string;
+  events:         TcsTrackEvent[];
+  deliveryDate?:  string;
+  bookingDate?:   string;
+  consigneeName?: string;
+  origin?:        string;
+  destination?:   string;
+  trackingUrl:    string;
+  syncedAt:       string;
+  rawResponse:    Record<string, any>;
+}
+
+export async function trackShipmentDynamic(cn: string): Promise<TcsTrackResult> {
+  const url = `${TCS_DYNAMIC_TRACK_URL}?consignee=${encodeURIComponent(cn)}&timezone=false`;
+  const t0  = Date.now();
+
+  logger.info(
+    { step: "dynamic_tracking", cn, trackingUrl: url, queryParams: { consignee: cn, timezone: false } },
+    "TCS Tracking API — request",
+  );
+
+  try {
+    const { status, text, data } = await httpReq(url, "GET", { Accept: "application/json" }, null, 15000);
+    const durationMs = Date.now() - t0;
+
+    logger.info(
+      { step: "dynamic_tracking", httpStatus: status, durationMs, cn, responseSnippet: text.slice(0, 400) },
+      "TCS Tracking API — response",
+    );
+
+    pushLog({
+      ts: new Date().toISOString(), step: "dynamic_tracking", url, method: "GET",
+      httpStatus: status, resBody: text.slice(0, 800), durationMs, success: status < 400,
+    });
+
+    if (status === 200 && data) {
+      /* Normalize events from various possible response shapes */
+      const rawEvents: any[] =
+        Array.isArray(data.TrackingData)  ? data.TrackingData  :
+        Array.isArray(data.trackingData)  ? data.trackingData  :
+        Array.isArray(data.Activities)    ? data.Activities    :
+        Array.isArray(data.activities)    ? data.activities    :
+        Array.isArray(data.data)          ? data.data          :
+        Array.isArray(data)               ? data               : [];
+
+      const events: TcsTrackEvent[] = rawEvents.map(ev => ({
+        dateTime:    String(ev.DateTime    ?? ev.dateTime    ?? ev.Date          ?? ev.ActivityDate ?? ev.date        ?? ""),
+        status:      String(ev.Status      ?? ev.status      ?? ev.Activity      ?? ev.Event        ?? ev.Type        ?? ""),
+        location:    String(ev.Location    ?? ev.location    ?? ev.City          ?? ev.Hub          ?? ev.Area        ?? ""),
+        description: String(ev.Description ?? ev.description ?? ev.Remarks      ?? ev.Activity     ?? ev.Status      ?? ""),
+      }));
+
+      const currentStatusRaw: string = String(
+        data.Status          ?? data.status          ??
+        data.CurrentStatus   ?? data.currentStatus   ??
+        data.DeliveryStatus  ?? data.deliveryStatus  ??
+        events[0]?.status    ?? "in_transit",
+      );
+
+      const currentStatus = currentStatusRaw.toLowerCase().replace(/\s+/g, "_");
+
+      logger.info(
+        { cn, status: currentStatus, eventsCount: events.length, deliveryDate: data.DeliveryDate ?? data.deliveryDate },
+        "TCS Tracking API — parsed",
+      );
+
+      return {
+        status:        currentStatus,
+        events,
+        deliveryDate:  data.DeliveryDate      ?? data.deliveryDate      ?? data.ActualDeliveryDate ?? undefined,
+        bookingDate:   data.BookingDate        ?? data.bookingDate        ?? data.PickupDate         ?? undefined,
+        consigneeName: data.ConsigneeName      ?? data.consigneeName      ?? data.Consignee          ?? undefined,
+        origin:        data.OriginCity         ?? data.originCity         ?? data.Origin             ?? undefined,
+        destination:   data.DestinationCity    ?? data.destinationCity    ?? data.Destination        ?? undefined,
+        trackingUrl:   getTcsTrackingUrl(cn),
+        syncedAt:      new Date().toISOString(),
+        rawResponse:   { ...data, durationMs, trackingUrl: getTcsTrackingUrl(cn) },
+      };
+    }
+
+    logger.warn({ step: "dynamic_tracking", httpStatus: status, cn, body: text.slice(0, 300) }, "TCS Tracking API — non-200 response");
+  } catch (err: any) {
+    logger.warn({ step: "dynamic_tracking", err: err.message, cn, trackingUrl: url }, "TCS Tracking API — request failed");
+    pushLog({
+      ts: new Date().toISOString(), step: "dynamic_tracking", url, method: "GET",
+      httpStatus: null, resBody: err.message, durationMs: Date.now() - t0, success: false,
+    });
+  }
+
+  return {
+    status:      "unknown",
+    events:      [],
+    trackingUrl: getTcsTrackingUrl(cn),
+    syncedAt:    new Date().toISOString(),
+    rawResponse: { error: "Tracking API unavailable", trackingUrl: getTcsTrackingUrl(cn) },
+  };
+}
+
 /* ─── httpReqBuffer — binary-safe HTTP (for PDF responses) ──────────────
  * Like httpReq but returns raw Buffer + content-type instead of text/JSON.
  */

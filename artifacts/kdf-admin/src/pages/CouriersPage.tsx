@@ -7,6 +7,7 @@ import {
   ChevronDown, Loader2, ArrowUpRight, ArrowDownRight, Printer, Sparkles,
   Users, Settings, Wifi, WifiOff, Eye, EyeOff, AlertCircle, MapPin,
   Filter, BookOpen, Star, FileText, Zap, Terminal, Activity, FlaskConical, ListChecks, Download,
+  Satellite, Copy, ExternalLink, Navigation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1239,14 +1240,57 @@ function DebugLogEntry({ log, onRetry, retrying }: { log: any; onRetry: (id: num
 
 function ShipmentCard({ shipment }: { shipment: any }) {
   const [expanded, setExpanded] = useState(false);
+  const [liveTrack, setLiveTrack] = useState<{
+    status: string;
+    events: Array<{ dateTime: string; status: string; location: string; description: string }>;
+    deliveryDate?: string;
+    bookingDate?: string;
+    consigneeName?: string;
+    origin?: string;
+    destination?: string;
+    syncedAt: string;
+  } | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
+
+  const isTcs = shipment.courierSlug === "tcs" && !!shipment.trackingId;
 
   const refresh = useMutation({
     mutationFn: () => apiFetch(`/api/admin/shipments/${shipment.id}/refresh`, { method: "POST" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/shipments-v2"] }); qc.invalidateQueries({ queryKey: ["/api/admin/courier-analytics"] }); toast({ title: "Tracking refreshed" }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
+
+  const trackMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/admin/couriers/tcs/track/${encodeURIComponent(shipment.trackingId)}`),
+    onSuccess: (d: any) => {
+      if (d.ok) {
+        setLiveTrack({
+          status:        d.status,
+          events:        d.events ?? [],
+          deliveryDate:  d.deliveryDate ?? undefined,
+          bookingDate:   d.bookingDate  ?? undefined,
+          consigneeName: d.consigneeName ?? undefined,
+          origin:        d.origin       ?? undefined,
+          destination:   d.destination  ?? undefined,
+          syncedAt:      d.syncedAt,
+        });
+        if (!expanded) setExpanded(true);
+        toast({ title: "✅ Live tracking synced", description: `Status: ${d.status.replace(/_/g, " ")}` });
+      } else {
+        toast({ variant: "destructive", title: "Tracking returned no data" });
+      }
+    },
+    onError: (e: any) => toast({ variant: "destructive", title: e.message ?? "Tracking failed" }),
+  });
+
+  const STATUS_ICON: Record<string, React.ReactNode> = {
+    delivered:        <CheckCircle2 className="w-3 h-3 text-green-500" />,
+    in_transit:       <Truck className="w-3 h-3 text-blue-500" />,
+    out_for_delivery: <MapPin className="w-3 h-3 text-orange-500" />,
+    returned:         <RotateCcw className="w-3 h-3 text-rose-500" />,
+    failed:           <XCircle className="w-3 h-3 text-red-500" />,
+  };
 
   return (
     <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
@@ -1258,7 +1302,15 @@ function ShipmentCard({ shipment }: { shipment: any }) {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm capitalize">{shipment.courierSlug ?? "Unknown"}</span>
             <StatusBadge status={shipment.status} />
-            {shipment.trackingId && <span className="text-xs font-mono text-blue-600">{shipment.trackingId}</span>}
+            {shipment.trackingId && (
+              <span
+                className="text-xs font-mono text-blue-600 cursor-pointer hover:text-blue-800"
+                onClick={() => { navigator.clipboard.writeText(shipment.trackingId); toast({ title: "CN Copied!" }); }}
+                title="Click to copy"
+              >
+                {shipment.trackingId}
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
             {shipment.orderId && <span>Order #{shipment.orderId}</span>}
@@ -1268,6 +1320,18 @@ function ShipmentCard({ shipment }: { shipment: any }) {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* Track Shipment — TCS only */}
+          {isTcs && (
+            <Button
+              variant="ghost" size="sm"
+              className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
+              onClick={() => trackMutation.mutate()}
+              disabled={trackMutation.isPending}
+              title="Track Shipment (TCS Official Tracking API)"
+            >
+              <Satellite className={`w-3.5 h-3.5 ${trackMutation.isPending ? "animate-pulse" : ""}`} />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => printShipmentLabel(shipment.id)} title="Print Label (A4)">
             <Printer className="w-3.5 h-3.5" />
           </Button>
@@ -1290,7 +1354,7 @@ function ShipmentCard({ shipment }: { shipment: any }) {
               <Printer className="w-3.5 h-3.5 text-purple-600" />
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title="Refresh Tracking">
+          <Button variant="ghost" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title="Refresh Status">
             <RefreshCw className={`w-3.5 h-3.5 ${refresh.isPending ? "animate-spin" : ""}`} />
           </Button>
           <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground p-1">
@@ -1298,26 +1362,123 @@ function ShipmentCard({ shipment }: { shipment: any }) {
           </button>
         </div>
       </div>
+
       {expanded && (
-        <div className="border-t border-border p-4 bg-muted/20 space-y-2">
-          {(shipment.statusHistory ?? []).length > 0 ? (
-            [...(shipment.statusHistory ?? [])].reverse().map((h: any, i: number) => (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                <div>
-                  <span className="font-semibold capitalize">{h.status.replace(/_/g, " ")}</span>
-                  <span className="text-muted-foreground ml-2">{new Date(h.timestamp).toLocaleString()}</span>
-                  {h.note && <span className="text-muted-foreground ml-2">— {h.note}</span>}
+        <div className="border-t border-border p-4 bg-muted/20 space-y-3 text-xs">
+
+          {/* Live tracking panel */}
+          {liveTrack ? (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-semibold text-indigo-800">
+                  <Satellite className="w-3.5 h-3.5" /> TCS Live Tracking
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-indigo-400 font-mono text-[10px]">synced {new Date(liveTrack.syncedAt).toLocaleTimeString()}</span>
+                  <button
+                    onClick={() => trackMutation.mutate()}
+                    disabled={trackMutation.isPending}
+                    className="text-indigo-500 hover:text-indigo-700 disabled:opacity-40"
+                    title="Refresh tracking"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${trackMutation.isPending ? "animate-spin" : ""}`} />
+                  </button>
                 </div>
               </div>
-            ))
-          ) : (
-            <p className="text-xs text-muted-foreground">
+
+              {/* Status */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge status={liveTrack.status} />
+                <span className="capitalize font-medium text-indigo-800">{liveTrack.status.replace(/_/g, " ")}</span>
+              </div>
+
+              {/* Meta grid */}
+              {(liveTrack.origin || liveTrack.destination || liveTrack.deliveryDate || liveTrack.consigneeName) && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-indigo-700 bg-white/70 rounded-lg p-2.5 border border-indigo-100">
+                  {liveTrack.consigneeName && (<><span className="font-semibold text-indigo-500">Consignee:</span><span>{liveTrack.consigneeName}</span></>)}
+                  {liveTrack.origin        && (<><span className="font-semibold text-indigo-500">From:</span><span>{liveTrack.origin}</span></>)}
+                  {liveTrack.destination   && (<><span className="font-semibold text-indigo-500">To:</span><span>{liveTrack.destination}</span></>)}
+                  {liveTrack.bookingDate   && (<><span className="font-semibold text-indigo-500">Booked:</span><span>{liveTrack.bookingDate}</span></>)}
+                  {liveTrack.deliveryDate  && (<><span className="font-semibold text-green-600">Delivered:</span><span className="text-green-700 font-bold">{liveTrack.deliveryDate}</span></>)}
+                </div>
+              )}
+
+              {/* Timeline events */}
+              {liveTrack.events.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="font-semibold text-indigo-700 flex items-center gap-1.5">
+                    <Navigation className="w-3 h-3" /> Timeline ({liveTrack.events.length} events)
+                  </p>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {liveTrack.events.map((ev, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${i === 0 ? "bg-indigo-500" : "bg-indigo-200"}`} />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-indigo-800 capitalize">{ev.status || ev.description}</span>
+                            {ev.location && <span className="text-indigo-400">— {ev.location}</span>}
+                          </div>
+                          {ev.dateTime && <span className="text-indigo-400 text-[10px] font-mono">{ev.dateTime}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-indigo-500 italic">No timeline events returned.</p>
+              )}
+
+              {/* Quick links */}
+              <div className="flex gap-2 pt-1 border-t border-indigo-100">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(shipment.trackingId); toast({ title: "CN Copied!" }); }}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded px-2 py-1"
+                >
+                  <Copy className="w-3 h-3" /> Copy CN
+                </button>
+                <a
+                  href={`https://ociconnect.tcscourier.com/tracking/index.html?cg=${encodeURIComponent(shipment.trackingId)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 rounded px-2 py-1"
+                >
+                  <ExternalLink className="w-3 h-3" /> Open TCS
+                </a>
+              </div>
+            </div>
+          ) : isTcs ? (
+            <button
+              onClick={() => trackMutation.mutate()}
+              disabled={trackMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-colors text-xs font-semibold disabled:opacity-50"
+            >
+              <Satellite className={`w-3.5 h-3.5 ${trackMutation.isPending ? "animate-pulse" : ""}`} />
+              {trackMutation.isPending ? "Fetching live tracking…" : "Track Shipment (TCS Official API)"}
+            </button>
+          ) : null}
+
+          {/* Status history (DB) */}
+          {(shipment.statusHistory ?? []).length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Status History</p>
+              {[...(shipment.statusHistory ?? [])].reverse().map((h: any, i: number) => (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold capitalize">{h.status.replace(/_/g, " ")}</span>
+                    <span className="text-muted-foreground ml-2">{new Date(h.timestamp).toLocaleString()}</span>
+                    {h.note && <span className="text-muted-foreground ml-2">— {h.note}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !liveTrack ? (
+            <p className="text-muted-foreground italic">
               No tracking history.
               {shipment.rawResponse?.note && <span className="ml-1 text-orange-600"> ({shipment.rawResponse.note})</span>}
               {shipment.rawResponse?.error && <span className="ml-1 text-red-500"> {shipment.rawResponse.error}</span>}
             </p>
-          )}
+          ) : null}
         </div>
       )}
     </div>

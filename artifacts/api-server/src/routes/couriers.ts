@@ -2393,33 +2393,48 @@ router.post("/admin/shipments/:id/retry-booking", adminMiddleware as any, async 
 });
 
 /* ─── GET /admin/couriers/tcs/track/:cn ─────────────────────────────────
- * Live shipment tracking via TCS ECOM API.
- * Returns status, trackingDetails, trackingUrl, syncedAt.
- * Logs: tracking request + CN + response in server logs.
+ * Live shipment tracking via TCS Official Dynamic Tracking API (no auth).
+ * GET https://ociconnect.tcscourier.com/tracking/api/Tracking/GetDynamicTrackDetail
+ *   ?consignee=CN&timezone=false
+ *
+ * Returns: status, events (timeline), deliveryDate, bookingDate,
+ *          consigneeName, origin, destination, trackingUrl, syncedAt.
+ * Logs: tracking URL, query params, CN, full response, errors.
  */
 router.get("/admin/couriers/tcs/track/:cn", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const cn = (req.params.cn ?? "").trim();
     if (!cn) { res.status(400).json({ ok: false, error: "cn param required" }); return; }
 
-    const s = await getTcsSettings();
-    if (!s) { res.status(404).json({ ok: false, error: "TCS not configured" }); return; }
+    const trackingUrl  = `${Tcs.TCS_DYNAMIC_TRACK_URL}?consignee=${encodeURIComponent(cn)}&timezone=false`;
+    req.log.info(
+      { step: "tcs_track", cn, trackingUrl, queryParams: { consignee: cn, timezone: false } },
+      "TCS — dynamic tracking request",
+    );
 
-    req.log.info({ cn }, "TCS — live track request");
-    const result = await Tcs.trackShipment(s, cn);
-    req.log.info({ cn, status: result.status }, "TCS — live track response");
+    const result = await Tcs.trackShipmentDynamic(cn);
+
+    req.log.info(
+      { step: "tcs_track", cn, status: result.status, eventsCount: result.events.length, deliveryDate: result.deliveryDate ?? null },
+      "TCS — dynamic tracking response",
+    );
 
     res.json({
-      ok:              true,
+      ok:            true,
       cn,
-      status:          result.status,
-      trackingUrl:     Tcs.getTcsTrackingUrl(cn),
-      trackingDetails: (result as any).trackingDetails ?? {},
-      syncedAt:        new Date().toISOString(),
-      rawResponse:     result.rawResponse,
+      status:        result.status,
+      events:        result.events,
+      deliveryDate:  result.deliveryDate  ?? null,
+      bookingDate:   result.bookingDate   ?? null,
+      consigneeName: result.consigneeName ?? null,
+      origin:        result.origin        ?? null,
+      destination:   result.destination   ?? null,
+      trackingUrl:   result.trackingUrl,
+      syncedAt:      result.syncedAt,
+      rawResponse:   result.rawResponse,
     });
   } catch (err: any) {
-    req.log.error(err);
+    req.log.error({ err: err.message }, "TCS — dynamic tracking error");
     res.status(500).json({ ok: false, error: err.message });
   }
 });

@@ -510,7 +510,16 @@ function BulkBookModal({ orderIds, couriers, onClose, onDone }: { orderIds: numb
 function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId: number; onRefresh: () => void }) {
   const { toast } = useToast();
   const [showTimeline, setShowTimeline] = useState(false);
-  const [liveTrack, setLiveTrack] = useState<{ status: string; trackingDetails: Record<string, any>; syncedAt: string } | null>(null);
+  const [liveTrack, setLiveTrack] = useState<{
+    status: string;
+    events: Array<{ dateTime: string; status: string; location: string; description: string }>;
+    deliveryDate?: string;
+    bookingDate?: string;
+    consigneeName?: string;
+    origin?: string;
+    destination?: string;
+    syncedAt: string;
+  } | null>(null);
 
   const cancelMutation = useMutation({
     mutationFn: () => api(`/admin/shopify/orders/${orderId}/shipments/${shipment.id}/cancel`, { method: "POST" }).then(r => r.json()),
@@ -538,15 +547,25 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
     onSuccess: () => { toast({ title: "COD status updated" }); onRefresh(); },
   });
 
-  /* Live tracking — only TCS ECOM (real API bookings) */
+  /* Live tracking — any TCS shipment with a CN (public tracking API, no auth) */
   const isTcsReal = shipment.courierSlug === "tcs" && (shipment.rawResponse as any)?.realApiBooking === true;
+  const canTrack  = shipment.courierSlug === "tcs" && !!shipment.trackingId;
   const trackMutation = useMutation({
     mutationFn: () =>
       api(`/admin/couriers/tcs/track/${encodeURIComponent(shipment.trackingId)}`)
         .then(r => r.json()),
     onSuccess: (d) => {
       if (d.ok) {
-        setLiveTrack({ status: d.status, trackingDetails: d.trackingDetails ?? {}, syncedAt: d.syncedAt });
+        setLiveTrack({
+          status:        d.status,
+          events:        d.events ?? [],
+          deliveryDate:  d.deliveryDate ?? undefined,
+          bookingDate:   d.bookingDate  ?? undefined,
+          consigneeName: d.consigneeName ?? undefined,
+          origin:        d.origin       ?? undefined,
+          destination:   d.destination  ?? undefined,
+          syncedAt:      d.syncedAt,
+        });
         toast({ title: "✅ Live status synced", description: `Status: ${d.status.replace(/_/g, " ")}` });
       } else {
         toast({ title: "Tracking returned no data", variant: "destructive" });
@@ -637,37 +656,84 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
 
       {/* Live tracking panel — shown after sync */}
       {liveTrack && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-2 text-xs">
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-3 text-xs">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-indigo-800">
               <Satellite className="w-3.5 h-3.5" />
-              Live Status — TCS ECOM
+              TCS Live Tracking
             </div>
-            <span className="text-indigo-500 font-mono">{new Date(liveTrack.syncedAt).toLocaleTimeString()}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-indigo-400 font-mono text-[10px]">synced {new Date(liveTrack.syncedAt).toLocaleTimeString()}</span>
+              <button
+                onClick={() => trackMutation.mutate()}
+                disabled={trackMutation.isPending}
+                className="text-indigo-500 hover:text-indigo-700 disabled:opacity-40"
+                title="Refresh tracking"
+              >
+                <RefreshCw className={`w-3 h-3 ${trackMutation.isPending ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Status + meta */}
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={liveTrack.status} />
-            <span className="text-indigo-700 capitalize">{liveTrack.status.replace(/_/g, " ")}</span>
+            <span className="text-indigo-700 capitalize font-medium">{liveTrack.status.replace(/_/g, " ")}</span>
           </div>
-          {Object.keys(liveTrack.trackingDetails).length > 0 && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-indigo-700 bg-white/60 rounded p-2 border border-indigo-100">
-              {liveTrack.trackingDetails.consignee && (
-                <><span className="font-medium">Consignee:</span><span>{liveTrack.trackingDetails.consignee}</span></>
-              )}
-              {liveTrack.trackingDetails.origin && (
-                <><span className="font-medium">Origin:</span><span>{liveTrack.trackingDetails.origin}</span></>
-              )}
-              {liveTrack.trackingDetails.destination && (
-                <><span className="font-medium">Destination:</span><span>{liveTrack.trackingDetails.destination}</span></>
-              )}
-              {liveTrack.trackingDetails.service && (
-                <><span className="font-medium">Service:</span><span>{liveTrack.trackingDetails.service}</span></>
-              )}
-              {liveTrack.trackingDetails.ShipmentWeight && (
-                <><span className="font-medium">Weight:</span><span>{liveTrack.trackingDetails.ShipmentWeight}</span></>
-              )}
+
+          {/* Route + meta grid */}
+          {(liveTrack.origin || liveTrack.destination || liveTrack.deliveryDate || liveTrack.consigneeName) && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-indigo-700 bg-white/70 rounded-lg p-2.5 border border-indigo-100">
+              {liveTrack.consigneeName && (<><span className="font-semibold text-indigo-500">Consignee:</span><span>{liveTrack.consigneeName}</span></>)}
+              {liveTrack.origin        && (<><span className="font-semibold text-indigo-500">Origin:</span><span>{liveTrack.origin}</span></>)}
+              {liveTrack.destination   && (<><span className="font-semibold text-indigo-500">Destination:</span><span>{liveTrack.destination}</span></>)}
+              {liveTrack.bookingDate   && (<><span className="font-semibold text-indigo-500">Booked:</span><span>{liveTrack.bookingDate}</span></>)}
+              {liveTrack.deliveryDate  && (<><span className="font-semibold text-green-600">Delivered:</span><span className="text-green-700 font-bold">{liveTrack.deliveryDate}</span></>)}
             </div>
           )}
+
+          {/* Timeline events */}
+          {liveTrack.events.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="font-semibold text-indigo-700 flex items-center gap-1.5">
+                <Navigation className="w-3 h-3" /> Shipment Timeline ({liveTrack.events.length} events)
+              </p>
+              <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                {liveTrack.events.map((ev, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${i === 0 ? "bg-indigo-500" : "bg-indigo-200"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-indigo-800 capitalize">{ev.status || ev.description}</span>
+                        {ev.location && <span className="text-indigo-400">— {ev.location}</span>}
+                      </div>
+                      {ev.dateTime && <span className="text-indigo-400 text-[10px] font-mono">{ev.dateTime}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-indigo-500 italic">No timeline events returned — CN may be newly booked.</p>
+          )}
+
+          {/* Quick actions */}
+          <div className="flex gap-2 pt-1 border-t border-indigo-100">
+            <button
+              onClick={() => { navigator.clipboard.writeText(shipment.trackingId); toast({ title: "CN Copied!" }); }}
+              className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded px-2 py-1"
+            >
+              <Copy className="w-3 h-3" /> Copy CN
+            </button>
+            <a
+              href={liveTrack ? `https://ociconnect.tcscourier.com/tracking/index.html?cg=${encodeURIComponent(shipment.trackingId)}` : "#"}
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 rounded px-2 py-1"
+            >
+              <ExternalLink className="w-3 h-3" /> Open TCS Tracking
+            </a>
+          </div>
         </div>
       )}
 
@@ -696,17 +762,36 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 hover:text-green-800 hover:bg-green-50" onClick={() => notifyMutation.mutate()} disabled={notifyMutation.isPending}>
             <Bell className="w-3 h-3" /> Notify
           </Button>
-          {/* Live Track — TCS real bookings only */}
-          {isTcsReal && (
-            <Button
-              size="sm" variant="outline"
-              className="h-7 text-xs gap-1 text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200"
-              onClick={() => trackMutation.mutate()}
-              disabled={trackMutation.isPending}
-            >
-              <Satellite className={`w-3 h-3 ${trackMutation.isPending ? "animate-pulse" : ""}`} />
-              {trackMutation.isPending ? "Syncing…" : "Live Track"}
-            </Button>
+          {/* Track Shipment — any TCS shipment with a CN */}
+          {canTrack && (
+            <>
+              <Button
+                size="sm" variant="outline"
+                className="h-7 text-xs gap-1 text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200"
+                onClick={() => trackMutation.mutate()}
+                disabled={trackMutation.isPending}
+                title="Fetch live tracking from TCS Official Tracking API"
+              >
+                <Satellite className={`w-3 h-3 ${trackMutation.isPending ? "animate-pulse" : ""}`} />
+                {trackMutation.isPending ? "Tracking…" : liveTrack ? "Refresh Track" : "Track Shipment"}
+              </Button>
+              <Button
+                size="sm" variant="outline"
+                className="h-7 text-xs gap-1 text-slate-600 hover:text-slate-800"
+                onClick={() => { navigator.clipboard.writeText(shipment.trackingId); toast({ title: "CN Copied!" }); }}
+                title="Copy CN number"
+              >
+                <Copy className="w-3 h-3" /> Copy CN
+              </Button>
+              <a
+                href={`https://ociconnect.tcscourier.com/tracking/index.html?cg=${encodeURIComponent(shipment.trackingId)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 h-7 text-xs font-medium px-2.5 rounded-md border border-border text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                title="Open TCS official tracking page"
+              >
+                <ExternalLink className="w-3 h-3" /> Open TCS
+              </a>
+            </>
           )}
           {/* Print Label + Download PDF + Thermal — all shipments with tracking ID */}
           {shipment.trackingId && (
