@@ -1958,4 +1958,85 @@ router.get("/admin/riders/:id/cod-history", adminMiddleware, async (req, res) =>
   }
 });
 
+/* ─── GET /api/admin/riders/daily-report ─────────────────────────────────
+ * Returns per-rider report data for a given date (default: today PKT).
+ * Filters: date (YYYY-MM-DD), rider_id, area
+ */
+router.get("/admin/riders/daily-report", adminMiddleware, async (req, res) => {
+  try {
+    const { generateRiderDailyReport } = await import("../lib/riderDailyReport.js");
+    const date = typeof req.query["date"] === "string" ? req.query["date"] : undefined;
+    const report = await generateRiderDailyReport(date);
+
+    /* optional filters */
+    let riders = report.riders;
+    const riderId = typeof req.query["rider_id"] === "string" ? parseInt(req.query["rider_id"]) : null;
+    const area    = typeof req.query["area"]     === "string" ? req.query["area"].toLowerCase()  : null;
+    const payment = typeof req.query["payment"]  === "string" ? req.query["payment"]              : null; /* cod | paid | zero */
+
+    if (riderId) riders = riders.filter((r: any) => r.id === riderId);
+    if (area)    riders = riders.filter((r: any) => (r.delivery_area ?? "").toLowerCase().includes(area));
+    if (payment === "cod")  riders = riders.filter((r: any) => r.cod_collected > 0);
+    if (payment === "paid") riders = riders.filter((r: any) => r.paid_orders > 0);
+    if (payment === "zero") riders = riders.filter((r: any) => r.zero_amount_orders > 0);
+
+    /* recalculate totals after filter */
+    const totals = {
+      delivered:          riders.reduce((s: number, r: any) => s + r.delivered, 0),
+      pending:            riders.reduce((s: number, r: any) => s + r.pending, 0),
+      failed:             riders.reduce((s: number, r: any) => s + r.failed, 0),
+      returned:           riders.reduce((s: number, r: any) => s + r.returned, 0),
+      cod_collected:      riders.reduce((s: number, r: any) => s + r.cod_collected, 0),
+      paid_orders:        riders.reduce((s: number, r: any) => s + r.paid_orders, 0),
+      zero_amount_orders: riders.reduce((s: number, r: any) => s + r.zero_amount_orders, 0),
+      total_assignments:  riders.reduce((s: number, r: any) => s + r.total_assignments, 0),
+      total_settled:      riders.reduce((s: number, r: any) => s + r.total_settled, 0),
+      settlement_pending: riders.reduce((s: number, r: any) => s + r.settlement_pending, 0),
+    };
+
+    /* top rider by deliveries */
+    const topRider = [...riders].sort((a: any, b: any) => b.delivered - a.delivered)[0] ?? null;
+
+    res.json({ ok: true, date: report.date, riders, totals, topRider });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ─── POST /api/admin/riders/daily-report/send ───────────────────────────
+ * Manually trigger WhatsApp + Email report send for a given date.
+ */
+router.post("/admin/riders/daily-report/send", adminMiddleware, async (req, res) => {
+  try {
+    const { sendRiderDailyReport } = await import("../lib/riderDailyReport.js");
+    const date = typeof req.body?.date === "string" ? req.body.date : undefined;
+    const result = await sendRiderDailyReport(date);
+    req.log.info(result, "Manual rider daily report triggered");
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ─── GET /api/admin/riders/daily-report/logs ────────────────────────────
+ * Returns history of sent reports (last 30).
+ */
+router.get("/admin/riders/daily-report/logs", adminMiddleware, async (req, res) => {
+  try {
+    const logs = await db.execute(sql`
+      SELECT id, report_date, sent_at, wa_status, email_status,
+             (report_data->'totals') AS totals,
+             jsonb_array_length(report_data->'riders') AS rider_count
+      FROM rider_report_logs
+      ORDER BY sent_at DESC
+      LIMIT 30
+    `);
+    res.json({ ok: true, logs: logs.rows ?? [] });
+  } catch {
+    res.json({ ok: true, logs: [] });
+  }
+});
+
 export default router;

@@ -9,7 +9,8 @@ import {
   CheckCircle, XCircle, Package, TrendingUp, X, RefreshCw,
   DollarSign, CreditCard, Printer, BarChart2, Clock, AlertCircle,
   RotateCcw, Bike, KeyRound, Eye, EyeOff, Zap, ShieldCheck, Activity,
-  AlertTriangle, Banknote,
+  AlertTriangle, Banknote, FileText, Send, Trophy, Filter,
+  ChevronDown, CalendarDays, Star,
 } from "lucide-react";
 
 const API = "/api";
@@ -991,6 +992,385 @@ function ShopifySyncMonitor() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   DAILY REPORTS PANEL
+══════════════════════════════════════════════════════════ */
+function DailyReportsPanel() {
+  const { toast } = useToast();
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate]             = useState(today);
+  const [filterRider, setFilterRider] = useState("");
+  const [filterArea, setFilterArea]   = useState("");
+  const [filterPayment, setFilterPayment] = useState("");
+  const [showLogs, setShowLogs]       = useState(false);
+
+  const params = new URLSearchParams({ date });
+  if (filterArea)    params.set("area", filterArea);
+  if (filterPayment) params.set("payment", filterPayment);
+
+  const { data, isLoading, refetch } = useQuery<any>({
+    queryKey: ["/api/admin/riders/daily-report", date, filterArea, filterPayment],
+    queryFn: () => apiFetch(`/admin/riders/daily-report?${params.toString()}`),
+    refetchInterval: 60000,
+  });
+
+  const { data: ridersData } = useQuery<any>({
+    queryKey: ["/api/admin/riders"],
+    queryFn: () => apiFetch("/admin/riders"),
+  });
+
+  const { data: logsData, refetch: refetchLogs } = useQuery<any>({
+    queryKey: ["/api/admin/riders/daily-report/logs"],
+    queryFn: () => apiFetch("/admin/riders/daily-report/logs"),
+    enabled: showLogs,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: () => apiFetch("/admin/riders/daily-report/send", {
+      method: "POST",
+      body: JSON.stringify({ date }),
+    }),
+    onSuccess: (d) => {
+      if (d.ok) {
+        toast({ title: `✅ Report sent! WA: ${d.waOk ? "✓" : "✗"} Email: ${d.emailOk ? "✓" : "✗"}` });
+        refetchLogs();
+      } else {
+        toast({ title: "Send failed", variant: "destructive" });
+      }
+    },
+    onError: () => toast({ title: "Failed to send report", variant: "destructive" }),
+  });
+
+  const report = data;
+  const totals = report?.totals ?? {};
+  const riders: any[] = (report?.riders ?? []).filter((r: any) =>
+    filterRider ? r.name.toLowerCase().includes(filterRider.toLowerCase()) : true
+  );
+  const topRider = report?.topRider;
+
+  const STAT_CARDS = [
+    { label: "Total Delivered",    value: totals.delivered ?? 0,                                               color: "emerald",  icon: CheckCircle },
+    { label: "Total COD Collected", value: `Rs. ${(totals.cod_collected ?? 0).toLocaleString()}`,              color: "blue",     icon: DollarSign },
+    { label: "Pending Settlement",  value: `Rs. ${(totals.settlement_pending ?? 0).toLocaleString()}`,         color: totals.settlement_pending > 0 ? "red" : "emerald", icon: AlertTriangle },
+    { label: "Failed / Returned",   value: `${totals.failed ?? 0} / ${totals.returned ?? 0}`,                  color: "rose",     icon: XCircle },
+    { label: "Paid Orders",         value: totals.paid_orders ?? 0,                                             color: "green",    icon: CreditCard },
+    { label: "Zero Amount Orders",  value: totals.zero_amount_orders ?? 0,                                      color: "slate",    icon: Package },
+  ];
+
+  const COL_COLORS: Record<string, string> = {
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    blue:    "bg-blue-50 border-blue-200 text-blue-700",
+    red:     "bg-red-50 border-red-200 text-red-700",
+    rose:    "bg-rose-50 border-rose-200 text-rose-700",
+    green:   "bg-green-50 border-green-200 text-green-700",
+    slate:   "bg-slate-50 border-slate-200 text-slate-600",
+  };
+
+  return (
+    <div className="space-y-5">
+
+      {/* Header bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <FileText size={18} className="text-indigo-600" />
+            Rider Daily Collection Report
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Auto-sent 8 PM PKT · WhatsApp 03040424252 · kdfmarts@gmail.com
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="h-8 gap-1.5 text-xs">
+            <RefreshCw size={13} /> Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => sendMutation.mutate()}
+            disabled={sendMutation.isPending}
+            className="h-8 gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            <Send size={13} className={sendMutation.isPending ? "animate-pulse" : ""} />
+            {sendMutation.isPending ? "Sending…" : "Send Report Now"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white border border-border rounded-xl p-4">
+        <div className="flex items-center gap-1.5 mb-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          <Filter size={12} /> Filters
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-input rounded-md bg-background"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Rider Name</label>
+            <Input value={filterRider} onChange={e => setFilterRider(e.target.value)}
+              placeholder="Search rider..." className="h-8 text-xs" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Area / Zone</label>
+            <Input value={filterArea} onChange={e => setFilterArea(e.target.value)}
+              placeholder="e.g. Lahore" className="h-8 text-xs" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Payment Type</label>
+            <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-input rounded-md bg-background">
+              <option value="">All</option>
+              <option value="cod">COD Only</option>
+              <option value="paid">Paid Only</option>
+              <option value="zero">Zero Amount</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {STAT_CARDS.map(({ label, value, color, icon: Icon }) => (
+          <div key={label} className={`border rounded-xl p-3 ${COL_COLORS[color]}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Icon size={13} />
+              <span className="text-[10px] font-semibold uppercase tracking-wide truncate">{label}</span>
+            </div>
+            <p className="text-xl font-black">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Top Rider Banner */}
+      {topRider && topRider.delivered > 0 && (
+        <div className="flex items-center gap-3 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl px-4 py-3">
+          <Trophy size={20} className="text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-amber-900">🏆 Top Rider — {topRider.name}</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {topRider.delivered} delivered · Rs. {topRider.cod_collected.toLocaleString()} COD
+              {topRider.delivery_area ? ` · ${topRider.delivery_area}` : ""}
+            </p>
+          </div>
+          {topRider.settlement_pending > 0 && (
+            <span className="text-xs bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-full font-semibold">
+              ⚠️ Rs. {topRider.settlement_pending.toLocaleString()} pending
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Rider Table */}
+      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b border-border bg-slate-50/60 flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-2">
+            <Users size={14} className="text-indigo-500" />
+            Per-Rider Breakdown
+            <span className="text-xs font-normal text-muted-foreground ml-1">
+              ({riders.filter((r: any) => r.total_assignments > 0).length} active · {riders.length} total)
+            </span>
+          </h3>
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <CalendarDays size={11} /> {date}
+          </span>
+        </div>
+
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <RefreshCw size={20} className="animate-spin mx-auto mb-2" />
+            Loading report…
+          </div>
+        ) : riders.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <Package size={32} className="mx-auto mb-2 opacity-30" />
+            <p>No rider data for {date}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  {["Rider", "Area", "Delivered", "Pending", "Failed", "Returned", "Paid", "Zero Amt", "COD Collected", "Settled", "Pending Settlement", "Status"].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {riders.map((r: any, i: number) => {
+                  const isActive = r.total_assignments > 0;
+                  return (
+                    <tr key={r.id} className={`border-b border-slate-50 hover:bg-slate-50/60 ${!isActive ? "opacity-50" : ""}`}>
+                      <td className="px-3 py-2.5 font-semibold whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          {i === 0 && isActive && <Star size={10} className="text-amber-400 shrink-0" />}
+                          {r.name}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-normal">{r.phone}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{r.delivery_area || "—"}</td>
+                      <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{r.delivered}</td>
+                      <td className="px-3 py-2.5 text-center text-amber-600">{r.pending}</td>
+                      <td className="px-3 py-2.5 text-center text-red-600">{r.failed}</td>
+                      <td className="px-3 py-2.5 text-center text-purple-600">{r.returned}</td>
+                      <td className="px-3 py-2.5 text-center text-blue-600 font-semibold">{r.paid_orders}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-500">{r.zero_amount_orders}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-blue-700">
+                        {r.cod_collected > 0 ? `Rs. ${r.cod_collected.toLocaleString()}` : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-emerald-600">
+                        {r.total_settled > 0 ? `Rs. ${r.total_settled.toLocaleString()}` : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-bold">
+                        {r.settlement_pending > 0 ? (
+                          <span className="text-red-600">Rs. {r.settlement_pending.toLocaleString()}</span>
+                        ) : r.cod_collected > 0 ? (
+                          <span className="text-emerald-600">✅ Settled</span>
+                        ) : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                          r.settlement_pending > 0 ? "bg-red-50 text-red-700 border-red-200" :
+                          isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                          "bg-slate-50 text-slate-500 border-slate-200"
+                        }`}>
+                          {r.settlement_pending > 0 ? "⚠️ Unsettled" : isActive ? "✅ OK" : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* Totals row */}
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-200 font-bold">
+                  <td colSpan={2} className="px-3 py-2.5 text-xs font-black">TOTAL ({riders.length} riders)</td>
+                  <td className="px-3 py-2.5 text-center text-emerald-700">{totals.delivered ?? 0}</td>
+                  <td className="px-3 py-2.5 text-center text-amber-600">{totals.pending ?? 0}</td>
+                  <td className="px-3 py-2.5 text-center text-red-600">{totals.failed ?? 0}</td>
+                  <td className="px-3 py-2.5 text-center text-purple-600">{totals.returned ?? 0}</td>
+                  <td className="px-3 py-2.5 text-center text-blue-600">{totals.paid_orders ?? 0}</td>
+                  <td className="px-3 py-2.5 text-center text-slate-500">{totals.zero_amount_orders ?? 0}</td>
+                  <td className="px-3 py-2.5 text-right text-blue-700">Rs. {(totals.cod_collected ?? 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-emerald-600">Rs. {(totals.total_settled ?? 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-red-600">Rs. {(totals.settlement_pending ?? 0).toLocaleString()}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* WhatsApp Preview */}
+      {riders.filter((r: any) => r.total_assignments > 0).length > 0 && (
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <button
+            onClick={() => setShowLogs(v => !v)}
+            className="w-full px-4 py-3 border-b border-border bg-slate-50/60 flex items-center justify-between hover:bg-slate-100 transition-colors"
+          >
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <MessageCircle size={14} className="text-green-600" />
+              WhatsApp Report Preview
+            </h3>
+            <ChevronDown size={14} className={`transition-transform ${showLogs ? "rotate-180" : ""}`} />
+          </button>
+          {showLogs && (
+            <div className="p-4 bg-[#075e54] rounded-b-xl">
+              <div className="bg-[#dcf8c6] rounded-xl p-3 max-w-sm mx-auto text-xs text-[#303030] whitespace-pre-wrap font-mono shadow-md">
+                {buildWaPreview(riders.filter((r: any) => r.total_assignments > 0), totals, date)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Send History */}
+      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <button
+          onClick={() => setShowLogs(v => !v)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+        >
+          <h3 className="text-sm font-bold flex items-center gap-2">
+            <Clock size={14} className="text-muted-foreground" />
+            Report Send History
+          </h3>
+          <ChevronDown size={14} className={`transition-transform ${showLogs ? "rotate-180" : ""}`} />
+        </button>
+        {showLogs && (
+          <div className="border-t border-border">
+            {!logsData?.logs?.length ? (
+              <p className="text-xs text-center text-muted-foreground py-6">No reports sent yet</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b">
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase">Date</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase">Sent At</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase">WhatsApp</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase">Email</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase">Riders</th>
+                    <th className="px-3 py-2 text-right text-[10px] font-bold text-muted-foreground uppercase">COD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logsData.logs.map((log: any) => (
+                    <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/60">
+                      <td className="px-3 py-2 font-mono font-semibold">{String(log.report_date).slice(0, 10)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{new Date(log.sent_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${log.wa_status === "sent" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          {log.wa_status === "sent" ? "✓ Sent" : "✗ Failed"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${log.email_status === "sent" ? "bg-blue-100 text-blue-700" : log.email_status === "not_configured" ? "bg-slate-100 text-slate-500" : "bg-red-100 text-red-700"}`}>
+                          {log.email_status === "sent" ? "✓ Sent" : log.email_status === "not_configured" ? "Not configured" : "✗ Failed"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">{log.rider_count ?? "—"}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-blue-700">
+                        {log.totals?.cod_collected ? `Rs. ${Number(log.totals.cod_collected).toLocaleString()}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function buildWaPreview(riders: any[], totals: any, date: string): string {
+  const d = new Date(date + "T00:00:00+05:00").toLocaleDateString("en-PK", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  let msg = `📦 *KDF NUTS — Rider Daily Report*\n📅 *${d}*\n━━━━━━━━━━━━━━━━━━\n\n`;
+  for (const r of riders.slice(0, 3)) {
+    msg += `👤 *${r.name}*${r.delivery_area ? `\n📍 ${r.delivery_area}` : ""}\n`;
+    msg += `✅ Delivered: ${r.delivered}`;
+    if (r.pending) msg += `  ⏳ Pending: ${r.pending}`;
+    msg += `\n`;
+    if (r.cod_collected > 0) msg += `💰 COD: Rs. ${r.cod_collected.toLocaleString()}\n`;
+    if (r.paid_orders) msg += `🟢 Paid: ${r.paid_orders}\n`;
+    if (r.zero_amount_orders) msg += `⚪ Zero Amt: ${r.zero_amount_orders}\n`;
+    if (r.settlement_pending > 0) msg += `⚠️ Pending: Rs. ${r.settlement_pending.toLocaleString()}\n`;
+    if (r.failed) msg += `❌ Failed: ${r.failed}\n`;
+    if (r.returned) msg += `↩️ Returns: ${r.returned}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━\n`;
+  }
+  if (riders.length > 3) msg += `... +${riders.length - 3} more riders\n━━━━━━━━━━━━━━━━━━\n`;
+  msg += `\n📊 *SUMMARY*\n✅ Total Delivered: ${totals.delivered ?? 0}\n💰 Total COD: Rs. ${(totals.cod_collected ?? 0).toLocaleString()}`;
+  if (totals.settlement_pending > 0) msg += `\n⚠️ *Unsettled: Rs. ${totals.settlement_pending.toLocaleString()}*`;
+  return msg;
+}
+
+/* ══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function RidersPage() {
@@ -999,7 +1379,7 @@ export default function RidersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editRider, setEditRider] = useState<any>(null);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"riders" | "accounting" | "cod-settlement" | "shopify-sync">("riders");
+  const [activeTab, setActiveTab] = useState<"riders" | "accounting" | "cod-settlement" | "shopify-sync" | "daily-reports">("riders");
 
   const { data, isLoading } = useQuery({
     queryKey: ["riders-full"],
@@ -1112,6 +1492,7 @@ export default function RidersPage() {
           ["riders",         "Riders",          Users,       null],
           ["accounting",     "Accounting",       DollarSign,  null],
           ["cod-settlement", "COD Settlement",   Banknote,    codPendingRidersCount > 0 ? codPendingRidersCount : null],
+          ["daily-reports",  "Daily Reports",    FileText,    null],
           ["shopify-sync",   "Shopify Sync",     Zap,         null],
         ] as const).map(([key, label, Icon, badge]) => (
           <button
@@ -1135,6 +1516,8 @@ export default function RidersPage() {
         <AccountingPanel />
       ) : activeTab === "cod-settlement" ? (
         <CodSettlementPanel />
+      ) : activeTab === "daily-reports" ? (
+        <DailyReportsPanel />
       ) : activeTab === "shopify-sync" ? (
         <ShopifySyncMonitor />
       ) : (
