@@ -35,7 +35,6 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 20_000 } },
 });
 
-/* ── Register push token for rider ── */
 async function registerPushToken(): Promise<string | null> {
   if (Platform.OS === "web") return null;
   try {
@@ -53,7 +52,6 @@ async function registerPushToken(): Promise<string | null> {
   } catch { return null; }
 }
 
-/* ── New-Order Monitor (riders only) ── */
 function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   const { token, rider } = useAuth();
   const router           = useRouter();
@@ -95,7 +93,7 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
     try {
       const r = await riderFetch("/rider/deliveries?status=assigned&period=active", token);
       if (!r.ok) return;
-      const json = await r.json();
+      const json       = await r.json();
       const deliveries: any[] = json.deliveries ?? [];
       if (!initialized.current) {
         deliveries.forEach((d) => knownIds.current.add(d.id));
@@ -162,31 +160,23 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ── Role-based root nav ── */
 function RootLayoutNav() {
-  const { userRole, loading } = useAuth();
+  const { rider, loading } = useAuth();
   if (loading) return null;
-
   return (
     <Stack>
-      {/* Rider tabs */}
-      <Stack.Screen name="(tabs)"   options={{ headerShown: false }} />
-      {/* Admin tabs */}
-      <Stack.Screen name="(admin)"  options={{ headerShown: false }} />
-      {/* Shared */}
-      <Stack.Screen name="login"    options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="(tabs)"     options={{ headerShown: false }} />
+      <Stack.Screen name="login"      options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
 }
 
-/* ── Root redirect based on role ── */
 function RoleRedirect() {
-  const { userRole, loading } = useAuth();
+  const { rider, loading } = useAuth();
   if (loading) return null;
-  if (userRole === "admin")  return <Redirect href="/(admin)" />;
-  if (userRole === "rider")  return <Redirect href="/(tabs)" />;
+  if (rider) return <Redirect href="/(tabs)" />;
   return <Redirect href="/login" />;
 }
 
