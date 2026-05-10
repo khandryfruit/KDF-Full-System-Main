@@ -131,6 +131,7 @@ const MARKETING_NAV = [
   { href: "/bidding",             label: "Auctions / Bidding", icon: Gavel       },
   { href: "/restock",             label: "Restock Alerts",     icon: Bell        },
   { href: "/seo",                 label: "SEO Settings",       icon: Search      },
+  { href: "/seo/fast-indexing",   label: "Fast Indexing",      icon: Zap         },
 ];
 
 const OPERATIONS_NAV = [

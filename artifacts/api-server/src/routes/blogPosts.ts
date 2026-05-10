@@ -146,6 +146,12 @@ router.post(
         })
         .returning();
       res.status(201).json(post);
+      // Auto-index published posts
+      if ((status ?? "draft") === "published" && slug) {
+        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+          getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/blog/${slug}`, "blog"); }).catch(() => {});
+        }).catch(() => {});
+      }
     } catch (err: any) {
       if (err?.code === "23505") {
         res.status(409).json({ error: "A post with this slug already exists" });
@@ -199,6 +205,12 @@ router.put(
         return;
       }
       res.json(post);
+      // Auto-index when published
+      if (post.status === "published" && post.slug) {
+        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+          getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/blog/${post.slug}`, "blog"); }).catch(() => {});
+        }).catch(() => {});
+      }
     } catch (err: any) {
       if (err?.code === "23505") {
         res.status(409).json({ error: "A post with this slug already exists" });

@@ -38,4 +38,4 @@ export * from "./erpSettings";
 export * from "./branchStock";
 export * from "./videoBanners";
 export * from "./mobileReels";
-export * from "./waAutomation";
+export * from "./googleIndexing";

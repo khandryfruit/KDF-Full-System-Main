@@ -81,6 +81,7 @@ import AdSensePage from "@/pages/AdSensePage";
 import RiderLiveMapPage from "@/pages/RiderLiveMapPage";
 import VideoBannersPage from "@/pages/VideoBannersPage";
 import MobileReelsPage from "@/pages/MobileReelsPage";
+import GoogleIndexingPage from "@/pages/GoogleIndexingPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -155,6 +156,7 @@ function Router() {
       <Route path="/abandoned-checkouts"><ProtectedRoute component={AbandonedCheckoutsPage} /></Route>
       <Route path="/blog"><ProtectedRoute component={BlogPostsPage} /></Route>
       <Route path="/seo"><ProtectedRoute component={SEOSettingsPage} /></Route>
+      <Route path="/seo/fast-indexing"><ProtectedRoute component={GoogleIndexingPage} /></Route>
       <Route path="/announcements"><ProtectedRoute component={AnnouncementsPage} /></Route>
       <Route path="/footer"><ProtectedRoute component={FooterPage} /></Route>
       <Route path="/ai-content"><ProtectedRoute component={AIContentPage} /></Route>

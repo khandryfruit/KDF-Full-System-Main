@@ -21,6 +21,9 @@ router.post("/categories", adminMiddleware as any, async (req, res) => {
     if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
     const [cat] = await db.insert(categoriesTable).values({ name, slug, ...rest }).returning();
     res.status(201).json(cat);
+    import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+      getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/categories/${slug}`, "category"); }).catch(() => {});
+    }).catch(() => {});
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to create category" });
@@ -32,6 +35,11 @@ router.put("/categories/:id", adminMiddleware as any, async (req, res) => {
     const [cat] = await db.update(categoriesTable).set(req.body).where(eq(categoriesTable.id, parseInt(req.params.id))).returning();
     if (!cat) { res.status(404).json({ error: "Not found" }); return; }
     res.json(cat);
+    if (cat.slug) {
+      import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+        getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/categories/${cat.slug}`, "category"); }).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to update category" });

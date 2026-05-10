@@ -199,11 +199,14 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
   try {
     const { name, price, stock, slug: rawSlug, ...rest } = req.body;
     if (!name || !price) { res.status(400).json({ error: "name and price are required" }); return; }
-    // Always sanitize: whether slug is provided by admin or generated from name
     const baseSlug = rawSlug?.trim() ? rawSlug.trim() : name;
     const slug = await ensureUniqueSlug(baseSlug);
     const [product] = await db.insert(productsTable).values({ name, price, stock: stock ?? 0, slug, ...rest }).returning();
     res.status(201).json(product);
+    // Auto-index after response sent
+    import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+      getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/products/${slug}`, "product"); }).catch(() => {});
+    }).catch(() => {});
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to create product" });
@@ -235,6 +238,13 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
     const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, id)).returning();
     if (!product) { res.status(404).json({ error: "Not found" }); return; }
     res.json(product);
+    // Auto-index after response sent
+    const slugForIndex = finalSlug ?? product.slug;
+    if (slugForIndex) {
+      import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
+        getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/products/${slugForIndex}`, "product"); }).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to update product" });
