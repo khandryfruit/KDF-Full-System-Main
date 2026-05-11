@@ -1,0 +1,496 @@
+Build a WORLD-CLASS Multi-Tenant AI-Powered SaaS E-commerce Ecosystem Platform with advanced Marketing, SEO, Logistics, AI Automation, WhatsApp CRM, Website Builder, Analytics, and Subscription Billing.
+
+This platform should become a complete business operating system where users can launch, manage, market, automate, and scale their ecommerce business from one ecosystem.
+
+━━━━━━━━━━━━━━━━━━━━
+CORE PLATFORM VISION
+━━━━━━━━━━━━━━━━━━━━
+
+Create a platform similar to:
+
+* Shopify
+* Zoho Commerce
+* Dukaan
+* Ecwid
+* Daraz Seller Center
+* HubSpot
+* Intercom
+* Meta Commerce
+* WhatsApp CRM Systems
+* AI Commerce Platforms
+
+But fully customized for our ecosystem with AI + WhatsApp + Logistics + SEO + Marketing + Automation.
+
+━━━━━━━━━━━━━━━━━━━━
+MULTI-TENANT SaaS ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━
+
+Every tenant/user should get:
+
+* Their own ecommerce website
+* Their own admin panel
+* Their own mobile admin app
+* Their own WhatsApp API
+* Their own Meta/Facebook integrations
+* Their own ChatGPT/OpenAI API
+* Their own courier integrations
+* Their own analytics
+* Their own payment gateways
+* Their own branding/domain/theme
+
+All tenant data must remain isolated and secure.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. WEBSITE BUILDER + STORE SYSTEM
+    ━━━━━━━━━━━━━━━━━━━━
+
+Users should be able to:
+
+* Create ecommerce websites
+* Select beautiful ready-made themes
+* Customize homepage
+* Edit colors/fonts/layouts
+* Add sliders/banners
+* Create pages
+* Configure menus/navigation
+* Upload logos/images/videos
+
+Need:
+
+* Mobile-first design
+* Fast loading
+* SEO optimized
+* Smooth animations
+* Professional UI/UX
+
+━━━━━━━━━━━━━━━━━━━━
+2. CUSTOM DOMAIN + HOSTING SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Custom domain mapping
+* SSL auto configuration
+* HTTPS auto enable
+* DNS verification
+* Subdomains
+* CDN integration
+
+Examples:
+
+* brand.com
+* shop.brand.pk
+* brand.platform.com
+
+━━━━━━━━━━━━━━━━━━━━
+3. COMPLETE ECOMMERCE SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Each user should get:
+
+* Products management
+* Categories/subcategories
+* Variants
+* Inventory management
+* Orders management
+* Customer management
+* Coupons/discounts
+* Wishlist/cart
+* Reviews/ratings
+* COD support
+* Online payments
+* SEO product pages
+
+━━━━━━━━━━━━━━━━━━━━
+4. AI PRODUCT + CONTENT SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need AI-powered content tools.
+
+Required:
+
+* AI product descriptions
+* AI SEO titles
+* AI meta descriptions
+* AI keyword generation
+* AI tags
+* AI product highlights
+* AI marketing captions
+* AI blog writing
+* AI ad copy generation
+
+Use:
+
+* OpenAI/ChatGPT APIs
+
+Each tenant/user should use:
+
+* Their own OpenAI API keys
+
+━━━━━━━━━━━━━━━━━━━━
+5. FACEBOOK + META INTEGRATION
+━━━━━━━━━━━━━━━━━━━━
+
+VERY IMPORTANT.
+
+Need complete Meta/Facebook integration.
+
+Required:
+
+* Facebook Pixel integration
+* Meta Conversion API
+* Instagram Shop integration
+* Facebook Shop integration
+* Meta Ads integration
+* Meta Catalog sync
+* Dynamic ads support
+* Retargeting support
+* Audience tracking
+
+Users should connect:
+
+* Their own Facebook Business account
+* Their own Pixel IDs
+* Their own Meta APIs
+
+━━━━━━━━━━━━━━━━━━━━
+6. MARKETING AUTOMATION SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need complete marketing system.
+
+Required:
+
+* Email marketing
+* WhatsApp campaigns
+* Broadcast campaigns
+* Abandoned cart recovery
+* Push notifications
+* Discount campaigns
+* Coupon campaigns
+* AI marketing suggestions
+* Customer segmentation
+* Retargeting automation
+
+━━━━━━━━━━━━━━━━━━━━
+7. ADVANCED SEO SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need enterprise-level SEO tools.
+
+Required:
+
+* SEO meta titles
+* SEO meta descriptions
+* SEO keywords
+* SEO-friendly URLs
+* Sitemap.xml generation
+* Robots.txt management
+* Schema markup
+* Product schema
+* Blog schema
+* Canonical URLs
+* OpenGraph tags
+* Twitter meta tags
+
+━━━━━━━━━━━━━━━━━━━━
+8. GOOGLE SEO + ANALYTICS INTEGRATION
+━━━━━━━━━━━━━━━━━━━━
+
+Need direct integrations with:
+
+* Google Search Console
+* Google Analytics
+* Google Tag Manager
+* Google Merchant Center
+* Google Indexing API
+* Google Ads conversion tracking
+
+Features:
+
+* Auto sitemap submission
+* Auto indexing requests
+* SEO analytics dashboard
+* Keyword performance tracking
+* Traffic analytics
+* Ecommerce analytics
+
+━━━━━━━━━━━━━━━━━━━━
+9. WEBSITE SPEED & OPTIMIZATION
+━━━━━━━━━━━━━━━━━━━━
+
+VERY IMPORTANT.
+
+Need:
+
+* High-performance architecture
+* Fast-loading websites
+* Core Web Vitals optimization
+* Lazy loading
+* CDN support
+* Image optimization
+* WebP conversion
+* Compression
+* SSR/SEO rendering
+* Caching systems
+* Database optimization
+
+Goal:
+
+* Lightning-fast ecommerce websites
+* Smooth mobile experience
+* SEO-friendly performance
+
+━━━━━━━━━━━━━━━━━━━━
+10. GOOGLE MAPS + LOCATION APIs
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Google Maps integration
+* Auto address suggestions
+* Auto location detection
+* Google Places API
+* Delivery address autofill
+* Pin location support
+* Live map integration
+
+Features:
+
+* Auto address picker
+* Rider tracking maps
+* Delivery zones
+* Distance calculations
+
+━━━━━━━━━━━━━━━━━━━━
+11. COMPLETE WHATSAPP CRM + AUTOMATION
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Order confirmation automation
+* Payment confirmation
+* Delivery updates
+* Rider updates
+* Abandoned cart recovery
+* AI chatbot replies
+* Broadcast campaigns
+* Customer support inbox
+* WhatsApp CRM
+* WhatsApp templates
+
+Each user should use:
+
+* Their own Meta WhatsApp APIs
+* Their own phone numbers
+
+━━━━━━━━━━━━━━━━━━━━
+12. AI CHATBOT SaaS SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Website chatbot
+* WhatsApp chatbot
+* AI support assistant
+* AI sales assistant
+* FAQ automation
+* Product recommendation AI
+* Human handoff system
+
+━━━━━━━━━━━━━━━━━━━━
+13. COMPLETE LOGISTICS SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need enterprise logistics ecosystem.
+
+Integrate ALL major Pakistan courier/logistics companies:
+
+* Leopards Courier
+* TCS
+* Trax
+* M&P
+* Call Courier
+* BlueEX
+* Rider
+* PostEx
+* Swyft
+* Daraz Logistics
+* Any future APIs
+
+Required:
+
+* Courier booking
+* Bulk booking
+* Tracking system
+* Shipping labels
+* Thermal labels
+* Rider assignment
+* Delivery workflows
+* COD settlement tracking
+
+━━━━━━━━━━━━━━━━━━━━
+14. PAYMENT GATEWAY SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need payment gateway integrations.
+
+If tenant/user has NO payment gateway:
+Show onboarding/setup options.
+
+Integrate:
+
+* JazzCash
+* Easypaisa
+* Meezan
+* HBL
+* Stripe
+* PayFast
+* PayPal
+* Bank transfer systems
+
+Features:
+
+* Payment status tracking
+* Auto paid status
+* Invoice sync
+* Payment analytics
+
+━━━━━━━━━━━━━━━━━━━━
+15. MOBILE ADMIN APP
+━━━━━━━━━━━━━━━━━━━━
+
+Need complete Admin Mobile App.
+
+Features:
+
+* Order management
+* Product uploads
+* WhatsApp CRM
+* Push notifications
+* Logistics booking
+* Invoice generation
+* Rider tracking
+* AI tools
+* Live analytics
+
+━━━━━━━━━━━━━━━━━━━━
+16. SUBSCRIPTION & FEATURE CONTROL SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+SUPER IMPORTANT.
+
+Platform owner/admin should control:
+
+* Which features tenants can access
+* Which APIs enabled
+* Which integrations enabled
+* Subscription plans
+* Usage limits
+* Billing cycles
+
+Features enabled ONLY if admin allows them.
+
+━━━━━━━━━━━━━━━━━━━━
+17. SaaS PRICING & FEATURE PLANS
+━━━━━━━━━━━━━━━━━━━━
+
+Need plans like:
+
+Starter
+
+* Website
+* Basic products
+* Limited orders
+
+Business
+
+* WhatsApp automation
+* AI tools
+* SEO tools
+* Courier integrations
+
+Enterprise
+
+* Advanced analytics
+* AI chatbot
+* Marketing automation
+* Multi-user system
+* Priority support
+
+Need:
+
+* Upgrade/downgrade
+* Feature gating
+* Usage tracking
+* Recurring billing
+
+━━━━━━━━━━━━━━━━━━━━
+18. REAL-TIME SYSTEMS
+━━━━━━━━━━━━━━━━━━━━
+
+Use:
+
+* Socket.IO
+* Firebase
+* WebSockets
+* Redis queues
+
+Need:
+
+* Live notifications
+* Live chats
+* Live order sync
+* Live rider tracking
+* Real-time analytics
+
+━━━━━━━━━━━━━━━━━━━━
+19. ENTERPRISE ADMIN CONTROL PANEL
+━━━━━━━━━━━━━━━━━━━━
+
+Super Admin should control:
+
+* All tenants
+* Billing
+* APIs
+* Integrations
+* Feature permissions
+* Plans
+* Analytics
+* Revenue
+* Activity logs
+* Marketing tools
+
+━━━━━━━━━━━━━━━━━━━━
+20. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+Build a COMPLETE AI-powered Ecommerce SaaS Ecosystem where users can:
+
+* Launch ecommerce websites
+* Connect custom domains
+* Upload/manage products
+* Use AI-generated SEO content
+* Run WhatsApp automations
+* Use AI chatbots
+* Run marketing campaigns
+* Connect Meta/Facebook tools
+* Track analytics
+* Manage logistics
+* Create invoices
+* Accept payments
+* Track riders
+* Scale their business
+
+Everything should:
+
+* Be enterprise-grade
+* Be extremely smooth
+* Be mobile optimized
+* Be SEO optimized
+* Be lightning fast
+* Be production ready
+* Be scalable globally
+* Work with real-time synchronization
+* Be controlled from Master Admin permissions
