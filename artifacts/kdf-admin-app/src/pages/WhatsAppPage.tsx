@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/App";
-import { MessageCircle, Search, RefreshCw, Phone, Clock } from "lucide-react";
+import { MessageCircle, Search, RefreshCw, Phone, Clock, ChevronRight } from "lucide-react";
 
 function apiFetch(path: string, token: string | null) {
   return fetch(`/api${path}`, {
@@ -29,6 +30,7 @@ function statusDot(status: string) {
 
 export default function WhatsAppPage() {
   const { token } = useAuth();
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "open" | "pending">("all");
 
@@ -114,8 +116,11 @@ export default function WhatsAppPage() {
         ) : (
           <div className="space-y-2">
             {conversations.map((c: any) => (
-              <div key={c.id}
-                className="bg-card border border-border rounded-2xl p-3.5 flex items-start gap-3 active:scale-[0.99] transition-transform">
+              <button
+                key={c.id}
+                onClick={() => navigate(`/wa/${encodeURIComponent(c.phone)}`)}
+                className="w-full bg-card border border-border rounded-2xl p-3.5 flex items-start gap-3 active:scale-[0.99] transition-transform hover:border-green-500/30 text-left"
+              >
                 {/* Avatar */}
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center font-bold text-green-400 text-sm">
@@ -142,13 +147,16 @@ export default function WhatsAppPage() {
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{c.last_message}</p>
                   )}
                 </div>
-                {/* Unread badge */}
-                {(c.unread_count ?? 0) > 0 && (
-                  <div className="shrink-0 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-bold text-white">
-                    {c.unread_count}
-                  </div>
-                )}
-              </div>
+                {/* Unread badge + arrow */}
+                <div className="shrink-0 flex items-center gap-1.5">
+                  {(c.unread_count ?? 0) > 0 && (
+                    <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-bold text-white">
+                      {c.unread_count}
+                    </div>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+                </div>
+              </button>
             ))}
           </div>
         )}

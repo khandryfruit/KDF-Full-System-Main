@@ -63,43 +63,51 @@ function ModuleProvider({ children }: { children: ReactNode }) {
 }
 
 /* ─── Pages ─────────────────────────────────────────────────────────────── */
-import LoginPage     from "@/pages/LoginPage";
-import DashboardPage from "@/pages/DashboardPage";
-import OrdersPage    from "@/pages/OrdersPage";
-import RidersPage    from "@/pages/RidersPage";
-import ModulesPage   from "@/pages/ModulesPage";
-import WhatsAppPage  from "@/pages/WhatsAppPage";
-import CustomersPage from "@/pages/CustomersPage";
-import AnalyticsPage from "@/pages/AnalyticsPage";
-import MorePage      from "@/pages/MorePage";
+import LoginPage          from "@/pages/LoginPage";
+import DashboardPage      from "@/pages/DashboardPage";
+import OrdersPage         from "@/pages/OrdersPage";
+import OrderDetailPage    from "@/pages/OrderDetailPage";
+import RidersPage         from "@/pages/RidersPage";
+import ModulesPage        from "@/pages/ModulesPage";
+import WhatsAppPage       from "@/pages/WhatsAppPage";
+import WAConversationPage from "@/pages/WAConversationPage";
+import CustomersPage      from "@/pages/CustomersPage";
+import AnalyticsPage      from "@/pages/AnalyticsPage";
+import MorePage           from "@/pages/MorePage";
 
-function ProtectedRoute({ component: C }: { component: React.ComponentType }) {
+function ProtectedRoute({ component: C, params }: { component: React.ComponentType<any>; params?: any }) {
   const { token } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => { if (!token) navigate("/login"); }, [token]);
   if (!token) return null;
-  return <C />;
+  return <C params={params} />;
 }
 
 function Router() {
   const { token } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => {
-    if (token && window.location.pathname.endsWith("/login")) navigate("/");
+    if (token && window.location.pathname.includes("/login")) navigate("/");
   }, [token]);
 
   return (
     <Switch>
-      <Route path="/login"     component={LoginPage} />
-      <Route path="/"          component={() => <ProtectedRoute component={DashboardPage} />} />
-      <Route path="/orders"    component={() => <ProtectedRoute component={OrdersPage}    />} />
-      <Route path="/riders"    component={() => <ProtectedRoute component={RidersPage}    />} />
-      <Route path="/wa"        component={() => <ProtectedRoute component={WhatsAppPage}  />} />
-      <Route path="/customers" component={() => <ProtectedRoute component={CustomersPage} />} />
-      <Route path="/analytics" component={() => <ProtectedRoute component={AnalyticsPage} />} />
-      <Route path="/more"      component={() => <ProtectedRoute component={MorePage}      />} />
-      <Route path="/modules"   component={() => <ProtectedRoute component={ModulesPage}   />} />
-      <Route                   component={() => <ProtectedRoute component={DashboardPage} />} />
+      <Route path="/login"          component={LoginPage} />
+      <Route path="/"               component={() => <ProtectedRoute component={DashboardPage}   />} />
+      <Route path="/orders"         component={() => <ProtectedRoute component={OrdersPage}       />} />
+      <Route path="/orders/:id">
+        {(params) => <ProtectedRoute component={OrderDetailPage} params={params} />}
+      </Route>
+      <Route path="/riders"         component={() => <ProtectedRoute component={RidersPage}       />} />
+      <Route path="/wa"             component={() => <ProtectedRoute component={WhatsAppPage}     />} />
+      <Route path="/wa/:phone">
+        {(params) => <ProtectedRoute component={WAConversationPage} params={params} />}
+      </Route>
+      <Route path="/customers"      component={() => <ProtectedRoute component={CustomersPage}    />} />
+      <Route path="/analytics"      component={() => <ProtectedRoute component={AnalyticsPage}    />} />
+      <Route path="/more"           component={() => <ProtectedRoute component={MorePage}         />} />
+      <Route path="/modules"        component={() => <ProtectedRoute component={ModulesPage}      />} />
+      <Route                        component={() => <ProtectedRoute component={DashboardPage}    />} />
     </Switch>
   );
 }
