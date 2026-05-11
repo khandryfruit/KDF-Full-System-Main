@@ -493,6 +493,10 @@ router.get("/admin/riders/live-dashboard", adminMiddleware, async (req, res) => 
 
     const activeRiders = await db.execute(sql`
       SELECT r.id, r.name, r.phone, r.delivery_area, r.is_online, r.expo_push_token IS NOT NULL AS has_push,
+        COALESCE(r.auto_assign_enabled, true)  AS auto_assign_enabled,
+        COALESCE(r.max_active_orders, 200)     AS max_active_orders,
+        COALESCE(r.priority, 1)                AS priority,
+        COALESCE(r.zone, 'lahore')             AS zone,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_orders,
         COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND DATE(d.delivered_at) = CURRENT_DATE) AS delivered_today
       FROM riders r
@@ -775,7 +779,7 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
     const buildRiderQuery = (onlineOnly: boolean) => db.execute(sql`
       SELECT r.id, r.name, r.phone, r.whatsapp_number, r.expo_push_token,
         r.is_online, r.delivery_area, r.priority,
-        COALESCE(r.max_active_orders, 50) AS max_active_orders,
+        COALESCE(r.max_active_orders, 200) AS max_active_orders,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_count
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
@@ -783,7 +787,7 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
         AND COALESCE(r.auto_assign_enabled, true) = true
         ${onlineOnly ? sql`AND r.is_online = true` : sql``}
       GROUP BY r.id
-      HAVING COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) < COALESCE(r.max_active_orders, 50)
+      HAVING COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) < COALESCE(r.max_active_orders, 200)
       ORDER BY COALESCE(r.priority, 1) DESC, active_count ASC
     `);
 

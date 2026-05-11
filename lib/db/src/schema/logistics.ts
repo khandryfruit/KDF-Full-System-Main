@@ -145,6 +145,99 @@ export const courierNotificationLogsTable = pgTable("courier_notification_logs",
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/* ══════════════════════════════════════════════════════════
+   LAHORE RIDERS
+══════════════════════════════════════════════════════════ */
+export const ridersTable = pgTable("riders", {
+  id:                      serial("id").primaryKey(),
+  name:                    text("name").notNull(),
+  phone:                   text("phone").notNull(),
+  whatsappNumber:          text("whatsapp_number"),
+  deliveryArea:            text("delivery_area"),
+  status:                  text("status").notNull().default("active"),
+  notes:                   text("notes"),
+  avatarUrl:               text("avatar_url"),
+  cnic:                    text("cnic"),
+  vehicleType:             text("vehicle_type").default("bike"),
+  passwordHash:            text("password_hash"),
+  expoPushToken:           text("expo_push_token"),
+  deliveryChargePerOrder:  numeric("delivery_charge_per_order").default("500"),
+  locationLat:             numeric("location_lat", { precision: 10, scale: 7 }),
+  locationLng:             numeric("location_lng", { precision: 10, scale: 7 }),
+  locationUpdatedAt:       timestamp("location_updated_at"),
+  locationAccuracy:        numeric("location_accuracy", { precision: 8, scale: 2 }),
+  locationSpeed:           numeric("location_speed", { precision: 8, scale: 2 }),
+  locationHeading:         numeric("location_heading", { precision: 6, scale: 2 }),
+  isOnline:                boolean("is_online").notNull().default(false),
+  cashLimit:               numeric("cash_limit").default("50000"),
+  currentCash:             numeric("current_cash").default("0"),
+  shiftStart:              text("shift_start"),
+  shiftEnd:                text("shift_end"),
+  /* Auto-assign controls */
+  autoAssignEnabled:       boolean("auto_assign_enabled").default(true),
+  maxActiveOrders:         integer("max_active_orders").default(200),
+  zone:                    text("zone").default("lahore"),
+  priority:                integer("priority").default(1),
+  createdAt:               timestamp("created_at").notNull().defaultNow(),
+  updatedAt:               timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const riderDeliveriesTable = pgTable("rider_deliveries", {
+  id:                    serial("id").primaryKey(),
+  riderId:               integer("rider_id").references(() => ridersTable.id, { onDelete: "set null" }),
+  shopifyOrderDbId:      integer("shopify_order_db_id"),
+  shopifyOrderId:        text("shopify_order_id"),
+  shopifyOrderNumber:    text("shopify_order_number"),
+  customerName:          text("customer_name"),
+  customerPhone:         text("customer_phone"),
+  deliveryAddress:       text("delivery_address"),
+  city:                  text("city").default("Lahore"),
+  codAmount:             numeric("cod_amount", { precision: 12, scale: 2 }).default("0"),
+  isPaid:                boolean("is_paid").default(false),
+  orderItems:            jsonb("order_items").$type<any[]>().default([]),
+  status:                text("status").notNull().default("pending"),
+  waSentAt:              timestamp("wa_sent_at"),
+  waMessageId:           text("wa_message_id"),
+  invoiceUrl:            text("invoice_url"),
+  notes:                 text("notes"),
+  assignedAt:            timestamp("assigned_at"),
+  pickedAt:              timestamp("picked_at"),
+  outForDeliveryAt:      timestamp("out_for_delivery_at"),
+  deliveredAt:           timestamp("delivered_at"),
+  failedAt:              timestamp("failed_at"),
+  returnedAt:            timestamp("returned_at"),
+  retryCount:            integer("retry_count").default(0),
+  metadata:              jsonb("metadata").$type<Record<string, any>>().default({}),
+  deliveryCharge:        numeric("delivery_charge").default("500"),
+  riderPaymentStatus:    text("rider_payment_status").default("pending"),
+  riderPaymentDate:      timestamp("rider_payment_date"),
+  riderPaidAmount:       numeric("rider_paid_amount").default("0"),
+  customerWaSentAt:      timestamp("customer_wa_sent_at"),
+  etaMinutes:            integer("eta_minutes"),
+  nearCustomerAt:        timestamp("near_customer_at"),
+  delayedAt:             timestamp("delayed_at"),
+  codReminderSentAt:     timestamp("cod_reminder_sent_at"),
+  customerWaAssignedAt:  timestamp("customer_wa_assigned_at"),
+  customerWaStatusAt:    timestamp("customer_wa_status_at"),
+  deliveryMode:          text("delivery_mode").default("auto"),
+  createdAt:             timestamp("created_at").notNull().defaultNow(),
+  updatedAt:             timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const riderCodSettlementsTable = pgTable("rider_cod_settlements", {
+  id:        serial("id").primaryKey(),
+  riderId:   integer("rider_id").notNull().references(() => ridersTable.id),
+  type:      text("type").notNull().default("full"),
+  amount:    numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  notes:     text("notes"),
+  settledBy: text("settled_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Rider = typeof ridersTable.$inferSelect;
+export type RiderDelivery = typeof riderDeliveriesTable.$inferSelect;
+export type RiderCodSettlement = typeof riderCodSettlementsTable.$inferSelect;
+
 export const insertCourierSchema = createInsertSchema(couriersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertShipmentSchema = createInsertSchema(shipmentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentGatewaySchema = createInsertSchema(paymentGatewaysTable).omit({ id: true, createdAt: true, updatedAt: true });

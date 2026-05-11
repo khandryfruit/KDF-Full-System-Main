@@ -632,7 +632,7 @@ function RiderOnlineRow({ rider }: { rider: any }) {
   const [expanded, setExpanded]       = useState(false);
   const [savingAA, setSavingAA]       = useState(false);
   const [localAA, setLocalAA]         = useState<boolean>(rider.auto_assign_enabled ?? true);
-  const [localMax, setLocalMax]       = useState<number>(rider.max_active_orders ?? 50);
+  const [localMax, setLocalMax]       = useState<number>(rider.max_active_orders ?? 200);
   const [localPriority, setLocalPriority] = useState<number>(rider.priority ?? 1);
 
   const toggleOnline = async () => {
