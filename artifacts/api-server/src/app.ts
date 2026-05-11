@@ -189,6 +189,9 @@ if (process.env.NODE_ENV === "production") {
     staticMw(req, res, () => {
       const indexHtml = path.join(distPath, "index.html");
       if (existsSync(indexHtml)) {
+        res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
         res.sendFile(indexHtml);
       } else {
         res

@@ -1,0 +1,131 @@
+Critical Production Deployment Issue
+
+Problem:
+All newly developed UI/features are visible correctly in development mode and Replit preview, but after republishing to the live custom domain/production deployment, the latest changes do NOT appear.
+
+The production/live domain is showing an old cached/stale version instead of the latest build.
+
+Need full investigation and permanent fix for production deployment sync.
+
+========================
+ISSUES OBSERVED
+========================
+
+In Development / Preview:
+- New Lahore Delivery Hub UI appears
+- New rider dashboard appears
+- Live dashboard widgets appear
+- Auto-assign buttons appear
+- Sync indicators appear
+- Latest UI changes appear correctly
+
+But on the Live Domain:
+- Old UI still appears
+- New features missing
+- Latest components not loading
+- Production looks outdated
+- Some routes/modules missing
+
+========================
+REQUIRED FIXES
+========================
+
+1. Production Build Verification
+Check that the latest source code is actually included in the production build.
+
+Verify:
+- build output
+- dist folder
+- deployment artifact
+- generated static assets
+
+Ensure latest commits are being deployed.
+
+========================
+2. Clear ALL Production Cache
+Completely clear:
+- Cloudflare cache
+- browser cache
+- service worker cache
+- Vite/React cached assets
+- CDN cache
+- old JS bundles
+
+Force fresh production assets.
+
+========================
+3. Versioned Build System
+Implement proper production versioning.
+
+Requirements:
+- unique hashed JS/CSS filenames
+- automatic cache busting
+- build version tracking
+- deployment timestamping
+
+========================
+4. Service Worker Check
+Investigate if old service workers are caching outdated frontend files.
+
+If using PWA:
+- unregister old workers
+- force update
+- clear stale assets
+
+========================
+5. Replit Deployment Sync
+Check:
+- latest deployment target
+- correct publish branch
+- deployment pipeline
+- deployment environment
+
+Ensure the custom domain points to the newest deployment.
+
+========================
+6. Environment Variables
+Verify production environment variables are correct.
+
+Check:
+- API URLs
+- frontend URLs
+- feature flags
+- deployment mode
+
+========================
+7. Frontend Routing
+Ensure new routes/modules are included in production:
+- Lahore Delivery Hub
+- Rider Dashboard
+- Auto Assign
+- Live Dashboard
+- Sync Components
+
+========================
+8. Build Commands
+Verify correct production commands:
+
+- npm run build
+- npm run start
+- vite build
+- frontend export
+
+Ensure no old build folder is reused.
+
+========================
+9. Production Debugging
+Add deployment logs:
+- build timestamp
+- git commit hash
+- deployment version
+- active frontend version
+
+========================
+10. FINAL REQUIREMENT
+After republishing:
+- production domain must EXACTLY match development preview
+- all new UI/features must appear instantly
+- no stale frontend allowed
+- no old cached UI
+
+This must be fully fixed before generating any new builds/APKs.
