@@ -17,6 +17,7 @@ import {
   shopifyCustomersTable,
   shopifyProductsTable,
   shopifyWebhookLogsTable,
+  abandonedCheckoutsTable,
 } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { logger } from "./logger";
@@ -489,16 +490,199 @@ export async function processShopifyWebhookPayload(
               lineItems:         Array.isArray(savedOrder.lineItems) ? savedOrder.lineItems : [],
             }).catch(e => logger.error(e, "triggerNewOrderAutomation failed")),
           );
+
+          /* ── Auto-assign Lahore orders to available riders ── */
+          setImmediate(async () => {
+            try {
+              const addrObj = (() => {
+                try {
+                  return typeof savedOrder.shippingAddress === "string"
+                    ? JSON.parse(savedOrder.shippingAddress) : (savedOrder.shippingAddress ?? {});
+                } catch { return {}; }
+              })();
+              if (!/lahore/i.test(addrObj.city ?? "")) return;
+
+              /* Already assigned? */
+              const existing = await db.execute(sql`
+                SELECT id FROM rider_deliveries WHERE shopify_order_db_id = ${savedOrder.id} LIMIT 1
+              `);
+              if (existing.rows.length) return;
+
+              /* Pick rider with fewest active deliveries (prefer online) */
+              const riderRes = await db.execute(sql`
+                SELECT r.id, r.name, r.phone, r.whatsapp_number, r.expo_push_token
+                FROM riders r
+                LEFT JOIN rider_deliveries d ON d.rider_id = r.id
+                  AND d.status NOT IN ('delivered','returned','failed')
+                WHERE r.status = 'active'
+                GROUP BY r.id
+                ORDER BY r.is_online DESC, COUNT(d.id) ASC
+                LIMIT 1
+              `);
+              if (!riderRes.rows.length) return;
+              const rider = riderRes.rows[0] as any;
+
+              const fullAddr = [addrObj.address1, addrObj.address2, addrObj.city].filter(Boolean).join(", ");
+              const isPaid   = savedOrder.financialStatus === "paid";
+              const codAmt   = isPaid ? 0 : Number(savedOrder.totalPrice ?? 0);
+
+              await db.execute(sql`
+                INSERT INTO rider_deliveries
+                  (rider_id, shopify_order_db_id, shopify_order_id, shopify_order_number,
+                   customer_name, customer_phone, delivery_address, city,
+                   cod_amount, is_paid, order_items, status, assigned_at)
+                VALUES (
+                  ${rider.id}, ${savedOrder.id},
+                  ${savedOrder.shopifyOrderId ?? null}, ${savedOrder.orderNumber ?? null},
+                  ${savedOrder.customerName ?? null}, ${savedOrder.customerPhone ?? null},
+                  ${fullAddr}, 'Lahore',
+                  ${codAmt}, ${isPaid},
+                  ${JSON.stringify(savedOrder.lineItems ?? [])},
+                  'assigned', NOW()
+                )
+                ON CONFLICT DO NOTHING
+              `);
+
+              logger.info({ orderId: savedOrder.id, riderName: rider.name }, "Lahore order auto-assigned on creation");
+
+              /* Notify rider via Expo push */
+              if (rider.expo_push_token) {
+                const { sendExpoPush } = await import("./ondriveEngine.js");
+                const codText = isPaid ? "PAID ✅" : `COD Rs.${codAmt.toLocaleString()}`;
+                await sendExpoPush({
+                  expoPushToken: rider.expo_push_token,
+                  title: `🚚 نیا آرڈر! ${savedOrder.orderNumber ?? ""}`,
+                  body: `${savedOrder.customerName ?? "Customer"} · ${addrObj.city ?? "Lahore"} · ${codText}`,
+                  data: { orderId: String(savedOrder.id), orderNumber: String(savedOrder.orderNumber ?? ""), screen: "order_detail" },
+                  sound: "default",
+                  badge: 1,
+                  riderId: rider.id,
+                  orderNumber: String(savedOrder.orderNumber ?? ""),
+                }).catch(() => {});
+              }
+            } catch (autoErr) {
+              logger.warn({ autoErr }, "Lahore auto-assign on new order failed (non-critical)");
+            }
+          });
         }
         break;
       }
 
+      case "orders/paid": {
+        await upsertOrder(store, payload);
+        /* ── WhatsApp payment confirmation ── */
+        setImmediate(async () => {
+          try {
+            const phone  = payload.billing_address?.phone ?? payload.shipping_address?.phone ?? payload.phone ?? null;
+            if (!phone) return;
+
+            const { sendWhatsAppMessage, normalizePhone } = await import("./whatsapp.js");
+            const name        = (payload.billing_address?.first_name ?? payload.customer?.first_name ?? "Customer").split(" ")[0];
+            const orderNum    = payload.name ?? `#${payload.order_number}`;
+            const amount      = parseFloat(payload.total_price ?? "0").toLocaleString("en-PK");
+            const lineItems   = (payload.line_items ?? []) as any[];
+            const itemsList   = lineItems.slice(0, 4)
+              .map((li: any) => `• ${li.title} × ${li.quantity}`)
+              .join("\n");
+
+            const message = [
+              `✅ *Payment Received Successfully!*`,
+              ``,
+              `اسلام علیکم ${name}! 🎉`,
+              ``,
+              `آپ کی payment موصول ہوگئی ہے۔`,
+              ``,
+              `📦 *Order:* ${orderNum}`,
+              `💰 *Amount Paid:* PKR ${amount}`,
+              `✅ *Payment Status:* PAID`,
+              `💳 *Remaining Balance:* PKR 0`,
+              ``,
+              itemsList ? `🛒 *Items:*\n${itemsList}` : null,
+              ``,
+              `آپ کا آرڈر جلد dispatch کیا جائے گا۔ 🚚`,
+              ``,
+              `شکریہ! KDF NUTS 🥜`,
+            ].filter(l => l !== null).join("\n");
+
+            await sendWhatsAppMessage({
+              phone: normalizePhone(phone),
+              message,
+              templateName: "payment_confirmed",
+            });
+            logger.info({ orderNum, phone }, "Payment confirmation WA sent");
+          } catch (waErr) {
+            logger.warn({ waErr }, "Payment confirmation WA failed (non-critical)");
+          }
+        });
+        break;
+      }
+
       case "orders/updated":
-      case "orders/paid":
       case "orders/fulfilled":
       case "orders/cancelled":
         await upsertOrder(store, payload);
         break;
+
+      case "checkouts/create":
+      case "checkouts/update": {
+        /* Save/update abandoned checkout record for recovery scheduler */
+        const checkoutId = String(payload.id ?? payload.token ?? "");
+        if (!checkoutId) break;
+
+        const phone = payload.phone ??
+          payload.shipping_address?.phone ??
+          payload.billing_address?.phone ?? null;
+        const email = payload.email ?? null;
+        const customerName = [
+          payload.shipping_address?.first_name ?? payload.customer?.first_name,
+          payload.shipping_address?.last_name  ?? payload.customer?.last_name,
+        ].filter(Boolean).join(" ") || null;
+
+        const lineItems: any[] = payload.line_items ?? [];
+        const cartItems = lineItems.map((li: any) => ({
+          productId: li.product_id ?? 0,
+          name:      li.title ?? li.name ?? "Product",
+          price:     String(li.price ?? "0"),
+          qty:       li.quantity ?? 1,
+          variant:   li.variant_id ? String(li.variant_id) : undefined,
+          variantLabel: li.variant_title ?? undefined,
+        }));
+
+        const subtotal = lineItems.reduce((sum: number, li: any) =>
+          sum + (parseFloat(li.price ?? "0") * (li.quantity ?? 1)), 0);
+
+        /* Only track if there are items */
+        if (!cartItems.length) break;
+
+        await db
+          .insert(abandonedCheckoutsTable)
+          .values({
+            sessionId:    checkoutId,
+            customerName: customerName ?? undefined,
+            phone:        phone ?? undefined,
+            email:        email ?? undefined,
+            cartItems,
+            subtotal:     String(subtotal.toFixed(2)),
+            checkoutStep: "cart",
+            status:       "active",
+            lastActivity: new Date(),
+          } as any)
+          .onConflictDoUpdate({
+            target: abandonedCheckoutsTable.sessionId,
+            set: {
+              customerName: customerName ?? undefined,
+              phone:        phone ?? undefined,
+              email:        email ?? undefined,
+              cartItems,
+              subtotal:     String(subtotal.toFixed(2)),
+              lastActivity: new Date(),
+            },
+          })
+          .catch(() => {});
+
+        logger.info({ checkoutId, phone, items: cartItems.length }, "Shopify checkout saved for abandoned recovery");
+        break;
+      }
 
       case "draft_orders/create":
         /* Log draft order for visibility — no auto-action */
@@ -588,6 +772,8 @@ const REQUIRED_TOPICS = [
   "customers/create",
   "customers/update",
   "draft_orders/create",
+  "checkouts/create",
+  "checkouts/update",
 ];
 
 export async function registerShopifyWebhooks(
