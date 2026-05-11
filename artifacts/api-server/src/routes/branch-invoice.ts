@@ -608,6 +608,43 @@ router.get("/admin/branch-invoices/report", adminMiddleware as any, async (req, 
   } catch (err: any) { req.log.error(err); res.status(500).json({ error: err.message }); }
 });
 
+/** POST /api/admin/branch-invoices — admin creates a mobile invoice (no branch auth required) */
+router.post("/admin/branch-invoices", adminMiddleware as any, async (req, res) => {
+  try {
+    const {
+      branchId = 1, type, invoiceNo, customerName, customerPhone, customerAddress,
+      items, subtotal, discountPct, discountAmt, shipping = 0, taxRate = 0, taxAmt = 0,
+      grandTotal, paymentMethod, paymentStatus, paidAmount, notes, status,
+    } = req.body;
+    const [invoice] = await db.insert(branchInvoicesTable).values({
+      branchId:       parseInt(String(branchId)),
+      invoiceNo:      invoiceNo      ?? `MOB-${Date.now()}`,
+      type:           type           ?? "invoice",
+      status:         status         ?? "completed",
+      customerName:   customerName   ?? null,
+      customerPhone:  customerPhone  ?? null,
+      customerAddress: customerAddress ?? null,
+      items:          items          ?? [],
+      subtotal:       String(subtotal  ?? 0),
+      discountPct:    String(discountPct ?? 0),
+      discountAmt:    String(discountAmt ?? 0),
+      shipping:       String(shipping  ?? 0),
+      taxRate:        String(taxRate   ?? 0),
+      taxAmt:         String(taxAmt    ?? 0),
+      grandTotal:     String(grandTotal ?? 0),
+      paymentMethod:  paymentMethod  ?? "cash",
+      paymentStatus:  paymentStatus  ?? "paid",
+      paidAmount:     String(paidAmount ?? grandTotal ?? 0),
+      notes:          notes          ?? null,
+    }).returning();
+    await auditLog({ branchId: parseInt(String(branchId)), invoiceId: invoice.id, userId: null, userName: "Mobile Admin", action: "create", newData: invoice });
+    return res.status(201).json({ invoice });
+  } catch (err: any) {
+    req.log?.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 /** GET /api/admin/branch-audit-logs */
 router.get("/admin/branch-audit-logs", adminMiddleware as any, async (req, res) => {
   try {

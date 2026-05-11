@@ -74,6 +74,7 @@ import WAConversationPage from "@/pages/WAConversationPage";
 import CustomersPage      from "@/pages/CustomersPage";
 import AnalyticsPage      from "@/pages/AnalyticsPage";
 import ProductsPage       from "@/pages/ProductsPage";
+import InvoicePOSPage     from "@/pages/InvoicePOSPage";
 import LogisticsPage      from "@/pages/LogisticsPage";
 import StubPage           from "@/pages/StubPage";
 import MorePage           from "@/pages/MorePage";
@@ -115,6 +116,8 @@ function Router() {
       <Route path="/analytics"      component={() => <ProtectedRoute component={AnalyticsPage}    />} />
       {/* Products */}
       <Route path="/products"       component={() => <ProtectedRoute component={ProductsPage}     />} />
+      {/* POS / Invoice */}
+      <Route path="/pos"            component={() => <ProtectedRoute component={InvoicePOSPage}   />} />
       {/* Logistics */}
       <Route path="/logistics"      component={() => <ProtectedRoute component={LogisticsPage}    />} />
       {/* Stub pages — open in desktop admin panel */}

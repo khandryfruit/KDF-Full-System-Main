@@ -1,0 +1,231 @@
+Please now add a COMPLETE Product Management + Mobile Invoice System inside the KDF Admin Mobile App.
+
+This is very important because we want to manage products, upload products, create invoices, and handle operations directly from mobile easily.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. PRODUCT MANAGEMENT MODULE REQUIRED
+    ━━━━━━━━━━━━━━━━━━━━
+
+Please add a FULL Product Management section inside KDF Admin Mobile App.
+
+Need:
+
+* Add New Product
+* Edit Product
+* Delete Product
+* Draft Product
+* Publish Product
+* Product Preview
+* Product Search
+* Product Categories
+* Product Variants
+* Product Stock Management
+
+Everything should sync with:
+
+* Main User Website
+* Shopify Store
+* Main Master Admin
+
+━━━━━━━━━━━━━━━━━━━━
+2. PRODUCT UPLOAD FROM MOBILE REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Admin should easily upload products directly from mobile.
+
+Required:
+
+* Product Images Upload
+* Multiple Images
+* Gallery Upload
+* Drag/Reorder Images
+* Thumbnail Selection
+* Product Video Support
+
+Need smooth mobile upload experience.
+
+━━━━━━━━━━━━━━━━━━━━
+3. AI PRODUCT DESCRIPTION GENERATOR REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Very Important:
+Please integrate AI-powered product description generation.
+
+Need:
+
+* “Generate with AI” button
+* AI-generated product descriptions
+* SEO-friendly content
+* Professional formatting
+* Urdu + English support
+* Shopify SEO optimization
+
+Use:
+
+* ChatGPT/OpenAI API
+    OR
+* AI text generation service
+
+Required AI Features:
+
+* Product title suggestions
+* SEO meta title
+* SEO meta description
+* Product highlights
+* Keywords/tags
+* Bullet points
+* Long description
+* Short description
+
+━━━━━━━━━━━━━━━━━━━━
+4. PRODUCT CATEGORY & SEO SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need proper:
+
+* Categories
+* Subcategories
+* Tags
+* Collections
+* SEO URL slugs
+* Meta tags
+* Search optimization
+
+Product should automatically appear on:
+
+* Main user website
+* Shopify storefront
+* Mobile admin product list
+
+━━━━━━━━━━━━━━━━━━━━
+5. PRODUCT IMAGE PROCESSING
+━━━━━━━━━━━━━━━━━━━━
+
+Please add:
+
+* Image compression
+* Image optimization
+* Crop/resize
+* Background cleanup (optional)
+* WebP optimization
+* Thumbnail generation
+
+Need faster mobile uploads.
+
+━━━━━━━━━━━━━━━━━━━━
+6. MOBILE-FIRST PRODUCT UI
+━━━━━━━━━━━━━━━━━━━━
+
+Please redesign product management for mobile-first workflow.
+
+Need:
+
+* Easy product upload
+* Compact UI
+* Faster editing
+* Smooth image handling
+* Better forms
+* Step-by-step product flow
+
+━━━━━━━━━━━━━━━━━━━━
+7. MOBILE INVOICE / FAST BILLING SYSTEM REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Please add FULL Invoice + Fast Billing module inside KDF Admin Mobile App.
+
+Need:
+
+* Create Invoice
+* Fast Billing
+* POS-style billing
+* Add products quickly
+* Search products
+* Barcode support
+* Customer selection
+* Walk-in customer option
+* Discount support
+* Tax support
+* Payment method selection
+
+━━━━━━━━━━━━━━━━━━━━
+8. INVOICE SYSTEM MUST SYNC WITH MAIN ADMIN
+━━━━━━━━━━━━━━━━━━━━
+
+Important:
+Invoices created from mobile must sync with:
+
+* Main Master Admin
+* Central invoice database
+* Reports
+* Customer records
+* Analytics
+
+Everything should save properly in backend/admin.
+
+━━━━━━━━━━━━━━━━━━━━
+9. MOBILE INVOICE UI IMPROVEMENT
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Fast invoice generation
+* Smooth billing flow
+* Easy product selection
+* Mobile-friendly layout
+* Quick checkout
+* One-hand usage support
+
+Make invoice system similar to:
+
+* Shopify POS
+* Retail POS apps
+* Fast cashier systems
+
+━━━━━━━━━━━━━━━━━━━━
+10. PDF & SHARE FEATURES
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Download invoice PDF
+* WhatsApp invoice
+* Print invoice
+* Share invoice
+* Thermal print support
+
+━━━━━━━━━━━━━━━━━━━━
+11. REAL-TIME INVENTORY SYNC
+━━━━━━━━━━━━━━━━━━━━
+
+When product:
+
+* Added
+* Edited
+* Sold
+* Invoiced
+
+Then inventory should update instantly everywhere:
+
+* Website
+* Shopify
+* Main Admin
+* Mobile Admin
+
+━━━━━━━━━━━━━━━━━━━━
+12. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF Admin Mobile App should become a COMPLETE business management app where admin can:
+
+* Upload products
+* Generate AI descriptions
+* Manage categories
+* Handle inventory
+* Create invoices
+* Run fast billing
+* Manage orders
+* Handle logistics
+* Support customers
+
+Everything should work smoothly from mobile with professional UI/UX and real-time sync.

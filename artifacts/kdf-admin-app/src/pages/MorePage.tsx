@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import {
   BarChart3, Users, MessageCircle, Sliders,
   Package, CreditCard, Store, Bell, GitBranch, Truck,
-  LogOut, Bike,
+  LogOut, Bike, Receipt,
 } from "lucide-react";
 
 
@@ -67,8 +67,16 @@ const MENU_ITEMS: MenuItem[] = [
     href:  "/products",
   },
   {
+    label: "POS / Invoice",
+    desc:  "Fast billing & invoices",
+    icon:  Receipt,
+    color: "text-violet-400",
+    bg:    "bg-violet-500/15",
+    href:  "/pos",
+  },
+  {
     label: "Payments",
-    desc:  "Invoices & billing",
+    desc:  "Payment settings",
     icon:  CreditCard,
     color: "text-pink-400",
     bg:    "bg-pink-500/15",
