@@ -1,0 +1,211 @@
+Please urgently fix the KDF Admin Mobile App because currently it looks functional visually, but almost everything inside is NON-FUNCTIONAL and behaving like a fake/static UI.
+
+You are successfully showing UI/cards/data placeholders, but the actual app functionality is broken.
+
+━━━━━━━━━━━━━━━━━━━━
+CRITICAL ISSUES
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problems:
+
+* WhatsApp chats are visible but NOT clickable
+* Orders are visible but NOT opening
+* Customer names/details missing
+* Order details not opening
+* Dashboard buttons not functional
+* Quick Action buttons not working
+* Modules not navigating
+* Deep linking/navigation broken
+* APIs partially connected only
+* Data is showing but functionality missing
+
+This means:
+UI exists but backend integration + navigation handling is incomplete.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. DEEP LINK & NAVIGATION DEBUGGING
+    ━━━━━━━━━━━━━━━━━━━━
+
+Please fully debug:
+
+* Flutter navigation routes
+* Deep links
+* Route handlers
+* Gesture detectors
+* onTap actions
+* Navigation stack
+* State management
+* Page routing
+
+Currently:
+Cards show on screen but tapping does nothing.
+
+Every card/button/list item MUST:
+
+* Open details page
+* Navigate properly
+* Load dynamic data
+* Handle errors correctly
+
+━━━━━━━━━━━━━━━━━━━━
+2. WHATSAPP MODULE FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Chats appear visually but conversations do not open.
+
+Required:
+
+* Click chat → open full conversation
+* Load real messages
+* Send/reply functionality
+* Media support
+* Real-time sync
+* Customer details visible
+
+Currently it behaves like static preview cards only.
+
+━━━━━━━━━━━━━━━━━━━━
+3. ORDERS MODULE FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Orders list visible but:
+
+* Order details not opening
+* Customer names missing
+* Amounts incorrect/zero
+* Status actions broken
+
+Please fix:
+
+* Order detail screen
+* Customer mapping
+* Shopify sync
+* Real invoice data
+* Status update actions
+* Rider assignment
+* Search/filter
+
+Need complete working order management.
+
+━━━━━━━━━━━━━━━━━━━━
+4. CUSTOMER DATA MAPPING ISSUE
+━━━━━━━━━━━━━━━━━━━━
+
+Current problem:
+Orders showing:
+
+* Unknown customer
+* Rs 0
+* Missing details
+
+Please debug:
+
+* Shopify customer mapping
+* Database relationships
+* API serializers
+* Null handling
+* Order/customer sync
+
+Every order should properly show:
+
+* Customer name
+* Phone number
+* Address
+* Amount
+* Status
+* Delivery details
+
+━━━━━━━━━━━━━━━━━━━━
+5. QUICK ACTION BUTTONS MUST WORK
+━━━━━━━━━━━━━━━━━━━━
+
+These buttons currently feel fake:
+
+* Auto-Assign Riders
+* View Orders
+* WhatsApp Chats
+* Customers
+* Analytics
+* Rider Management
+
+Please connect all buttons with:
+
+* Actual routes
+* APIs
+* Functional pages
+
+━━━━━━━━━━━━━━━━━━━━
+6. ADMIN APP MUST BE FULLY FUNCTIONAL
+━━━━━━━━━━━━━━━━━━━━
+
+Current app:
+Looks modern visually
+BUT functionality is incomplete.
+
+Need:
+
+* Fully clickable UI
+* Fully functional modules
+* Real-time APIs
+* Live updates
+* Real navigation
+* Production-ready behavior
+
+━━━━━━━━━━━━━━━━━━━━
+7. CHECK LIVE PRODUCTION BUILD
+━━━━━━━━━━━━━━━━━━━━
+
+Please specifically debug:
+
+* Production build issues
+* API base URLs
+* Live token handling
+* Release mode navigation bugs
+* Environment configs
+* Authentication persistence
+
+Possible issue:
+Works partially in development but breaks in production.
+
+━━━━━━━━━━━━━━━━━━━━
+8. FULL MOBILE QA TESTING REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Test every screen manually:
+
+Dashboard
+Orders
+WhatsApp
+Customers
+Riders
+Analytics
+Settings
+Notifications
+Assignment flow
+
+Verify:
+
+* Clickable
+* Loading data
+* Navigation
+* API response
+* Real-time updates
+
+━━━━━━━━━━━━━━━━━━━━
+9. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF Admin App should become a REAL enterprise business app, not just a designed UI demo.
+
+Everything visible on screen must:
+
+* Be clickable
+* Open correctly
+* Show live data
+* Sync with backend
+* Execute actions properly
+
+Right now app visually looks good, but functionality is mostly fake/incomplete.
