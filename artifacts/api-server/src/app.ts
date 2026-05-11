@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import path from "path";
-import { existsSync, statSync } from "fs";
+import { existsSync } from "fs";
 import router from "./routes";
 import publicInvoiceRouter from "./routes/public-invoice";
 import { logger } from "./lib/logger";
@@ -10,19 +10,16 @@ import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
 import { db } from "@workspace/db";
 import { seoSettingsTable } from "@workspace/db/schema";
-import { ssrMiddleware } from "./lib/ssrMiddleware";
 
 // Resolve static dist directories from project root
 const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
 const adminAppDist = path.resolve(process.cwd(), "artifacts/kdf-admin-app/dist/public");
 const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
-const nutsDist     = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
 const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
 
 const adminStatic    = express.static(adminDist,    { index: false });
 const adminAppStatic = express.static(adminAppDist, { index: false });
 const mainStatic     = express.static(mainDist,     { index: false });
-const nutsStatic     = express.static(nutsDist,     { index: false });
 
 const app: Express = express();
 
@@ -172,29 +169,14 @@ if (process.env.NODE_ENV === "production") {
   });
 
   /**
-   * ── SSR middleware for kdf-nuts product pages ──
-   * Only runs for khanbabadryfruits.com hostname; skipped for admin paths
-   * (admin paths are already handled above and never reach this middleware).
-   */
-  app.use((req: Request, res: Response, next: () => void) => {
-    const rawHost = req.headers["x-forwarded-host"];
-    const hostname = (Array.isArray(rawHost) ? rawHost[0] : typeof rawHost === "string" ? rawHost.split(",")[0].trim() : req.hostname ?? "");
-    const isKhanbaba = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
-    if (isKhanbaba) {
-      ssrMiddleware(req, res, next);
-    } else {
-      next();
-    }
-  });
-
-  /**
    * ── Storefront catch-all: hostname-based ──
    *
-   * khanbabadryfruits.com / www.khanbabadryfruits.com  →  kdf-nuts  (customer storefront)
+   * khanbabadryfruits.com / www.khanbabadryfruits.com  →  kdf-plus  (primary customer storefront)
    * app.khanbabadryfruits.com                          →  kdf-admin-app
    * admin.khanbabadryfruits.com                        →  kdf-admin  (subdomain alias)
-   * everything else (*.replit.app, kdf-plus domain)    →  kdf-plus
+   * everything else (*.replit.app, etc.)               →  kdf-plus
    *
+   * kdf-plus is built with BASE_PATH="/" so it serves correctly from domain root.
    * By the time a request reaches this middleware, /admin/* has already been
    * handled above — so this only serves non-admin paths.
    */
@@ -209,10 +191,9 @@ if (process.env.NODE_ENV === "production") {
 
     const isAdminSubdomain = hostname.startsWith("admin.");
     const isAdminApp       = hostname === "app.khanbabadryfruits.com";
-    const isKhanbaba       = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
 
-    const staticMw = isAdminSubdomain ? adminStatic : isAdminApp ? adminAppStatic : isKhanbaba ? nutsStatic : mainStatic;
-    const distPath = isAdminSubdomain ? adminDist   : isAdminApp ? adminAppDist   : isKhanbaba ? nutsDist   : mainDist;
+    const staticMw = isAdminSubdomain ? adminStatic : isAdminApp ? adminAppStatic : mainStatic;
+    const distPath = isAdminSubdomain ? adminDist   : isAdminApp ? adminAppDist   : mainDist;
 
     staticMw(req, res, () => {
       const indexHtml = path.join(distPath, "index.html");
