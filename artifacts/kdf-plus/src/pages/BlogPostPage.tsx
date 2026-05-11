@@ -685,10 +685,10 @@ export default function BlogPostPage() {
                     We're passionate about bringing you the freshest premium dry fruits from Pakistan's finest farms. Our team shares health tips, recipes, and nutrition guides to help you live better.
                   </p>
                   <div className="flex items-center gap-3 mt-3">
-                    <a href="/" className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 text-white" style={{ background: GREEN }}>
+                    <a href={import.meta.env.BASE_URL} className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 text-white" style={{ background: GREEN }}>
                       Visit Store
                     </a>
-                    <a href="/blog" className="text-xs font-semibold text-gray-500 hover:text-gray-700">
+                    <a href={`${import.meta.env.BASE_URL}blog`} className="text-xs font-semibold text-gray-500 hover:text-gray-700">
                       More Articles →
                     </a>
                   </div>

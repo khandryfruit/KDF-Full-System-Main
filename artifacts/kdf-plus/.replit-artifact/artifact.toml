@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/"
+previewPath = "/store/"
 title = "KDF Plus Web Store"
 version = "1.0.0"
 id = "artifacts/kdf-plus"
@@ -11,14 +11,14 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/store/" ]
 localPort = 24300
 
 [services.development]
 run = "pnpm --filter @workspace/kdf-plus run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/kdf-plus", "run", "build" ]
+build = [ "sh", "-c", "BASE_PATH=/ pnpm --filter @workspace/kdf-plus run build" ]
 publicDir = "artifacts/kdf-plus/dist/public"
 serve = "static"
 
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "24300"
-BASE_PATH = "/"
+BASE_PATH = "/store/"

@@ -13,14 +13,16 @@ import { seoSettingsTable } from "@workspace/db/schema";
 import { ssrMiddleware } from "./lib/ssrMiddleware";
 
 // Resolve static dist directories from project root
-const adminDist   = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
-const mainDist    = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
-const nutsDist    = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
+const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
+const adminAppDist = path.resolve(process.cwd(), "artifacts/kdf-admin-app/dist/public");
+const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
+const nutsDist     = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
 const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
 
-const adminStatic = express.static(adminDist,    { index: false });
-const mainStatic  = express.static(mainDist,     { index: false });
-const nutsStatic  = express.static(nutsDist,     { index: false });
+const adminStatic    = express.static(adminDist,    { index: false });
+const adminAppStatic = express.static(adminAppDist, { index: false });
+const mainStatic     = express.static(mainDist,     { index: false });
+const nutsStatic     = express.static(nutsDist,     { index: false });
 
 const app: Express = express();
 
@@ -177,11 +179,12 @@ if (process.env.NODE_ENV === "production") {
         ? rawHost.split(",")[0].trim()
         : undefined;
     const hostname = forwardedHost ?? req.hostname ?? "";
-    const isAdmin = hostname.startsWith("admin.");
+    const isAdmin    = hostname.startsWith("admin.");
+    const isAdminApp = hostname === "app.khanbabadryfruits.com";
     const isKhanbaba = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
 
-    const staticMw = isAdmin ? adminStatic : isKhanbaba ? nutsStatic : mainStatic;
-    const distPath = isAdmin ? adminDist   : isKhanbaba ? nutsDist   : mainDist;
+    const staticMw = isAdmin ? adminStatic : isAdminApp ? adminAppStatic : isKhanbaba ? nutsStatic : mainStatic;
+    const distPath = isAdmin ? adminDist   : isAdminApp ? adminAppDist   : isKhanbaba ? nutsDist   : mainDist;
 
     staticMw(req, res, () => {
       const indexHtml = path.join(distPath, "index.html");
