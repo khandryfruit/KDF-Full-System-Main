@@ -10,6 +10,7 @@ import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
 import { db } from "@workspace/db";
 import { seoSettingsTable } from "@workspace/db/schema";
+import { ssrMiddleware } from "./lib/ssrMiddleware";
 
 // Resolve static dist directories from project root
 const adminDist   = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
@@ -150,6 +151,21 @@ app.use((req: Request, res: Response, next: () => void) => {
   }
   next();
 });
+
+/* ── SSR middleware for kdf-nuts product pages (production only) ── */
+if (process.env.NODE_ENV === "production") {
+  /* Only run SSR for the kdf-nuts hostname — skip for admin/kdf-plus */
+  app.use((req: Request, res: Response, next: () => void) => {
+    const rawHost = req.headers["x-forwarded-host"];
+    const hostname = (Array.isArray(rawHost) ? rawHost[0] : typeof rawHost === "string" ? rawHost.split(",")[0].trim() : req.hostname ?? "");
+    const isKhanbaba = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
+    if (isKhanbaba) {
+      ssrMiddleware(req, res, next);
+    } else {
+      next();
+    }
+  });
+}
 
 if (process.env.NODE_ENV === "production") {
   app.use((req: Request, res: Response) => {

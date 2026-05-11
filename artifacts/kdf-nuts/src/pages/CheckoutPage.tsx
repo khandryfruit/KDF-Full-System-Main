@@ -317,10 +317,70 @@ export function CheckoutPage() {
         },
       },
     }, {
-      onSuccess: (order) => {
+      onSuccess: async (order) => {
         clearCart();
         const pm = effectivePaymentMethod;
-        const ref = (pm === "bank_transfer" || pm === "jazzcash" || pm === "easypaisa") ? encodeURIComponent(referenceNumber) : "";
+
+        /* ── JazzCash / Easypaisa: initiate hosted payment then form-redirect ── */
+        if (pm === 'jazzcash' || pm === 'easypaisa') {
+          try {
+            const endpoint = pm === 'jazzcash'
+              ? '/api/payments/jazzcash/initiate'
+              : '/api/payments/easypaisa/initiate';
+
+            const resp = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId:        order.id,
+                amount:         Number(order.total ?? total),
+                customerMobile: address.phone.trim(),
+                orderDesc:      `KDF NUTS Order #${order.orderNumber}`,
+              }),
+            });
+
+            if (!resp.ok) throw new Error('Payment gateway unavailable');
+            const data = await resp.json();
+
+            if (pm === 'jazzcash') {
+              /* Submit as hidden HTML form to JazzCash hosted page */
+              const form = document.createElement('form');
+              form.method = 'POST';
+              form.action = data.actionUrl;
+              for (const [key, value] of Object.entries(data.formFields as Record<string, string>)) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = value;
+                form.appendChild(input);
+              }
+              document.body.appendChild(form);
+              form.submit();
+              return;
+            }
+
+            if (pm === 'easypaisa') {
+              /* POST to Easypaisa API then redirect to web URL */
+              const epResp = await fetch(data.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data.payload),
+              });
+              const epData = await epResp.json();
+              const webUrl = `${data.webUrl}?${new URLSearchParams({ ...data.payload, ...epData }).toString()}`;
+              window.location.href = webUrl;
+              return;
+            }
+          } catch (payErr: any) {
+            /* Gateway error — fall back to order-success with pending payment status */
+            setError(`Payment gateway error: ${payErr.message}. Your order was placed — please retry payment.`);
+            setLocation(`/order-success?orderId=${order.id}&orderNumber=${order.orderNumber}&paymentMethod=${pm}&referenceNumber=&total=${order.total ?? total}&paymentPending=1`);
+            return;
+          }
+        }
+
+        /* All other methods → go straight to order success */
+        const ref = pm === 'bank_transfer' ? encodeURIComponent(referenceNumber) : "";
         setLocation(`/order-success?orderId=${order.id}&orderNumber=${order.orderNumber}&paymentMethod=${pm}&referenceNumber=${ref}&total=${order.total ?? total}`);
       },
       onError: (err: any) => {

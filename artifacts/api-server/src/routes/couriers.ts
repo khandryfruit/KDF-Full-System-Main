@@ -1875,10 +1875,14 @@ async function sendCourierNotification(shipment: any, newStatus: string, req: an
 function getTrackingUrl(slug: string, trackingId: string): string {
   const id = encodeURIComponent(trackingId);
   const urls: Record<string, string> = {
-    tcs:      `https://ociconnect.tcscourier.com/tracking/index.html?cg=${id}`,
-    postex:   `https://postex.pk/tracking/${id}`,
-    leopards: `https://leopardscourier.com/leopards-tracking/?title=leopards&tracking_number=${id}`,
-    trax:     `https://traxpk.com/tracking/${id}`,
+    tcs:         `https://ociconnect.tcscourier.com/tracking/index.html?cg=${id}`,
+    postex:      `https://postex.pk/tracking/${id}`,
+    leopards:    `https://leopardscourier.com/leopards-tracking/?title=leopards&tracking_number=${id}`,
+    trax:        `https://traxpk.com/tracking/${id}`,
+    mp:          `https://mp.com.pk/tracking?cn=${id}`,
+    bluex:       `https://bluex.pk/tracking/${id}`,
+    callcourier: `https://callcourier.com.pk/tracking?cn=${id}`,
+    swyft:       `https://swyftlogistics.com/tracking/${id}`,
   };
   return urls[slug] ?? `https://track.kdfnuts.com/?id=${id}&courier=${slug}`;
 }
@@ -1912,6 +1916,7 @@ function jwtIsValid(token: string): boolean {
 function generateTrackingId(slug: string): string {
   const prefix: Record<string, string> = {
     tcs: "TCS", leopards: "LP", postex: "PX", trax: "TX",
+    mp: "MP", bluex: "BX", callcourier: "CC", swyft: "SW",
   };
   const p = prefix[slug] ?? "KDF";
   return `${p}${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
@@ -2155,6 +2160,150 @@ async function callCourierApi(courier: any, order: any, service?: string): Promi
     return { trackingId: tId, trackingUrl: getTrackingUrl("trax", tId), rawResponse: raw };
   }
 
+  /* ── M&P (M&P Logistics / Momentum) ── */
+  if (courier.slug === "mp") {
+    const settings = (courier.settings ?? {}) as Record<string, any>;
+    if (!courier.apiKey) throw new Error("M&P: API Key is required in settings");
+    const endpoint = courier.apiEndpoint ?? "https://api.mp.com.pk/api";
+    const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
+    const payload = {
+      pickup_address_id: settings.pickupAddressId ?? 1,
+      information: {
+        order_id:       String(order.orderNumber ?? order.id),
+        consignee_name: address.name ?? "",
+        consignee_phone: address.phone ?? "",
+        consignee_address: address.address ?? "",
+        consignee_city: address.city ?? "",
+        consignee_email: address.email ?? "",
+        description:    order.notes ?? order.contentDesc ?? "Dry Fruits",
+        weight:         String(order.weight ?? settings.defaultWeight ?? 0.5),
+        pieces:         order.pieces ?? 1,
+        cod_amount:     codAmount,
+        payment_mode:   codAmount > 0 ? "COD" : "Prepaid",
+      },
+    };
+    const resp = await fetch(`${endpoint}/create-order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": courier.apiKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+    const raw = await resp.json() as Record<string, any>;
+    if (!resp.ok || raw.status === false || raw.success === false) {
+      throw new Error(`M&P booking failed: ${raw.message ?? raw.error ?? JSON.stringify(raw).slice(0, 200)}`);
+    }
+    const trackId = raw.tracking_number ?? raw.cn ?? raw.data?.cn ?? generateTrackingId("mp");
+    const mId = String(trackId);
+    return { trackingId: mId, trackingUrl: getTrackingUrl("mp", mId), rawResponse: raw };
+  }
+
+  /* ── BlueEX ── */
+  if (courier.slug === "bluex") {
+    const settings = (courier.settings ?? {}) as Record<string, any>;
+    if (!courier.apiKey || !courier.apiSecret) throw new Error("BlueEX: API Key and Secret are required");
+    const endpoint = courier.apiEndpoint ?? "https://api.bluex.pk/api/v1";
+    const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
+    const payload = {
+      orderRef:      String(order.orderNumber ?? order.id),
+      senderName:    settings.senderName ?? "KDF NUTS",
+      senderPhone:   settings.senderPhone ?? "",
+      senderAddress: settings.senderAddress ?? "",
+      senderCity:    settings.senderCity ?? "Lahore",
+      receiverName:  address.name ?? "",
+      receiverPhone: address.phone ?? "",
+      receiverAddress: address.address ?? "",
+      receiverCity:  address.city ?? "",
+      codAmount,
+      weight:        order.weight ?? settings.defaultWeight ?? 0.5,
+      pieces:        order.pieces ?? 1,
+      productDesc:   order.notes ?? "Dry Fruits & Nuts",
+      serviceType:   service ?? settings.serviceType ?? "overnight",
+    };
+    const authStr  = Buffer.from(`${courier.apiKey}:${courier.apiSecret}`).toString("base64");
+    const resp = await fetch(`${endpoint}/shipments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Basic ${authStr}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+    const raw = await resp.json() as Record<string, any>;
+    if (!resp.ok || raw.success === false) {
+      throw new Error(`BlueEX booking failed: ${raw.message ?? raw.error ?? JSON.stringify(raw).slice(0, 200)}`);
+    }
+    const trackId = raw.tracking_id ?? raw.trackingNo ?? raw.data?.tracking_id ?? generateTrackingId("bluex");
+    const bId = String(trackId);
+    return { trackingId: bId, trackingUrl: getTrackingUrl("bluex", bId), rawResponse: raw };
+  }
+
+  /* ── Call Courier ── */
+  if (courier.slug === "callcourier") {
+    const settings = (courier.settings ?? {}) as Record<string, any>;
+    if (!courier.apiKey) throw new Error("Call Courier: API Key is required");
+    const endpoint = courier.apiEndpoint ?? "https://callcourier.com.pk/api";
+    const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
+    const payload = {
+      api_key:            courier.apiKey,
+      consignee_name:     address.name ?? "",
+      consignee_phone:    address.phone ?? "",
+      consignee_city:     address.city ?? "",
+      consignee_address:  address.address ?? "",
+      origin_city:        settings.originCity ?? "Lahore",
+      weight:             order.weight ?? settings.defaultWeight ?? 0.5,
+      pieces:             order.pieces ?? 1,
+      cod_amount:         codAmount,
+      order_id:           String(order.orderNumber ?? order.id),
+      remarks:            order.notes ?? "",
+      service:            service ?? settings.serviceCode ?? "D",
+    };
+    const resp = await fetch(`${endpoint}/booking`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+    const raw = await resp.json() as Record<string, any>;
+    if (!resp.ok || raw.status === 0 || raw.success === false) {
+      throw new Error(`Call Courier booking failed: ${raw.message ?? raw.error ?? JSON.stringify(raw).slice(0, 200)}`);
+    }
+    const trackId = raw.cn_no ?? raw.tracking_number ?? raw.tracking_no ?? generateTrackingId("callcourier");
+    const cId = String(trackId);
+    return { trackingId: cId, trackingUrl: getTrackingUrl("callcourier", cId), rawResponse: raw };
+  }
+
+  /* ── Swyft ── */
+  if (courier.slug === "swyft") {
+    const settings = (courier.settings ?? {}) as Record<string, any>;
+    if (!courier.apiKey) throw new Error("Swyft: API Key / Bearer Token is required");
+    const endpoint = courier.apiEndpoint ?? "https://api.swyftlogistics.com/api/v1";
+    const codAmount = order.paymentMethod === "cod" ? Number(order.total) : 0;
+    const payload = {
+      reference_number:  String(order.orderNumber ?? order.id),
+      customer_name:     address.name ?? "",
+      customer_phone:    address.phone ?? "",
+      customer_address:  address.address ?? "",
+      customer_city:     address.city ?? "",
+      collect_amount:    codAmount,
+      weight:            order.weight ?? settings.defaultWeight ?? 0.5,
+      pieces:            order.pieces ?? 1,
+      special_instructions: order.notes ?? "",
+      service_type:      service ?? settings.serviceType ?? "overnight",
+      pickup_station_id: settings.pickupStationId ?? null,
+    };
+    const resp = await fetch(`${endpoint}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${courier.apiKey}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+    const raw = await resp.json() as Record<string, any>;
+    if (!resp.ok || raw.success === false) {
+      throw new Error(`Swyft booking failed: ${raw.message ?? raw.error ?? JSON.stringify(raw).slice(0, 200)}`);
+    }
+    const trackId = raw.tracking_id ?? raw.tracking_number ?? raw.data?.tracking_id ?? generateTrackingId("swyft");
+    const sId = String(trackId);
+    return { trackingId: sId, trackingUrl: getTrackingUrl("swyft", sId), rawResponse: raw };
+  }
+
   throw new Error(`No API implementation for courier: ${courier.slug}`);
 }
 
@@ -2176,6 +2325,17 @@ async function trackWithCourierApi(courier: any, trackingId: string): Promise<{ 
       headers["token"] = courier.apiKey;
     } else if (courier.slug === "trax") {
       url = `${courier.apiEndpoint}/track_order/${trackingId}`;
+      headers["Authorization"] = `Bearer ${courier.apiKey}`;
+    } else if (courier.slug === "mp") {
+      url = `${courier.apiEndpoint ?? "https://api.mp.com.pk/api"}/tracking?cn=${trackingId}&api_key=${courier.apiKey}`;
+    } else if (courier.slug === "bluex") {
+      url = `${courier.apiEndpoint ?? "https://api.bluex.pk/api/v1"}/shipments/${trackingId}/track`;
+      const authStr = Buffer.from(`${courier.apiKey}:${courier.apiSecret}`).toString("base64");
+      headers["Authorization"] = `Basic ${authStr}`;
+    } else if (courier.slug === "callcourier") {
+      url = `${courier.apiEndpoint ?? "https://callcourier.com.pk/api"}/tracking?cn=${trackingId}&api_key=${courier.apiKey}`;
+    } else if (courier.slug === "swyft") {
+      url = `${courier.apiEndpoint ?? "https://api.swyftlogistics.com/api/v1"}/orders/${trackingId}/track`;
       headers["Authorization"] = `Bearer ${courier.apiKey}`;
     } else {
       return { status: "in_transit", rawResponse: { note: "Unknown courier" } };

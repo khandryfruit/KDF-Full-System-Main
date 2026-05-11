@@ -7,6 +7,7 @@ import { sendOrderNotification } from "./notifications";
 import { sendOrderConfirmation, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest, sendReturnRefundNotification } from "../lib/whatsapp";
 import { sendSocialOrderMessage } from "../lib/socialMessenger";
 import { broadcastSSE } from "../lib/sse";
+import { fireCapiPurchase } from "../lib/metaCapi";
 import type { Response } from "express";
 
 const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: string }> = {
@@ -293,6 +294,16 @@ router.post("/orders", optionalAuthMiddleware as any, async (req: AuthRequest, r
         items: insertedItems.map((i: any) => ({ name: i.name, qty: i.qty })),
       }).catch(() => {});
     }
+
+    /* ── Meta CAPI Purchase event (fire-and-forget) ── */
+    fireCapiPurchase({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      total: order.total,
+      items: insertedItems.map((i: any) => ({ name: i.name, productId: i.productId, price: i.price, qty: i.qty })),
+      shippingAddress: shippingAddress as any,
+    }, { ip: req.ip, headers: req.headers as any }).catch(() => {});
+
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to create order" });

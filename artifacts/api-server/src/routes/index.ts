@@ -58,6 +58,7 @@ import googleIndexingRouter from "./googleIndexing";
 import adminManagementRouter from "./adminManagement";
 import modulesRouter from "./modules";
 import merchantRouter from "./merchant";
+import onlinePaymentsRouter from "./onlinePayments";
 
 const router: IRouter = Router();
 
@@ -78,6 +79,7 @@ router.use(integrationsRouter);
 router.use(syncJobsRouter);
 router.use(couriersRouter);
 router.use(paymentsRouter);
+router.use(onlinePaymentsRouter);
 router.use(locationsRouter);
 router.use(whatsappRouter);
 router.use(siteSettingsRouter);
