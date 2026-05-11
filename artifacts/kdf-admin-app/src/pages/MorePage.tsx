@@ -7,7 +7,6 @@ import {
   LogOut,
 } from "lucide-react";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 interface MenuItem {
   label: string;
@@ -131,7 +130,7 @@ export default function MorePage() {
             return (
               <button
                 key={item.href}
-                onClick={() => navigate(`${BASE}${item.href}`)}
+                onClick={() => navigate(item.href)}
                 className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-2.5 text-left active:scale-95 transition-transform hover:border-primary/30"
               >
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bg}`}>

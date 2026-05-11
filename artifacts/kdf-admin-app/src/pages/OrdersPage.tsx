@@ -73,20 +73,21 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-2">
             {orders.map((o: any) => {
-              const orderNum  = o.orderNumber ?? o.order_number ?? o.id;
+              const dbId      = o.id;
+              const orderNum  = o.orderNumber ?? o.order_number ?? `#${o.id}`;
               const custName  = o.customerName ?? o.customer_name ?? o.shippingAddress?.name ?? "Unknown customer";
               const city      = o.shippingAddress?.city ?? o.shipping_address?.city ?? "—";
               const status    = o.fulfillmentStatus ?? o.financialStatus ?? o.status ?? "pending";
               const price     = Number(o.totalPrice ?? o.total_price ?? 0);
               return (
                 <button
-                  key={o.id ?? o.shopifyOrderId ?? orderNum}
-                  onClick={() => navigate(`/orders/${orderNum}`)}
+                  key={dbId ?? o.shopifyOrderId ?? orderNum}
+                  onClick={() => navigate(`/orders/${dbId}`)}
                   className="w-full bg-card border border-border rounded-2xl p-4 text-left active:scale-[0.99] transition-transform hover:border-primary/30"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground truncate">#{orderNum}</p>
+                      <p className="text-sm font-semibold text-foreground truncate">{orderNum}</p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{custName}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{city}</p>
                     </div>
