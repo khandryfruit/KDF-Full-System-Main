@@ -1,268 +1,298 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { useLocation } from "wouter";
-import { ArrowLeft, Save, Loader2, Eye, Palette, Layout, Type, ShoppingBag } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { industryIcon } from "@/lib/utils";
 
 const TEMPLATES = [
-  { id: "grocery",     label: "Grocery",     icon: "🛒", desc: "Fast shopping, category sliders, flash sales",      preview: "bg-green-500" },
-  { id: "fashion",     label: "Fashion",     icon: "👗", desc: "Luxury UI, lookbook, Instagram-style layouts",      preview: "bg-pink-500" },
-  { id: "electronics", label: "Electronics", icon: "💻", desc: "Premium modern, product comparison, specs",          preview: "bg-blue-500" },
-  { id: "pharmacy",    label: "Pharmacy",    icon: "💊", desc: "Clean professional, medicine categories, fast checkout", preview: "bg-emerald-500" },
-  { id: "default",     label: "Default",     icon: "🏪", desc: "Versatile all-purpose storefront",                  preview: "bg-gray-500" },
+  { id: "grocery", name: "Grocery", icon: "🛒", desc: "Fresh produce & daily essentials", primary: "#16a34a", accent: "#15803d" },
+  { id: "fashion", name: "Fashion", icon: "👗", desc: "Apparel & accessories boutique", primary: "#9333ea", accent: "#7c3aed" },
+  { id: "electronics", name: "Electronics", icon: "📱", desc: "Tech gadgets & devices", primary: "#2563eb", accent: "#1d4ed8" },
+  { id: "pharmacy", name: "Pharmacy", icon: "💊", desc: "Health, medicine & wellness", primary: "#dc2626", accent: "#b91c1c" },
+  { id: "default", name: "Default", icon: "🏪", desc: "Generic multi-purpose store", primary: "#6366f1", accent: "#4f46e5" },
 ];
 
-const FONT_OPTIONS = ["Inter", "Roboto", "Poppins", "Playfair Display", "Lato", "Montserrat", "Nunito"];
-const RADIUS_OPTIONS = [{ id: "none", label: "None" }, { id: "sm", label: "Small" }, { id: "md", label: "Medium" }, { id: "lg", label: "Large" }, { id: "full", label: "Pill" }];
-const HERO_STYLES = ["banner", "carousel", "video", "split", "minimal"];
-const HEADER_STYLES = ["default", "sticky", "transparent", "centered", "minimal"];
+const FONTS = ["Inter", "Poppins", "Roboto", "Open Sans", "Lato", "Montserrat", "Nunito", "Raleway"];
+const RADII = [{ id: "none", label: "Sharp" }, { id: "sm", label: "Small" }, { id: "md", label: "Medium" }, { id: "lg", label: "Large" }, { id: "xl", label: "Extra Large" }];
+const HEADER_STYLES = ["default", "transparent", "dark", "colored"];
+const HERO_STYLES = ["banner", "video", "carousel", "minimal", "split"];
+const PRODUCT_CARD_STYLES = ["default", "compact", "minimal", "elevated"];
 
-export default function StorefrontBuilderPage({ tenantId }: { tenantId: number }) {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [tab, setTab] = useState<"template" | "colors" | "typography" | "layout">("template");
+interface Theme {
+  templateId: string; primaryColor: string; accentColor: string; bgColor: string; textColor: string;
+  fontFamily: string; borderRadius: string; headerStyle: string; heroStyle: string; productCardStyle: string;
+  showReviews: boolean; showWishlist: boolean; showChat: boolean; showBanner: boolean;
+  customCss: string;
+}
 
-  const { data: tenant } = useQuery({ queryKey: ["saas-tenant", tenantId], queryFn: () => apiFetch(`/saas/admin/tenants/${tenantId}`) });
+const DEFAULT_THEME: Theme = {
+  templateId: "default", primaryColor: "#16a34a", accentColor: "#15803d", bgColor: "#ffffff",
+  textColor: "#111827", fontFamily: "Inter", borderRadius: "md", headerStyle: "default",
+  heroStyle: "banner", productCardStyle: "default", showReviews: true, showWishlist: true,
+  showChat: true, showBanner: true, customCss: "",
+};
 
-  const [theme, setTheme] = useState<Record<string, any>>({
-    templateId: "default", primaryColor: "#16a34a", accentColor: "#15803d",
-    bgColor: "#ffffff", textColor: "#111827", fontFamily: "Inter",
-    borderRadius: "md", headerStyle: "default", heroStyle: "banner",
-    productCardStyle: "default", showReviews: true, showWishlist: true,
-    showChat: true, showBanner: true,
-  });
+export default function StorefrontBuilderPage() {
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState<any>(null);
+  const [theme, setTheme] = useState<Theme>({ ...DEFAULT_THEME });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const { isLoading } = useQuery({
-    queryKey: ["saas-theme", tenantId],
-    queryFn: () => apiFetch(`/saas/admin/tenants/${tenantId}/theme`),
-    onSuccess: (d: any) => d && setTheme({ ...theme, ...d }),
-  });
+  useEffect(() => {
+    api.tenants.list().then(setTenants);
+  }, []);
 
-  const save = useMutation({
-    mutationFn: () => apiFetch(`/saas/admin/tenants/${tenantId}/theme`, { method: "PUT", body: JSON.stringify(theme) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-theme", tenantId] }); toast({ title: "Theme saved!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+  async function selectTenant(t: any) {
+    setSelectedTenant(t);
+    setLoading(true);
+    const data = await api.tenants.getTheme(t.id);
+    if (data) {
+      setTheme({ ...DEFAULT_THEME, ...data });
+    } else {
+      const tpl = TEMPLATES.find(tp => tp.id === t.industry) || TEMPLATES[4];
+      setTheme({ ...DEFAULT_THEME, templateId: tpl.id, primaryColor: tpl.primary, accentColor: tpl.accent });
+    }
+    setLoading(false);
+  }
 
-  const TABS = [
-    { id: "template", label: "Template", icon: Layout },
-    { id: "colors", label: "Colors", icon: Palette },
-    { id: "typography", label: "Typography", icon: Type },
-    { id: "layout", label: "Layout", icon: ShoppingBag },
-  ];
+  function applyTemplate(tpl: typeof TEMPLATES[0]) {
+    setTheme(prev => ({
+      ...prev, templateId: tpl.id, primaryColor: tpl.primary, accentColor: tpl.accent,
+    }));
+  }
+
+  async function handleSave() {
+    if (!selectedTenant) return;
+    setSaving(true);
+    await api.tenants.updateTheme(selectedTenant.id, theme);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setLocation(`/tenants/${tenantId}`)} className="p-2 rounded-lg hover:bg-accent text-muted-foreground">
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">Storefront Builder</h1>
-          <p className="text-muted-foreground text-sm">{tenant?.storeName ?? "..."}</p>
-        </div>
-        <button onClick={() => save.mutate()} disabled={save.isPending}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
-          {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Theme
-        </button>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Storefront Builder</h1>
+        <p className="text-slate-400 text-sm mt-1">Customize the look & feel of each tenant's store</p>
       </div>
 
-      <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id as any)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${tab === id ? "bg-card text-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>
-            <Icon className="w-3.5 h-3.5" />{label}
-          </button>
-        ))}
-      </div>
-
-      {/* Template Selection */}
-      {tab === "template" && (
-        <div className="space-y-4">
-          <h3 className="font-semibold">Choose Industry Template</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {TEMPLATES.map(({ id, label, icon, desc, preview }) => (
-              <div key={id} onClick={() => setTheme({ ...theme, templateId: id })}
-                className={`border-2 rounded-2xl overflow-hidden cursor-pointer transition-all ${theme.templateId === id ? "border-primary shadow-lg shadow-primary/20" : "border-border hover:border-primary/50"}`}>
-                <div className={`h-24 ${preview} flex items-center justify-center`}>
-                  <span className="text-5xl">{icon}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Select Tenant</h2>
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {tenants.map(t => (
+              <button
+                key={t.id}
+                onClick={() => selectTenant(t)}
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all flex items-center gap-2 ${selectedTenant?.id === t.id ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}
+              >
+                <span>{industryIcon(t.industry)}</span>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{t.storeName}</div>
+                  <div className={`text-xs truncate ${selectedTenant?.id === t.id ? "text-emerald-200" : "text-slate-500"}`}>{t.industry}</div>
                 </div>
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-sm text-foreground">{label}</span>
-                    {theme.templateId === id && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">Active</span>}
+              </button>
+            ))}
+            {tenants.length === 0 && <p className="text-slate-500 text-xs px-2">No tenants yet</p>}
+          </div>
+        </div>
+
+        <div className="lg:col-span-3 space-y-5">
+          {!selectedTenant ? (
+            <div className="bg-slate-900 border border-slate-800 border-dashed rounded-xl p-16 text-center">
+              <div className="text-4xl mb-3">🎨</div>
+              <p className="text-slate-400">Select a tenant from the left to customize their storefront</p>
+            </div>
+          ) : loading ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">
+                      {industryIcon(selectedTenant.industry)} {selectedTenant.storeName}
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Storefront theme settings</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className={`text-sm font-medium px-4 py-2 rounded-lg transition-all ${saved ? "bg-emerald-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white"}`}
+                  >
+                    {saved ? "✓ Saved!" : saving ? "Saving..." : "Save Theme"}
+                  </button>
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-3 block">Template</label>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    {TEMPLATES.map(tpl => (
+                      <button
+                        key={tpl.id}
+                        onClick={() => applyTemplate(tpl)}
+                        className={`p-3 rounded-xl border text-left transition-all ${theme.templateId === tpl.id ? "border-emerald-500 bg-emerald-500/10" : "border-slate-800 hover:border-slate-600 bg-slate-800/50"}`}
+                      >
+                        <div className="text-xl mb-1">{tpl.icon}</div>
+                        <div className="text-xs font-medium text-white">{tpl.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5 leading-tight">{tpl.desc}</div>
+                        <div className="flex gap-1 mt-2">
+                          <div className="w-4 h-2 rounded-sm" style={{ backgroundColor: tpl.primary }} />
+                          <div className="w-4 h-2 rounded-sm" style={{ backgroundColor: tpl.accent }} />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <Section title="Colors">
+                    <ColorField label="Primary Color" value={theme.primaryColor} onChange={v => setTheme(t => ({ ...t, primaryColor: v }))} />
+                    <ColorField label="Accent Color" value={theme.accentColor} onChange={v => setTheme(t => ({ ...t, accentColor: v }))} />
+                    <ColorField label="Background" value={theme.bgColor} onChange={v => setTheme(t => ({ ...t, bgColor: v }))} />
+                    <ColorField label="Text Color" value={theme.textColor} onChange={v => setTheme(t => ({ ...t, textColor: v }))} />
+                  </Section>
+
+                  <Section title="Typography & Shape">
+                    <SelectField label="Font" value={theme.fontFamily} onChange={v => setTheme(t => ({ ...t, fontFamily: v }))} options={FONTS} />
+                    <SelectField label="Border Radius" value={theme.borderRadius} onChange={v => setTheme(t => ({ ...t, borderRadius: v }))} options={RADII.map(r => r.id)} labels={RADII.map(r => r.label)} />
+                  </Section>
+
+                  <Section title="Layout Style">
+                    <SelectField label="Header Style" value={theme.headerStyle} onChange={v => setTheme(t => ({ ...t, headerStyle: v }))} options={HEADER_STYLES} />
+                    <SelectField label="Hero Style" value={theme.heroStyle} onChange={v => setTheme(t => ({ ...t, heroStyle: v }))} options={HERO_STYLES} />
+                    <SelectField label="Product Card" value={theme.productCardStyle} onChange={v => setTheme(t => ({ ...t, productCardStyle: v }))} options={PRODUCT_CARD_STYLES} />
+                  </Section>
+
+                  <Section title="Sections">
+                    {([
+                      ["showReviews", "Show Reviews"],
+                      ["showWishlist", "Show Wishlist"],
+                      ["showChat", "Show Chat Widget"],
+                      ["showBanner", "Show Banner"],
+                    ] as [keyof Theme, string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center justify-between cursor-pointer py-1">
+                        <span className="text-sm text-slate-300">{label}</span>
+                        <div
+                          onClick={() => setTheme(prev => ({ ...prev, [key]: !prev[key] }))}
+                          className={`w-10 h-5 rounded-full cursor-pointer transition-colors ${theme[key] ? "bg-emerald-600" : "bg-slate-700"}`}
+                        >
+                          <div className={`w-3.5 h-3.5 bg-white rounded-full mt-0.5 transition-transform ${theme[key] ? "translate-x-5" : "translate-x-0.5"}`} />
+                        </div>
+                      </label>
+                    ))}
+                  </Section>
+                </div>
+
+                <div className="mt-5">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-2 block">Custom CSS</label>
+                  <textarea
+                    value={theme.customCss}
+                    onChange={e => setTheme(t => ({ ...t, customCss: e.target.value }))}
+                    rows={5}
+                    placeholder=".hero { background: linear-gradient(...); }"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-emerald-500 resize-none"
+                  />
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Template features preview */}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h4 className="font-semibold text-sm mb-3">Template Features: {TEMPLATES.find(t => t.id === theme.templateId)?.label}</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: "Mobile First", ok: true },
-                { label: "SEO Optimized", ok: true },
-                { label: "Fast Loading", ok: true },
-                { label: "AI Chatbot", ok: true },
-                { label: "WhatsApp Button", ok: true },
-                { label: "Cart & Checkout", ok: true },
-                { label: "Product Search", ok: true },
-                { label: "Reviews", ok: true },
-              ].map(({ label, ok }) => (
-                <div key={label} className={`flex items-center gap-2 p-2.5 rounded-lg border ${ok ? "border-green-500/30 bg-green-500/10" : "border-border bg-muted/30"}`}>
-                  <span className={`text-xs font-medium ${ok ? "text-green-400" : "text-muted-foreground"}`}>{ok ? "✓" : "—"} {label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Colors */}
-      {tab === "colors" && (
-        <div className="space-y-6">
-          <h3 className="font-semibold">Brand Colors</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-            {[
-              { key: "primaryColor", label: "Primary Color", hint: "Main brand color" },
-              { key: "accentColor", label: "Accent Color", hint: "Secondary / hover color" },
-              { key: "bgColor", label: "Background", hint: "Page background" },
-              { key: "textColor", label: "Text Color", hint: "Body text" },
-            ].map(({ key, label, hint }) => (
-              <div key={key} className="space-y-2">
-                <div>
-                  <label className="text-sm font-medium text-foreground">{label}</label>
-                  <p className="text-xs text-muted-foreground">{hint}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input type="color" value={theme[key]} onChange={e => setTheme({ ...theme, [key]: e.target.value })}
-                    className="w-12 h-12 rounded-xl border border-border cursor-pointer bg-transparent" />
-                  <input type="text" value={theme[key]} onChange={e => setTheme({ ...theme, [key]: e.target.value })}
-                    className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Live preview */}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h4 className="font-semibold text-sm mb-4">Color Preview</h4>
-            <div className="rounded-xl overflow-hidden border border-border" style={{ background: theme.bgColor }}>
-              <div className="px-4 py-3 flex items-center justify-between" style={{ background: theme.primaryColor }}>
-                <span className="text-white font-bold text-sm">{tenant?.storeName ?? "Store Name"}</span>
-                <div className="flex gap-2">
-                  <div className="w-6 h-6 rounded-full bg-white/20" />
-                  <div className="w-6 h-6 rounded-full bg-white/20" />
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-3 gap-3">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="rounded-xl overflow-hidden shadow-sm border border-gray-200/50">
-                      <div className="h-16" style={{ background: `${theme.primaryColor}22` }} />
-                      <div className="p-2">
-                        <div className="h-2 rounded" style={{ background: theme.textColor, opacity: 0.7 }} />
-                        <div className="h-2 rounded mt-1 w-2/3" style={{ background: theme.textColor, opacity: 0.4 }} />
-                        <div className="mt-2 rounded-lg py-1 text-center text-[10px] text-white font-medium" style={{ background: theme.primaryColor }}>Add to Cart</div>
-                      </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <h2 className="text-sm font-semibold text-white mb-3">Live Preview</h2>
+                <div
+                  className="rounded-xl overflow-hidden border border-slate-800"
+                  style={{ fontFamily: theme.fontFamily }}
+                >
+                  <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                      backgroundColor: theme.headerStyle === "transparent" ? "transparent" :
+                        theme.headerStyle === "dark" ? "#111" :
+                          theme.headerStyle === "colored" ? theme.primaryColor : "#fff",
+                      color: theme.headerStyle === "dark" || theme.headerStyle === "colored" ? "#fff" : theme.textColor,
+                    }}
+                  >
+                    <div className="font-bold text-lg">{selectedTenant.storeName}</div>
+                    <div className="flex gap-4 text-sm opacity-70">
+                      <span>Home</span><span>Products</span><span>About</span>
                     </div>
-                  ))}
+                    <div
+                      className="text-sm font-medium px-3 py-1 rounded-full text-white"
+                      style={{ backgroundColor: theme.primaryColor }}
+                    >
+                      Cart (0)
+                    </div>
+                  </div>
+
+                  <div
+                    className="h-32 flex items-center justify-center"
+                    style={{ backgroundColor: theme.primaryColor + "22" }}
+                  >
+                    <div className="text-center">
+                      <div className="text-xl font-bold" style={{ color: theme.primaryColor }}>Welcome to {selectedTenant.storeName}</div>
+                      <div className="text-sm opacity-60 mt-1" style={{ color: theme.textColor }}>Discover amazing products</div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 grid grid-cols-3 gap-3" style={{ backgroundColor: theme.bgColor }}>
+                    {["Product A", "Product B", "Product C"].map((name, i) => (
+                      <div
+                        key={name}
+                        className="overflow-hidden"
+                        style={{
+                          backgroundColor: "#f8f8f8",
+                          borderRadius: theme.borderRadius === "none" ? "0" : theme.borderRadius === "sm" ? "4px" : theme.borderRadius === "md" ? "8px" : theme.borderRadius === "lg" ? "12px" : "16px",
+                          boxShadow: theme.productCardStyle === "elevated" ? "0 4px 12px rgba(0,0,0,0.1)" : "none",
+                        }}
+                      >
+                        <div className="h-16" style={{ backgroundColor: theme.primaryColor + "30" }} />
+                        <div className="p-2">
+                          <div className="text-xs font-medium" style={{ color: theme.textColor }}>{name}</div>
+                          <div className="text-xs font-bold mt-0.5" style={{ color: theme.primaryColor }}>Rs. {(i + 1) * 999}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
 
-      {/* Typography */}
-      {tab === "typography" && (
-        <div className="space-y-4">
-          <h3 className="font-semibold">Typography & Style</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-2">Font Family</label>
-              <div className="space-y-2">
-                {FONT_OPTIONS.map(font => (
-                  <label key={font} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${theme.fontFamily === font ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
-                    <input type="radio" checked={theme.fontFamily === font} onChange={() => setTheme({ ...theme, fontFamily: font })} className="accent-green-500" />
-                    <span style={{ fontFamily: font }} className="text-sm">{font} — The quick brown fox</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-2">Border Radius</label>
-              <div className="space-y-2">
-                {RADIUS_OPTIONS.map(({ id, label }) => (
-                  <label key={id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${theme.borderRadius === id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
-                    <input type="radio" checked={theme.borderRadius === id} onChange={() => setTheme({ ...theme, borderRadius: id })} className="accent-green-500" />
-                    <div className={`w-12 h-8 border-2 border-foreground/30 flex-shrink-0 ${id === "none" ? "rounded-none" : id === "sm" ? "rounded" : id === "md" ? "rounded-lg" : id === "lg" ? "rounded-2xl" : "rounded-full"}`} />
-                    <span className="text-sm">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
 
-      {/* Layout */}
-      {tab === "layout" && (
-        <div className="space-y-6">
-          <h3 className="font-semibold">Layout & Sections</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Header Style</label>
-              <div className="space-y-2">
-                {HEADER_STYLES.map(s => (
-                  <label key={s} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${theme.headerStyle === s ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
-                    <input type="radio" checked={theme.headerStyle === s} onChange={() => setTheme({ ...theme, headerStyle: s })} className="accent-green-500" />
-                    <span className="text-sm capitalize">{s}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Hero Section Style</label>
-              <div className="space-y-2">
-                {HERO_STYLES.map(s => (
-                  <label key={s} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${theme.heroStyle === s ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
-                    <input type="radio" checked={theme.heroStyle === s} onChange={() => setTheme({ ...theme, heroStyle: s })} className="accent-green-500" />
-                    <span className="text-sm capitalize">{s}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-3 block">Section Visibility</label>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: "showReviews", label: "Product Reviews" },
-                { key: "showWishlist", label: "Wishlist Feature" },
-                { key: "showChat", label: "AI Chat Widget" },
-                { key: "showBanner", label: "Announcement Banner" },
-              ].map(({ key, label }) => (
-                <label key={key} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${theme[key] ? "border-green-500/50 bg-green-500/10" : "border-border hover:bg-accent"}`}>
-                  <input type="checkbox" checked={!!theme[key]} onChange={e => setTheme({ ...theme, [key]: e.target.checked })} className="accent-green-500 w-4 h-4" />
-                  <span className="text-sm text-foreground">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-2 block">Custom CSS</label>
-            <textarea value={theme.customCss ?? ""} onChange={e => setTheme({ ...theme, customCss: e.target.value })} rows={5}
-              placeholder="/* Add custom CSS for this tenant's storefront */"
-              className="w-full bg-input border border-border rounded-xl px-4 py-3 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none placeholder:text-muted-foreground" />
-          </div>
-        </div>
-      )}
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <label className="text-sm text-slate-300">{label}</label>
+      <div className="flex items-center gap-2">
+        <input type="color" value={value} onChange={e => onChange(e.target.value)} className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" />
+        <span className="text-xs text-slate-500 font-mono">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, labels }: { label: string; value: string; onChange: (v: string) => void; options: string[]; labels?: string[] }) {
+  return (
+    <div>
+      <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 capitalize">
+        {options.map((o, i) => <option key={o} value={o}>{labels ? labels[i] : o}</option>)}
+      </select>
     </div>
   );
 }

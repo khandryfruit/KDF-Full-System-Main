@@ -1,361 +1,282 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { useLocation } from "wouter";
-import { useState } from "react";
-import {
-  ArrowLeft, Building2, Globe, CreditCard, Settings, Activity,
-  Edit3, Save, X, Loader2, CheckCircle2, PauseCircle, Play,
-  Eye, EyeOff, Palette, Zap, Phone, Mail, MapPin,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
-const INDUSTRY_ICONS: Record<string, string> = {
-  grocery: "🛒", fashion: "👗", electronics: "💻", pharmacy: "💊",
-  food: "🍕", beauty: "💄", sports: "⚽", furniture: "🪑", books: "📚", other: "🏪",
-};
-const INDUSTRIES = ["grocery", "fashion", "electronics", "pharmacy", "food", "beauty", "sports", "furniture", "books", "other"];
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "wouter";
+import { api } from "@/lib/api";
+import { formatDate, formatDateTime, statusColor, tierColor, industryIcon } from "@/lib/utils";
 
 const FEATURE_LABELS: Record<string, string> = {
-  website: "Website Builder", whatsappAutomation: "WhatsApp Automation", aiTools: "AI Content Tools",
-  aiChatbot: "AI Chatbot", seoTools: "SEO Tools", metaIntegration: "Meta/Facebook Integration",
-  courierIntegrations: "Courier Integrations", analyticsAdvanced: "Advanced Analytics",
-  marketingCampaigns: "Marketing Campaigns", multiUser: "Multi-User Access",
-  customDomain: "Custom Domain", mobileApp: "Mobile Admin App", apiAccess: "API Access",
-  realtimeAnalytics: "Real-time Analytics", blogModule: "Blog Module",
-  loyaltyModule: "Loyalty Module", prioritySupport: "Priority Support",
+  website: "Website", products: "Max Products", orders: "Max Orders/Month",
+  whatsappAutomation: "WhatsApp Automation", aiTools: "AI Tools", aiChatbot: "AI Chatbot",
+  seoTools: "SEO Tools", metaIntegration: "Meta Integration", courierIntegrations: "Courier Integrations",
+  analyticsAdvanced: "Advanced Analytics", marketingCampaigns: "Marketing Campaigns",
+  multiUser: "Multi User", customDomain: "Custom Domain", storageGb: "Storage (GB)",
+  staffAccounts: "Staff Accounts", branches: "Branches", prioritySupport: "Priority Support",
+  mobileApp: "Mobile App", apiAccess: "API Access", realtimeAnalytics: "Realtime Analytics",
+  themeCustomization: "Theme Customization", blogModule: "Blog Module", loyaltyModule: "Loyalty Module",
+  stripeConnect: "Stripe Connect",
 };
 
-export default function TenantDetailPage({ id }: { id: number }) {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [tab, setTab] = useState<"overview" | "settings" | "features" | "theme" | "plan">("overview");
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<any>({});
-  const [showSecrets, setShowSecrets] = useState(false);
-  const [featureEdits, setFeatureEdits] = useState<Record<string, boolean>>({});
+export default function TenantDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const [tenant, setTenant] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"overview" | "features" | "activity" | "plan">("overview");
+  const [editStatus, setEditStatus] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [features, setFeatures] = useState<Record<string, any>>({});
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["saas-tenant", id],
-    queryFn: () => apiFetch(`/saas/admin/tenants/${id}`),
-    onSuccess: (d: any) => setForm({
-      name: d.name, email: d.email, storeName: d.storeName,
-      industry: d.industry, ownerName: d.ownerName ?? "", ownerPhone: d.ownerPhone ?? "",
-      notes: d.notes ?? "", customDomain: d.customDomain ?? "", subdomain: d.subdomain ?? "",
-    }),
-  });
+  async function load() {
+    const [t, p, a] = await Promise.all([
+      api.tenants.get(Number(id)),
+      api.plans.list(),
+      api.activity(Number(id)),
+    ]);
+    setTenant(t);
+    setEditStatus(t.status);
+    setEditNotes(t.notes || "");
+    setFeatures(t.featureOverrides || {});
+    setPlans(p);
+    setActivity(a);
+    setLoading(false);
+  }
 
-  const { data: plans = [] } = useQuery({ queryKey: ["saas-plans-admin"], queryFn: () => apiFetch("/saas/admin/plans") });
+  useEffect(() => { load(); }, [id]);
 
-  const update = useMutation({
-    mutationFn: (body: any) => apiFetch(`/saas/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); setEditing(false); toast({ title: "Saved!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+  async function saveNotes() {
+    setSaving(true);
+    await api.tenants.update(Number(id), { notes: editNotes, status: editStatus });
+    load();
+    setSaving(false);
+  }
 
-  const updateFeatures = useMutation({
-    mutationFn: (overrides: any) => apiFetch(`/saas/admin/tenants/${id}/features`, { method: "PUT", body: JSON.stringify(overrides) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); toast({ title: "Features updated!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+  async function saveFeatures() {
+    setSaving(true);
+    await api.tenants.updateFeatures(Number(id), features);
+    load();
+    setSaving(false);
+  }
 
-  const changePlan = useMutation({
-    mutationFn: (planId: number) => apiFetch(`/saas/admin/tenants/${id}/plan`, { method: "PUT", body: JSON.stringify({ planId }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); toast({ title: "Plan changed!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+  async function changePlan(planId: number) {
+    await api.tenants.changePlan(Number(id), planId);
+    load();
+  }
 
-  const suspend = useMutation({
-    mutationFn: () => apiFetch(`/saas/admin/tenants/${id}/suspend`, { method: "POST" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); toast({ title: "Suspended" }); },
-  });
-  const activate = useMutation({
-    mutationFn: () => apiFetch(`/saas/admin/tenants/${id}/activate`, { method: "POST" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); toast({ title: "Activated" }); },
-  });
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  const updateSettings = useMutation({
-    mutationFn: (settings: any) => apiFetch(`/saas/admin/tenants/${id}`, { method: "PUT", body: JSON.stringify({ settings }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenant", id] }); toast({ title: "Settings saved!" }); },
-  });
+  if (!tenant) return <div className="text-slate-400">Tenant not found</div>;
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
-  if (!data) return <div className="text-center text-muted-foreground py-16">Tenant not found</div>;
-
-  const tenant = data;
-  const planFeatures = tenant.plan?.features ?? {};
-  const featureOverrides = tenant.featureOverrides ?? {};
-  const effectiveFeatures = { ...planFeatures, ...featureOverrides, ...featureEdits };
-
-  const TABS = [
-    { id: "overview", label: "Overview", icon: Building2 },
-    { id: "settings", label: "API Settings", icon: Settings },
-    { id: "features", label: "Features", icon: Zap },
-    { id: "plan", label: "Plan", icon: CreditCard },
-    { id: "theme", label: "Storefront", icon: Palette },
-  ];
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "features", label: "Features" },
+    { id: "plan", label: "Plan" },
+    { id: "activity", label: "Activity" },
+  ] as const;
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <button onClick={() => setLocation("/tenants")} className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors mt-0.5">
-          <ArrowLeft className="w-4 h-4" />
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <button onClick={() => navigate("/tenants")} className="text-slate-400 hover:text-white transition-colors text-sm">
+          ← Tenants
         </button>
-        <div className="flex-1">
+        <span className="text-slate-700">/</span>
+        <span className="text-white font-medium">{tenant.storeName}</span>
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-start justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-2xl">
-              {INDUSTRY_ICONS[tenant.industry] ?? "🏪"}
+            <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-2xl">
+              {industryIcon(tenant.industry)}
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">{tenant.storeName}</h1>
-              <p className="text-sm text-muted-foreground">{tenant.email}</p>
+              <h1 className="text-xl font-bold text-white">{tenant.storeName}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor(tenant.status)}`}>{tenant.status}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${tierColor(tenant.plan?.tier || "")}`}>{tenant.plan?.name || "No Plan"}</span>
+                <span className="text-xs text-slate-500 capitalize">{tenant.industry}</span>
+              </div>
             </div>
-            <span className={`ml-auto text-xs font-medium px-3 py-1 rounded-full border ${
-              tenant.status === "active" ? "bg-green-500/20 text-green-400 border-green-500/30"
-              : tenant.status === "trial" ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-              : "bg-red-500/20 text-red-400 border-red-500/30"
-            }`}>{tenant.status}</span>
+          </div>
+          <div className="text-right text-xs text-slate-500">
+            <div>ID: #{tenant.id}</div>
+            <div>Joined: {formatDate(tenant.createdAt)}</div>
+            {tenant.trialEndsAt && <div>Trial ends: {formatDate(tenant.trialEndsAt)}</div>}
           </div>
         </div>
       </div>
 
-      {/* Quick actions */}
-      <div className="flex flex-wrap gap-2">
-        <button onClick={() => setLocation(`/tenants/${id}/storefront`)} className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm hover:bg-accent transition-colors">
-          <Globe className="w-3.5 h-3.5 text-primary" /> Storefront Builder
-        </button>
-        {tenant.status !== "active" && (
-          <button onClick={() => activate.mutate()} disabled={activate.isPending} className="flex items-center gap-2 px-3 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-sm text-green-400 hover:bg-green-500/30 transition-colors">
-            {activate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} Activate
-          </button>
-        )}
-        {tenant.status !== "suspended" && (
-          <button onClick={() => suspend.mutate()} disabled={suspend.isPending} className="flex items-center gap-2 px-3 py-2 bg-amber-500/20 border border-amber-500/30 rounded-lg text-sm text-amber-400 hover:bg-amber-500/30 transition-colors">
-            {suspend.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PauseCircle className="w-3.5 h-3.5" />} Suspend
-          </button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit">
-        {TABS.map(({ id: tid, label, icon: Icon }) => (
-          <button key={tid} onClick={() => setTab(tid as any)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${tab === tid ? "bg-card text-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+      <div className="flex gap-1 bg-slate-900/50 p-1 rounded-lg border border-slate-800 w-fit">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 text-sm rounded-md font-medium transition-all ${tab === t.id ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"}`}
           >
-            <Icon className="w-3.5 h-3.5" />{label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Overview */}
       {tab === "overview" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm">Store Info</h3>
-              <button onClick={() => setEditing(!editing)} className="text-primary text-xs hover:underline flex items-center gap-1">
-                {editing ? <><X className="w-3 h-3" /> Cancel</> : <><Edit3 className="w-3 h-3" /> Edit</>}
-              </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-white">Contact Info</h2>
+            <Row label="Email" value={tenant.email} />
+            <Row label="Owner" value={tenant.ownerName} />
+            <Row label="Phone" value={tenant.ownerPhone} />
+            <Row label="Store Slug" value={tenant.storeSlug} mono />
+            <Row label="Subdomain" value={tenant.subdomain} mono />
+            <Row label="Custom Domain" value={tenant.customDomain} />
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-white">Admin Notes & Status</h2>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Status</label>
+              <select
+                value={editStatus}
+                onChange={e => setEditStatus(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+              >
+                {["trial", "active", "suspended", "cancelled", "pending"].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
-            {editing ? (
-              <div className="space-y-3">
-                {[
-                  { k: "storeName", label: "Store Name" }, { k: "name", label: "Owner Name" },
-                  { k: "email", label: "Email" }, { k: "ownerPhone", label: "Phone" },
-                  { k: "customDomain", label: "Custom Domain" }, { k: "subdomain", label: "Subdomain" },
-                ].map(({ k, label }) => (
-                  <div key={k}>
-                    <label className="text-xs text-muted-foreground">{label}</label>
-                    <input value={form[k] ?? ""} onChange={e => setForm({ ...form, [k]: e.target.value })}
-                      className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-                  </div>
-                ))}
-                <div>
-                  <label className="text-xs text-muted-foreground">Industry</label>
-                  <select value={form.industry ?? ""} onChange={e => setForm({ ...form, industry: e.target.value })}
-                    className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
-                    {INDUSTRIES.map(i => <option key={i} value={i}>{INDUSTRY_ICONS[i]} {i}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Notes</label>
-                  <textarea value={form.notes ?? ""} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
-                    className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
-                </div>
-                <button onClick={() => update.mutate(form)} disabled={update.isPending}
-                  className="w-full bg-primary text-primary-foreground py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90">
-                  {update.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {[
-                  { label: "Store Name", value: tenant.storeName },
-                  { label: "Industry", value: `${INDUSTRY_ICONS[tenant.industry] ?? ""} ${tenant.industry}` },
-                  { label: "Owner", value: tenant.ownerName },
-                  { label: "Phone", value: tenant.ownerPhone },
-                  { label: "Custom Domain", value: tenant.customDomain ?? "—" },
-                  { label: "Subdomain", value: tenant.subdomain ?? "—" },
-                  { label: "Trial Ends", value: tenant.trialEndsAt ? new Date(tenant.trialEndsAt).toLocaleDateString() : "—" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="font-medium text-foreground capitalize">{value ?? "—"}</span>
-                  </div>
-                ))}
-                {tenant.notes && <p className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">{tenant.notes}</p>}
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Notes</label>
+              <textarea
+                value={editNotes}
+                onChange={e => setEditNotes(e.target.value)}
+                rows={4}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 resize-none"
+                placeholder="Internal notes about this tenant..."
+              />
+            </div>
+            {tenant.suspendReason && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-400 text-xs">
+                Suspend reason: {tenant.suspendReason}
               </div>
             )}
-          </div>
-          <div className="space-y-4">
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="font-semibold text-sm mb-3">Current Plan</h3>
-              {tenant.plan ? (
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: tenant.plan.color ?? "#6366f1" }} />
-                    <span className="font-bold text-foreground">{tenant.plan.name}</span>
-                  </div>
-                  <p className="text-2xl font-bold text-primary">Rs. {Number(tenant.plan.priceMonthly).toLocaleString()}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
-                </div>
-              ) : <p className="text-muted-foreground text-sm">No plan assigned</p>}
-            </div>
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="font-semibold text-sm mb-3">Account Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Registered</span><span>{new Date(tenant.createdAt).toLocaleDateString()}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Last Updated</span><span>{new Date(tenant.updatedAt).toLocaleDateString()}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Store Slug</span><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{tenant.storeSlug}</code></div>
-              </div>
-            </div>
+            <button
+              onClick={saveNotes}
+              disabled={saving}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors"
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
           </div>
         </div>
       )}
 
-      {/* API Settings */}
-      {tab === "settings" && (
-        <ApiSettingsTab tenant={tenant} updateSettings={updateSettings} showSecrets={showSecrets} setShowSecrets={setShowSecrets} />
-      )}
-
-      {/* Features */}
       {tab === "features" && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Feature Overrides</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Override individual features for this tenant</p>
-            </div>
-            <button onClick={() => updateFeatures.mutate(featureEdits)} disabled={updateFeatures.isPending}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
-              {updateFeatures.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-white">Feature Overrides</h2>
+            <button
+              onClick={saveFeatures}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {saving ? "Saving..." : "Save Overrides"}
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <p className="text-xs text-slate-500 mb-4">Override individual features for this tenant regardless of plan.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {Object.entries(FEATURE_LABELS).map(([key, label]) => {
-              const val = featureEdits.hasOwnProperty(key) ? featureEdits[key] : (featureOverrides[key] ?? planFeatures[key] ?? false);
-              const fromPlan = !featureOverrides.hasOwnProperty(key) && !featureEdits.hasOwnProperty(key);
+              const planValue = tenant.plan?.features?.[key];
+              const overrideValue = features[key];
+              const isBoolean = typeof planValue === "boolean" || (planValue === undefined && typeof overrideValue === "boolean") || overrideValue === undefined;
               return (
-                <label key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-accent cursor-pointer transition-colors">
-                  <input type="checkbox" checked={!!val} onChange={e => setFeatureEdits({ ...featureEdits, [key]: e.target.checked })}
-                    className="w-4 h-4 accent-green-500" />
-                  <div className="flex-1">
-                    <span className="text-sm text-foreground">{label}</span>
-                    {fromPlan && <span className="block text-[10px] text-muted-foreground">From plan</span>}
+                <div key={key} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2.5">
+                  <div>
+                    <div className="text-sm text-white">{label}</div>
+                    <div className="text-xs text-slate-500">Plan default: {String(planValue ?? "—")}</div>
                   </div>
-                  {val ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : <X className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
-                </label>
+                  {isBoolean ? (
+                    <button
+                      onClick={() => setFeatures(f => ({ ...f, [key]: overrideValue === undefined ? !planValue : !overrideValue }))}
+                      className={`w-10 h-5 rounded-full transition-colors ${overrideValue === true || (overrideValue === undefined && planValue === true) ? "bg-emerald-600" : "bg-slate-700"}`}
+                    >
+                      <div className={`w-3.5 h-3.5 bg-white rounded-full mx-auto transition-transform ${overrideValue === true || (overrideValue === undefined && planValue === true) ? "translate-x-2.5" : "-translate-x-2.5"}`} />
+                    </button>
+                  ) : (
+                    <input
+                      type="number"
+                      value={overrideValue ?? planValue ?? ""}
+                      onChange={e => setFeatures(f => ({ ...f, [key]: Number(e.target.value) }))}
+                      className="w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white text-right outline-none focus:border-emerald-500"
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* Plan */}
       {tab === "plan" && (
-        <div className="space-y-4">
-          <h3 className="font-semibold">Change Plan</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(plans as any[]).map((p: any) => (
-              <div key={p.id} onClick={() => changePlan.mutate(p.id)}
-                className={`border-2 rounded-xl p-5 cursor-pointer transition-all ${tenant.planId === p.id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-accent"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-3 h-3 rounded-full" style={{ background: p.color ?? "#6366f1" }} />
-                  <span className="font-bold text-sm">{p.name}</span>
-                  {tenant.planId === p.id && <CheckCircle2 className="w-4 h-4 text-primary ml-auto" />}
-                </div>
-                <p className="text-xl font-bold">Rs. {Number(p.priceMonthly).toLocaleString()}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
-                <p className="text-xs text-muted-foreground mt-1">{p.description}</p>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-white mb-4">Change Plan</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {plans.map(plan => (
+              <div
+                key={plan.id}
+                className={`border rounded-xl p-4 cursor-pointer transition-all ${tenant.plan?.id === plan.id ? "border-emerald-500 bg-emerald-500/5" : "border-slate-800 hover:border-slate-600"}`}
+                onClick={() => changePlan(plan.id)}
+              >
+                <div className={`text-xs px-2 py-0.5 rounded-full w-fit mb-2 ${tierColor(plan.tier)}`}>{plan.tier}</div>
+                <div className="font-semibold text-white">{plan.name}</div>
+                <div className="text-emerald-400 font-bold mt-1">Rs. {plan.priceMonthly}/mo</div>
+                <div className="text-xs text-slate-400 mt-2">{plan.description}</div>
+                {tenant.plan?.id === plan.id && (
+                  <div className="text-xs text-emerald-400 mt-2 font-medium">✓ Current Plan</div>
+                )}
               </div>
             ))}
+            {plans.length === 0 && <div className="text-slate-500 text-sm col-span-3">No plans configured yet. Go to Plans to create some.</div>}
           </div>
         </div>
       )}
 
-      {/* Storefront link */}
-      {tab === "theme" && (
-        <div className="bg-card border border-border rounded-xl p-8 text-center">
-          <Palette className="w-12 h-12 text-primary mx-auto mb-4" />
-          <h3 className="text-lg font-bold mb-2">Storefront Builder</h3>
-          <p className="text-muted-foreground text-sm mb-6">Customize the tenant's storefront template, colors, fonts, and sections</p>
-          <button onClick={() => setLocation(`/tenants/${id}/storefront`)}
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-medium hover:opacity-90 transition-all">
-            <Globe className="w-4 h-4" /> Open Storefront Builder
-          </button>
+      {tab === "activity" && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-white mb-4">Activity Log</h2>
+          <div className="space-y-3">
+            {activity.map((log: any) => (
+              <div key={log.id} className="flex items-start gap-3 text-sm border-b border-slate-800/50 pb-3">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <span className="text-white font-medium">{log.action.replace(/_/g, " ")}</span>
+                  {log.entity && <span className="text-slate-400"> · {log.entity} #{log.entityId}</span>}
+                  {log.meta && Object.keys(log.meta).length > 0 && (
+                    <div className="text-xs text-slate-500 mt-0.5">{JSON.stringify(log.meta)}</div>
+                  )}
+                  <div className="text-xs text-slate-600 mt-0.5">{formatDateTime(log.createdAt)}</div>
+                </div>
+              </div>
+            ))}
+            {activity.length === 0 && <p className="text-slate-500 text-sm">No activity recorded yet.</p>}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function ApiSettingsTab({ tenant, updateSettings, showSecrets, setShowSecrets }: any) {
-  const [form, setForm] = useState({ ...(tenant.settings ?? {}) });
-  const { toast } = useToast();
-  const fields = [
-    { key: "openaiApiKey", label: "OpenAI API Key", placeholder: "sk-...", secret: true },
-    { key: "whatsappToken", label: "WhatsApp Access Token", placeholder: "EAAxxxx...", secret: true },
-    { key: "whatsappPhoneId", label: "WhatsApp Phone Number ID", placeholder: "100123456789", secret: false },
-    { key: "whatsappBusinessId", label: "WhatsApp Business Account ID", placeholder: "100123456789", secret: false },
-    { key: "metaAppId", label: "Meta App ID", placeholder: "123456789", secret: false },
-    { key: "metaAppSecret", label: "Meta App Secret", placeholder: "abc123...", secret: true },
-    { key: "metaPixelId", label: "Meta Pixel ID", placeholder: "123456789", secret: false },
-    { key: "metaAccessToken", label: "Meta Access Token", placeholder: "EAAxxxx...", secret: true },
-    { key: "googleMapsKey", label: "Google Maps API Key", placeholder: "AIza...", secret: true },
-    { key: "googleAnalyticsId", label: "Google Analytics ID", placeholder: "G-XXXX", secret: false },
-  ];
+function Row({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold">Tenant API Settings</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Per-tenant API keys (stored encrypted, tenant-isolated)</p>
-        </div>
-        <button onClick={() => setShowSecrets(!showSecrets)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-          {showSecrets ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          {showSecrets ? "Hide" : "Show"} secrets
-        </button>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {fields.map(({ key, label, placeholder, secret }) => (
-          <div key={key}>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
-            <input
-              type={secret && !showSecrets ? "password" : "text"}
-              value={form[key] ?? ""}
-              onChange={e => setForm({ ...form, [key]: e.target.value })}
-              placeholder={placeholder}
-              className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-            />
-          </div>
-        ))}
-      </div>
-      <button
-        onClick={() => updateSettings.mutate(form)}
-        disabled={updateSettings.isPending}
-        className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90"
-      >
-        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save API Settings
-      </button>
+    <div className="flex justify-between items-start gap-4 text-sm">
+      <span className="text-slate-500 flex-shrink-0">{label}</span>
+      <span className={`text-slate-300 text-right truncate max-w-xs ${mono ? "font-mono text-xs" : ""}`}>{value || "—"}</span>
     </div>
   );
 }

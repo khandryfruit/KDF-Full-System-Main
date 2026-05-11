@@ -1,221 +1,258 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { useState } from "react";
-import {
-  Plus, Edit3, Save, X, Loader2, CheckCircle2, Trash2,
-  Zap, Star, Crown, Package,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
-const TIER_ICONS: Record<string, React.ElementType> = { starter: Package, business: Zap, enterprise: Crown, custom: Star };
-const TIER_COLORS: Record<string, string> = {
-  starter: "text-blue-400 bg-blue-500/20",
-  business: "text-purple-400 bg-purple-500/20",
-  enterprise: "text-amber-400 bg-amber-500/20",
-  custom: "text-green-400 bg-green-500/20",
-};
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { tierColor } from "@/lib/utils";
 
 const FEATURE_LABELS: Record<string, string> = {
-  website: "Website", whatsappAutomation: "WhatsApp", aiTools: "AI Tools", aiChatbot: "AI Chatbot",
-  seoTools: "SEO Tools", metaIntegration: "Meta/FB", courierIntegrations: "Couriers",
-  analyticsAdvanced: "Advanced Analytics", marketingCampaigns: "Marketing", multiUser: "Multi-User",
-  customDomain: "Custom Domain", mobileApp: "Mobile App", apiAccess: "API Access",
-  realtimeAnalytics: "Real-time Analytics", blogModule: "Blog", loyaltyModule: "Loyalty",
-  prioritySupport: "Priority Support",
+  website: "Website", whatsappAutomation: "WhatsApp Automation", aiTools: "AI Tools",
+  aiChatbot: "AI Chatbot", seoTools: "SEO Tools", metaIntegration: "Meta Integration",
+  courierIntegrations: "Courier Integrations", analyticsAdvanced: "Advanced Analytics",
+  marketingCampaigns: "Marketing Campaigns", multiUser: "Multi User", customDomain: "Custom Domain",
+  mobileApp: "Mobile App", apiAccess: "API Access", prioritySupport: "Priority Support",
+  blogModule: "Blog Module", loyaltyModule: "Loyalty Module", stripeConnect: "Stripe Connect",
+  realtimeAnalytics: "Realtime Analytics", themeCustomization: "Theme Customization",
 };
 
-const BLANK_PLAN = {
-  name: "", tier: "starter", description: "", priceMonthly: 0, priceYearly: 0,
-  trialDays: 14, badgeLabel: "", color: "#6366f1", displayOrder: 0,
-  features: {} as Record<string, any>,
+const NUM_FEATURES: Record<string, string> = {
+  products: "Max Products", orders: "Max Orders/Mo", storageGb: "Storage (GB)",
+  staffAccounts: "Staff Accounts", branches: "Branches",
 };
+
+const DEFAULT_FEATURES = {
+  website: true, products: 50, orders: 100, whatsappAutomation: false, aiTools: false,
+  aiChatbot: false, seoTools: false, metaIntegration: false, courierIntegrations: false,
+  analyticsAdvanced: false, marketingCampaigns: false, multiUser: false, customDomain: false,
+  storageGb: 1, staffAccounts: 1, branches: 1, prioritySupport: false, mobileApp: false,
+  apiAccess: false, realtimeAnalytics: false, themeCustomization: true, blogModule: false,
+  loyaltyModule: false, stripeConnect: false,
+};
+
+interface PlanForm {
+  name: string; tier: string; description: string; priceMonthly: string; priceYearly: string;
+  color: string; badgeLabel: string; trialDays: string; displayOrder: string;
+  features: Record<string, any>;
+}
+
+const emptyForm = (): PlanForm => ({
+  name: "", tier: "starter", description: "", priceMonthly: "0", priceYearly: "0",
+  color: "#6366f1", badgeLabel: "", trialDays: "14", displayOrder: "0",
+  features: { ...DEFAULT_FEATURES },
+});
 
 export default function PlansPage() {
-  const { toast } = useToast();
-  const qc = useQueryClient();
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState({ ...BLANK_PLAN });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<PlanForm>(emptyForm());
+  const [saving, setSaving] = useState(false);
 
-  const { data: plans = [], isLoading } = useQuery({
-    queryKey: ["saas-plans-admin"],
-    queryFn: () => apiFetch("/saas/admin/plans"),
-  });
+  async function load() {
+    const data = await api.plans.list();
+    setPlans(data);
+    setLoading(false);
+  }
 
-  const create = useMutation({
-    mutationFn: () => apiFetch("/saas/admin/plans", { method: "POST", body: JSON.stringify(form) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-plans-admin"] }); setShowForm(false); setForm({ ...BLANK_PLAN }); toast({ title: "Plan created!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+  useEffect(() => { load(); }, []);
 
-  const update = useMutation({
-    mutationFn: () => apiFetch(`/saas/admin/plans/${editId}`, { method: "PUT", body: JSON.stringify(form) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-plans-admin"] }); setEditId(null); toast({ title: "Plan updated!" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
-
-  const archive = useMutation({
-    mutationFn: (id: number) => apiFetch(`/saas/admin/plans/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-plans-admin"] }); toast({ title: "Plan archived" }); },
-  });
-
-  const openEdit = (p: any) => {
-    setForm({ ...BLANK_PLAN, ...p, features: p.features ?? {} });
-    setEditId(p.id);
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm());
     setShowForm(true);
-  };
+  }
+
+  function openEdit(plan: any) {
+    setEditingId(plan.id);
+    setForm({
+      name: plan.name, tier: plan.tier, description: plan.description || "",
+      priceMonthly: plan.priceMonthly, priceYearly: plan.priceYearly,
+      color: plan.color || "#6366f1", badgeLabel: plan.badgeLabel || "",
+      trialDays: String(plan.trialDays), displayOrder: String(plan.displayOrder),
+      features: { ...DEFAULT_FEATURES, ...plan.features },
+    });
+    setShowForm(true);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const payload = { ...form, trialDays: Number(form.trialDays), displayOrder: Number(form.displayOrder) };
+    if (editingId) {
+      await api.plans.update(editingId, payload);
+    } else {
+      await api.plans.create(payload);
+    }
+    setShowForm(false);
+    load();
+    setSaving(false);
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Deactivate this plan?")) return;
+    await api.plans.delete(id);
+    load();
+  }
+
+  const setFeature = (key: string, value: any) => setForm(f => ({ ...f, features: { ...f.features, [key]: value } }));
+
+  if (loading) {
+    return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>;
+  }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Subscription Plans</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Manage pricing tiers and feature sets</p>
+          <h1 className="text-2xl font-bold text-white">Plans</h1>
+          <p className="text-slate-400 text-sm mt-1">Manage subscription plans and feature sets</p>
         </div>
-        <button onClick={() => { setForm({ ...BLANK_PLAN }); setEditId(null); setShowForm(true); }}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
-          <Plus className="w-4 h-4" /> New Plan
+        <button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          + New Plan
         </button>
       </div>
 
-      {/* Plan form */}
-      {showForm && (
-        <div className="bg-card border border-primary/30 rounded-2xl p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg">{editId ? "Edit Plan" : "Create New Plan"}</h3>
-            <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-muted-foreground">Plan Name *</label>
-              <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Business Pro"
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Tier</label>
-              <select value={form.tier} onChange={e => setForm({ ...form, tier: e.target.value })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground">
-                <option value="starter">Starter</option>
-                <option value="business">Business</option>
-                <option value="enterprise">Enterprise</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Badge Label</label>
-              <input value={form.badgeLabel} onChange={e => setForm({ ...form, badgeLabel: e.target.value })} placeholder="Popular"
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Description</label>
-            <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Plan description..."
-              className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-muted-foreground">Monthly Price (PKR)</label>
-              <input type="number" value={form.priceMonthly} onChange={e => setForm({ ...form, priceMonthly: Number(e.target.value) })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Yearly Price (PKR)</label>
-              <input type="number" value={form.priceYearly} onChange={e => setForm({ ...form, priceYearly: Number(e.target.value) })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Trial Days</label>
-              <input type="number" value={form.trialDays} onChange={e => setForm({ ...form, trialDays: Number(e.target.value) })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">Features (check to enable)</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {Object.entries(FEATURE_LABELS).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-accent border border-border/50">
-                  <input type="checkbox" checked={!!form.features[key]} onChange={e => setForm({ ...form, features: { ...form.features, [key]: e.target.checked } })} className="accent-green-500 w-3.5 h-3.5" />
-                  <span className="text-xs text-foreground">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs text-muted-foreground">Max Products (-1 = unlimited)</label>
-              <input type="number" value={form.features.products ?? 50} onChange={e => setForm({ ...form, features: { ...form.features, products: Number(e.target.value) } })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Max Orders/month (-1 = unlimited)</label>
-              <input type="number" value={form.features.orders ?? 100} onChange={e => setForm({ ...form, features: { ...form.features, orders: Number(e.target.value) } })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Staff Accounts</label>
-              <input type="number" value={form.features.staffAccounts ?? 1} onChange={e => setForm({ ...form, features: { ...form.features, staffAccounts: Number(e.target.value) } })}
-                className="w-full mt-1 bg-input border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => editId ? update.mutate() : create.mutate()} disabled={create.isPending || update.isPending || !form.name}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {(create.isPending || update.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {editId ? "Update Plan" : "Create Plan"}
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-5 py-2.5 border border-border rounded-lg text-sm hover:bg-accent">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Plans grid */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-40"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {(plans as any[]).map((p: any) => {
-            const TierIcon = TIER_ICONS[p.tier] ?? Package;
-            const tierColor = TIER_COLORS[p.tier] ?? TIER_COLORS.starter;
-            return (
-              <div key={p.id} className={`bg-card border rounded-2xl overflow-hidden ${p.isActive ? "border-border" : "border-border/30 opacity-60"}`}>
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tierColor}`}>
-                      <TierIcon className="w-5 h-5" />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {p.badgeLabel && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">{p.badgeLabel}</span>}
-                      {!p.isActive && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Archived</span>}
-                    </div>
-                  </div>
-                  <h3 className="font-bold text-lg text-foreground">{p.name}</h3>
-                  <p className="text-3xl font-bold text-foreground mt-1">Rs. {Number(p.priceMonthly).toLocaleString()}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
-                  {p.priceYearly > 0 && <p className="text-xs text-muted-foreground">Rs. {Number(p.priceYearly).toLocaleString()}/year</p>}
-                  <p className="text-xs text-muted-foreground mt-2">{p.description}</p>
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {Object.entries(FEATURE_LABELS).filter(([k]) => p.features?.[k]).slice(0, 6).map(([k, label]) => (
-                      <span key={k} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{label}</span>
-                    ))}
-                    {Object.entries(FEATURE_LABELS).filter(([k]) => p.features?.[k]).length > 6 && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">+{Object.entries(FEATURE_LABELS).filter(([k]) => p.features?.[k]).length - 6} more</span>
-                    )}
-                  </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {plans.map(plan => (
+          <div key={plan.id} className={`bg-slate-900 border rounded-xl p-5 ${plan.isActive ? "border-slate-800" : "border-slate-800/40 opacity-60"}`}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${tierColor(plan.tier)}`}>{plan.tier}</span>
+                  {plan.badgeLabel && <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">{plan.badgeLabel}</span>}
+                  {!plan.isActive && <span className="text-xs text-red-400">Inactive</span>}
                 </div>
-                <div className="px-5 pb-4 flex gap-2">
-                  <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-2 py-2 border border-border rounded-lg text-xs hover:bg-accent transition-colors">
-                    <Edit3 className="w-3 h-3" /> Edit
-                  </button>
-                  {p.isActive && (
-                    <button onClick={() => archive.mutate(p.id)} className="py-2 px-3 border border-border rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
+                <h3 className="text-white font-semibold mt-1">{plan.name}</h3>
+              </div>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plan.color }} />
+            </div>
+
+            <div className="mb-3">
+              <span className="text-2xl font-bold text-white">Rs. {plan.priceMonthly}</span>
+              <span className="text-slate-400 text-sm">/mo</span>
+              {plan.priceYearly !== "0" && <div className="text-sm text-slate-400">Rs. {plan.priceYearly}/yr</div>}
+            </div>
+
+            {plan.description && <p className="text-xs text-slate-400 mb-3">{plan.description}</p>}
+
+            <div className="border-t border-slate-800 pt-3 mb-4">
+              <div className="grid grid-cols-2 gap-1 text-xs">
+                {Object.entries(NUM_FEATURES).map(([key, label]) => (
+                  <div key={key} className="text-slate-400">
+                    <span className="text-white font-medium">{plan.features?.[key] === -1 ? "∞" : (plan.features?.[key] ?? "—")}</span> {label}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {Object.entries(FEATURE_LABELS).filter(([key]) => plan.features?.[key] === true).map(([key, label]) => (
+                  <span key={key} className="text-xs bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded">{label}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => openEdit(plan)} className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-white py-1.5 rounded-lg transition-colors">Edit</button>
+              <button onClick={() => handleDelete(plan.id)} className="flex-1 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 py-1.5 rounded-lg transition-colors">Deactivate</button>
+            </div>
+          </div>
+        ))}
+
+        {plans.length === 0 && (
+          <div className="col-span-3 bg-slate-900 border border-slate-800 border-dashed rounded-xl p-12 text-center">
+            <div className="text-4xl mb-3">📦</div>
+            <p className="text-slate-400">No plans yet. Create your first pricing plan.</p>
+          </div>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-2xl my-8">
+            <h2 className="text-lg font-semibold text-white mb-5">{editingId ? "Edit Plan" : "Create Plan"}</h2>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Plan Name *">
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inp} required />
+                </Field>
+                <Field label="Tier">
+                  <select value={form.tier} onChange={e => setForm(f => ({ ...f, tier: e.target.value }))} className={inp}>
+                    {["starter", "business", "enterprise", "custom"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Description">
+                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inp} />
+              </Field>
+              <div className="grid grid-cols-3 gap-4">
+                <Field label="Monthly Price (Rs.)">
+                  <input type="number" value={form.priceMonthly} onChange={e => setForm(f => ({ ...f, priceMonthly: e.target.value }))} className={inp} />
+                </Field>
+                <Field label="Yearly Price (Rs.)">
+                  <input type="number" value={form.priceYearly} onChange={e => setForm(f => ({ ...f, priceYearly: e.target.value }))} className={inp} />
+                </Field>
+                <Field label="Trial Days">
+                  <input type="number" value={form.trialDays} onChange={e => setForm(f => ({ ...f, trialDays: e.target.value }))} className={inp} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <Field label="Badge Label">
+                  <input value={form.badgeLabel} onChange={e => setForm(f => ({ ...f, badgeLabel: e.target.value }))} className={inp} placeholder="Popular" />
+                </Field>
+                <Field label="Color">
+                  <input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} className="w-full h-9 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer" />
+                </Field>
+                <Field label="Display Order">
+                  <input type="number" value={form.displayOrder} onChange={e => setForm(f => ({ ...f, displayOrder: e.target.value }))} className={inp} />
+                </Field>
+              </div>
+
+              <div className="border-t border-slate-800 pt-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Numeric Limits</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {Object.entries(NUM_FEATURES).map(([key, label]) => (
+                    <Field key={key} label={label}>
+                      <input type="number" value={form.features[key] ?? 0} onChange={e => setFeature(key, Number(e.target.value))} className={inp} />
+                    </Field>
+                  ))}
                 </div>
               </div>
-            );
-          })}
+
+              <div className="border-t border-slate-800 pt-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Feature Toggles</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {Object.entries(FEATURE_LABELS).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!form.features[key]}
+                        onChange={e => setFeature(key, e.target.checked)}
+                        className="rounded border-slate-600 bg-slate-800 text-emerald-600"
+                      />
+                      <span className="text-xs text-slate-300">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2 rounded-lg transition-colors">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors">
+                  {saving ? "Saving..." : editingId ? "Update Plan" : "Create Plan"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const inp = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500";
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+      {children}
     </div>
   );
 }

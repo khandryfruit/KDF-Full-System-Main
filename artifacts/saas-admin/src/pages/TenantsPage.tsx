@@ -1,207 +1,312 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useState } from "react";
-import {
-  Plus, Search, Filter, MoreVertical, CheckCircle2, Clock, PauseCircle, XCircle,
-  Globe, Building2, ChevronRight, Trash2, Play, Pause, RefreshCw,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
-const STATUS_COLORS: Record<string, string> = {
-  active: "bg-green-500/20 text-green-400 border-green-500/30",
-  trial: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  suspended: "bg-red-500/20 text-red-400 border-red-500/30",
-  cancelled: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-  pending: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-};
-const INDUSTRY_ICONS: Record<string, string> = {
-  grocery: "🛒", fashion: "👗", electronics: "💻", pharmacy: "💊",
-  food: "🍕", beauty: "💄", sports: "⚽", furniture: "🪑", books: "📚", other: "🏪",
-};
+import { api } from "@/lib/api";
+import { formatDate, statusColor, tierColor, industryIcon } from "@/lib/utils";
 
 export default function TenantsPage() {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({
+    name: "", email: "", password: "", storeName: "",
+    ownerName: "", ownerPhone: "", industry: "other", planId: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const { data: tenants = [], isLoading, refetch } = useQuery({
-    queryKey: ["saas-tenants", search, status],
-    queryFn: () => {
-      const p = new URLSearchParams();
-      if (search) p.set("search", search);
-      if (status) p.set("status", status);
-      return apiFetch(`/saas/admin/tenants?${p}`);
-    },
-  });
+  async function load() {
+    const params: Record<string, string> = {};
+    if (search) params.search = search;
+    if (statusFilter) params.status = statusFilter;
+    const [t, p] = await Promise.all([api.tenants.list(params), api.plans.list()]);
+    setTenants(t);
+    setPlans(p);
+    setLoading(false);
+  }
 
-  const suspend = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason?: string }) => apiFetch(`/saas/admin/tenants/${id}/suspend`, { method: "POST", body: JSON.stringify({ reason }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenants"] }); toast({ title: "Tenant suspended" }); },
-  });
-  const activate = useMutation({
-    mutationFn: (id: number) => apiFetch(`/saas/admin/tenants/${id}/activate`, { method: "POST" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenants"] }); toast({ title: "Tenant activated" }); },
-  });
-  const cancel = useMutation({
-    mutationFn: (id: number) => apiFetch(`/saas/admin/tenants/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["saas-tenants"] }); toast({ title: "Tenant cancelled" }); },
-  });
+  useEffect(() => { load(); }, [search, statusFilter]);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      await api.tenants.create({
+        ...form,
+        planId: form.planId ? Number(form.planId) : undefined,
+      });
+      setShowAdd(false);
+      setForm({ name: "", email: "", password: "", storeName: "", ownerName: "", ownerPhone: "", industry: "other", planId: "" });
+      load();
+    } catch (err: any) {
+      setError(err.message || "Failed to create tenant");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSuspend(id: number) {
+    if (!confirm("Suspend this tenant?")) return;
+    await api.tenants.suspend(id, "Suspended by admin");
+    load();
+  }
+
+  async function handleActivate(id: number) {
+    await api.tenants.activate(id);
+    load();
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Cancel this tenant account? This marks it as cancelled.")) return;
+    await api.tenants.delete(id);
+    load();
+  }
+
+  const industries = ["grocery", "fashion", "electronics", "pharmacy", "food", "beauty", "sports", "furniture", "books", "other"];
 
   return (
-    <div className="space-y-6 max-w-7xl">
-      {/* Header */}
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Tenants</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{(tenants as any[]).length} total tenants</p>
+          <h1 className="text-2xl font-bold text-white">Tenants</h1>
+          <p className="text-slate-400 text-sm mt-1">{tenants.length} stores on the platform</p>
         </div>
         <button
-          onClick={() => setLocation("/tenants/new")}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90"
+          onClick={() => setShowAdd(true)}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Tenant
+          + Add Tenant
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+      <div className="flex gap-3 flex-wrap">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search stores or emails..."
+          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500 w-64"
+        />
         <select
-          value={status}
-          onChange={e => setStatus(e.target.value)}
-          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
         >
-          <option value="">All Statuses</option>
+          <option value="">All Status</option>
           <option value="trial">Trial</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <button onClick={() => refetch()} className="flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-accent">
-          <RefreshCw className="w-4 h-4" />
-        </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (tenants as any[]).length === 0 ? (
-          <div className="text-center py-16">
-            <Building2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">No tenants found</p>
-            <button onClick={() => setLocation("/tenants/new")} className="mt-4 text-primary text-sm hover:underline">
-              + Add your first tenant
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Store</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Industry</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Owner</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Joined</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(tenants as any[]).map((t: any) => (
-                  <tr key={t.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <button onClick={() => setLocation(`/tenants/${t.id}`)} className="flex items-center gap-3 text-left">
-                        {t.logoUrl ? (
-                          <img src={t.logoUrl} className="w-9 h-9 rounded-lg object-cover border border-border" alt="" />
-                        ) : (
-                          <div className="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center text-base flex-shrink-0">
-                            {INDUSTRY_ICONS[t.industry] ?? "🏪"}
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-foreground hover:text-primary transition-colors">{t.storeName}</p>
-                          <p className="text-xs text-muted-foreground">{t.email}</p>
-                        </div>
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs capitalize text-muted-foreground">{INDUSTRY_ICONS[t.industry] ?? "🏪"} {t.industry}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-foreground">{t.planName ?? <span className="text-muted-foreground">No plan</span>}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full border ${STATUS_COLORS[t.status] ?? STATUS_COLORS.trial}`}>
-                        {t.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-slate-500 border-b border-slate-800 bg-slate-900/50">
+                <th className="text-left px-4 py-3">Store</th>
+                <th className="text-left px-4 py-3">Owner</th>
+                <th className="text-left px-4 py-3">Plan</th>
+                <th className="text-left px-4 py-3">Status</th>
+                <th className="text-left px-4 py-3">Trial Ends</th>
+                <th className="text-left px-4 py-3">Joined</th>
+                <th className="text-right px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.map(t => (
+                <tr key={t.id} className="border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{industryIcon(t.industry)}</span>
                       <div>
-                        <p className="text-xs text-foreground">{t.ownerName ?? "—"}</p>
-                        <p className="text-[10px] text-muted-foreground">{t.ownerPhone ?? ""}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(t.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="relative">
                         <button
-                          onClick={() => setOpenMenu(openMenu === t.id ? null : t.id)}
-                          className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => navigate(`/tenants/${t.id}`)}
+                          className="font-medium text-white hover:text-emerald-400 transition-colors text-left"
                         >
-                          <MoreVertical className="w-4 h-4" />
+                          {t.storeName}
                         </button>
-                        {openMenu === t.id && (
-                          <div className="absolute right-0 top-8 z-50 w-44 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
-                            <button onClick={() => { setLocation(`/tenants/${t.id}`); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left">
-                              <ChevronRight className="w-3.5 h-3.5" /> View Details
-                            </button>
-                            <button onClick={() => { setLocation(`/tenants/${t.id}/storefront`); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left">
-                              <Globe className="w-3.5 h-3.5" /> Storefront Builder
-                            </button>
-                            {t.status !== "active" && (
-                              <button onClick={() => { activate.mutate(t.id); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left text-green-400">
-                                <Play className="w-3.5 h-3.5" /> Activate
-                              </button>
-                            )}
-                            {t.status !== "suspended" && (
-                              <button onClick={() => { suspend.mutate({ id: t.id }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left text-amber-400">
-                                <Pause className="w-3.5 h-3.5" /> Suspend
-                              </button>
-                            )}
-                            <button onClick={() => { if (confirm("Cancel this tenant?")) { cancel.mutate(t.id); setOpenMenu(null); } }} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent text-left text-red-400">
-                              <Trash2 className="w-3.5 h-3.5" /> Cancel
-                            </button>
-                          </div>
-                        )}
+                        <div className="text-xs text-slate-500">{t.email}</div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">
+                    <div>{t.ownerName || "—"}</div>
+                    <div className="text-xs text-slate-600">{t.ownerPhone}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${tierColor(t.planTier || "")}`}>
+                      {t.planName || "No Plan"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor(t.status)}`}>
+                      {t.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400 text-xs">{formatDate(t.trialEndsAt)}</td>
+                  <td className="px-4 py-3 text-slate-400 text-xs">{formatDate(t.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => navigate(`/tenants/${t.id}`)}
+                        className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800 transition-colors"
+                      >
+                        View
+                      </button>
+                      {t.status === "suspended" ? (
+                        <button
+                          onClick={() => handleActivate(t.id)}
+                          className="text-xs text-emerald-400 hover:text-emerald-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors"
+                        >
+                          Activate
+                        </button>
+                      ) : t.status !== "cancelled" ? (
+                        <button
+                          onClick={() => handleSuspend(t.id)}
+                          className="text-xs text-amber-400 hover:text-amber-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors"
+                        >
+                          Suspend
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {tenants.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-slate-500">
+                    No tenants found. Add your first tenant above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-white mb-4">Add New Tenant</h2>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Store Name *</label>
+                  <input
+                    value={form.storeName}
+                    onChange={e => setForm(p => ({ ...p, storeName: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                    placeholder="My Store"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Owner Name *</label>
+                  <input
+                    value={form.name}
+                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                    placeholder="John Doe"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Email *</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Password *</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Industry</label>
+                  <select
+                    value={form.industry}
+                    onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                  >
+                    {industries.map(i => <option key={i} value={i} className="capitalize">{i}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Plan</label>
+                  <select
+                    value={form.planId}
+                    onChange={e => setForm(p => ({ ...p, planId: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                  >
+                    <option value="">No Plan</option>
+                    {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Owner Phone</label>
+                  <input
+                    value={form.ownerPhone}
+                    onChange={e => setForm(p => ({ ...p, ownerPhone: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                    placeholder="03001234567"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-400 text-xs">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowAdd(false); setError(""); }}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors"
+                >
+                  {saving ? "Creating..." : "Create Tenant"}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
-      {/* Close dropdown on outside click */}
-      {openMenu !== null && <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />}
+        </div>
+      )}
     </div>
   );
 }

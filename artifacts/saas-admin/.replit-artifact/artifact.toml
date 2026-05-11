@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/saas-admin/"
+previewPath = "/saas-platform/"
 title = "SaaS Super Admin"
 version = "1.0.0"
 id = "artifacts/saas-admin"
@@ -11,8 +11,8 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/saas-admin/" ]
-localPort = 21458
+paths = [ "/saas-platform/" ]
+localPort = 24699
 
 [services.development]
 run = "pnpm --filter @workspace/saas-admin run dev"
@@ -27,5 +27,5 @@ from = "/*"
 to = "/index.html"
 
 [services.env]
-PORT = "21458"
-BASE_PATH = "/saas-admin/"
+PORT = "24699"
+BASE_PATH = "/saas-platform/"

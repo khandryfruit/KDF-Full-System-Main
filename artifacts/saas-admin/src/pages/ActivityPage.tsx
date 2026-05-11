@@ -1,72 +1,62 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { Activity, User, Building2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/utils";
 
-const ACTION_COLORS: Record<string, string> = {
-  create_tenant: "text-green-400 bg-green-500/20",
-  update_tenant: "text-blue-400 bg-blue-500/20",
-  cancel_tenant: "text-red-400 bg-red-500/20",
-  register: "text-purple-400 bg-purple-500/20",
-  change_plan: "text-amber-400 bg-amber-500/20",
+const ACTION_ICONS: Record<string, string> = {
+  create_tenant: "🏪", update_tenant: "✏️", cancel_tenant: "❌", change_plan: "📦",
+  register: "🆕", suspend: "⚠️", activate: "✅", login: "🔑", default: "📋",
 };
 
 export default function ActivityPage() {
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ["saas-activity"],
-    queryFn: () => apiFetch("/saas/admin/activity"),
-    refetchInterval: 15000,
-  });
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.activity().then(setLogs).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>;
+  }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">Activity Log</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">All platform events and actions</p>
+        <h1 className="text-2xl font-bold text-white">Activity Log</h1>
+        <p className="text-slate-400 text-sm mt-1">All platform events and actions</p>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (logs as any[]).length === 0 ? (
-          <div className="text-center py-16">
-            <Activity className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">No activity recorded yet</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {(logs as any[]).map((log: any) => {
-              const col = ACTION_COLORS[log.action] ?? "text-gray-400 bg-gray-500/20";
-              return (
-                <div key={log.id} className="flex items-start gap-4 p-4 hover:bg-accent/30 transition-colors">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${col}`}>
-                    {log.actorType === "super_admin" ? <User className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-foreground capitalize">
-                        {log.action.replace(/_/g, " ")}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${col}`}>
-                        {log.actorType === "super_admin" ? "Super Admin" : "Tenant"}
-                      </span>
-                      {log.entity && <span className="text-[10px] text-muted-foreground">{log.entity} #{log.entityId}</span>}
-                    </div>
-                    {log.meta && Object.keys(log.meta).length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {Object.entries(log.meta).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                      </p>
-                    )}
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      {new Date(log.createdAt).toLocaleString()}
-                      {log.ip && ` · ${log.ip}`}
-                    </p>
-                  </div>
+      <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800">
+        {logs.map(log => (
+          <div key={log.id} className="flex items-start gap-4 px-5 py-4 hover:bg-slate-800/30 transition-colors">
+            <div className="text-xl flex-shrink-0">{ACTION_ICONS[log.action] || ACTION_ICONS.default}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-white font-medium text-sm">{log.action.replace(/_/g, " ")}</span>
+                {log.entity && (
+                  <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+                    {log.entity}
+                    {log.entityId ? ` #${log.entityId}` : ""}
+                  </span>
+                )}
+                <span className={`text-xs px-2 py-0.5 rounded-full ${log.actorType === "super_admin" ? "bg-indigo-500/20 text-indigo-300" : "bg-slate-700 text-slate-300"}`}>
+                  {log.actorType === "super_admin" ? "Super Admin" : "Tenant"}
+                </span>
+              </div>
+              {log.meta && Object.keys(log.meta).length > 0 && (
+                <div className="text-xs text-slate-500 mt-1 font-mono bg-slate-800/50 rounded px-2 py-1 truncate">
+                  {JSON.stringify(log.meta)}
                 </div>
-              );
-            })}
+              )}
+            </div>
+            <div className="text-xs text-slate-500 flex-shrink-0 text-right">
+              <div>{formatDateTime(log.createdAt)}</div>
+              {log.ip && <div className="text-slate-600 mt-0.5">IP: {log.ip}</div>}
+            </div>
           </div>
+        ))}
+        {logs.length === 0 && (
+          <div className="py-16 text-center text-slate-500">No activity logged yet.</div>
         )}
       </div>
     </div>

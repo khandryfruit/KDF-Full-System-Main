@@ -1,106 +1,130 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Zap, Eye, EyeOff, Loader2 } from "lucide-react";
-import { apiFetch, setToken } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { api, setToken } from "@/lib/api";
 
-export default function LoginPage() {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [showPw, setShowPw] = useState(false);
+interface LoginPageProps {
+  onLogin: () => void;
+}
 
-  const login = useMutation({
-    mutationFn: () => apiFetch("/saas/admin/login", { method: "POST", body: JSON.stringify(form) }),
-    onSuccess: (data: any) => {
+export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [email, setEmail] = useState("admin@platform.com");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [seedMode, setSeedMode] = useState(false);
+  const [seedName, setSeedName] = useState("Platform Admin");
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const data = await api.login(email, password);
       setToken(data.token);
-      qc.invalidateQueries({ queryKey: ["saas-admin-me"] });
-      setLocation("/");
-    },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+      onLogin();
+    } catch (err: any) {
+      setError(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const seed = useMutation({
-    mutationFn: () => apiFetch("/saas/admin/seed", {
-      method: "POST",
-      body: JSON.stringify({ name: "Platform Admin", email: form.email || "admin@platform.com", password: form.password || "Admin@SaaS2024" }),
-    }),
-    onSuccess: (data: any) => {
+  async function handleSeed(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const data = await api.seed(seedName, email, password);
       setToken(data.token);
-      qc.invalidateQueries({ queryKey: ["saas-admin-me"] });
-      setLocation("/");
-      toast({ title: "Super admin created & logged in!" });
-    },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
-  });
+      onLogin();
+    } catch (err: any) {
+      setError(err.message || "Setup failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Logo */}
-        <div className="text-center">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/30">
-            <Zap className="w-8 h-8 text-primary-foreground" />
+    <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 mb-4">
+            <span className="text-2xl">⚡</span>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">SaaS Platform</h1>
-          <p className="text-muted-foreground text-sm mt-1">Super Admin Console</p>
+          <h1 className="text-2xl font-bold text-white">SaaS Platform</h1>
+          <p className="text-slate-400 text-sm mt-1">Super Admin Console</p>
         </div>
 
-        {/* Form */}
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              placeholder="admin@platform.com"
-              className="w-full bg-input border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              onKeyDown={e => e.key === "Enter" && login.mutate()}
-            />
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+          <div className="flex mb-6 bg-slate-800/50 rounded-lg p-1">
+            <button
+              onClick={() => setSeedMode(false)}
+              className={`flex-1 py-1.5 text-sm rounded-md font-medium transition-all ${!seedMode ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"}`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => setSeedMode(true)}
+              className={`flex-1 py-1.5 text-sm rounded-md font-medium transition-all ${seedMode ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"}`}
+            >
+              First Setup
+            </button>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Password</label>
-            <div className="relative">
+
+          <form onSubmit={seedMode ? handleSeed : handleLogin} className="space-y-4">
+            {seedMode && (
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Your Name</label>
+                <input
+                  value={seedName}
+                  onChange={e => setSeedName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
+                  placeholder="Platform Admin"
+                />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Email</label>
               <input
-                type={showPw ? "text" : "password"}
-                value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                placeholder="••••••••"
-                className="w-full bg-input border border-border rounded-lg px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                onKeyDown={e => e.key === "Enter" && login.mutate()}
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
+                placeholder="admin@platform.com"
+                required
               />
-              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
             </div>
-          </div>
-          <button
-            onClick={() => login.mutate()}
-            disabled={login.isPending || !form.email || !form.password}
-            className="w-full bg-primary text-primary-foreground rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {login.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            Sign In
-          </button>
-        </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
+                placeholder="••••••••"
+                required
+              />
+            </div>
 
-        {/* First time setup */}
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground mb-2">First time setup?</p>
-          <button
-            onClick={() => seed.mutate()}
-            disabled={seed.isPending}
-            className="text-xs text-primary hover:underline flex items-center gap-1 mx-auto"
-          >
-            {seed.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
-            Create default super admin account
-          </button>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Default: admin@platform.com / Admin@SaaS2024
-          </p>
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
+            >
+              {loading ? "Please wait..." : seedMode ? "Create Admin Account" : "Sign In"}
+            </button>
+          </form>
+
+          {!seedMode && (
+            <p className="text-center text-xs text-slate-500 mt-4">
+              Default: admin@platform.com / Admin@SaaS2024
+            </p>
+          )}
         </div>
       </div>
     </div>
