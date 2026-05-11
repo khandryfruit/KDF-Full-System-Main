@@ -2,7 +2,7 @@ import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, w
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
-const WA_API_VERSION = "v18.0";
+const WA_API_VERSION = "v22.0";
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
 
 export interface WASendOptions {

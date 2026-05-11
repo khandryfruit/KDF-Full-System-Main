@@ -36,23 +36,39 @@ router.patch("/admin/email-settings", adminMiddleware as any, async (req, res) =
   }
 });
 
-router.post("/admin/email-settings/test", adminMiddleware as any, async (_req, res) => {
+router.post("/admin/email-settings/test", adminMiddleware as any, async (req: any, res) => {
   try {
     const [settings] = await db.select().from(emailSettingsTable).limit(1);
     if (!settings?.smtpHost || !settings.smtpUser || !settings.smtpPass) {
-      return res.status(400).json({ error: "SMTP not fully configured" });
+      return res.status(400).json({ error: "SMTP not fully configured — please fill in Host, Username, and Password then save first." });
     }
     const nodemailer = await import("nodemailer");
+    const isPort465 = Number(settings.smtpPort) === 465;
     const transport = nodemailer.default.createTransport({
-      host: settings.smtpHost,
-      port: settings.smtpPort,
-      secure: settings.smtpPort === 465,
-      auth: { user: settings.smtpUser, pass: settings.smtpPass },
-    });
+      host:   settings.smtpHost,
+      port:   Number(settings.smtpPort) || 587,
+      secure: isPort465,
+      auth:   { user: settings.smtpUser, pass: settings.smtpPass },
+      tls:    { rejectUnauthorized: false },
+      connectionTimeout: 10000,
+      greetingTimeout:   8000,
+      socketTimeout:     10000,
+    } as any);
     await transport.verify();
-    return res.json({ success: true, message: "SMTP connection successful" });
+    req.log.info({ host: settings.smtpHost, port: settings.smtpPort, user: settings.smtpUser }, "SMTP test OK");
+    return res.json({ success: true, message: `SMTP connection to ${settings.smtpHost}:${settings.smtpPort} successful!` });
   } catch (e: any) {
-    return res.status(500).json({ error: `SMTP test failed: ${e.message}` });
+    req.log.error({ err: e.message }, "SMTP test failed");
+    /* Provide actionable error hints */
+    let hint = "";
+    if (e.message?.includes("authentication") || e.message?.includes("535") || e.message?.includes("Invalid login")) {
+      hint = " — Wrong username or password. For Hostinger: use smtp.hostinger.com port 465.";
+    } else if (e.message?.includes("ECONNREFUSED") || e.message?.includes("connect")) {
+      hint = " — Cannot reach server. Check Host and Port.";
+    } else if (e.message?.includes("timeout")) {
+      hint = " — Connection timed out. Check firewall / Host settings.";
+    }
+    return res.status(500).json({ error: `SMTP test failed: ${e.message}${hint}` });
   }
 });
 

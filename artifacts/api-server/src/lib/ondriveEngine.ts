@@ -263,18 +263,19 @@ export async function sendOrderConfirmationWA(params: {
 
     const branding = await getOnDriveBranding();
 
-    /* Try approved template first, fall back to interactive message */
+    /* ── Primary: approved template "order_confromd_" (4 params: orderNo, name, total, payment) ── */
+    const paymentLabel = isPaid ? "Paid Online ✅" : `COD Rs. ${Number(codAmount).toLocaleString()}`;
     const templateResult = await sendWhatsAppTemplate({
       phone: normalizedPhone,
-      templateName: "order_confirmation",
+      templateName: "order_confromd_",
       components: [
         {
           type: "body",
           parameters: [
-            { type: "text", text: name },
-            { type: "text", text: orderNumber },
-            { type: "text", text: `Rs. ${Number(total).toLocaleString()}` },
-            { type: "text", text: isPaid ? "Paid Online" : `COD Rs. ${Number(codAmount).toLocaleString()}` },
+            { type: "text", text: orderNumber },                           /* {{1}} order number */
+            { type: "text", text: name },                                  /* {{2}} customer name */
+            { type: "text", text: `Rs. ${Number(total).toLocaleString()}` }, /* {{3}} total amount */
+            { type: "text", text: paymentLabel },                          /* {{4}} payment method */
           ],
         },
       ],
@@ -283,8 +284,9 @@ export async function sendOrderConfirmationWA(params: {
     let messageId: string | undefined = templateResult.messageId;
     let success = templateResult.success;
 
+    /* ── Fallback: interactive buttons (works within 24h session window) ── */
     if (!success) {
-      /* Fallback: interactive buttons with confirm/cancel */
+      logger.warn({ orderNumber, templateError: templateResult.error }, "order_confromd_ template failed — trying interactive fallback");
       const msgText = `📦 *New Order Received!*\n\n` +
         `Hello *${name}*! 👋\n\n` +
         `Your order has been placed at *Khan Dry Fruits* 🥜\n\n` +
