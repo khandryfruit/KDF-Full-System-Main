@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/store/"
+previewPath = "/"
 title = "KDF Plus Web Store"
 version = "1.0.0"
 id = "artifacts/kdf-plus"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/store/" ]
+paths = [ "/" ]
 localPort = 24300
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "24300"
-BASE_PATH = "/store/"
+BASE_PATH = "/"
