@@ -14,7 +14,7 @@ import { seoSettingsTable } from "@workspace/db/schema";
 // Resolve static dist directories from project root
 const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
 const adminAppDist = path.resolve(process.cwd(), "artifacts/kdf-admin-app/dist/public");
-const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
+const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
 const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
 
 const adminStatic    = express.static(adminDist,    { index: false });
@@ -169,16 +169,28 @@ if (process.env.NODE_ENV === "production") {
   });
 
   /**
+   * ── kdf-admin-app assets at /app/ prefix ──
+   *
+   * kdf-admin-app is built with BASE_PATH="/app/" so its HTML references
+   * /app/assets/main.js etc. When app.khanbabadryfruits.com loads, the
+   * browser requests those assets at /app/...; mounting express.static here
+   * makes Express strip the /app prefix and serve from adminAppDist directly:
+   *   GET /app/assets/main.js  →  adminAppDist/assets/main.js  ✓
+   */
+  app.use("/app", adminAppStatic);
+
+  /**
    * ── Storefront catch-all: hostname-based ──
    *
-   * khanbabadryfruits.com / www.khanbabadryfruits.com  →  kdf-plus  (primary customer storefront)
-   * app.khanbabadryfruits.com                          →  kdf-admin-app
+   * khanbabadryfruits.com / www.khanbabadryfruits.com  →  kdf-nuts  (customer storefront)
+   * app.khanbabadryfruits.com                          →  kdf-admin-app (built at /app/)
    * admin.khanbabadryfruits.com                        →  kdf-admin  (subdomain alias)
-   * everything else (*.replit.app, etc.)               →  kdf-plus
+   * everything else (*.replit.app, etc.)               →  kdf-nuts
    *
-   * kdf-plus is built with BASE_PATH="/" so it serves correctly from domain root.
-   * By the time a request reaches this middleware, /admin/* has already been
-   * handled above — so this only serves non-admin paths.
+   * kdf-nuts is built with BASE_PATH="/" so it serves correctly from the root domain.
+   * kdf-admin-app is built with BASE_PATH="/app/"; its assets are served above at /app/.
+   * By the time a request reaches this middleware, /admin/* and /app/* asset requests
+   * have already been handled — this catch-all only serves index.html for SPA routing.
    */
   app.use((req: Request, res: Response) => {
     const rawHost = req.headers["x-forwarded-host"];

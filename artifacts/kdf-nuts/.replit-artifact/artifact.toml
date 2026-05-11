@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/kdf-nuts/"
+previewPath = "/"
 title = "KDF NUTS"
 version = "1.0.0"
 id = "artifacts/kdf-nuts"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/kdf-nuts/" ]
+paths = [ "/" ]
 localPort = 20269
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "20269"
-BASE_PATH = "/kdf-nuts/"
+BASE_PATH = "/"
