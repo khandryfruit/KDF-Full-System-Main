@@ -1,0 +1,197 @@
+```txt id="n5m6t1"
+Improve the Mobile POS / Invoice System UI, UX, Performance, and Admin Permission Logic.
+
+The current invoice/POS screen works, but it needs to be much smoother, faster, easier, and more professional for mobile users.
+
+Create a modern production-level mobile POS experience similar to premium retail POS systems.
+
+========================
+1. MOBILE POS UI/UX IMPROVEMENTS
+========================
+
+Redesign the invoice/POS flow for mobile devices with:
+- smoother interactions
+- cleaner spacing
+- faster product selection
+- better touch experience
+- modern animations
+- premium dark UI
+- optimized responsiveness
+
+Requirements:
+- Large touch-friendly buttons
+- Faster product search
+- Sticky cart summary
+- Smooth scrolling
+- Better spacing between products
+- Faster loading
+- No lag while adding products
+- Professional invoice layout
+- Clean typography
+- Better product cards
+- Better quantity controls (+ / -)
+- Floating checkout button
+- Better keyboard handling on mobile
+
+========================
+2. ADD TO PRODUCT FEATURE
+========================
+
+Add a proper “Add Product” feature directly inside POS.
+
+Requirements:
+- Add new product instantly from POS
+- Popup modal / drawer
+- Product image upload
+- Barcode support
+- SKU support
+- Category selection
+- Price
+- Stock quantity
+- Product variation support
+- Save instantly without leaving POS
+
+After adding:
+- Product should instantly appear in product list
+- No page refresh needed
+
+========================
+3. SMART PRODUCT SEARCH
+========================
+
+Improve search system:
+- Instant search
+- Barcode scan support
+- SKU search
+- Search by product name
+- Recent products
+- Frequently sold items
+- Fast filtering
+
+========================
+4. INVOICE IMPROVEMENTS
+========================
+
+Create a professional invoice system.
+
+Invoice requirements:
+- Clean printable layout
+- Mobile optimized invoice preview
+- Auto invoice number
+- Customer details
+- Product summary
+- Discounts
+- Taxes
+- Delivery charges
+- Payment method
+- QR code
+- Store logo
+- Store information
+- WhatsApp share
+- PDF download
+- Thermal printer support
+- Beautiful modern design
+
+========================
+5. CART & CHECKOUT UX
+========================
+
+Improve checkout flow:
+- Real-time totals
+- Auto subtotal calculation
+- Discount preview
+- Editable quantities
+- Remove item option
+- Swipe gestures
+- Faster checkout confirmation
+- Loading states
+- Success animation
+
+========================
+6. ADMIN PERMISSION SYSTEM FIX
+========================
+
+Problem:
+Admin permissions are enabled from the super admin panel, but many allowed features are not appearing for sub-admin users.
+
+Fix the complete role & permission system.
+
+Requirements:
+- Real-time permission sync
+- Dynamic sidebar menu
+- Dynamic feature visibility
+- Permission-based routing
+- Permission-based APIs
+- Auto refresh after permission update
+
+Check:
+- products permissions
+- order permissions
+- POS permissions
+- invoice permissions
+- logistics permissions
+- accounting permissions
+- rider permissions
+- reports permissions
+
+========================
+7. BACKEND PERMISSION VALIDATION
+========================
+
+Ensure backend checks:
+- role permissions
+- feature access
+- API authorization
+- hidden modules
+- page access restrictions
+
+Fix any caching issue where old permissions are still used.
+
+========================
+8. PERFORMANCE OPTIMIZATION
+========================
+
+Optimize:
+- API calls
+- rendering
+- product list virtualization
+- mobile animations
+- image loading
+- state management
+
+Ensure:
+- instant POS response
+- smooth scrolling
+- no UI freezing
+- no lag on low-end Android devices
+
+========================
+9. REALTIME SYNC
+========================
+
+Ensure:
+- newly added products instantly appear
+- permissions update instantly
+- POS sync works in realtime
+- invoices save immediately
+- stock updates live
+
+========================
+10. FINAL REQUIREMENTS
+========================
+
+The final mobile POS/invoice system should feel:
+- modern
+- ultra smooth
+- premium
+- production-ready
+- fast like Shopify POS / Square POS
+
+Focus heavily on:
+- mobile usability
+- touch experience
+- speed
+- clean UI/UX
+- professional invoice generation
+- stable admin permission system
+```
