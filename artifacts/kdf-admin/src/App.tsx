@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -182,7 +182,7 @@ function Router() {
       <Route path="/logistics/automation"><ProtectedRoute component={LogisticsAutomationPage} /></Route>
       <Route path="/logistics/confirmations"><ProtectedRoute component={WaOrderConfirmationsPage} /></Route>
       <Route path="/logistics/lahore"><ProtectedRoute component={LahoreDeliveriesPage} /></Route>
-      <Route path="/logistics/riders"><ProtectedRoute component={RidersPage} /></Route>
+      <Route path="/logistics/riders"><Redirect to="/logistics/lahore" /></Route>
       <Route path="/logistics/live-map"><ProtectedRoute component={RiderLiveMapPage} /></Route>
       <Route path="/shopify"><ProtectedRoute component={ShopifyDashboardPage} /></Route>
       <Route path="/shopify/orders"><ProtectedRoute component={ShopifyOrdersPage} /></Route>
