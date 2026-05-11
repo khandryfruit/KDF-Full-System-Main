@@ -1,0 +1,102 @@
+Fix the Rider Initialization, Settlement, and Dashboard Logic in the Admin Panel.
+
+Problem:
+When a brand-new rider is created, the admin dashboard still shows old delivery counts, COD settlement amounts, earnings, and previous rider statistics.
+
+A newly added rider must always start with completely fresh and zeroed data.
+
+Required Fixes:
+
+1. New Rider = Clean State
+When creating a new rider:
+- Active orders = 0
+- Completed deliveries = 0
+- COD collected = 0
+- Pending settlement = 0
+- Earnings = 0
+- Delivery history = empty
+- Assigned orders = empty
+- Daily reports = empty
+- Settlement records = empty
+
+The rider should start as a completely fresh profile.
+
+2. Separate Rider Statistics
+Currently the dashboard appears to be showing:
+- global totals
+- cached data
+- previous rider records
+instead of rider-specific stats.
+
+Fix all queries so each rider only sees:
+- their own orders
+- their own COD
+- their own settlements
+- their own deliveries
+
+3. Reset Rider Accounting
+When admin clicks:
+- Add Rider
+or
+- Reset Rider
+
+System must automatically:
+- create fresh accounting record
+- clear cached stats
+- initialize zero balances
+- generate fresh rider wallet state
+
+4. Settlement Logic
+Do NOT carry forward old COD balances to new riders.
+
+New riders must NEVER inherit:
+- old unsettled COD
+- old delivery totals
+- previous rider balances
+
+5. Backend Database Fix
+Check:
+- riders table
+- rider_orders table
+- settlements table
+- accounting table
+- cached dashboard summaries
+
+Ensure rider_id filtering exists everywhere.
+
+6. Rider Dashboard Refresh
+After adding a rider:
+- dashboard should refresh instantly
+- counts should remain zero until new orders are assigned
+
+7. Admin Panel Improvements
+Add:
+- Reset Rider Data button
+- Clear Rider History button
+- Reinitialize Rider button
+
+8. Logging & Debugging
+Add logs for:
+- rider creation
+- rider initialization
+- settlement creation
+- order assignment
+- dashboard stats generation
+
+9. Production Fix
+This issue must be fixed on:
+- live production server
+- production APK
+- admin panel
+- realtime updates
+- sockets
+- database cache
+
+10. Important
+Do not generate a new APK until:
+- rider initialization logic
+- dashboard statistics
+- settlement system
+are fully fixed and tested in production.
+
+A newly created rider must always start from absolute zero state.

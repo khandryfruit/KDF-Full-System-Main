@@ -11,6 +11,7 @@ import TenantDetailPage from "@/pages/TenantDetailPage";
 import PlansPage from "@/pages/PlansPage";
 import StorefrontBuilderPage from "@/pages/StorefrontBuilderPage";
 import ActivityPage from "@/pages/ActivityPage";
+import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/not-found";
 
 import PortalLandingPage from "@/pages/PortalLandingPage";
@@ -26,6 +27,7 @@ const NAV = [
   { path: "/plans", label: "Plans", icon: "📦" },
   { path: "/storefront", label: "Storefront Builder", icon: "🎨" },
   { path: "/activity", label: "Activity Log", icon: "📋" },
+  { path: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
 function Sidebar({ onLogout }: { onLogout: () => void }) {
@@ -101,6 +103,7 @@ function AdminRoutes({ onLogout }: { onLogout: () => void }) {
         <Route path="/plans" component={PlansPage} />
         <Route path="/storefront" component={StorefrontBuilderPage} />
         <Route path="/activity" component={ActivityPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

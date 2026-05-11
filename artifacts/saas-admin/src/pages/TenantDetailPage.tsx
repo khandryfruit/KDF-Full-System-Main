@@ -27,6 +27,11 @@ export default function TenantDetailPage() {
   const [editNotes, setEditNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [features, setFeatures] = useState<Record<string, any>>({});
+  const [trialDays, setTrialDays] = useState(14);
+  const [showTrialModal, setShowTrialModal] = useState(false);
+  const [extendingTrial, setExtendingTrial] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
+  const [actionMsg, setActionMsg] = useState("");
 
   async function load() {
     const [t, p, a] = await Promise.all([
@@ -62,6 +67,37 @@ export default function TenantDetailPage() {
   async function changePlan(planId: number) {
     await api.tenants.changePlan(Number(id), planId);
     load();
+  }
+
+  async function handleExtendTrial() {
+    setExtendingTrial(true);
+    try {
+      const res = await api.tenants.extendTrial(Number(id), trialDays);
+      setActionMsg(`Trial extended to ${new Date(res.trialEndsAt).toLocaleDateString()}`);
+      setShowTrialModal(false);
+      load();
+    } catch (err: any) {
+      setActionMsg("Error: " + (err.message || "Failed"));
+    } finally {
+      setExtendingTrial(false);
+    }
+  }
+
+  async function handleImpersonate() {
+    setImpersonating(true);
+    try {
+      const res = await api.tenants.impersonate(Number(id));
+      localStorage.setItem("saas_tenant_token", res.token);
+      setActionMsg(`Now impersonating ${res.storeName}. Opening portal…`);
+      setTimeout(() => {
+        window.open("/saas-platform/portal/dashboard", "_blank");
+        setActionMsg("");
+      }, 1000);
+    } catch (err: any) {
+      setActionMsg("Error: " + (err.message || "Failed"));
+    } finally {
+      setImpersonating(false);
+    }
   }
 
   if (loading) {
@@ -106,13 +142,85 @@ export default function TenantDetailPage() {
               </div>
             </div>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            <div>ID: #{tenant.id}</div>
-            <div>Joined: {formatDate(tenant.createdAt)}</div>
-            {tenant.trialEndsAt && <div>Trial ends: {formatDate(tenant.trialEndsAt)}</div>}
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowTrialModal(true)}
+                className="flex items-center gap-1.5 text-xs bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/30 text-blue-400 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                ⏳ Extend Trial
+              </button>
+              <button
+                onClick={handleImpersonate}
+                disabled={impersonating}
+                className="flex items-center gap-1.5 text-xs bg-purple-600/20 hover:bg-purple-600/30 border border-purple-600/30 text-purple-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                👤 {impersonating ? "Opening…" : "Impersonate"}
+              </button>
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <div>ID: #{tenant.id}</div>
+              <div>Joined: {formatDate(tenant.createdAt)}</div>
+              {tenant.trialEndsAt && <div>Trial ends: {formatDate(tenant.trialEndsAt)}</div>}
+            </div>
           </div>
         </div>
+
+        {actionMsg && (
+          <div className={`mt-3 px-3 py-2 rounded-lg text-xs ${
+            actionMsg.startsWith("Error") ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+          }`}>
+            {actionMsg}
+          </div>
+        )}
       </div>
+
+      {showTrialModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h2 className="text-white font-bold text-lg mb-1">Extend Trial</h2>
+            <p className="text-slate-400 text-sm mb-5">
+              Add days to <strong className="text-white">{tenant.storeName}</strong>'s trial.
+              {tenant.trialEndsAt && ` Current end: ${formatDate(tenant.trialEndsAt)}.`}
+            </p>
+            <label className="text-xs text-slate-400 mb-1 block">Days to add</label>
+            <div className="flex gap-2 mb-5">
+              {[7, 14, 30, 60].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setTrialDays(d)}
+                  className={`flex-1 py-1.5 text-sm rounded-lg border transition-all ${trialDays === d ? "bg-blue-600 border-blue-600 text-white" : "border-slate-700 text-slate-400 hover:border-slate-500"}`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              value={trialDays}
+              onChange={e => setTrialDays(Number(e.target.value))}
+              min={1}
+              max={365}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTrialModal(false)}
+                className="flex-1 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExtendTrial}
+                disabled={extendingTrial}
+                className="flex-1 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+              >
+                {extendingTrial ? "Extending…" : `Add ${trialDays} Days`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-1 bg-slate-900/50 p-1 rounded-lg border border-slate-800 w-fit">
         {tabs.map(t => (

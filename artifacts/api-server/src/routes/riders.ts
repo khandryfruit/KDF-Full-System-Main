@@ -233,8 +233,10 @@ router.get("/admin/riders", adminMiddleware, async (req, res) => {
   try {
     const rows = await db.execute(sql`
       SELECT r.*,
-        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_deliveries,
+        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_deliveries,
         COUNT(d.id) FILTER (WHERE d.status = 'delivered') AS total_delivered,
+        COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND DATE(d.delivered_at) = CURRENT_DATE) AS delivered_today,
+        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS in_queue,
         COUNT(d.id) AS total_assignments
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
@@ -251,15 +253,30 @@ router.get("/admin/riders", adminMiddleware, async (req, res) => {
 /* POST /api/admin/riders */
 router.post("/admin/riders", adminMiddleware, async (req, res) => {
   try {
-    const { name, phone, whatsapp_number, delivery_area, status, notes } = req.body;
-    if (!name || !phone) res.status(400).json({ error: "name and phone are required" });
+    const { name, phone, whatsapp_number, delivery_area, status, vehicle_type, cnic, delivery_charge_per_order, notes } = req.body;
+    if (!name || !phone) { res.status(400).json({ error: "name and phone are required" }); return; }
     const wa = whatsapp_number || phone;
     const rows = await db.execute(sql`
-      INSERT INTO riders (name, phone, whatsapp_number, delivery_area, status, notes)
-      VALUES (${name}, ${normalisePhone(phone)}, ${normalisePhone(wa)}, ${delivery_area ?? null}, ${status ?? "active"}, ${notes ?? null})
+      INSERT INTO riders (name, phone, whatsapp_number, delivery_area, status, vehicle_type, cnic, delivery_charge_per_order, notes)
+      VALUES (
+        ${name},
+        ${normalisePhone(phone)},
+        ${normalisePhone(wa)},
+        ${delivery_area ?? null},
+        ${status ?? "active"},
+        ${vehicle_type ?? "bike"},
+        ${cnic ?? null},
+        ${delivery_charge_per_order ? Number(delivery_charge_per_order) : 500},
+        ${notes ?? null}
+      )
       RETURNING *
     `);
-    res.json({ rider: rows.rows[0] });
+    const rider = rows.rows[0] as any;
+    logger.info(
+      { riderId: rider.id, name: rider.name, phone: rider.phone, status: rider.status },
+      "New rider created — starting with zero deliveries, zero COD, zero earnings"
+    );
+    res.json({ rider });
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
@@ -401,20 +418,23 @@ router.get("/admin/riders/stats", adminMiddleware, async (req, res) => {
     const totals = await db.execute(sql`
       SELECT
         (SELECT COUNT(*)::int FROM shopify_orders WHERE (shipping_address->>'city') ILIKE '%lahore%') AS total_lahore,
-        (SELECT COUNT(*)::int FROM rider_deliveries) AS total_assigned,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status NOT IN ('delivered','returned','failed','cancelled')) AS total_assigned,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'delivered') AS delivered,
+        (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'delivered' AND DATE(delivered_at) = CURRENT_DATE) AS delivered_today,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'out_for_delivery') AS out_for_delivery,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'assigned') AS assigned,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'picked') AS picked,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'failed') AS failed,
         (SELECT COUNT(*)::int FROM rider_deliveries WHERE status = 'returned') AS returned,
         (SELECT COUNT(*)::int FROM riders WHERE status = 'active') AS active_riders,
-        (SELECT COALESCE(SUM(cod_amount),0)::int FROM rider_deliveries WHERE status = 'delivered' AND is_paid = false) AS cod_collected
+        (SELECT COALESCE(SUM(cod_amount),0)::int FROM rider_deliveries WHERE status = 'delivered' AND is_paid = false AND rider_id IS NOT NULL) AS cod_collected,
+        (SELECT COALESCE(SUM(cod_amount),0)::int FROM rider_deliveries WHERE status = 'delivered' AND is_paid = false AND rider_id IS NOT NULL AND DATE(delivered_at) = CURRENT_DATE) AS cod_today
     `);
     const riderStats = await db.execute(sql`
       SELECT r.id, r.name, r.status, r.delivery_area,
         COUNT(d.id) FILTER (WHERE d.status = 'delivered') AS delivered,
-        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active
+        COUNT(d.id) FILTER (WHERE d.status = 'delivered' AND DATE(d.delivered_at) = CURRENT_DATE) AS delivered_today,
+        COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
       GROUP BY r.id ORDER BY delivered DESC LIMIT 10

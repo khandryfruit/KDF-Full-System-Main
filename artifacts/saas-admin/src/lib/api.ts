@@ -102,6 +102,8 @@ export const api = {
     updateFeatures: (id: number, features: any) => request(`/saas/admin/tenants/${id}/features`, { method: "PUT", body: JSON.stringify(features) }),
     getTheme: (id: number) => request(`/saas/admin/tenants/${id}/theme`),
     updateTheme: (id: number, data: any) => request(`/saas/admin/tenants/${id}/theme`, { method: "PUT", body: JSON.stringify(data) }),
+    extendTrial: (id: number, days: number) => request(`/saas/admin/tenants/${id}/extend-trial`, { method: "POST", body: JSON.stringify({ days }) }),
+    impersonate: (id: number) => request(`/saas/admin/tenants/${id}/impersonate`, { method: "POST" }),
   },
 
   plans: {
@@ -114,6 +116,13 @@ export const api = {
   activity: (tenantId?: number) => {
     const qs = tenantId ? `?tenantId=${tenantId}` : "";
     return request(`/saas/admin/activity${qs}`);
+  },
+
+  revenue: () => request("/saas/admin/revenue"),
+
+  settings: {
+    get: () => request("/saas/admin/settings"),
+    update: (data: any) => request("/saas/admin/settings", { method: "PUT", body: JSON.stringify(data) }),
   },
 
   /* Tenant (public + authenticated) */

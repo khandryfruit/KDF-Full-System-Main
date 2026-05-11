@@ -477,6 +477,107 @@ saasRouter.put("/saas/tenant/theme", tenantAuth, async (req, res) => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════
+   TRIAL MANAGEMENT & IMPERSONATION
+══════════════════════════════════════════════════════════ */
+
+/* POST /api/saas/admin/tenants/:id/extend-trial */
+saasRouter.post("/saas/admin/tenants/:id/extend-trial", saasAdminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { days = 14 } = req.body ?? {};
+  const [tenant] = await db.select({ trialEndsAt: saasTenantTable.trialEndsAt })
+    .from(saasTenantTable).where(eq(saasTenantTable.id, id)).limit(1);
+  if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
+  const base = tenant.trialEndsAt && new Date(tenant.trialEndsAt) > new Date()
+    ? new Date(tenant.trialEndsAt) : new Date();
+  const newEnds = new Date(base.getTime() + Number(days) * 86400_000);
+  await db.update(saasTenantTable)
+    .set({ trialEndsAt: newEnds, status: "trial", updatedAt: new Date() })
+    .where(eq(saasTenantTable.id, id));
+  await logActivity({ actorType: "super_admin", action: "extend_trial", entity: "tenant", entityId: String(id), meta: { days, newTrialEndsAt: newEnds.toISOString() } });
+  res.json({ ok: true, trialEndsAt: newEnds });
+});
+
+/* POST /api/saas/admin/tenants/:id/impersonate */
+saasRouter.post("/saas/admin/tenants/:id/impersonate", saasAdminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const [tenant] = await db.select({
+    id: saasTenantTable.id, storeName: saasTenantTable.storeName, email: saasTenantTable.email,
+  }).from(saasTenantTable).where(eq(saasTenantTable.id, id)).limit(1);
+  if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
+  const token = signToken({ id: tenant.id, role: "saas_tenant" });
+  await logActivity({ actorType: "super_admin", action: "impersonate_tenant", entity: "tenant", entityId: String(id) });
+  res.json({ token, storeName: tenant.storeName, email: tenant.email });
+});
+
+/* ══════════════════════════════════════════════════════════
+   PLATFORM SETTINGS
+══════════════════════════════════════════════════════════ */
+
+/* GET /api/saas/admin/settings */
+saasRouter.get("/saas/admin/settings", saasAdminAuth, async (req, res) => {
+  const adminId = (req as any).saasAdmin.id;
+  const rows = await db.execute(sql`SELECT settings FROM saas_super_admins WHERE id = ${adminId} LIMIT 1`);
+  const settings = (rows.rows?.[0] as any)?.settings ?? {};
+  res.json(settings);
+});
+
+/* PUT /api/saas/admin/settings */
+saasRouter.put("/saas/admin/settings", saasAdminAuth, async (req, res) => {
+  const adminId = (req as any).saasAdmin.id;
+  const settings = req.body ?? {};
+  await db.execute(sql`UPDATE saas_super_admins SET settings = ${JSON.stringify(settings)}::jsonb WHERE id = ${adminId}`);
+  await logActivity({ actorType: "super_admin", action: "update_settings", meta: { keys: Object.keys(settings) } });
+  res.json({ ok: true, settings });
+});
+
+/* ══════════════════════════════════════════════════════════
+   REVENUE ANALYTICS
+══════════════════════════════════════════════════════════ */
+
+/* GET /api/saas/admin/revenue */
+saasRouter.get("/saas/admin/revenue", saasAdminAuth, async (_req, res) => {
+  const metricsRows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN t.status IN ('active','trial') THEN p.price_monthly::numeric ELSE 0 END), 0)      AS mrr,
+      COALESCE(SUM(CASE WHEN t.status IN ('active','trial') THEN p.price_monthly::numeric * 12 ELSE 0 END), 0) AS arr,
+      COUNT(*) FILTER (WHERE t.status = 'active' AND t.plan_id IS NOT NULL)                                     AS paying_tenants,
+      COALESCE(AVG(CASE WHEN t.status IN ('active','trial') AND p.price_monthly::numeric > 0 THEN p.price_monthly::numeric END), 0) AS arpu
+    FROM saas_tenants t
+    LEFT JOIN saas_plans p ON p.id = t.plan_id
+  `);
+
+  const growthRows = await db.execute(sql`
+    SELECT
+      TO_CHAR(gs.d, 'MM/DD') AS label,
+      COALESCE(t.cnt, 0)::int AS count
+    FROM generate_series(CURRENT_DATE - INTERVAL '29 days', CURRENT_DATE, '1 day') gs(d)
+    LEFT JOIN (
+      SELECT DATE(created_at) AS d, COUNT(*)::int AS cnt
+      FROM saas_tenants
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+    ) t ON t.d = gs.d
+    ORDER BY gs.d
+  `);
+
+  const planRevenueRows = await db.execute(sql`
+    SELECT p.name, p.tier, p.color,
+           COUNT(t.id)::int                                    AS tenant_count,
+           COALESCE(SUM(p.price_monthly::numeric), 0)          AS monthly_revenue
+    FROM saas_plans p
+    LEFT JOIN saas_tenants t ON t.plan_id = p.id AND t.status IN ('active','trial')
+    GROUP BY p.id, p.name, p.tier, p.color
+    ORDER BY monthly_revenue DESC
+  `);
+
+  res.json({
+    metrics:       metricsRows.rows?.[0] ?? {},
+    growth:        growthRows.rows ?? [],
+    byPlanRevenue: planRevenueRows.rows ?? [],
+  });
+});
+
 /* GET /api/saas/me  (tenant) */
 saasRouter.get("/saas/me", async (req, res) => {
   const auth = req.headers.authorization;

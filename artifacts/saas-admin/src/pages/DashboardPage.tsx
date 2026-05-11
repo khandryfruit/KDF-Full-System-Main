@@ -11,12 +11,51 @@ interface DashStats {
   plans: any[];
 }
 
+interface RevenueData {
+  metrics: { mrr: number; arr: number; paying_tenants: number; arpu: number };
+  growth: { label: string; count: number }[];
+  byPlanRevenue: { name: string; tier: string; color: string; tenant_count: number; monthly_revenue: number }[];
+}
+
+function Sparkline({ data }: { data: { label: string; count: number }[] }) {
+  if (!data.length) return null;
+  const maxVal = Math.max(...data.map(d => d.count), 1);
+  const W = 280; const H = 56;
+  const pts = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * W;
+    const y = H - (d.count / maxVal) * H * 0.85 - 2;
+    return `${x},${y}`;
+  }).join(" ");
+  const area = `M ${data.map((d, i) => {
+    const x = (i / (data.length - 1)) * W;
+    const y = H - (d.count / maxVal) * H * 0.85 - 2;
+    return `${x},${y}`;
+  }).join(" L ")} L ${W},${H} L 0,${H} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-14" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#sparkGrad)" />
+      <polyline points={pts} fill="none" stroke="#10b981" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashStats | null>(null);
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.dashboard().then(setStats).finally(() => setLoading(false));
+    Promise.all([
+      api.dashboard().then(setStats),
+      api.revenue().then(setRevenue).catch(() => null),
+    ]).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -29,6 +68,10 @@ export default function DashboardPage() {
 
   if (!stats) return null;
   const { totals, byIndustry, byPlan, recentTenants, recentActivity } = stats;
+  const mrr = Number(revenue?.metrics?.mrr ?? 0);
+  const arr = Number(revenue?.metrics?.arr ?? 0);
+  const arpu = Number(revenue?.metrics?.arpu ?? 0);
+  const payingTenants = Number(revenue?.metrics?.paying_tenants ?? 0);
 
   const statCards = [
     { label: "Total Tenants", value: totals.total, icon: "🏪", color: "text-white" },
@@ -39,13 +82,40 @@ export default function DashboardPage() {
     { label: "Cancelled", value: totals.cancelled, icon: "❌", color: "text-red-400" },
   ];
 
+  const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(Math.round(n));
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Platform Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-1">Overview of all tenants and activity</p>
+        <p className="text-slate-400 text-sm mt-1">Overview of all tenants, revenue, and activity</p>
       </div>
 
+      {/* Revenue cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-emerald-900/40 to-slate-900 border border-emerald-500/30 rounded-xl p-5">
+          <p className="text-xs text-emerald-400/70 font-medium uppercase tracking-wider mb-1">MRR</p>
+          <p className="text-2xl font-bold text-emerald-400">Rs. {fmt(mrr)}</p>
+          <p className="text-xs text-slate-500 mt-1">Monthly Recurring Revenue</p>
+        </div>
+        <div className="bg-gradient-to-br from-indigo-900/30 to-slate-900 border border-indigo-500/20 rounded-xl p-5">
+          <p className="text-xs text-indigo-400/70 font-medium uppercase tracking-wider mb-1">ARR</p>
+          <p className="text-2xl font-bold text-indigo-400">Rs. {fmt(arr)}</p>
+          <p className="text-xs text-slate-500 mt-1">Annual Recurring Revenue</p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">Paying</p>
+          <p className="text-2xl font-bold text-white">{payingTenants}</p>
+          <p className="text-xs text-slate-500 mt-1">Active subscriptions</p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">ARPU</p>
+          <p className="text-2xl font-bold text-white">Rs. {fmt(arpu)}</p>
+          <p className="text-xs text-slate-500 mt-1">Avg revenue per user</p>
+        </div>
+      </div>
+
+      {/* Tenant count cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {statCards.map(card => (
           <div key={card.label} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -56,6 +126,53 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Growth sparkline + plan breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Growth chart */}
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-white">30-Day Tenant Growth</h2>
+            <span className="text-xs text-slate-500">
+              {totals.thisMonth} new this month
+            </span>
+          </div>
+          {revenue?.growth && revenue.growth.length > 0 ? (
+            <>
+              <Sparkline data={revenue.growth} />
+              <div className="flex justify-between text-xs text-slate-600 mt-2">
+                <span>{revenue.growth[0]?.label}</span>
+                <span>{revenue.growth[revenue.growth.length - 1]?.label}</span>
+              </div>
+            </>
+          ) : (
+            <div className="h-14 flex items-center justify-center text-slate-600 text-sm">
+              No data yet
+            </div>
+          )}
+        </div>
+
+        {/* Revenue by plan */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-white mb-4">Revenue by Plan</h2>
+          <div className="space-y-3">
+            {(revenue?.byPlanRevenue ?? []).map(plan => (
+              <div key={plan.name} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: plan.color || "#6366f1" }} />
+                  <span className="text-sm text-slate-300 truncate">{plan.name}</span>
+                  <span className="text-xs text-slate-600">({plan.tenant_count})</span>
+                </div>
+                <span className="text-sm font-semibold text-white flex-shrink-0">
+                  Rs. {fmt(Number(plan.monthly_revenue))}
+                </span>
+              </div>
+            ))}
+            {!revenue?.byPlanRevenue?.length && <p className="text-slate-500 text-xs">No plan data</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* By industry + By plan + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
           <h2 className="text-sm font-semibold text-white mb-4">By Industry</h2>
@@ -84,7 +201,7 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-white mb-4">By Plan</h2>
           <div className="space-y-3">
             {byPlan.map(item => (
-              <div key={item.planName} className="flex items-center justify-between">
+              <div key={item.planName ?? "none"} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${tierColor(item.tier || "")}`}>
                     {item.tier || "None"}
@@ -134,7 +251,7 @@ export default function DashboardPage() {
                 <tr key={t.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                   <td className="py-3 pr-4">
                     <div className="font-medium text-white">{t.storeName}</div>
-                    <div className="text-xs text-slate-500">{t.industry}</div>
+                    <div className="text-xs text-slate-500 capitalize">{t.industry}</div>
                   </td>
                   <td className="py-3 pr-4 text-slate-400">{t.email}</td>
                   <td className="py-3 pr-4">
