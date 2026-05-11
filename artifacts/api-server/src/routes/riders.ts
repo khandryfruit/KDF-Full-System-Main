@@ -329,7 +329,7 @@ router.put("/admin/riders/:id", adminMiddleware, async (req, res) => {
       WHERE id = ${id}
       RETURNING *
     `);
-    if (!rows.rows.length) res.status(404).json({ error: "Rider not found" });
+    if (!rows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
     res.json({ rider: rows.rows[0] });
   } catch (err: any) {
     req.log.error(err);

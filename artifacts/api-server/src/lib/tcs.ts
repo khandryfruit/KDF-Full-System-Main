@@ -414,7 +414,7 @@ export async function createBooking(
   const remarks     = (order.specialInstructions ?? order.notes ?? settings.defaultRemarks ?? "").trim() || "Handle with care";
   const isFragile   = order.fragile ?? settings.fragile ?? false;
   const originCity  = normalizeCity((settings.shipperCity ?? "Lahore").trim());
-  const shipperName = (settings.shipperName ?? "KDF NUTS").trim();
+  const shipperName = ((settings.shipperName as string) || "KDF NUTS").trim();
   const shipperAddr = (settings.shipperAddress ?? "").trim();
   const shipperPhone = (settings.shipperPhone ?? "").replace(/\D/g, "");
   const mobNo = rawPhone.length === 10 ? `0${rawPhone}` : rawPhone;
