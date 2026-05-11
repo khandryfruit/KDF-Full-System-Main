@@ -440,6 +440,43 @@ saasRouter.post("/saas/login", async (req, res) => {
   res.json({ token, tenant: { id: tenant.id, storeName: tenant.storeName, storeSlug: tenant.storeSlug, status: tenant.status, industry: tenant.industry } });
 });
 
+/* ══════════════════════════════════════════════════════════
+   TENANT AUTH HELPER
+══════════════════════════════════════════════════════════ */
+function tenantAuth(req: Request, res: Response, next: Function): void {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const payload = verifyToken(auth.slice(7));
+    if (payload.role !== "saas_tenant") { res.status(403).json({ error: "Forbidden" }); return; }
+    (req as any).tenantPayload = payload;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+/* GET /api/saas/tenant/theme  (tenant self-service) */
+saasRouter.get("/saas/tenant/theme", tenantAuth, async (req, res) => {
+  const tenantId = (req as any).tenantPayload.id;
+  const [theme] = await db.select().from(saasThemeSettingsTable).where(eq(saasThemeSettingsTable.tenantId, tenantId)).limit(1);
+  res.json(theme ?? null);
+});
+
+/* PUT /api/saas/tenant/theme  (tenant self-service) */
+saasRouter.put("/saas/tenant/theme", tenantAuth, async (req, res) => {
+  const tenantId = (req as any).tenantPayload.id;
+  const body = req.body ?? {};
+  const existing = await db.select({ id: saasThemeSettingsTable.id }).from(saasThemeSettingsTable).where(eq(saasThemeSettingsTable.tenantId, tenantId)).limit(1);
+  if (existing.length > 0) {
+    const [theme] = await db.update(saasThemeSettingsTable).set({ ...body, updatedAt: new Date() }).where(eq(saasThemeSettingsTable.tenantId, tenantId)).returning();
+    res.json(theme);
+  } else {
+    const [theme] = await db.insert(saasThemeSettingsTable).values({ tenantId, ...body }).returning();
+    res.json(theme);
+  }
+});
+
 /* GET /api/saas/me  (tenant) */
 saasRouter.get("/saas/me", async (req, res) => {
   const auth = req.headers.authorization;

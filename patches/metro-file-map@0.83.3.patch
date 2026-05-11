@@ -1,0 +1,33 @@
+diff --git a/src/watchers/FallbackWatcher.js b/src/watchers/FallbackWatcher.js
+index e431e90cba1d0700a45b4b5e21c95c8fd1bb0eba..a49d66baee0cf55b1c910f46c46fbb553ce5a266 100644
+--- a/src/watchers/FallbackWatcher.js
++++ b/src/watchers/FallbackWatcher.js
+@@ -116,13 +116,21 @@ class FallbackWatcher extends _AbstractWatcher.AbstractWatcher {
+     if (this.watched[dir]) {
+       return false;
+     }
+-    const watcher = _fs.default.watch(
+-      dir,
+-      {
+-        persistent: true,
+-      },
+-      (event, filename) => this._normalizeChange(dir, event, filename),
+-    );
++    let watcher;
++    try {
++      watcher = _fs.default.watch(
++        dir,
++        {
++          persistent: true,
++        },
++        (event, filename) => this._normalizeChange(dir, event, filename),
++      );
++    } catch (e) {
++      if (e.code === 'ENOENT' || e.code === 'EACCES') {
++        return false;
++      }
++      throw e;
++    }
+     this.watched[dir] = watcher;
+     watcher.on("error", this._checkedEmitError);
+     if (this.root !== dir) {
