@@ -337,6 +337,29 @@ router.put("/admin/riders/:id", adminMiddleware, async (req, res) => {
   }
 });
 
+/* PATCH /api/admin/riders/:id/auto-assign — per-rider auto-assign settings */
+router.patch("/admin/riders/:id/auto-assign", adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] as string);
+    const { auto_assign_enabled, max_active_orders, zone, priority } = req.body;
+    const rows = await db.execute(sql`
+      UPDATE riders SET
+        auto_assign_enabled = COALESCE(${auto_assign_enabled != null ? auto_assign_enabled : null}, auto_assign_enabled),
+        max_active_orders   = COALESCE(${max_active_orders != null ? parseInt(String(max_active_orders)) : null}, max_active_orders),
+        zone                = COALESCE(${zone ?? null}, zone),
+        priority            = COALESCE(${priority != null ? parseInt(String(priority)) : null}, priority),
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `);
+    if (!rows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
+    res.json({ ok: true, rider: rows.rows[0] });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* DELETE /api/admin/riders/:id */
 router.delete("/admin/riders/:id", adminMiddleware, async (req, res) => {
   try {
@@ -751,14 +774,17 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
     /* ── Prefer online riders → fallback all active ── */
     const buildRiderQuery = (onlineOnly: boolean) => db.execute(sql`
       SELECT r.id, r.name, r.phone, r.whatsapp_number, r.expo_push_token,
-        r.is_online, r.delivery_area,
+        r.is_online, r.delivery_area, r.priority,
+        COALESCE(r.max_active_orders, 50) AS max_active_orders,
         COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) AS active_count
       FROM riders r
       LEFT JOIN rider_deliveries d ON d.rider_id = r.id
       WHERE r.status = 'active'
+        AND COALESCE(r.auto_assign_enabled, true) = true
         ${onlineOnly ? sql`AND r.is_online = true` : sql``}
       GROUP BY r.id
-      ORDER BY active_count ASC
+      HAVING COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed')) < COALESCE(r.max_active_orders, 50)
+      ORDER BY COALESCE(r.priority, 1) DESC, active_count ASC
     `);
 
     let ridersResult = await buildRiderQuery(true);

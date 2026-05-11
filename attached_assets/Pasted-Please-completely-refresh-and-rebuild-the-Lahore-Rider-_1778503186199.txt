@@ -1,0 +1,179 @@
+Please completely refresh and rebuild the Lahore Rider Delivery System and Rider Management module.
+
+Current production behavior is unstable and old cached versions are still appearing after publish.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. RIDER REFRESH / OLD DATA ISSUE
+   ━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+When rider data refreshes, old orders disappear incorrectly, stats reset to zero, and the old/new order handling is broken.
+
+Please deeply debug:
+
+- Rider refresh logic
+- Cache handling
+- State management
+- API sync
+- Socket.IO live updates
+- Local storage/session storage
+- Service worker/PWA cache
+- CDN/browser cache
+- Production build caching
+
+Need:
+
+- Proper real-time syncing
+- Old orders archived correctly
+- New orders always visible instantly
+- Refresh should NEVER reset rider stats incorrectly
+
+━━━━━━━━━━━━━━━━━━━━
+2. AUTO ASSIGN CONTROL SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need a professional Auto-Assign Management System.
+
+Currently:
+
+- Auto assign is unstable
+- No rider-level control
+- No enable/disable logic
+
+Required:
+Inside admin/rider management:
+
+Per rider options:
+
+- Enable Auto Assign
+- Disable Auto Assign
+- Rider availability toggle
+- Max orders limit
+- Area assignment
+- Lahore zone assignment
+- Shift timing
+- Priority assignment
+
+Need intelligent assignment logic:
+
+- Closest rider
+- Least busy rider
+- Online riders only
+- Lahore-only filtering
+
+━━━━━━━━━━━━━━━━━━━━
+3. AUTO ASSIGN SETTINGS PANEL
+━━━━━━━━━━━━━━━━━━━━
+
+Create a dedicated settings interface:
+
+Features:
+
+- Master auto assign ON/OFF
+- Per rider ON/OFF
+- Manual override
+- Bulk assignment
+- Smart assignment rules
+- Assignment logs
+- Failed assignment logs
+
+━━━━━━━━━━━━━━━━━━━━
+4. PUBLISH / CACHE ISSUE
+━━━━━━━━━━━━━━━━━━━━
+
+Critical Problem:
+After publishing new updates, production still shows OLD versions.
+
+I already:
+
+- Cleared Google Cloud cache
+- Cleared browser cache
+- Refreshed builds
+
+But production still loads old UI and old logic.
+
+Please deeply investigate:
+
+- PWA caching
+- Service worker cache
+- Build cache
+- CDN cache
+- Expo cache
+- Vite cache
+- Static asset caching
+- Nginx cache
+- Cloudflare cache (if enabled)
+
+Need:
+
+- Proper cache invalidation
+- Versioned builds
+- Forced production refresh
+- Latest UI always loading
+
+━━━━━━━━━━━━━━━━━━━━
+5. UI/UX IMPROVEMENTS REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+The Lahore Rider Dashboard should look enterprise-grade.
+
+Need:
+
+- Cleaner cards
+- Better spacing
+- Better typography
+- Smooth mobile UI
+- Professional rider dashboard
+- Better responsive layout
+- Cleaner stats sections
+- Modern rider activity feed
+
+━━━━━━━━━━━━━━━━━━━━
+6. LIVE RIDER MANAGEMENT IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+- Live rider tracking
+- Real-time status
+- Active/Offline indicators
+- Order load balancing
+- Rider performance stats
+- Rider earnings panel
+- COD settlement improvements
+
+━━━━━━━━━━━━━━━━━━━━
+7. PRODUCTION STABILITY REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+This system is now becoming enterprise-level logistics infrastructure.
+
+Please focus on:
+
+- Stability
+- Real-time syncing
+- Automation reliability
+- Production-safe deployments
+- Proper cache/version handling
+- Smooth mobile performance
+
+━━━━━━━━━━━━━━━━━━━━
+8. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+The Lahore Rider Delivery Hub should work like:
+
+- Uber dispatch
+- Careem fleet management
+- Daraz logistics
+- Enterprise delivery systems
+
+Everything must:
+
+- Sync instantly
+- Refresh correctly
+- Show latest builds
+- Handle real-time riders
+- Support stable automation
+- Be production optimized

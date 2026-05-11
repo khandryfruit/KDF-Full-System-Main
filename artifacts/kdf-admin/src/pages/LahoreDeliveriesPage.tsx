@@ -623,12 +623,17 @@ function OrderTableRow({ order, riders, onRefresh, onAssign, soundEnabled, isSel
 }
 
 /* ══════════════════════════════════════════════════════════
-   RIDER ONLINE ROW — with toggle
+   RIDER ONLINE ROW — with toggle + per-rider auto-assign
 ══════════════════════════════════════════════════════════ */
 function RiderOnlineRow({ rider }: { rider: any }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [toggling, setToggling] = useState(false);
+  const [toggling, setToggling]       = useState(false);
+  const [expanded, setExpanded]       = useState(false);
+  const [savingAA, setSavingAA]       = useState(false);
+  const [localAA, setLocalAA]         = useState<boolean>(rider.auto_assign_enabled ?? true);
+  const [localMax, setLocalMax]       = useState<number>(rider.max_active_orders ?? 50);
+  const [localPriority, setLocalPriority] = useState<number>(rider.priority ?? 1);
 
   const toggleOnline = async () => {
     setToggling(true);
@@ -647,58 +652,152 @@ function RiderOnlineRow({ rider }: { rider: any }) {
     } finally { setToggling(false); }
   };
 
+  const saveAutoAssign = async (patch: Partial<{ auto_assign_enabled: boolean; max_active_orders: number; priority: number }>) => {
+    setSavingAA(true);
+    try {
+      const res = await apiFetch(`/admin/riders/${rider.id}/auto-assign`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        toast({ title: `✅ ${rider.name} settings saved` });
+        qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+        qc.invalidateQueries({ queryKey: ["riders-list"] });
+      }
+    } catch {
+      toast({ title: "Error saving settings", variant: "destructive" });
+    } finally { setSavingAA(false); }
+  };
+
   const activeOrders   = Number(rider.active_orders ?? 0);
   const deliveredToday = Number(rider.delivered_today ?? 0);
-  const maxLoad = 10;
-  const loadPct = Math.min(100, Math.round((activeOrders / maxLoad) * 100));
+  const maxLoad = localMax;
+  const loadPct = Math.min(100, Math.round((activeOrders / Math.max(maxLoad, 1)) * 100));
   const loadColor = loadPct >= 80 ? "bg-red-500" : loadPct >= 50 ? "bg-amber-400" : "bg-green-500";
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50">
-      <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold shrink-0 ${rider.is_online ? "bg-green-600" : "bg-slate-400"}`}>
-        {rider.name.charAt(0)}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-semibold text-sm leading-none">{rider.name}</p>
-          {rider.has_push && (
-            <span title="Push notifications enabled">
-              <Smartphone size={11} className="text-blue-500" />
-            </span>
-          )}
+    <div className="hover:bg-slate-50/50 transition-colors">
+      {/* Main row */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold shrink-0 ${rider.is_online ? "bg-green-600" : "bg-slate-400"}`}>
+          {rider.name.charAt(0)}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">{rider.delivery_area || "All Lahore"} · {rider.phone}</p>
-        {/* Workload bar */}
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-            <div className={`h-full ${loadColor} rounded-full transition-all`} style={{ width: `${loadPct}%` }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-sm leading-none">{rider.name}</p>
+            {rider.has_push && <span title="Push enabled"><Smartphone size={11} className="text-blue-500" /></span>}
+            {!localAA && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium border border-slate-200">
+                Auto-Assign OFF
+              </span>
+            )}
+            {localPriority > 1 && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-medium border border-purple-200">
+                P{localPriority}
+              </span>
+            )}
           </div>
-          <span className="text-[9px] text-muted-foreground shrink-0">{activeOrders}/{maxLoad}</span>
+          <p className="text-xs text-muted-foreground mt-0.5">{rider.delivery_area || "All Lahore"} · {rider.phone}</p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div className={`h-full ${loadColor} rounded-full transition-all`} style={{ width: `${loadPct}%` }} />
+            </div>
+            <span className="text-[9px] text-muted-foreground shrink-0">{activeOrders}/{maxLoad}</span>
+          </div>
         </div>
+        <div className="flex gap-2 text-center shrink-0">
+          <div className="text-center">
+            <p className="text-sm font-bold text-orange-600">{activeOrders}</p>
+            <p className="text-[9px] text-muted-foreground">Active</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-green-600">{deliveredToday}</p>
+            <p className="text-[9px] text-muted-foreground">Today</p>
+          </div>
+        </div>
+        <button
+          onClick={toggleOnline} disabled={toggling}
+          title={rider.is_online ? "Set Offline" : "Set Online"}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+            rider.is_online
+              ? "bg-green-50 border-green-200 text-green-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+              : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-green-50 hover:border-green-200 hover:text-green-700"
+          } ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${rider.is_online ? "bg-green-500 animate-pulse" : "bg-slate-400"}`} />
+          {rider.is_online ? "Online" : "Offline"}
+        </button>
+        <button
+          onClick={() => setExpanded(e => !e)}
+          title="Auto-Assign Settings"
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-slate-100 hover:text-foreground transition-colors"
+        >
+          <Settings2 size={13} />
+        </button>
       </div>
-      <div className="flex gap-2 text-center shrink-0">
-        <div className="text-center">
-          <p className="text-sm font-bold text-orange-600">{activeOrders}</p>
-          <p className="text-[9px] text-muted-foreground">Active</p>
+
+      {/* Expanded auto-assign settings panel */}
+      {expanded && (
+        <div className="mx-4 mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Auto-Assign Settings — {rider.name}</p>
+
+          {/* Auto-Assign toggle */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold">⚡ Auto-Assign Enabled</p>
+              <p className="text-[10px] text-muted-foreground">Include in auto-assign rounds</p>
+            </div>
+            <Switch
+              checked={localAA}
+              onCheckedChange={v => {
+                setLocalAA(v);
+                saveAutoAssign({ auto_assign_enabled: v });
+              }}
+              disabled={savingAA}
+              className="data-[state=checked]:bg-green-600"
+            />
+          </div>
+
+          {/* Max active orders */}
+          <div>
+            <p className="text-xs font-semibold mb-1.5">📦 Max Active Orders (cap)</p>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 flex-wrap">
+                {[10, 20, 30, 50, 75, 100].map(n => (
+                  <button key={n} onClick={() => setLocalMax(n)}
+                    className={`px-2 py-0.5 text-[11px] rounded-lg border font-medium transition-colors ${localMax === n ? "bg-green-600 text-white border-green-600" : "border-border hover:bg-muted"}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <Button size="sm" disabled={savingAA} onClick={() => saveAutoAssign({ max_active_orders: localMax })}
+                className="h-6 text-[10px] px-2 ml-auto">
+                {savingAA ? "…" : "Save"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <p className="text-xs font-semibold mb-1.5">🏆 Assignment Priority</p>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} onClick={() => setLocalPriority(n)}
+                    className={`w-7 h-7 text-[11px] rounded-lg border font-bold transition-colors ${localPriority === n ? "bg-purple-600 text-white border-purple-600" : "border-border hover:bg-muted"}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground ml-1">{localPriority === 5 ? "Highest" : localPriority === 1 ? "Normal" : `Level ${localPriority}`}</p>
+              <Button size="sm" disabled={savingAA} onClick={() => saveAutoAssign({ priority: localPriority })}
+                className="h-6 text-[10px] px-2 ml-auto">
+                {savingAA ? "…" : "Save"}
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="text-center">
-          <p className="text-sm font-bold text-green-600">{deliveredToday}</p>
-          <p className="text-[9px] text-muted-foreground">Today</p>
-        </div>
-      </div>
-      <button
-        onClick={toggleOnline}
-        disabled={toggling}
-        title={rider.is_online ? "Click to set Offline" : "Click to set Online"}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
-          rider.is_online
-            ? "bg-green-50 border-green-200 text-green-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
-            : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-green-50 hover:border-green-200 hover:text-green-700"
-        } ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full ${rider.is_online ? "bg-green-500 animate-pulse" : "bg-slate-400"}`} />
-        {rider.is_online ? "Online" : "Offline"}
-      </button>
+      )}
     </div>
   );
 }
