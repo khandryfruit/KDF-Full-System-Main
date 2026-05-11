@@ -41,3 +41,4 @@ export * from "./mobileReels";
 export * from "./googleIndexing";
 export * from "./adminManagement";
 export * from "./googleMerchant";
+export * from "./saas";

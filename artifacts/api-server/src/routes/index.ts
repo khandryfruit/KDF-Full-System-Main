@@ -59,6 +59,7 @@ import adminManagementRouter from "./adminManagement";
 import modulesRouter from "./modules";
 import merchantRouter from "./merchant";
 import onlinePaymentsRouter from "./onlinePayments";
+import { saasRouter } from "./saas";
 
 const router: IRouter = Router();
 
@@ -124,5 +125,6 @@ router.use(googleIndexingRouter);
 router.use(adminManagementRouter);
 router.use(modulesRouter);
 router.use(merchantRouter);
+router.use(saasRouter);
 
 export default router;
