@@ -13,6 +13,7 @@ import {
   Bell, BellOff, Settings2, Activity, Timer,
   Navigation, PhoneCall, DollarSign, TrendingUp, Eye,
   Volume2, VolumeX, BarChart3, Shield, Smartphone,
+  CheckSquare, Square,
 } from "lucide-react";
 
 const API = "/api";
@@ -207,6 +208,131 @@ function AssignModal({ order, riders, onClose, onDone, defaultEta }: {
 }
 
 /* ══════════════════════════════════════════════════════════
+   BULK ASSIGN MODAL
+══════════════════════════════════════════════════════════ */
+function BulkAssignModal({ orderIds, orders, riders, onClose, onDone, defaultEta }: {
+  orderIds: number[]; orders: any[]; riders: any[];
+  onClose: () => void; onDone: () => void; defaultEta: number;
+}) {
+  const { toast } = useToast();
+  const [riderId,    setRiderId]    = useState<string>("");
+  const [sendCustWa, setSendCustWa] = useState(true);
+  const [etaMinutes, setEtaMinutes] = useState(defaultEta);
+  const [sending,    setSending]    = useState(false);
+
+  const selectedOrders = orders.filter(o => orderIds.includes(o.id));
+  const selectedRider  = riders.find(r => r.id?.toString() === riderId);
+
+  const assign = async () => {
+    if (!riderId) { toast({ title: "⚠️ Please select a rider", variant: "destructive" }); return; }
+    setSending(true);
+    try {
+      const res = await apiFetch("/admin/riders/bulk-assign", {
+        method: "POST",
+        body: JSON.stringify({
+          rider_id: parseInt(riderId),
+          order_ids: orderIds,
+          eta_minutes: etaMinutes,
+          send_customer_wa: sendCustWa,
+        }),
+      });
+      if (res.ok) {
+        toast({ title: `✅ Bulk Assigned!`, description: `${res.assigned} orders → ${selectedRider?.name}${res.failed ? ` (${res.failed} failed)` : ""}` });
+        onDone();
+      } else {
+        toast({ title: "Error", description: res.error ?? "Bulk assign failed", variant: "destructive" });
+      }
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="p-5 border-b flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-lg flex items-center gap-2">
+              <CheckSquare size={18} className="text-green-600" />Bulk Assign
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {orderIds.length} orders selected
+            </p>
+          </div>
+          <button onClick={onClose}><X size={18} className="text-muted-foreground" /></button>
+        </div>
+
+        {/* Order list preview */}
+        <div className="max-h-32 overflow-y-auto border-b divide-y divide-border/50">
+          {selectedOrders.slice(0, 8).map(o => (
+            <div key={o.id} className="px-5 py-1.5 flex items-center justify-between">
+              <span className="text-xs font-semibold text-blue-700">{o.order_number}</span>
+              <span className="text-xs text-muted-foreground truncate max-w-[180px]">{o.customer_name}</span>
+              {o.financial_status !== "paid"
+                ? <span className="text-xs text-amber-700 font-bold shrink-0">COD {Number(o.total_price ?? 0).toLocaleString()}</span>
+                : <span className="text-xs text-green-700 font-bold shrink-0">PAID</span>}
+            </div>
+          ))}
+          {orderIds.length > 8 && (
+            <div className="px-5 py-1.5 text-xs text-muted-foreground text-center">+{orderIds.length - 8} more orders</div>
+          )}
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Rider select */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Select Rider</label>
+            <select className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-background"
+              value={riderId} onChange={e => setRiderId(e.target.value)}>
+              <option value="">-- Choose a rider --</option>
+              {riders.filter(r => r.status !== "inactive").map((r: any) => (
+                <option key={r.id} value={r.id}>
+                  {r.is_online ? "🟢" : "⚫"} {r.name} ({r.delivery_area || "All Areas"}) — {r.active_deliveries ?? 0} active
+                </option>
+              ))}
+            </select>
+            {selectedRider && (
+              <p className="text-xs text-muted-foreground mt-1">
+                📞 {selectedRider.phone} · {selectedRider.active_deliveries ?? 0} active orders
+              </p>
+            )}
+          </div>
+
+          {/* ETA */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
+              <Timer size={12} className="inline mr-1" />Estimated Delivery Time
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {ETA_PRESETS.map(p => (
+                <button key={p.value} onClick={() => setEtaMinutes(p.value)}
+                  className={`px-2.5 py-1 text-xs rounded-lg border font-medium transition-colors ${etaMinutes === p.value ? "bg-green-600 text-white border-green-600" : "border-border hover:bg-muted"}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* WA toggle */}
+          <div className="flex items-center gap-2 bg-green-50 rounded-xl p-3 border border-green-100">
+            <Send size={14} className="text-purple-600 shrink-0" />
+            <label className="flex items-center gap-2 text-sm cursor-pointer flex-1">
+              <input type="checkbox" checked={sendCustWa} onChange={e => setSendCustWa(e.target.checked)} className="rounded" />
+              Notify all customers via WhatsApp
+            </label>
+          </div>
+        </div>
+
+        <div className="p-4 border-t flex gap-2 justify-end">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={assign} disabled={sending || !riderId} className="bg-green-600 hover:bg-green-700 text-white gap-1.5">
+            {sending ? "Assigning..." : <><Zap size={14} />Assign {orderIds.length} Orders</>}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    STATUS UPDATE ROW — quick actions with WA
 ══════════════════════════════════════════════════════════ */
 const STATUS_FLOW = [
@@ -260,8 +386,9 @@ function QuickStatusBar({ deliveryId, currentStatus, onDone, soundEnabled }: {
 /* ══════════════════════════════════════════════════════════
    ORDER CARD (Card View)
 ══════════════════════════════════════════════════════════ */
-function OrderCard({ order, riders, onRefresh, soundEnabled, defaultEta }: {
+function OrderCard({ order, riders, onRefresh, soundEnabled, defaultEta, isSelected, onSelect }: {
   order: any; riders: any[]; onRefresh: () => void; soundEnabled: boolean; defaultEta: number;
+  isSelected?: boolean; onSelect?: (id: number) => void;
 }) {
   const { toast } = useToast();
   const [showAssign,    setShowAssign]    = useState(false);
@@ -297,10 +424,15 @@ function OrderCard({ order, riders, onRefresh, soundEnabled, defaultEta }: {
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+      <div className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isSelected ? "border-green-500 ring-1 ring-green-400" : "border-border"}`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-3 py-2.5 border-b ${cfg.bg}/30`}>
           <div className="flex items-center gap-2">
+            {onSelect && (
+              <button onClick={() => onSelect(order.id)} className="shrink-0 text-muted-foreground hover:text-green-600 transition-colors">
+                {isSelected ? <CheckSquare size={15} className="text-green-600" /> : <Square size={15} />}
+              </button>
+            )}
             <div className={`w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center`}>
               <cfg.icon size={13} className={cfg.color} />
             </div>
@@ -383,8 +515,9 @@ function OrderCard({ order, riders, onRefresh, soundEnabled, defaultEta }: {
 /* ══════════════════════════════════════════════════════════
    TABLE ROW
 ══════════════════════════════════════════════════════════ */
-function OrderTableRow({ order, riders, onRefresh, onAssign, soundEnabled }: {
+function OrderTableRow({ order, riders, onRefresh, onAssign, soundEnabled, isSelected, onSelect }: {
   order: any; riders: any[]; onRefresh: () => void; onAssign: () => void; soundEnabled: boolean;
+  isSelected?: boolean; onSelect?: (id: number) => void;
 }) {
   const { toast } = useToast();
   const [sending, setSending] = useState<string | null>(null);
@@ -416,7 +549,14 @@ function OrderTableRow({ order, riders, onRefresh, onAssign, soundEnabled }: {
   const openInvoice = () => window.open(`/api/admin/riders/orders/${order.id}/invoice?token=${token()}`, "_blank");
 
   return (
-    <tr className="border-b border-border/40 hover:bg-slate-50/60 transition-colors group">
+    <tr className={`border-b border-border/40 hover:bg-slate-50/60 transition-colors group ${isSelected ? "bg-green-50/60" : ""}`}>
+      <td className="px-2 py-2 w-8">
+        {onSelect && (
+          <button onClick={() => onSelect(order.id)} className="text-muted-foreground hover:text-green-600 transition-colors">
+            {isSelected ? <CheckSquare size={14} className="text-green-600" /> : <Square size={14} />}
+          </button>
+        )}
+      </td>
       <td className="px-3 py-2 whitespace-nowrap">
         <span className="font-bold text-sm text-blue-700">{order.order_number}</span>
         <p className="text-[10px] text-muted-foreground">{new Date(order.order_date).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "2-digit" })}</p>
@@ -748,15 +888,17 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
 export default function LahoreDeliveriesPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [activeTab,     setActiveTab]     = useState<"dashboard" | "orders">("dashboard");
-  const [page,          setPage]          = useState(1);
-  const [search,        setSearch]        = useState("");
-  const [searchInput,   setSearchInput]   = useState("");
-  const [statusFilter,  setStatusFilter]  = useState("all");
-  const [autoAssigning, setAutoAssigning] = useState(false);
-  const [viewMode,      setViewMode]      = useState<"cards" | "table">("table");
-  const [assignOrder,   setAssignOrder]   = useState<any>(null);
-  const [soundEnabled,  setSoundEnabled]  = useState(() => localStorage.getItem("kdf_sound_alerts") !== "off");
+  const [activeTab,      setActiveTab]      = useState<"dashboard" | "orders">("dashboard");
+  const [page,           setPage]           = useState(1);
+  const [search,         setSearch]         = useState("");
+  const [searchInput,    setSearchInput]    = useState("");
+  const [statusFilter,   setStatusFilter]   = useState("all");
+  const [autoAssigning,  setAutoAssigning]  = useState(false);
+  const [viewMode,       setViewMode]       = useState<"cards" | "table">("table");
+  const [assignOrder,    setAssignOrder]    = useState<any>(null);
+  const [soundEnabled,   setSoundEnabled]   = useState(() => localStorage.getItem("kdf_sound_alerts") !== "off");
+  const [selectedOrders, setSelectedOrders] = useState<Set<number>>(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const prevDeliveredRef = useRef<number>(0);
 
   const toggleSound = () => {
@@ -771,6 +913,24 @@ export default function LahoreDeliveriesPage() {
     qc.invalidateQueries({ queryKey: ["rider-stats"] });
     qc.invalidateQueries({ queryKey: ["live-dashboard"] });
   }, [qc]);
+
+  const toggleSelectOrder = (id: number) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedOrders.size === orders.length) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(orders.map((o: any) => o.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedOrders(new Set());
 
   /* ── SSE realtime listener ── */
   const soundEnabledRef = useRef(soundEnabled);
@@ -1007,6 +1167,24 @@ export default function LahoreDeliveriesPage() {
             </div>
           </div>
 
+          {/* ── Bulk Action Bar ── */}
+          {selectedOrders.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-600 text-white shadow-lg sticky top-2 z-10">
+              <CheckSquare size={16} />
+              <span className="font-semibold text-sm">{selectedOrders.size} order{selectedOrders.size > 1 ? "s" : ""} selected</span>
+              <div className="flex gap-2 ml-auto">
+                <Button size="sm" variant="outline"
+                  className="h-7 text-xs border-white/40 text-white hover:bg-white/20 hover:text-white bg-transparent gap-1.5"
+                  onClick={() => setBulkAssignOpen(true)}>
+                  <UserPlus size={12} />Bulk Assign to Rider
+                </Button>
+                <button onClick={clearSelection} className="text-white/80 hover:text-white transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -1030,6 +1208,13 @@ export default function LahoreDeliveriesPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-border">
+                      <th className="px-2 py-2.5 w-8">
+                        <button onClick={selectAll} className="text-muted-foreground hover:text-green-600 transition-colors" title="Select all">
+                          {selectedOrders.size > 0 && selectedOrders.size === orders.length
+                            ? <CheckSquare size={14} className="text-green-600" />
+                            : <Square size={14} />}
+                        </button>
+                      </th>
                       {["Order #", "Customer", "Area", "Amount", "Rider", "Status", "Quick Status", "Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
@@ -1038,7 +1223,8 @@ export default function LahoreDeliveriesPage() {
                   <tbody>
                     {orders.map((order: any) => (
                       <OrderTableRow key={order.id} order={order} riders={riders} onRefresh={refresh}
-                        onAssign={() => setAssignOrder(order)} soundEnabled={soundEnabled} />
+                        onAssign={() => setAssignOrder(order)} soundEnabled={soundEnabled}
+                        isSelected={selectedOrders.has(order.id)} onSelect={toggleSelectOrder} />
                     ))}
                   </tbody>
                 </table>
@@ -1048,7 +1234,8 @@ export default function LahoreDeliveriesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {orders.map((order: any) => (
                 <OrderCard key={order.id} order={order} riders={riders} onRefresh={refresh}
-                  soundEnabled={soundEnabled} defaultEta={defaultEta} />
+                  soundEnabled={soundEnabled} defaultEta={defaultEta}
+                  isSelected={selectedOrders.has(order.id)} onSelect={toggleSelectOrder} />
               ))}
             </div>
           )}
@@ -1080,6 +1267,18 @@ export default function LahoreDeliveriesPage() {
       {assignOrder && (
         <AssignModal order={assignOrder} riders={riders} defaultEta={defaultEta}
           onClose={() => setAssignOrder(null)} onDone={() => { setAssignOrder(null); refresh(); }} />
+      )}
+
+      {/* Bulk assign modal */}
+      {bulkAssignOpen && selectedOrders.size > 0 && (
+        <BulkAssignModal
+          orderIds={Array.from(selectedOrders)}
+          orders={orders}
+          riders={riders}
+          defaultEta={defaultEta}
+          onClose={() => setBulkAssignOpen(false)}
+          onDone={() => { setBulkAssignOpen(false); clearSelection(); refresh(); }}
+        />
       )}
     </div>
   );

@@ -884,6 +884,148 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════
+   BULK ASSIGN — assign multiple orders to one rider
+═══════════════════════════════════════════════════════ */
+
+/* POST /api/admin/riders/bulk-assign */
+router.post("/admin/riders/bulk-assign", adminMiddleware, async (req, res) => {
+  try {
+    const { rider_id, order_ids, eta_minutes, send_customer_wa } = req.body;
+    if (!rider_id)                          { res.status(400).json({ error: "rider_id required" }); return; }
+    if (!Array.isArray(order_ids) || !order_ids.length) { res.status(400).json({ error: "order_ids[] required" }); return; }
+
+    const riderRows = await db.execute(sql`SELECT * FROM riders WHERE id = ${parseInt(rider_id)} AND status = 'active' LIMIT 1`);
+    if (!riderRows.rows.length) { res.status(404).json({ error: "Rider not found or inactive" }); return; }
+    const rider = riderRows.rows[0] as any;
+
+    const settings = await getDeliverySettings();
+    const etaMins  = eta_minutes ? parseInt(String(eta_minutes)) : settings.default_eta_minutes;
+
+    let assignedCount = 0;
+    const failed: number[] = [];
+    const assignments: Array<{ orderId: number; orderNumber: string }> = [];
+
+    for (const rawId of order_ids) {
+      const orderId = parseInt(String(rawId));
+      try {
+        const orderRows = await db.execute(sql`SELECT * FROM shopify_orders WHERE id = ${orderId} LIMIT 1`);
+        if (!orderRows.rows.length) { failed.push(orderId); continue; }
+        const order = orderRows.rows[0] as any;
+
+        const addr = (() => {
+          try {
+            const a = typeof order.shipping_address === "string" ? JSON.parse(order.shipping_address) : order.shipping_address;
+            return [a?.address1, a?.address2, a?.city].filter(Boolean).join(", ");
+          } catch { return "Lahore"; }
+        })();
+
+        const isPaid    = order.financial_status === "paid";
+        const codAmount = isPaid ? 0 : Number(order.total_price ?? 0);
+
+        const existing = await db.execute(sql`SELECT id FROM rider_deliveries WHERE shopify_order_db_id = ${orderId} LIMIT 1`);
+        let delivery: any;
+
+        if (existing.rows.length) {
+          const upd = await db.execute(sql`
+            UPDATE rider_deliveries SET
+              rider_id = ${parseInt(rider_id)}, status = 'assigned',
+              assigned_at = NOW(), updated_at = NOW()
+            WHERE shopify_order_db_id = ${orderId}
+            RETURNING *
+          `);
+          delivery = upd.rows[0];
+        } else {
+          const ins = await db.execute(sql`
+            INSERT INTO rider_deliveries
+              (rider_id, shopify_order_db_id, shopify_order_id, shopify_order_number,
+               customer_name, customer_phone, delivery_address, city,
+               cod_amount, is_paid, order_items, status, assigned_at)
+            VALUES (
+              ${parseInt(rider_id)}, ${orderId},
+              ${order.shopify_order_id ?? null}, ${order.order_number ?? null},
+              ${order.customer_name ?? null}, ${order.customer_phone ?? null},
+              ${addr},
+              ${(typeof order.shipping_address === "string" ? JSON.parse(order.shipping_address) : order.shipping_address)?.city || "Lahore"},
+              ${codAmount}, ${isPaid},
+              ${JSON.stringify(order.line_items ?? [])},
+              'assigned', NOW()
+            )
+            RETURNING *
+          `);
+          delivery = ins.rows[0];
+        }
+
+        if (delivery) {
+          assignedCount++;
+          assignments.push({ orderId, orderNumber: order.order_number ?? String(orderId) });
+
+          /* Non-blocking notifications */
+          setImmediate(async () => {
+            try {
+              /* Rider WA */
+              const riderWaPhone = rider.whatsapp_number || rider.phone;
+              if (riderWaPhone) {
+                const msg = buildRiderMessage(order, { ...delivery, rider_name: rider.name, rider_phone: rider.phone });
+                const sent = await sendWhatsAppMessage({ phone: normalisePhone(riderWaPhone), message: msg }).catch(() => false);
+                if (sent) await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
+              }
+              /* Expo push to rider */
+              if (rider.expo_push_token) {
+                await fetch("https://exp.host/--/api/v2/push/send", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Accept: "application/json" },
+                  body: JSON.stringify({
+                    to: rider.expo_push_token,
+                    title: "🚚 نیا آرڈر ملا!",
+                    body: `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
+                    sound: "default", priority: "high",
+                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number) },
+                    badge: 1,
+                  }),
+                }).catch(() => {});
+              }
+              /* Customer WA */
+              if (send_customer_wa !== false && settings.auto_wa_on_assign) {
+                const customerPhone = delivery.customer_phone || order.customer_phone;
+                if (customerPhone) {
+                  const enrichedDel = { ...delivery, rider_name: rider.name, rider_phone: rider.phone || rider.whatsapp_number };
+                  const custMsg = buildCustomerStatusMessage("assigned", order, enrichedDel, etaMins);
+                  const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message: custMsg }).catch(() => false);
+                  if (sent) await db.execute(sql`UPDATE rider_deliveries SET customer_wa_assigned_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
+                }
+              }
+            } catch (e: any) { logger.error(e, "bulk-assign setImmediate error"); }
+          });
+        } else {
+          failed.push(orderId);
+        }
+      } catch (e: any) {
+        logger.warn({ orderId, err: e.message }, "bulk-assign single order failed");
+        failed.push(orderId);
+      }
+    }
+
+    /* SSE broadcast */
+    try {
+      const { broadcastSSE } = await import("../lib/sse.js");
+      broadcastSSE("auto_assigned", { assigned: assignedCount, riderName: rider.name, riderPhone: rider.phone });
+    } catch {}
+
+    res.json({
+      ok: true,
+      assigned: assignedCount,
+      failed: failed.length,
+      failed_ids: failed,
+      rider: { id: rider.id, name: rider.name },
+      assignments,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
    RIDER ONLINE STATUS TOGGLE
 ═══════════════════════════════════════════════════════ */
 

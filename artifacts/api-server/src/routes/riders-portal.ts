@@ -335,8 +335,8 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
         OR (rd.status = 'assigned' AND DATE(rd.assigned_at) = CURRENT_DATE)
       )`;
     } else if (p === "active") {
-      /* Active orders: cap at 45 days to prevent stale "stuck" orders showing forever */
-      dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '45 days')`;
+      /* Active orders: cap at 7 days to prevent stale "stuck" orders showing */
+      dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '7 days')`;
     } else if (p === "yesterday") {
       dateFilter = `DATE(rd.assigned_at) = CURRENT_DATE - INTERVAL '1 day'`;
     } else if (p === "week") {
@@ -346,9 +346,9 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
     } else if (p === "all") {
       dateFilter = "1=1";
     } else {
-      /* default "today": active orders (last 45 days) + today's terminal statuses */
+      /* default "today": active orders (last 7 days) + today's terminal statuses */
       dateFilter = `(
-        (rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '45 days')
+        (rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '7 days')
         OR DATE(rd.assigned_at) = CURRENT_DATE
       )`;
     }
