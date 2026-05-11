@@ -2,9 +2,9 @@ import AppShell from "@/components/AppShell";
 import { useAuth } from "@/App";
 import { useLocation } from "wouter";
 import {
-  BarChart3, Users, MessageCircle, Settings, Sliders,
+  BarChart3, Users, MessageCircle, Sliders,
   Package, CreditCard, Store, Bell, GitBranch, Truck,
-  LogOut,
+  LogOut, Bike,
 } from "lucide-react";
 
 
@@ -49,6 +49,14 @@ const MENU_ITEMS: MenuItem[] = [
     color: "text-orange-400",
     bg:    "bg-orange-500/15",
     href:  "/logistics",
+  },
+  {
+    label: "Riders",
+    desc:  "Lahore delivery fleet",
+    icon:  Bike,
+    color: "text-teal-400",
+    bg:    "bg-teal-500/15",
+    href:  "/riders",
   },
   {
     label: "Products",

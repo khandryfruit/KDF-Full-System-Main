@@ -1,0 +1,27 @@
+{
+  "name": "KDF Admin App",
+  "short_name": "KDF Admin",
+  "description": "KDF NUTS operations & logistics admin",
+  "start_url": "/admin-app/",
+  "scope": "/admin-app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en"
+}

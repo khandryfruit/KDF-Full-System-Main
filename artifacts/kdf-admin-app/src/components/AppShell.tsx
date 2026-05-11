@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import { useAuth } from "@/App";
 import type { ReactNode } from "react";
 import {
-  LayoutDashboard, Package, Bike, MessageCircle, Grid3X3, LogOut,
+  LayoutDashboard, Package, Truck, MessageCircle, Grid3X3,
 } from "lucide-react";
 
 interface NavItem {
@@ -12,16 +12,16 @@ interface NavItem {
 }
 
 const ALL_NAV: NavItem[] = [
-  { href: "/",        label: "Dashboard", icon: LayoutDashboard },
-  { href: "/orders",  label: "Orders",    icon: Package         },
-  { href: "/riders",  label: "Riders",    icon: Bike            },
-  { href: "/wa",      label: "WhatsApp",  icon: MessageCircle   },
-  { href: "/more",    label: "More",      icon: Grid3X3         },
+  { href: "/",          label: "Dashboard", icon: LayoutDashboard },
+  { href: "/orders",    label: "Orders",    icon: Package         },
+  { href: "/logistics", label: "Logistics", icon: Truck           },
+  { href: "/wa",        label: "WhatsApp",  icon: MessageCircle   },
+  { href: "/more",      label: "More",      icon: Grid3X3         },
 ];
 
 export default function AppShell({ children, title }: { children: ReactNode; title: string }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -40,13 +40,6 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
           <span className="text-xs text-muted-foreground max-w-[90px] truncate hidden sm:block">
             {user?.name ?? user?.email ?? "Admin"}
           </span>
-          <button
-            onClick={logout}
-            title="Logout"
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
       </header>
 
