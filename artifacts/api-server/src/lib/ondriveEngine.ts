@@ -633,12 +633,19 @@ export async function processWhatsAppConfirmation(params: {
 
 async function handleConfirmation(phone: string, shopifyOrderId: string, method: string): Promise<{ handled: boolean; action: string; orderId: string }> {
   try {
-    /* Mark as confirmed */
+    /* Mark as confirmed in confirmations table */
     await db.execute(sql`
       UPDATE shopify_order_confirmations
       SET status = 'confirmed', confirmation_reply = ${method},
           confirmation_received_at = NOW(), updated_at = NOW()
       WHERE shopify_order_id = ${shopifyOrderId} AND customer_phone = ${phone}
+    `).catch(() => {});
+
+    /* Also update local shopify_orders status → confirmed */
+    await db.execute(sql`
+      UPDATE shopify_orders
+      SET status = 'confirmed', updated_at = NOW()
+      WHERE shopify_order_id = ${shopifyOrderId}
     `).catch(() => {});
 
     /* Find the order in DB */
@@ -686,6 +693,13 @@ async function handleCancellation(phone: string, shopifyOrderId: string): Promis
     SET status = 'cancelled', confirmation_reply = 'cancelled',
         confirmation_received_at = NOW(), updated_at = NOW()
     WHERE shopify_order_id = ${shopifyOrderId} AND customer_phone = ${phone}
+  `).catch(() => {});
+
+  /* Also update local shopify_orders status → cancelled */
+  await db.execute(sql`
+    UPDATE shopify_orders
+    SET status = 'cancelled', updated_at = NOW()
+    WHERE shopify_order_id = ${shopifyOrderId}
   `).catch(() => {});
 
   const orderRes = await db.execute(sql`SELECT order_number FROM shopify_orders WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));

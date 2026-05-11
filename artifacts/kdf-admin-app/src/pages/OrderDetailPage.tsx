@@ -64,7 +64,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   const subTotal   = Number(o.subtotalPrice ?? o.subtotal_price ?? 0);
   const totalTax   = Number(o.totalTax ?? o.total_tax ?? 0);
   const discounts  = Number(o.totalDiscounts ?? o.total_discounts ?? 0);
-  const finStatus  = o.financialStatus ?? o.financial_status ?? o.status ?? "—";
+  const rawStatus  = o.status ?? "";
+  const finStatus  = ["confirmed", "cancelled"].includes(rawStatus.toLowerCase())
+    ? rawStatus
+    : o.financialStatus ?? o.financial_status ?? rawStatus ?? "—";
   const fulStatus  = o.fulfillmentStatus ?? o.fulfillment_status ?? "unfulfilled";
   const orderNum   = o.orderNumber ?? o.order_number ?? orderId;
   const tracking   = o.trackingNumber ?? o.shipmentTrackingId ?? "—";

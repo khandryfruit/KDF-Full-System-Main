@@ -1,0 +1,304 @@
+Please urgently complete and stabilize the entire KDF Admin System, Delivery System, WhatsApp Automation, Rider App, and Admin Mobile App.
+
+IMPORTANT:
+Backend is built on Node.js (NOT Laravel).
+Please debug and implement everything accordingly using:
+
+* Node.js APIs
+* Express/Nest APIs
+* WebSockets/Socket.IO
+* Queue workers
+* Background jobs
+* Meta WhatsApp webhooks
+* Real-time sync architecture
+
+Currently many modules visually exist but are incomplete, partially functional, or broken on live production.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. WHATSAPP ORDER CONFIRMATION AUTOMATION
+    ━━━━━━━━━━━━━━━━━━━━
+
+Current Issue:
+When customer places order from website/Shopify:
+
+* WhatsApp confirmation template is sent
+* Customer confirms order from WhatsApp
+* But order status does NOT update automatically
+
+Required Full Flow:
+
+1. Customer places order
+2. System automatically sends Meta WhatsApp template
+3. Customer clicks:
+    ✅ Confirm Order
+    ❌ Cancel Order
+4. Meta webhook receives response
+5. Node.js backend processes callback
+6. System automatically updates order status
+
+Required Status Logic:
+
+If customer clicks:
+✅ Confirm Order
+
+Then:
+
+* Pending → Confirmed
+* Add “Confirmed” tag
+* Save confirmation timestamp
+* Trigger rider assignment flow
+* Notify admin dashboards
+
+If customer clicks:
+❌ Cancel Order
+
+Then:
+
+* Pending → Cancelled
+* Stop delivery flow
+* Notify admin
+
+Please fully integrate:
+
+* Meta WhatsApp API
+* Interactive template replies
+* Webhook handlers
+* Node.js event processing
+* Real-time dashboard updates
+
+━━━━━━━━━━━━━━━━━━━━
+2. ADMIN PANEL + ADMIN MOBILE APP SYNC
+━━━━━━━━━━━━━━━━━━━━
+
+When customer confirms/cancels:
+
+* Super Admin updates instantly
+* Master Admin updates instantly
+* Admin Mobile App updates instantly
+* Order status badge changes live
+
+Use:
+
+* Socket.IO/WebSockets/Firebase
+    for real-time synchronization.
+
+━━━━━━━━━━━━━━━━━━━━
+3. REMOVE BROKEN AUTOMATION TOGGLES
+━━━━━━━━━━━━━━━━━━━━
+
+Please REMOVE these broken toggle options completely:
+
+* Auto-Assign on Order
+* Auto WA on Assign
+* Auto WA on Status
+
+Reason:
+They work locally but fail on live production.
+
+Instead:
+Make automation fully backend-controlled from Node.js services.
+
+━━━━━━━━━━━━━━━━━━━━
+4. FULLY AUTOMATIC LAHORE RIDER ASSIGNMENT
+━━━━━━━━━━━━━━━━━━━━
+
+Required Logic:
+
+When Lahore order arrives:
+
+* Automatically detect Lahore city
+* Automatically assign Lahore rider
+* Send rider notification
+* Send customer rider details
+
+No manual toggle required.
+
+Please debug:
+
+* Rider assignment queues
+* Socket events
+* Background jobs
+* Production environment configs
+* API event flow
+
+━━━━━━━━━━━━━━━━━━━━
+5. RIDER WHATSAPP AUTOMATION
+━━━━━━━━━━━━━━━━━━━━
+
+When rider assigned:
+
+* Rider receives WhatsApp notification
+* Customer receives WhatsApp notification
+
+Customer message should include:
+
+* Rider Name
+* Rider Phone Number
+* ETA
+* Delivery status
+
+When rider:
+
+* Picks order
+* Out for delivery
+* Delivered
+
+Then customer automatically receives WhatsApp updates.
+
+━━━━━━━━━━━━━━━━━━━━
+6. RIDER APP ORDER FILTERING
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Old orders clutter rider dashboard.
+
+Required:
+
+Main Rider Dashboard should ONLY show:
+
+* Active deliveries
+* Today orders
+* Pending deliveries
+* Last 24–48 hour deliveries
+
+Create separate:
+
+* Completed Orders
+* Archived Orders
+* Delivery History
+
+Also:
+Only show orders ABOVE Rs. 20,000 on active rider dashboard.
+
+━━━━━━━━━━━━━━━━━━━━
+7. ADMIN MOBILE APP FIXES
+━━━━━━━━━━━━━━━━━━━━
+
+Current problem:
+App visually looks modern but functionality is broken.
+
+Issues:
+
+* Cards not clickable
+* Orders not opening
+* WhatsApp chats not opening
+* Analytics not loading
+* Customer details missing
+* Navigation partially broken
+
+Please debug:
+
+* Flutter routes
+* Deep linking
+* Gesture detectors
+* onTap actions
+* Node.js API integration
+* State management
+* Release/live build configs
+
+━━━━━━━━━━━━━━━━━━━━
+8. DASHBOARD DATA FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Current dashboard shows:
+
+* Unknown customer
+* Rs 0 amounts
+* Fake/static cards
+
+Please fully fix:
+
+* Shopify customer mapping
+* Order totals
+* Customer details
+* Real revenue
+* Live analytics
+* Real-time counters
+
+━━━━━━━━━━━━━━━━━━━━
+9. LOGISTICS & COURIER BOOKING SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Need complete logistics workflow like Daraz Seller Center.
+
+Required:
+
+* Manual booking
+* Bulk booking
+* Auto booking
+* Courier integration
+* Tracking IDs
+* Shipment tracking
+* Rider assignment
+* Delivery workflow
+
+Add:
+
+* Print Label
+* Download Label
+* Thermal printing
+* Barcode/QR labels
+* Bulk label printing
+
+━━━━━━━━━━━━━━━━━━━━
+10. COMPLETE ORDER MANAGEMENT SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Orders module should support:
+
+* Confirm Orders
+* Cancel Orders
+* Assign Riders
+* Courier Booking
+* Print Labels
+* Generate Invoice
+* Delivery Tracking
+* Returns
+* Bulk Actions
+
+━━━━━━━━━━━━━━━━━━━━
+11. PERFORMANCE & PRODUCTION STABILITY
+━━━━━━━━━━━━━━━━━━━━
+
+Please optimize:
+
+* Node.js APIs
+* Database queries
+* Socket events
+* Real-time sync
+* Flutter rendering
+* Queue workers
+* Redis caching
+* Background jobs
+
+Fix:
+
+* Duplicate orders
+* Delayed sync
+* Broken navigation
+* Non-clickable UI
+* Empty states
+* Loading issues
+
+━━━━━━━━━━━━━━━━━━━━
+12. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF system should become a complete enterprise business ecosystem.
+
+Everything must:
+
+* Work on LIVE production
+* Be fully functional
+* Sync in real time
+* Handle automations properly
+* Support WhatsApp workflows
+* Support rider workflows
+* Support logistics
+* Support invoicing
+* Support SEO product management
+
+Current system visually looks good but functionality is incomplete and unstable.
+
+Please fully debug, complete, and productionize the entire platform properly.

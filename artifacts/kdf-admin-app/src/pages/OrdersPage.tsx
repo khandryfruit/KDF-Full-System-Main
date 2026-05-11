@@ -77,7 +77,10 @@ export default function OrdersPage() {
               const orderNum  = o.orderNumber ?? o.order_number ?? `#${o.id}`;
               const custName  = o.customerName ?? o.customer_name ?? o.shippingAddress?.name ?? "Unknown customer";
               const city      = o.shippingAddress?.city ?? o.shipping_address?.city ?? "—";
-              const status    = o.fulfillmentStatus ?? o.financialStatus ?? o.status ?? "pending";
+              const rawStatus = o.status ?? "";
+              const status    = ["confirmed", "cancelled"].includes(rawStatus.toLowerCase())
+                ? rawStatus
+                : o.fulfillmentStatus ?? o.financialStatus ?? rawStatus ?? "pending";
               const price     = Number(o.totalPrice ?? o.total_price ?? 0);
               return (
                 <button

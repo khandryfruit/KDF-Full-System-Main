@@ -326,17 +326,17 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
     const p = String(period ?? "today");
 
     if (p === "new") {
-      /* New orders tab: only "assigned" status, assigned within last 7 days */
-      dateFilter = `(rd.status = 'assigned' AND rd.assigned_at >= NOW() - INTERVAL '7 days')`;
+      /* New orders tab: only "assigned" status, assigned within last 48 hours */
+      dateFilter = `(rd.status = 'assigned' AND rd.assigned_at >= NOW() - INTERVAL '48 hours')`;
     } else if (p === "dashboard") {
-      /* Dashboard: all in-progress statuses (any date, need attention) + today's new assigned */
+      /* Dashboard: all in-progress statuses (last 48h) + today's new assigned */
       dateFilter = `(
-        rd.status IN ('picked','out_for_delivery','near_customer','delayed','rescheduled')
+        (rd.status IN ('picked','out_for_delivery','near_customer','delayed','rescheduled') AND rd.assigned_at >= NOW() - INTERVAL '48 hours')
         OR (rd.status = 'assigned' AND DATE(rd.assigned_at) = CURRENT_DATE)
       )`;
     } else if (p === "active") {
-      /* Active orders: cap at 7 days to prevent stale "stuck" orders showing */
-      dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '7 days')`;
+      /* Active orders: cap at 48 hours — avoids stale stuck orders flooding the screen */
+      dateFilter = `(rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '48 hours')`;
     } else if (p === "yesterday") {
       dateFilter = `DATE(rd.assigned_at) = CURRENT_DATE - INTERVAL '1 day'`;
     } else if (p === "week") {
@@ -346,9 +346,9 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
     } else if (p === "all") {
       dateFilter = "1=1";
     } else {
-      /* default "today": active orders (last 7 days) + today's terminal statuses */
+      /* default "today": active orders (last 48h) + today's terminal statuses */
       dateFilter = `(
-        (rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '7 days')
+        (rd.status IN (${ACTIVE_STATUSES.join(",")}) AND rd.assigned_at >= NOW() - INTERVAL '48 hours')
         OR DATE(rd.assigned_at) = CURRENT_DATE
       )`;
     }
@@ -361,7 +361,7 @@ router.get("/rider/deliveries", riderMiddleware, async (req: any, res) => {
       ? `AND DATE(rd.assigned_at) = '${String(date).replace(/'/g, "''")}'`
       : "";
 
-    const limitClause = (p === "all" || p === "month") ? 500 : p === "dashboard" ? 200 : 300;
+    const limitClause = (p === "all") ? 500 : (p === "month") ? 300 : (p === "week") ? 200 : (p === "dashboard") ? 80 : 100;
 
     const rows = await db.execute(sql`
       SELECT
