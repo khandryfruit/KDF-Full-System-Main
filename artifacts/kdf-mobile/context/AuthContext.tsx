@@ -225,7 +225,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     stopLocationRef.current?.();
     stopLocationRef.current = null;
-    await AsyncStorage.multiRemove(["kdf_rider_token", "kdf_rider_data", "kdf_expo_push_token", "kdf_rider_online"]);
+    await AsyncStorage.removeItem("kdf_rider_token");
+    await AsyncStorage.removeItem("kdf_rider_data");
+    await AsyncStorage.removeItem("kdf_expo_push_token");
+    await AsyncStorage.removeItem("kdf_rider_online");
     setToken(null);
     setRider(null);
     setIsOnline(false);

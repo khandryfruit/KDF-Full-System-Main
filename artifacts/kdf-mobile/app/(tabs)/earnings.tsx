@@ -170,7 +170,7 @@ export default function EarningsScreen() {
             {/* ── COD ALERT ── */}
             {codPending > 0 && (
               <View style={styles.codAlert}>
-                <LinearGradient colors={["#FFFBEB", "#FEF3C7"]} style={StyleSheet.absoluteFill} borderRadius={18} />
+                <LinearGradient colors={["#FFFBEB", "#FEF3C7"]} style={[StyleSheet.absoluteFill, { borderRadius: 18 }]} />
                 <View style={styles.codAlertIcon}>
                   <Feather name="alert-circle" size={22} color="#D97706" />
                 </View>
@@ -229,7 +229,7 @@ export default function EarningsScreen() {
 
             {/* ── TIPS ── */}
             <View style={styles.tipsCard}>
-              <LinearGradient colors={["#ECFDF5", "#D1FAE5"]} style={StyleSheet.absoluteFill} borderRadius={20} />
+              <LinearGradient colors={["#ECFDF5", "#D1FAE5"]} style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
               <View style={[styles.tipsIconWrap, { backgroundColor: "#A7F3D0" }]}>
                 <Feather name="zap" size={18} color="#059669" />
               </View>

@@ -25,7 +25,7 @@ function TabIcon({
       ) : (
         <>
           <Feather name={name as any} size={20} color={color} />
-          <Text style={[styles.inactiveLabel, { color }]}>{label}</Text>
+          <Text style={[styles.inactiveLabel, { color }]} numberOfLines={1}>{label}</Text>
         </>
       )}
     </View>
@@ -173,5 +173,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     letterSpacing: 0.3,
     textTransform: "uppercase",
+    flexShrink: 0,
+    textAlign: "center",
   },
 });

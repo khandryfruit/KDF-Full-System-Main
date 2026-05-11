@@ -366,7 +366,7 @@ export default function DashboardScreen() {
             }}
             activeOpacity={0.88}
           >
-            <LinearGradient colors={["#DC2626", "#991B1B"]} style={StyleSheet.absoluteFill} borderRadius={18} />
+            <LinearGradient colors={["#DC2626", "#991B1B"]} style={[StyleSheet.absoluteFill, { borderRadius: 18 }]} />
             <View style={styles.urgentIcon}>
               <Feather name="alert-octagon" size={20} color="#fff" />
             </View>

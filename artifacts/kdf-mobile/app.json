@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.kdfnuts.rider",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "KDF Rider needs your location for delivery navigation.",
         "NSLocationAlwaysUsageDescription": "KDF Rider uses your location to track deliveries."
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.kdfnuts.rider",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D2137"
