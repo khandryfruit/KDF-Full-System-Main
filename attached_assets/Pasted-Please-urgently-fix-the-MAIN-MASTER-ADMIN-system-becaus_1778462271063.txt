@@ -1,0 +1,104 @@
+Please urgently fix the MAIN MASTER ADMIN system because Shopify new orders are no longer appearing there.
+
+Current Critical Problem:
+You changed/moved order handling to another admin/app, and now the MAIN MASTER ADMIN is broken.
+
+This KDF Admin is our PRIMARY MASTER ADMIN.
+Everything must work here first.
+
+Current issues in Main Admin:
+
+* New Shopify orders NOT coming
+* No live order notifications
+* No real-time updates
+* Orders appearing elsewhere but not here
+* Main admin dashboard partially broken
+
+This is NOT acceptable because this is the central/master control panel.
+
+━━━━━━━━━━━━━━━━━━━━
+IMPORTANT REQUIREMENT
+━━━━━━━━━━━━━━━━━━━━
+
+The MAIN MASTER ADMIN must always be the primary source of truth.
+
+Everything should first sync here:
+
+* Shopify Orders
+* Notifications
+* WhatsApp updates
+* Rider assignments
+* Confirmed orders
+* Courier bookings
+* Analytics
+* Customer data
+
+Other admin apps/panels can sync AFTER main admin.
+
+━━━━━━━━━━━━━━━━━━━━
+PLEASE CHECK
+━━━━━━━━━━━━━━━━━━━━
+
+1. Shopify Webhook Routing
+
+* Verify Shopify webhooks still point correctly
+* Check if webhook events are being redirected elsewhere
+* Ensure main admin database receives all orders first
+
+2. Node.js Order Processing
+
+* Check order listeners
+* Queue workers
+* Socket events
+* Background jobs
+* Redis/pub-sub flow
+
+3. Real-Time Notifications
+    Main admin should instantly receive:
+
+* New order notifications
+* WhatsApp confirmation updates
+* Rider assignment updates
+* Delivery updates
+
+4. Dashboard Data Sync
+    Fix:
+
+* Missing orders
+* Delayed sync
+* Notification failures
+* Broken counters
+* Empty states
+
+5. Do NOT Break Main Admin
+    While developing secondary admin/mobile apps:
+
+* Do NOT break existing master admin workflows
+* Maintain backward compatibility
+* Keep main admin fully operational
+
+━━━━━━━━━━━━━━━━━━━━
+EXPECTED FLOW
+━━━━━━━━━━━━━━━━━━━━
+
+Shopify Order →
+Main Master Admin Receives First →
+Notification Triggered →
+WhatsApp Automation →
+Rider Assignment →
+Other Admin Apps Sync
+
+━━━━━━━━━━━━━━━━━━━━
+FINAL IMPORTANT NOTE
+━━━━━━━━━━━━━━━━━━━━
+
+The Main KDF Admin is the MASTER CONTROL PANEL.
+
+Please prioritize fixing:
+
+* Missing Shopify orders
+* Missing notifications
+* Real-time sync
+* Dashboard order visibility
+
+Do not move or isolate core order functionality away from the main admin system.

@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { db, ordersTable, usersTable, productsTable, abandonedCheckoutsTable, whatsappLogsTable, whatsappCampaignsTable } from "@workspace/db";
-import { shopifyEmailCampaignsTable } from "@workspace/db";
-import { eq, sql, desc, gte, and } from "drizzle-orm";
+import { db, usersTable, productsTable, abandonedCheckoutsTable, whatsappLogsTable, whatsappCampaignsTable } from "@workspace/db";
+import { shopifyEmailCampaignsTable, shopifyOrdersTable } from "@workspace/db";
+import { sql, desc, gte } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
-import { orderItemsTable } from "@workspace/db";
 
 const router = Router();
 
@@ -32,38 +31,38 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
       emailCampaignStats,
       newCustomers,
     ] = await Promise.all([
-      /* All-time order stats */
+      /* All-time order stats — from shopify_orders (source of truth) */
       db.select({
         totalOrders:      sql<number>`count(*)`,
-        totalRevenue:     sql<number>`coalesce(sum(total::numeric), 0)`,
-        avgOrderValue:    sql<number>`coalesce(avg(total::numeric), 0)`,
+        totalRevenue:     sql<number>`coalesce(sum(total_price::numeric), 0)`,
+        avgOrderValue:    sql<number>`coalesce(avg(total_price::numeric), 0)`,
         pendingOrders:    sql<number>`count(*) filter (where status = 'pending')`,
         processingOrders: sql<number>`count(*) filter (where status = 'processing')`,
-        shippedOrders:    sql<number>`count(*) filter (where status = 'shipped')`,
+        shippedOrders:    sql<number>`count(*) filter (where fulfillment_status = 'fulfilled')`,
         deliveredOrders:  sql<number>`count(*) filter (where status = 'delivered')`,
         cancelledOrders:  sql<number>`count(*) filter (where status = 'cancelled')`,
         confirmedOrders:  sql<number>`count(*) filter (where status = 'confirmed')`,
         outForDelivery:   sql<number>`count(*) filter (where status = 'out_for_delivery')`,
-        paidOrders:       sql<number>`count(*) filter (where payment_status = 'paid')`,
-        unpaidOrders:     sql<number>`count(*) filter (where payment_status = 'unpaid')`,
-      }).from(ordersTable),
+        paidOrders:       sql<number>`count(*) filter (where financial_status = 'paid')`,
+        unpaidOrders:     sql<number>`count(*) filter (where financial_status IN ('pending','unpaid'))`,
+      }).from(shopifyOrdersTable),
 
-      /* Recent 5 orders */
+      /* Recent 5 orders from shopify_orders */
       db.select({
-        id: ordersTable.id,
-        orderNumber: ordersTable.orderNumber,
-        status: ordersTable.status,
-        total: ordersTable.total,
-        paymentStatus: ordersTable.paymentStatus,
-        createdAt: ordersTable.createdAt,
-        shippingAddress: ordersTable.shippingAddress,
-      }).from(ordersTable).orderBy(desc(ordersTable.createdAt)).limit(5),
+        id:              shopifyOrdersTable.id,
+        orderNumber:     shopifyOrdersTable.orderNumber,
+        status:          shopifyOrdersTable.status,
+        total:           shopifyOrdersTable.totalPrice,
+        paymentStatus:   shopifyOrdersTable.financialStatus,
+        createdAt:       shopifyOrdersTable.createdAt,
+        shippingAddress: shopifyOrdersTable.shippingAddress,
+      }).from(shopifyOrdersTable).orderBy(desc(shopifyOrdersTable.createdAt)).limit(5),
 
       /* Users count */
       db.select({ count: sql<number>`count(*)` }).from(usersTable),
 
       /* Active products */
-      db.select({ count: sql<number>`count(*)` }).from(productsTable).where(eq(productsTable.active, true)),
+      db.select({ count: sql<number>`count(*)` }).from(productsTable),
 
       /* Abandoned checkouts */
       db.select({
@@ -73,17 +72,17 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
         totalValue: sql<number>`coalesce(sum(subtotal::numeric), 0)`,
       }).from(abandonedCheckoutsTable),
 
-      /* Today stats */
+      /* Today stats from shopify_orders */
       db.select({
         orders:  sql<number>`count(*)`,
-        revenue: sql<number>`coalesce(sum(total::numeric), 0)`,
-      }).from(ordersTable).where(gte(ordersTable.createdAt, todayStart)),
+        revenue: sql<number>`coalesce(sum(total_price::numeric), 0)`,
+      }).from(shopifyOrdersTable).where(gte(shopifyOrdersTable.createdAt, todayStart)),
 
-      /* This month stats */
+      /* This month stats from shopify_orders */
       db.select({
         orders:  sql<number>`count(*)`,
-        revenue: sql<number>`coalesce(sum(total::numeric), 0)`,
-      }).from(ordersTable).where(gte(ordersTable.createdAt, monthStart)),
+        revenue: sql<number>`coalesce(sum(total_price::numeric), 0)`,
+      }).from(shopifyOrdersTable).where(gte(shopifyOrdersTable.createdAt, monthStart)),
 
       /* WA logs aggregate */
       db.select({
@@ -189,37 +188,28 @@ router.get("/admin/analytics", adminMiddleware as any, async (req, res) => {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const [orderStats, dailyRevenue, topProducts, abandonedStats, waStats, paymentStats] = await Promise.all([
+    const [orderStats, dailyRevenue, abandonedStats, waStats, paymentStats] = await Promise.all([
       db.select({
         totalOrders:    sql<number>`count(*)`,
-        totalRevenue:   sql<number>`coalesce(sum(total::numeric), 0)`,
-        avgOrderValue:  sql<number>`coalesce(avg(total::numeric), 0)`,
-        paidOrders:     sql<number>`count(*) filter (where payment_status = 'paid')`,
-        unpaidOrders:   sql<number>`count(*) filter (where payment_status = 'unpaid')`,
-        pendingPayment: sql<number>`count(*) filter (where payment_status = 'pending')`,
-        paidRevenue:    sql<number>`coalesce(sum(total::numeric) filter (where payment_status = 'paid'), 0)`,
-        pendingRevenue: sql<number>`coalesce(sum(total::numeric) filter (where payment_status != 'paid'), 0)`,
+        totalRevenue:   sql<number>`coalesce(sum(total_price::numeric), 0)`,
+        avgOrderValue:  sql<number>`coalesce(avg(total_price::numeric), 0)`,
+        paidOrders:     sql<number>`count(*) filter (where financial_status = 'paid')`,
+        unpaidOrders:   sql<number>`count(*) filter (where financial_status = 'unpaid')`,
+        pendingPayment: sql<number>`count(*) filter (where financial_status = 'pending')`,
+        paidRevenue:    sql<number>`coalesce(sum(total_price::numeric) filter (where financial_status = 'paid'), 0)`,
+        pendingRevenue: sql<number>`coalesce(sum(total_price::numeric) filter (where financial_status != 'paid'), 0)`,
         deliveredOrders: sql<number>`count(*) filter (where status = 'delivered')`,
         cancelledOrders: sql<number>`count(*) filter (where status = 'cancelled')`,
-      }).from(ordersTable),
+      }).from(shopifyOrdersTable),
 
       db.select({
         date:    sql<string>`date_trunc('day', created_at)::date::text`,
-        revenue: sql<number>`coalesce(sum(total::numeric), 0)`,
+        revenue: sql<number>`coalesce(sum(total_price::numeric), 0)`,
         orders:  sql<number>`count(*)`,
-      }).from(ordersTable)
-        .where(gte(ordersTable.createdAt, thirtyDaysAgo))
+      }).from(shopifyOrdersTable)
+        .where(gte(shopifyOrdersTable.createdAt, thirtyDaysAgo))
         .groupBy(sql`date_trunc('day', created_at)`)
         .orderBy(sql`date_trunc('day', created_at)`),
-
-      db.select({
-        name:         orderItemsTable.name,
-        totalQty:     sql<number>`sum(qty)`,
-        totalRevenue: sql<number>`coalesce(sum(price::numeric * qty), 0)`,
-      }).from(orderItemsTable)
-        .groupBy(orderItemsTable.name)
-        .orderBy(sql`sum(qty) desc`)
-        .limit(10),
 
       db.select({
         total:      sql<number>`count(*)`,
@@ -237,11 +227,11 @@ router.get("/admin/analytics", adminMiddleware as any, async (req, res) => {
       }).from(whatsappLogsTable),
 
       db.select({
-        method:  ordersTable.paymentMethod,
+        method:  shopifyOrdersTable.financialStatus,
         count:   sql<number>`count(*)`,
-        revenue: sql<number>`coalesce(sum(total::numeric), 0)`,
-      }).from(ordersTable)
-        .groupBy(ordersTable.paymentMethod)
+        revenue: sql<number>`coalesce(sum(total_price::numeric), 0)`,
+      }).from(shopifyOrdersTable)
+        .groupBy(shopifyOrdersTable.financialStatus)
         .orderBy(sql`count(*) desc`),
     ]);
 
@@ -269,7 +259,7 @@ router.get("/admin/analytics", adminMiddleware as any, async (req, res) => {
         cancelled: safeNum(orderStats[0]?.cancelledOrders),
       },
       dailyRevenue,
-      topProducts,
+      topProducts: [],
       abandoned: {
         total: abandonedTotal,
         active: safeNum(abandonedStats[0]?.active),
