@@ -37,6 +37,8 @@ interface AuthContextType {
   rider: Rider | null;
   token: string | null;
   loading: boolean;
+  isOnline: boolean;
+  toggleOnline: (online: boolean) => Promise<void>;
   login: (phone: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
@@ -45,6 +47,8 @@ const AuthContext = createContext<AuthContextType>({
   rider: null,
   token: null,
   loading: true,
+  isOnline: false,
+  toggleOnline: async () => {},
   login: async () => ({ ok: false }),
   logout: async () => {},
 });
@@ -61,7 +65,6 @@ async function registerForPushNotifications(token: string): Promise<void> {
     if (finalStatus !== "granted") return;
 
     if (Platform.OS === "android") {
-      /* "new_order" — matches channelId sent by backend sendExpoPush */
       await Notifications.setNotificationChannelAsync("new_order", {
         name: "New Orders",
         importance: Notifications.AndroidImportance.MAX,
@@ -72,7 +75,6 @@ async function registerForPushNotifications(token: string): Promise<void> {
         showBadge: true,
         bypassDnd: true,
       });
-      /* Legacy "orders" channel for older push tokens */
       await Notifications.setNotificationChannelAsync("orders", {
         name: "Order Updates",
         importance: Notifications.AndroidImportance.HIGH,
@@ -137,9 +139,10 @@ async function startLocationTracking(authToken: string): Promise<() => void> {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [rider,   setRider]   = useState<Rider | null>(null);
-  const [token,   setToken]   = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [rider,    setRider]    = useState<Rider | null>(null);
+  const [token,    setToken]    = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [isOnline, setIsOnline] = useState(false);
   const stopLocationRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -147,17 +150,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const riderToken = await AsyncStorage.getItem("kdf_rider_token");
         const riderData  = await AsyncStorage.getItem("kdf_rider_data");
+        const onlineStr  = await AsyncStorage.getItem("kdf_rider_online");
         if (riderToken && riderData) {
           setToken(riderToken);
           setRider(JSON.parse(riderData));
+          if (onlineStr !== null) setIsOnline(onlineStr === "true");
           registerForPushNotifications(riderToken).catch(() => {});
           startLocationTracking(riderToken).then(stop => { stopLocationRef.current = stop; });
+          /* Sync online status from server */
+          fetch(`${BASE_URL}/api/rider/auth/me`, {
+            headers: { Authorization: `Bearer ${riderToken}` },
+          })
+            .then(r => r.json())
+            .then(d => {
+              if (typeof d?.rider?.is_online === "boolean") {
+                setIsOnline(d.rider.is_online);
+                AsyncStorage.setItem("kdf_rider_online", String(d.rider.is_online)).catch(() => {});
+              }
+            })
+            .catch(() => {});
         }
       } catch {}
       setLoading(false);
     })();
     return () => { stopLocationRef.current?.(); };
   }, []);
+
+  const toggleOnline = useCallback(async (online: boolean) => {
+    setIsOnline(online);
+    await AsyncStorage.setItem("kdf_rider_online", String(online)).catch(() => {});
+    const t = token ?? (await AsyncStorage.getItem("kdf_rider_token"));
+    if (!t) return;
+    fetch(`${BASE_URL}/api/rider/online`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ is_online: online }),
+    }).catch(() => {});
+  }, [token]);
 
   const login = useCallback(async (phone: string, password: string) => {
     stopLocationRef.current?.();
@@ -174,6 +203,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem("kdf_rider_data", JSON.stringify(data.rider));
       setToken(data.token);
       setRider(data.rider);
+      /* Fetch actual is_online from server after login */
+      fetch(`${BASE_URL}/api/rider/auth/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      })
+        .then(r => r.json())
+        .then(d => {
+          const online = d?.rider?.is_online ?? false;
+          setIsOnline(online);
+          AsyncStorage.setItem("kdf_rider_online", String(online)).catch(() => {});
+        })
+        .catch(() => {});
       registerForPushNotifications(data.token).catch(() => {});
       startLocationTracking(data.token).then(stop => { stopLocationRef.current = stop; });
       return { ok: true };
@@ -185,13 +225,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     stopLocationRef.current?.();
     stopLocationRef.current = null;
-    await AsyncStorage.multiRemove(["kdf_rider_token", "kdf_rider_data", "kdf_expo_push_token"]);
+    await AsyncStorage.multiRemove(["kdf_rider_token", "kdf_rider_data", "kdf_expo_push_token", "kdf_rider_online"]);
     setToken(null);
     setRider(null);
+    setIsOnline(false);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ rider, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ rider, token, loading, isOnline, toggleOnline, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

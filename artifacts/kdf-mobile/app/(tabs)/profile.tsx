@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -51,10 +52,18 @@ function StatBox({ label, value, accent }: { label: string; value: string | numb
 }
 
 export default function ProfileScreen() {
-  const { rider, token, logout } = useAuth();
+  const { rider, token, logout, isOnline, toggleOnline } = useAuth();
   const insets = useSafeAreaInsets();
   const [notifState, setNotifState] = useState<"idle" | "sending" | "sent" | "denied">("idle");
   const [pushToken, setPushToken] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  const handleToggleOnline = async (val: boolean) => {
+    if (toggling) return;
+    setToggling(true);
+    await toggleOnline(val);
+    setToggling(false);
+  };
 
   /* Check push permission + token on mount */
   React.useEffect(() => {
@@ -146,10 +155,17 @@ export default function ProfileScreen() {
             style={styles.heroLogo}
             resizeMode="contain"
           />
-          <View style={styles.onlinePill}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.onlineTxt}>Online</Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.onlinePill, !isOnline && styles.offlinePill]}
+            onPress={() => handleToggleOnline(!isOnline)}
+            activeOpacity={0.75}
+            disabled={toggling}
+          >
+            <View style={[styles.onlineDot, !isOnline && styles.offlineDot]} />
+            <Text style={[styles.onlineTxt, !isOnline && styles.offlineTxt]}>
+              {isOnline ? "Online" : "Offline"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Avatar */}
@@ -189,6 +205,29 @@ export default function ProfileScreen() {
 
       {/* ── BODY ── */}
       <View style={styles.body}>
+
+        {/* ── ONLINE STATUS CARD ── */}
+        <View style={[styles.card, isOnline ? styles.cardOnline : styles.cardOffline]}>
+          <View style={styles.cardHead}>
+            <View style={[styles.cardHeadIcon, { backgroundColor: isOnline ? "#ECFDF5" : "#F1F5F9" }]}>
+              <Feather name="radio" size={15} color={isOnline ? "#10B981" : "#94A3B8"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>آرڈر موڈ</Text>
+              <Text style={{ fontSize: 11, color: isOnline ? "#059669" : "#94A3B8", fontFamily: "Inter_400Regular", marginTop: 2 }}>
+                {isOnline ? "نئے آرڈر آپ کو مل رہے ہیں" : "آپ offline ہیں — کوئی نیا آرڈر نہیں ملے گا"}
+              </Text>
+            </View>
+            <Switch
+              value={isOnline}
+              onValueChange={handleToggleOnline}
+              trackColor={{ false: "#E2E8F0", true: "#BBF7D0" }}
+              thumbColor={isOnline ? "#10B981" : "#CBD5E0"}
+              ios_backgroundColor="#E2E8F0"
+              disabled={toggling}
+            />
+          </View>
+        </View>
 
         {/* Earnings banner */}
         <LinearGradient colors={["#047857", "#059669"]} style={styles.earningsBanner}>
@@ -373,8 +412,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,197,98,0.16)", paddingHorizontal: 12, paddingVertical: 6,
     borderRadius: 20, borderWidth: 1, borderColor: "rgba(0,197,98,0.28)",
   },
+  offlinePill: {
+    backgroundColor: "rgba(148,163,184,0.12)",
+    borderColor: "rgba(148,163,184,0.25)",
+  },
   onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#4ADE80" },
+  offlineDot: { backgroundColor: "#94A3B8" },
   onlineTxt: { color: "#4ADE80", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  offlineTxt: { color: "#94A3B8" },
+
+  /* Online status card variants */
+  cardOnline: { borderWidth: 1, borderColor: "#BBF7D0" },
+  cardOffline: { borderWidth: 1, borderColor: "#E2E8F0" },
 
   avatarWrap: { position: "relative", marginBottom: 16 },
   avatar: {

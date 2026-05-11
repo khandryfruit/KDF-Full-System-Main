@@ -139,8 +139,33 @@ router.get("/rider/auth/me", riderMiddleware, async (req: any, res) => {
         status: rider.status,
         delivery_charge_per_order: rider.delivery_charge_per_order,
         cnic: rider.cnic,
+        is_online: rider.is_online ?? false,
       },
     });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   RIDER ONLINE STATUS TOGGLE (self-service)
+═══════════════════════════════════════════════════════ */
+
+router.patch("/rider/online", riderMiddleware, async (req: any, res) => {
+  try {
+    const riderId = req.rider.id;
+    const { is_online } = req.body;
+    if (typeof is_online !== "boolean") {
+      res.status(400).json({ error: "is_online must be boolean" }); return;
+    }
+    const rows = await db.execute(sql`
+      UPDATE riders SET is_online = ${is_online}, updated_at = NOW()
+      WHERE id = ${riderId}
+      RETURNING id, name, is_online
+    `);
+    logger.info({ riderId, isOnline: is_online }, "Rider toggled online status");
+    res.json({ ok: true, is_online, rider: rows.rows[0] });
   } catch (err: any) {
     req.log?.error(err);
     res.status(500).json({ error: err.message });

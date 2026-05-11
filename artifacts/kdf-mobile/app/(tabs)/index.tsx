@@ -11,6 +11,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -177,11 +178,19 @@ function DeliveryCard({ d, onPress }: { d: any; onPress: () => void }) {
 
 /* ─── Main Dashboard ─── */
 export default function DashboardScreen() {
-  const { rider } = useAuth();
-  const { token } = useAuth();
+  const { rider, token, isOnline, toggleOnline } = useAuth();
   const router    = useRouter();
   const insets    = useSafeAreaInsets();
   const topPad    = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const [toggling, setToggling] = React.useState(false);
+
+  const handleToggleOnline = async (val: boolean) => {
+    if (toggling) return;
+    Haptics.impactAsync(val ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Heavy);
+    setToggling(true);
+    await toggleOnline(val);
+    setToggling(false);
+  };
 
   const { data: statsData, isLoading: sl, refetch: rs } = useQuery({
     queryKey: ["rider-stats"],
@@ -258,9 +267,37 @@ export default function DashboardScreen() {
             <LinearGradient colors={["#00C562", "#00A050"]} style={styles.avatarGrad}>
               <Text style={styles.avatarTxt}>{initials}</Text>
             </LinearGradient>
-            <View style={styles.onlineDot} />
+            <View style={[styles.onlineDot, { backgroundColor: isOnline ? "#4ADE80" : "#94A3B8" }]} />
           </TouchableOpacity>
         </View>
+
+        {/* ── ONLINE / OFFLINE TOGGLE ── */}
+        <TouchableOpacity
+          style={[styles.onlineToggleBar, isOnline ? styles.onlineToggleBarOn : styles.onlineToggleBarOff]}
+          onPress={() => handleToggleOnline(!isOnline)}
+          activeOpacity={0.85}
+          disabled={toggling}
+        >
+          <View style={[styles.onlineToggleLeft, { opacity: toggling ? 0.6 : 1 }]}>
+            <View style={[styles.onlineStatusDot, { backgroundColor: isOnline ? "#4ADE80" : "#94A3B8" }]} />
+            <View>
+              <Text style={styles.onlineToggleTitle}>
+                {isOnline ? "آنلائن — نئے آرڈر مل رہے ہیں" : "آف لائن — آرڈر نہیں ملیں گے"}
+              </Text>
+              <Text style={styles.onlineToggleSub}>
+                {isOnline ? "Auto-assign ON ✓" : "Tap to go Online"}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={isOnline}
+            onValueChange={handleToggleOnline}
+            trackColor={{ false: "rgba(148,163,184,0.35)", true: "rgba(74,222,128,0.45)" }}
+            thumbColor={isOnline ? "#4ADE80" : "#94A3B8"}
+            ios_backgroundColor="rgba(148,163,184,0.35)"
+            disabled={toggling}
+          />
+        </TouchableOpacity>
 
         {/* Earnings hero card */}
         <View style={styles.heroCard}>
@@ -526,7 +563,37 @@ const styles = StyleSheet.create({
   onlineDot: {
     position: "absolute", bottom: 1, right: 1,
     width: 13, height: 13, borderRadius: 7,
-    backgroundColor: "#4ADE80", borderWidth: 2.5, borderColor: "#060E1C",
+    borderWidth: 2.5, borderColor: "#060E1C",
+  },
+
+  /* Online / Offline toggle bar */
+  onlineToggleBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderRadius: 18, paddingVertical: 13, paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  onlineToggleBarOn: {
+    backgroundColor: "rgba(74,222,128,0.10)",
+    borderColor: "rgba(74,222,128,0.35)",
+  },
+  onlineToggleBarOff: {
+    backgroundColor: "rgba(148,163,184,0.08)",
+    borderColor: "rgba(148,163,184,0.2)",
+  },
+  onlineToggleLeft: {
+    flexDirection: "row", alignItems: "center", gap: 12, flex: 1,
+  },
+  onlineStatusDot: {
+    width: 12, height: 12, borderRadius: 6,
+    shadowColor: "#4ADE80", shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8, shadowRadius: 4,
+  },
+  onlineToggleTitle: {
+    color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold",
+  },
+  onlineToggleSub: {
+    color: "rgba(255,255,255,0.4)", fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2,
   },
 
   /* Hero card */

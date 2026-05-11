@@ -1,0 +1,227 @@
+یہ الگ اسپیشل پرامپٹ اپنے ڈیولپر کو بھیج دیں:
+
+Please urgently redesign and fix the Delivery Management System, Rider App, and Auto Assignment workflow.
+
+Current delivery system is still unstable and causing operational issues in live production.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. AUTO ASSIGN NOT WORKING PROPERLY
+    ━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+
+* Shopify orders are not auto assigning correctly
+* Auto Assign button/toggle does not work properly on LIVE DOMAIN/PRODUCTION
+* Sometimes settings work locally but fail after deployment
+* Even after multiple app updates issue still exists
+
+Please fully debug:
+
+* Production environment variables
+* API endpoints
+* Webhook listeners
+* Queue workers
+* Live socket events
+* Permission middleware
+* Deployment configs
+* Caching/session issues
+
+Required:
+Auto Assign should work perfectly on production/live domain.
+
+━━━━━━━━━━━━━━━━━━━━
+2. ENABLE/DISABLE TOGGLE ISSUE (LIVE PRODUCTION BUG)
+━━━━━━━━━━━━━━━━━━━━
+
+Current issue:
+Auto Assign Enable/Disable toggle becomes unstable or non-functional on live production.
+
+Required Fix:
+
+* Toggle state should save instantly
+* State should persist after refresh
+* Database should sync correctly
+* Live APIs should update correctly
+* Real-time toggle sync required
+
+Please add:
+
+* Proper loading state
+* Success/error toast messages
+* Retry handling
+* Logging for failures
+
+━━━━━━━━━━━━━━━━━━━━
+3. MANUAL ASSIGN SYSTEM REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Current auto system assigns too many orders automatically (50+ orders), which is NOT operationally good.
+
+Required Change:
+Admin should manually select orders and manually assign rider.
+
+New Flow:
+
+1. Select Orders
+2. Choose Rider
+3. Click Assign
+4. Rider instantly receives order
+
+Required Features:
+
+* Multi-select orders
+* Bulk assign
+* Smart rider selection
+* Assign confirmation popup
+* Rider workload visibility
+
+━━━━━━━━━━━━━━━━━━━━
+4. OLD ORDERS SHOULD NOT SHOW IN RIDER APP
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+Very old orders appear inside rider app dashboard.
+
+Required:
+Main Rider Dashboard should ONLY show:
+
+* Today orders
+* Active deliveries
+* Assigned orders
+* Pending orders
+* Last 24–48 hour deliveries
+
+DO NOT show:
+
+* 2–3 month old orders
+* Completed archived deliveries
+* Old history on main screen
+
+Create separate:
+
+* Active Orders
+* Completed Orders
+* Archived Orders
+* Delivery History
+
+━━━━━━━━━━━━━━━━━━━━
+5. ADMIN DELIVERY CONTROL PANEL IMPROVEMENT
+━━━━━━━━━━━━━━━━━━━━
+
+Please improve Admin Delivery Panel.
+
+Need:
+
+* Auto Open new incoming orders
+* Real-time order popup
+* Delivery queue section
+* Pending assignment queue
+* Rider availability indicator
+* Lahore rider filter
+* Delivery priority controls
+
+Suggested Feature:
+Admin should instantly see:
+
+* New Shopify orders
+* Unassigned orders
+* Delayed orders
+* Rider load status
+
+━━━━━━━━━━━━━━━━━━━━
+6. SMART ASSIGNMENT SYSTEM (SUGGESTED IMPROVEMENT)
+━━━━━━━━━━━━━━━━━━━━
+
+Please improve assignment logic.
+
+Suggested:
+
+* Assign based on city
+* Assign based on rider availability
+* Assign based on active workload
+* Prevent overload on single rider
+
+Example:
+If rider already has too many active deliveries:
+
+* System should suggest another rider
+
+━━━━━━━━━━━━━━━━━━━━
+7. REAL-TIME DELIVERY SYSTEM FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Please fully check:
+
+* Firebase/Pusher/WebSockets
+* Laravel queues
+* Event broadcasting
+* Background jobs
+* Notification listeners
+* Mobile sync logic
+
+Ensure:
+Orders appear instantly in Rider App without refresh.
+
+━━━━━━━━━━━━━━━━━━━━
+8. DELIVERY STATUS FLOW FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Status updates should properly sync:
+
+* Assigned
+* Picked
+* Out for Delivery
+* Delivered
+* Failed Delivery
+
+When rider updates status:
+
+* Admin updates instantly
+* Customer notification sent
+* WhatsApp automation triggered
+* Order moves to correct section
+
+━━━━━━━━━━━━━━━━━━━━
+9. PERFORMANCE & BUG FIXING
+━━━━━━━━━━━━━━━━━━━━
+
+Please fix:
+
+* Duplicate orders
+* Missing orders
+* Delayed sync
+* Empty dashboard issues
+* Broken filters
+* Search issues
+* App lag
+* UI freezes
+
+Optimize:
+
+* Database queries
+* APIs
+* State management
+* Real-time sync
+
+━━━━━━━━━━━━━━━━━━━━
+10. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+Delivery system should feel enterprise-level and production ready.
+
+Admin should have:
+
+* Full manual control
+* Smart assignment tools
+* Real-time monitoring
+* Stable production behavior
+
+Rider app should:
+
+* Show only active deliveries
+* Sync instantly
+* Work smoothly
+* Avoid old order clutter
+
+Current production flow is unstable and requires full debugging + redesign.
