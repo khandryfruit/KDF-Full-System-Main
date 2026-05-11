@@ -647,6 +647,12 @@ function RiderOnlineRow({ rider }: { rider: any }) {
     } finally { setToggling(false); }
   };
 
+  const activeOrders   = Number(rider.active_orders ?? 0);
+  const deliveredToday = Number(rider.delivered_today ?? 0);
+  const maxLoad = 10;
+  const loadPct = Math.min(100, Math.round((activeOrders / maxLoad) * 100));
+  const loadColor = loadPct >= 80 ? "bg-red-500" : loadPct >= 50 ? "bg-amber-400" : "bg-green-500";
+
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50">
       <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-sm font-bold shrink-0 ${rider.is_online ? "bg-green-600" : "bg-slate-400"}`}>
@@ -662,14 +668,21 @@ function RiderOnlineRow({ rider }: { rider: any }) {
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{rider.delivery_area || "All Lahore"} · {rider.phone}</p>
+        {/* Workload bar */}
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+            <div className={`h-full ${loadColor} rounded-full transition-all`} style={{ width: `${loadPct}%` }} />
+          </div>
+          <span className="text-[9px] text-muted-foreground shrink-0">{activeOrders}/{maxLoad}</span>
+        </div>
       </div>
       <div className="flex gap-2 text-center shrink-0">
         <div className="text-center">
-          <p className="text-sm font-bold text-orange-600">{rider.active_orders ?? 0}</p>
+          <p className="text-sm font-bold text-orange-600">{activeOrders}</p>
           <p className="text-[9px] text-muted-foreground">Active</p>
         </div>
         <div className="text-center">
-          <p className="text-sm font-bold text-green-600">{rider.delivered_today ?? 0}</p>
+          <p className="text-sm font-bold text-green-600">{deliveredToday}</p>
           <p className="text-[9px] text-muted-foreground">Today</p>
         </div>
       </div>
@@ -694,6 +707,7 @@ function RiderOnlineRow({ rider }: { rider: any }) {
    LIVE DASHBOARD TAB
 ══════════════════════════════════════════════════════════ */
 function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean; onSoundToggle: () => void }) {
+  const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["live-dashboard"],
     queryFn: () => apiFetch("/admin/riders/live-dashboard"),
@@ -759,8 +773,69 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
     { label: "COD Collected",    value: `PKR ${Number(stats.cod_collected_today ?? 0).toLocaleString()}`, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
   ];
 
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const onlineRidersCount = activeRiders.filter((r: any) => r.is_online).length;
+  const unassignedCount   = stats.unassigned ?? 0;
+
+  const quickAutoAssign = async () => {
+    setAutoAssigning(true);
+    try {
+      const res = await apiFetch("/admin/riders/auto-assign", { method: "POST", body: JSON.stringify({ limit: 50 }) });
+      toast({ title: `⚡ Auto-assigned ${res.assigned ?? 0} orders`, description: res.message ?? "" });
+      qc.invalidateQueries({ queryKey: ["live-dashboard"] });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setAutoAssigning(false); }
+  };
+
   return (
     <div className="space-y-5">
+      {/* ── Pending Assignment Queue Alert ── */}
+      {!isLoading && unassignedCount > 0 && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-sm ${
+          onlineRidersCount === 0 ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+        }`}>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+            onlineRidersCount === 0 ? "bg-red-100" : "bg-amber-100"
+          }`}>
+            <Clock size={18} className={onlineRidersCount === 0 ? "text-red-600" : "text-amber-600"} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`font-semibold text-sm ${onlineRidersCount === 0 ? "text-red-700" : "text-amber-800"}`}>
+              {unassignedCount} Unassigned Order{unassignedCount !== 1 ? "s" : ""} Pending
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {onlineRidersCount === 0
+                ? "⚠️ No riders are online — turn on a rider first, then auto-assign"
+                : `${onlineRidersCount} rider${onlineRidersCount !== 1 ? "s" : ""} online and ready`
+              }
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {onlineRidersCount > 0 && (
+              <Button size="sm" onClick={quickAutoAssign} disabled={autoAssigning}
+                className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1">
+                <Zap size={11} />{autoAssigning ? "Assigning..." : "Auto-Assign Now"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Auto-assign off warning ── */}
+      {!isLoading && !ds.auto_delivery_mode && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+          <AlertCircle size={15} className="text-slate-500 shrink-0" />
+          <p className="text-xs text-slate-600 flex-1">
+            <strong>Auto-assign is OFF.</strong> New Lahore orders will NOT be auto-assigned. Enable it in Automation Settings below.
+          </p>
+          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2"
+            onClick={() => saveSetting("auto_delivery_mode", true)}>
+            Enable
+          </Button>
+        </div>
+      )}
+
       {/* Stat tiles */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2.5">
         {STAT_TILES.map(tile => (
