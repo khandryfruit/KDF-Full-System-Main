@@ -1,0 +1,155 @@
+Please further improve the Logistics module inside the KDF Admin Mobile App.
+
+Current issue:
+When we click “Book Courier”, booking partially works, but the workflow is incomplete and not user-friendly.
+
+Need a FULL professional courier booking experience.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. BOOKING SUCCESS CONFIRMATION REQUIRED
+    ━━━━━━━━━━━━━━━━━━━━
+
+After successful courier booking:
+Please show proper success confirmation.
+
+Required:
+
+* Success popup/modal
+* “Order Booked Successfully”
+* Courier Name
+* Tracking ID
+* Booking Time
+* Delivery ETA
+
+Also add buttons:
+
+* Print Label
+* Download Label
+* Copy Tracking ID
+* Open Tracking
+* Share Tracking
+
+Currently after booking nothing clearly happens.
+Need proper booking feedback.
+
+━━━━━━━━━━━━━━━━━━━━
+2. PRINT LABEL SYSTEM REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+After booking:
+Automatically generate shipping label.
+
+Need:
+
+* Thermal label support
+* A4 print support
+* Barcode/QR code
+* Customer address
+* Tracking ID
+* Courier details
+* COD amount
+* Order number
+
+Add buttons:
+
+* Print Label
+* Download PDF
+* Share Label
+
+Print label should work directly from mobile app.
+
+━━━━━━━━━━━━━━━━━━━━
+3. BULK BOOKING FEATURE REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Please add:
+✅ Bulk Order Booking
+
+Need ability to:
+
+* Select multiple confirmed orders
+* Book all together
+* Generate multiple tracking IDs
+* Print all labels together
+* Bulk download labels
+
+Add:
+
+* Multi-select checkbox
+* “Bulk Book Courier” button
+* Bulk print workflow
+
+━━━━━━━━━━━━━━━━━━━━
+4. SMOOTHER BOOKING FLOW
+━━━━━━━━━━━━━━━━━━━━
+
+Please improve booking UX.
+
+Current flow feels incomplete.
+
+Need:
+
+* Step-by-step booking flow
+* Loading states
+* Success animations
+* Error handling
+* Retry option
+* Real-time booking status
+
+━━━━━━━━━━━━━━━━━━━━
+5. ORDER STATUS AUTO UPDATE
+━━━━━━━━━━━━━━━━━━━━
+
+After successful booking:
+Automatically:
+
+* Change order status to “Booked”
+* Add tracking number
+* Update logistics timeline
+* Sync with Main Admin
+* Sync with Rider App
+
+━━━━━━━━━━━━━━━━━━━━
+6. WHATSAPP AUTOMATION AFTER BOOKING
+━━━━━━━━━━━━━━━━━━━━
+
+After booking:
+Customer should automatically receive WhatsApp message containing:
+
+* Courier Name
+* Tracking Number
+* Tracking Link
+* Delivery ETA
+* Thank You Message
+
+━━━━━━━━━━━━━━━━━━━━
+7. REAL-TIME NOTIFICATIONS
+━━━━━━━━━━━━━━━━━━━━
+
+After booking:
+Admin should receive:
+
+* Booking success notification
+* Tracking generated notification
+* Failed booking alert (if any)
+
+━━━━━━━━━━━━━━━━━━━━
+8. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF Admin Mobile App logistics system should work like a professional shipping panel similar to:
+
+* Daraz Seller Center
+* Shopify Shipping
+* Courier management systems
+
+Need:
+
+* Smooth courier booking
+* Bulk booking
+* Instant confirmation
+* Print labels
+* Real-time sync
+* WhatsApp automation
+* Professional workflow
