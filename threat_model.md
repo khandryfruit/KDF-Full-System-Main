@@ -24,9 +24,9 @@ KDF NUTS is a pnpm-monorepo eCommerce platform with a TypeScript/Express API, Po
 ## Scan Anchors
 
 - **Production entry points:** `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/app.ts`, and `artifacts/api-server/src/routes/index.ts`.
-- **Highest-risk server areas:** `artifacts/api-server/src/lib/auth.ts`, `artifacts/api-server/src/routes/storage.ts`, `artifacts/api-server/src/routes/imageUpload.ts`, `artifacts/api-server/src/routes/social.ts`, `artifacts/api-server/src/routes/whatsapp.ts`, `artifacts/api-server/src/routes/adminNotifications.ts`.
-- **Public surfaces:** product/search/chat/order tracking/review upload/storage/public routes and OAuth callbacks that are mounted without auth.
-- **Authenticated/admin surfaces:** `/admin/*` API routes, JWT-protected customer routes, SSE notifications, settings/integration routes, and direct object upload helpers used by admin UIs.
+- **Highest-risk server areas:** `artifacts/api-server/src/lib/auth.ts`, `artifacts/api-server/src/routes/orders.ts`, `artifacts/api-server/src/routes/public-invoice.ts`, `artifacts/api-server/src/routes/storage.ts`, `artifacts/api-server/src/routes/imageUpload.ts`, `artifacts/api-server/src/routes/social.ts`, `artifacts/api-server/src/routes/shopify.ts`, `artifacts/api-server/src/routes/whatsapp.ts`, `artifacts/api-server/src/routes/adminNotifications.ts`, `artifacts/api-server/src/routes/branch-invoice.ts`, and `artifacts/api-server/src/routes/riders-portal.ts`.
+- **Public surfaces:** product/search/chat/order creation, payment initiation and callbacks, order tracking, public invoice rendering, review upload/image routes, storage/public routes, and OAuth/webhook callbacks that are mounted without auth.
+- **Authenticated/admin surfaces:** `/admin/*` API routes, branch and rider JWT-protected routes, JWT-protected customer routes, SSE notifications, settings/integration routes, and direct object upload helpers used by admin UIs.
 - **Usually ignore unless proven reachable:** `artifacts/mockup-sandbox`, local build tooling, and development-only preview assets.
 
 ## Threat Categories
