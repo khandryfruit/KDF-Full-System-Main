@@ -8,6 +8,14 @@ import { sendOrderConfirmation, sendOrderStatusUpdate, sendFailedDeliveryNotific
 import { sendSocialOrderMessage } from "../lib/socialMessenger";
 import { broadcastSSE } from "../lib/sse";
 import { fireCapiPurchase } from "../lib/metaCapi";
+import {
+  sendOrderConfirmationEmail,
+  sendOrderPaidEmail,
+  sendOrderCancelledEmail,
+  sendOutForDeliveryEmail,
+  sendDeliveredEmail,
+  sendRefundEmail,
+} from "../lib/email.js";
 import type { Response } from "express";
 
 const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: string }> = {
@@ -295,6 +303,26 @@ router.post("/orders", optionalAuthMiddleware as any, async (req: AuthRequest, r
       }).catch(() => {});
     }
 
+    /* ── Order confirmation email (fire-and-forget) ── */
+    const emailAddr = (shippingAddress as any)?.email ?? null;
+    if (emailAddr) {
+      const addr2 = shippingAddress as any;
+      sendOrderConfirmationEmail({
+        orderNumber: order.orderNumber,
+        customerName: addr2?.name ?? "Customer",
+        customerEmail: emailAddr,
+        phone: addr2?.phone ?? undefined,
+        city: addr2?.city ?? undefined,
+        address: [addr2?.address, addr2?.province].filter(Boolean).join(", ") || undefined,
+        paymentMethod: paymentMethod ?? "cod",
+        items: insertedItems.map((i: any) => ({ name: i.name, variant: i.variant ?? undefined, price: Number(i.price), qty: i.qty })),
+        subtotal,
+        deliveryFee,
+        total,
+        orderId: order.id,
+      }).catch(() => {});
+    }
+
     /* ── Meta CAPI Purchase event (fire-and-forget) ── */
     fireCapiPurchase({
       id: order.id,
@@ -394,6 +422,22 @@ router.patch("/orders/:id/payment-status", adminMiddleware as any, async (req, r
         status: "confirmed",
       }).catch(() => {});
     }
+
+    /* ── Payment confirmed email (fire-and-forget) ── */
+    if (paymentStatus === "paid") {
+      const addr = order.shippingAddress as any;
+      const emailAddr = addr?.email ?? null;
+      if (emailAddr) {
+        sendOrderPaidEmail({
+          orderNumber: order.orderNumber,
+          customerName: addr?.name ?? "Customer",
+          customerEmail: emailAddr,
+          total: Number(order.total),
+          orderId: order.id,
+        }).catch(() => {});
+      }
+    }
+
     res.json(order);
   } catch (err) {
     req.log.error(err);
@@ -433,6 +477,30 @@ router.patch("/orders/:id/status", adminMiddleware as any, async (req, res) => {
         orderNumber: order.orderNumber,
         status,
       }).catch(() => { /* silent */ });
+    }
+
+    /* ── Status-driven email automations (fire-and-forget) ── */
+    const emailStatusAddr = (order.shippingAddress as any)?.email ?? null;
+    if (emailStatusAddr) {
+      const addr3 = order.shippingAddress as any;
+      const baseData = {
+        orderNumber: order.orderNumber,
+        customerName: addr3?.name ?? "Customer",
+        customerEmail: emailStatusAddr,
+        phone: addr3?.phone ?? undefined,
+        city: addr3?.city ?? undefined,
+        total: Number(order.total),
+        orderId: order.id,
+      };
+      if (status === "cancelled") {
+        sendOrderCancelledEmail(baseData).catch(() => {});
+      } else if (status === "out_for_delivery") {
+        sendOutForDeliveryEmail(baseData).catch(() => {});
+      } else if (status === "delivered") {
+        sendDeliveredEmail(baseData).catch(() => {});
+      } else if (status === "refunded") {
+        sendRefundEmail(baseData).catch(() => {});
+      }
     }
 
     /* ── WhatsApp status update (fire-and-forget) ── */

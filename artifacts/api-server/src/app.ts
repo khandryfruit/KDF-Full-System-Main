@@ -154,7 +154,7 @@ if (process.env.NODE_ENV === "production") {
    *   GET /admin/assets/main.js  →  adminDist/assets/main.js  ✓
    */
   app.use("/admin", express.static(adminDist, { index: false }));
-  app.get(["/admin", "/admin/*"], (req: Request, res: Response) => {
+  app.get(["/admin", "/admin/*path"], (req: Request, res: Response) => {
     const indexHtml = path.join(adminDist, "index.html");
     if (existsSync(indexHtml)) {
       res.set("Cache-Control", "no-cache, no-store, must-revalidate");

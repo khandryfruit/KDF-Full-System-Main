@@ -648,6 +648,23 @@ router.post("/admin/shipments", adminMiddleware as any, async (req: AuthRequest,
           sendTrackingUpdateWA({ phone, customerName, orderNumber, trackingId, courierName, courierSlug: slug }).catch(() => {});
           req.log.info({ phone, trackingId, courierSlug: slug }, "Auto-sent WA tracking after booking");
         }
+
+        /* ── Courier booked email (fire-and-forget) ── */
+        const emailAddr = addr.email ?? null;
+        if (emailAddr) {
+          import("../lib/email.js").then(({ sendCourierBookedEmail }) => {
+            sendCourierBookedEmail({
+              orderNumber,
+              customerName,
+              customerEmail: emailAddr,
+              phone: phone || undefined,
+              trackingId,
+              courierName,
+              trackingUrl: (rawResponse as any)?.trackingUrl ?? undefined,
+              orderId,
+            }).catch(() => {});
+          }).catch(() => {});
+        }
       }
     } catch { /* non-blocking */ }
 
