@@ -82,7 +82,7 @@ import MorePage           from "@/pages/MorePage";
 function ProtectedRoute({ component: C, params }: { component: React.ComponentType<any>; params?: any }) {
   const { token } = useAuth();
   const [, navigate] = useLocation();
-  useEffect(() => { if (!token) navigate("/login"); }, [token]);
+  useEffect(() => { if (!token) navigate("/login/admin"); }, [token]);
   if (!token) return null;
   return <C params={params} />;
 }
@@ -91,12 +91,12 @@ function Router() {
   const { token } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => {
-    if (token && window.location.pathname.includes("/login")) navigate("/");
+    if (token && window.location.pathname.includes("/login/admin")) navigate("/");
   }, [token]);
 
   return (
     <Switch>
-      <Route path="/login"          component={LoginPage} />
+      <Route path="/login/admin"    component={LoginPage} />
       <Route path="/"               component={() => <ProtectedRoute component={DashboardPage}   />} />
       {/* Orders */}
       <Route path="/orders"         component={() => <ProtectedRoute component={OrdersPage}       />} />
