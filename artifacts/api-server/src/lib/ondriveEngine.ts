@@ -3,8 +3,8 @@
  * Connects: Shopify Orders ↔ WhatsApp Confirmations ↔ Real Courier APIs
  */
 
-import { db, couriersTable, shipmentsTable, shopifyOrdersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, couriersTable, shipmentsTable, shopifyOrdersTable, whatsappTemplatesTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
 import {
   sendWhatsAppMessage,
   sendWhatsAppTemplate,
@@ -13,10 +13,6 @@ import {
   getSettings as getWaSettings,
 } from "./whatsapp";
 import { logger } from "./logger";
-
-/* ── WhatsApp API version ── */
-const WA_API_VERSION = "v18.0";
-const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
 
 /* ══════════════════════════════════════════════════════
    EXPO PUSH NOTIFICATION HELPER
@@ -707,10 +703,43 @@ async function handleCancellation(phone: string, shopifyOrderId: string): Promis
   const orderRes = await db.execute(sql`SELECT order_number FROM shopify_orders WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));
   const orderNum = ((orderRes.rows ?? [])[0] as any)?.order_number ?? shopifyOrderId;
 
+  /* ── PRIMARY: Use approved Meta template "order_cancelled" (1 param: order number) ── */
+  const cancelTpl = await db.select()
+    .from(whatsappTemplatesTable)
+    .where(and(
+      eq(whatsappTemplatesTable.approvalStatus, "approved"),
+      eq(whatsappTemplatesTable.triggerEvent, "order_cancelled"),
+    ))
+    .limit(1)
+    .catch(() => []);
+
+  if (cancelTpl.length > 0) {
+    const tpl = cancelTpl[0]!;
+    const result = await sendWhatsAppTemplate({
+      phone,
+      templateName: tpl.name,
+      languageCode: tpl.language ?? "en_US",
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: orderNum },   /* {{1}} order number */
+          ],
+        },
+      ],
+    });
+    if (result.success) {
+      logger.info({ orderNum, phone, template: tpl.name }, "OnDrive: order_cancelled template sent successfully");
+      return;
+    }
+    logger.warn({ error: result.error, template: tpl.name }, "OnDrive: order_cancelled template failed — falling back to plain text");
+  }
+
+  /* ── FALLBACK: plain text (within 24h session window) ── */
   await sendWhatsAppMessage({
     phone,
     message: `❌ *Order ${orderNum} Cancelled*\n\nWe've received your cancellation request. If this was a mistake, please contact us or visit our website.\n\nThank you for reaching out! 🥜`,
-    templateName: "ondrive_cancelled",
+    templateName: "ondrive_cancelled_fallback",
   }).catch(() => {});
 }
 
