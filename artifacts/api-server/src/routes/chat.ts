@@ -15,7 +15,7 @@ import {
   shipmentsTable,
   couriersTable,
 } from "@workspace/db";
-import { eq, ilike, or, and, desc, sql, asc } from "drizzle-orm";
+import { eq, ilike, or, and, desc, sql, asc, inArray } from "drizzle-orm";
 import { expandQuery } from "./search";
 import { adminMiddleware } from "../lib/auth";
 import { trackWithCourierApiForShopify } from "./couriers";
@@ -928,7 +928,7 @@ router.get("/admin/chat/sessions", adminMiddleware as any, async (req, res) => {
     if (sessionIds.length) {
       const leads = await db.select({ sessionId: chatLeadsTable.sessionId, name: chatLeadsTable.name, phone: chatLeadsTable.phone, source: chatLeadsTable.source })
         .from(chatLeadsTable)
-        .where(sql`${chatLeadsTable.sessionId} = ANY(${sessionIds})`);
+        .where(inArray(chatLeadsTable.sessionId, sessionIds));
       for (const l of leads) { if (l.sessionId) leadsMap[l.sessionId] = { name: l.name, phone: l.phone, source: l.source }; }
     }
     const enriched = sessions.map(s => ({ ...s, lead: leadsMap[s.sessionId] ?? null }));
@@ -1115,7 +1115,7 @@ router.post("/admin/chat/leads/bulk-wa", adminMiddleware as any, async (req, res
     } else {
       if (!Array.isArray(leadIds) || leadIds.length === 0) return res.status(400).json({ error: "leadIds required" });
       targets = await db.select({ id: chatLeadsTable.id, name: chatLeadsTable.name, phone: chatLeadsTable.phone })
-        .from(chatLeadsTable).where(sql`${chatLeadsTable.id} = ANY(${leadIds})`);
+        .from(chatLeadsTable).where(inArray(chatLeadsTable.id, leadIds));
     }
     res.json({ success: true, count: targets.length, message: `Bulk WA started for ${targets.length} leads` });
     const { sendWhatsAppMessage } = await import("../lib/whatsapp");

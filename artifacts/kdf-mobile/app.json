@@ -2,7 +2,7 @@
   "expo": {
     "name": "KDF RIDER LAHORE",
     "slug": "kdf-mobile",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kdf-mobile",
@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.kdfnuts.rider",
+      "buildNumber": "6",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "KDF Rider needs your location for delivery navigation.",
         "NSLocationAlwaysUsageDescription": "KDF Rider uses your location to track deliveries."
@@ -23,20 +24,12 @@
     },
     "android": {
       "package": "com.kdfnuts.rider",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D2137"
       },
       "permissions": [
-        "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.VIBRATE",
@@ -54,7 +47,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://khanbabadryfruits.com/"
         }
       ],
       "expo-font",
@@ -89,7 +82,9 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/f5433930-a95c-4ac1-857f-dfdafc2fe4d1"
+      "url": "https://u.expo.dev/f5433930-a95c-4ac1-857f-dfdafc2fe4d1",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
     }
   }
 }
