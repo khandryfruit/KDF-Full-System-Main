@@ -1,0 +1,159 @@
+Please urgently fix the KDF Admin App because currently the app looks like a fake/static dashboard and most options are NOT working.
+
+Current Critical Issues:
+
+* No option is clickable properly
+* Buttons/cards are not responding
+* Dashboard modules look fake/static
+* Orders section not working
+* Riders section not loading
+* WhatsApp section not opening
+* Analytics not loading
+* Customers module unstable
+* Auto-Assign button not functioning
+* Navigation partially broken
+
+Right now the app feels like UI only without proper backend functionality.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. ALL DASHBOARD CARDS MUST WORK
+    ━━━━━━━━━━━━━━━━━━━━
+
+These sections must be fully functional:
+
+* Orders
+* Riders
+* WhatsApp
+* Analytics
+* Customers
+* Rider Management
+* Auto Assign
+
+Currently they either:
+
+* Do nothing
+* Freeze
+* Don’t open
+* Show blank screens
+
+Please connect every module properly with backend APIs.
+
+━━━━━━━━━━━━━━━━━━━━
+2. REMOVE FAKE / STATIC BEHAVIOR
+━━━━━━━━━━━━━━━━━━━━
+
+Current dashboard looks like:
+
+* Dummy UI
+* Static cards
+* Hardcoded values
+* Fake counters
+
+Need:
+
+* Real-time live data
+* Dynamic dashboard
+* Actual Shopify order counts
+* Actual rider counts
+* Real revenue
+* Real pending orders
+
+Dashboard should update live from database/APIs.
+
+━━━━━━━━━━━━━━━━━━━━
+3. CLICK & TOUCH ISSUE FIX
+━━━━━━━━━━━━━━━━━━━━
+
+Please debug:
+
+* Gesture detectors
+* Flutter navigation
+* Touch overlays
+* z-index/layer conflicts
+* Disabled widgets
+* API loading blockers
+
+All buttons/cards must:
+
+* Open instantly
+* Navigate smoothly
+* Load proper data
+
+━━━━━━━━━━━━━━━━━━━━
+4. MODULES MUST LOAD REAL DATA
+━━━━━━━━━━━━━━━━━━━━
+
+Orders module:
+
+* Load Shopify orders
+* Show statuses
+* Allow assignment
+
+Rider module:
+
+* Show active riders
+* Show deliveries
+* Live tracking
+
+WhatsApp module:
+
+* Show chats
+* Show broadcasts
+* Open conversations
+
+Analytics:
+
+* Real sales
+* Revenue
+* Order reports
+
+Customers:
+
+* Customer list
+* Order history
+* Search/filter
+
+━━━━━━━━━━━━━━━━━━━━
+5. ADMIN APP SHOULD FEEL ENTERPRISE LEVEL
+━━━━━━━━━━━━━━━━━━━━
+
+Current app feels incomplete.
+
+Need:
+
+* Real functionality
+* Live APIs
+* Working modules
+* Proper loading states
+* Smooth animations
+* Professional UX
+
+━━━━━━━━━━━━━━━━━━━━
+6. FULL DEBUGGING REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Please fully debug:
+
+* Frontend
+* Backend APIs
+* Laravel routes
+* Flutter state management
+* Authentication
+* Permissions
+* Database queries
+* Live sync
+
+━━━━━━━━━━━━━━━━━━━━
+7. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF Admin App should become a fully functional business management app, not just a UI demo/dashboard.
+
+Everything visible on screen must:
+
+* Work properly
+* Open correctly
+* Show live data
+* Sync with backend
+* Handle actions properly

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/App";
-import { BarChart3, TrendingUp, ShoppingBag, Users, Package, RefreshCw } from "lucide-react";
+import { BarChart3, TrendingUp, ShoppingBag, Users, Package, RefreshCw, MessageCircle } from "lucide-react";
 
 function apiFetch(path: string, token: string | null) {
   return fetch(`/api${path}`, {
@@ -54,15 +54,20 @@ export default function AnalyticsPage() {
     refetchInterval: 60_000,
   });
 
-  const { data: waAnalytics } = useQuery({
-    queryKey: ["wa-analytics"],
-    queryFn:  () => apiFetch("/admin/wa/analytics", token),
+  const { data: riderStats } = useQuery({
+    queryKey: ["analytics-rider-stats"],
+    queryFn:  () => apiFetch("/admin/riders/stats", token),
+    refetchInterval: 30_000,
+  });
+
+  const { data: waRaw } = useQuery({
+    queryKey: ["analytics-wa-conversations"],
+    queryFn:  () => apiFetch("/admin/whatsapp/conversations", token),
     staleTime: 60_000,
   });
 
-  // Dashboard API returns flat (no stats wrapper)
-  const s    = dash ?? {};
-  const wa   = waAnalytics ?? {};
+  const s   = dash ?? {};
+  const rs  = riderStats?.stats ?? {};
 
   const totalOrders   = s.totalOrders   ?? "—";
   const ordersToday   = s.todayOrders   ?? "—";
@@ -70,6 +75,12 @@ export default function AnalyticsPage() {
   const revenueToday  = Number(s.todayRevenue ?? 0);
   const totalCust     = s.totalUsers    ?? "—";
   const pendingOrders = s.pendingOrders ?? "—";
+
+  const waList: any[] = Array.isArray(waRaw) ? waRaw : (waRaw?.rows ?? []);
+  const waTotal    = waList.length;
+  const waOpen     = waList.filter((c: any) => c.status === "open").length;
+  const waUnread   = waList.reduce((sum: number, c: any) => sum + (Number(c.unread_count) || 0), 0);
+  const waHuman    = waList.filter((c: any) => c.bot_mode === "human").length;
 
   const cityBreakdown: { city: string; revenue: number }[] = dash?.cityBreakdown ?? [];
   const maxCityRev = cityBreakdown.reduce((m, c) => Math.max(m, c.revenue), 0);
@@ -111,6 +122,25 @@ export default function AnalyticsPage() {
               <StatCard icon={Users}        label="Customers"      value={totalCust}    color="text-pink-400"   bg="bg-pink-500/10"   />
             </div>
 
+            {/* Rider stats */}
+            {rs.active_riders != null && (
+              <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-foreground">Rider Stats</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Online Riders",  value: rs.active_riders  ?? "—", color: "text-green-400"  },
+                    { label: "Assigned",        value: rs.assigned       ?? "—", color: "text-blue-400"   },
+                    { label: "Delivered",       value: rs.delivered      ?? "—", color: "text-primary"    },
+                  ].map(s => (
+                    <div key={s.label} className="text-center">
+                      <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* City revenue breakdown */}
             {cityBreakdown.length > 0 && (
               <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
@@ -130,19 +160,20 @@ export default function AnalyticsPage() {
             )}
 
             {/* WhatsApp stats */}
-            {wa && (
+            {waTotal > 0 && (
               <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <span className="text-green-500">●</span> WhatsApp Stats
+                  <MessageCircle className="w-4 h-4 text-green-500" /> WhatsApp Conversations
                 </h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Total Msgs",  value: wa.totalMessages ?? wa.total_messages ?? "—" },
-                    { label: "Sent",        value: wa.sent          ?? "—"                        },
-                    { label: "Received",    value: wa.received      ?? "—"                        },
+                    { label: "Total Chats",   value: waTotal,  color: "text-foreground"  },
+                    { label: "Open",          value: waOpen,   color: "text-green-400"   },
+                    { label: "Unread Msgs",   value: waUnread, color: "text-orange-400"  },
+                    { label: "Human Mode",    value: waHuman,  color: "text-blue-400"    },
                   ].map(s => (
-                    <div key={s.label} className="text-center">
-                      <p className="text-lg font-bold text-foreground">{s.value}</p>
+                    <div key={s.label} className="bg-muted/50 rounded-xl p-3 text-center">
+                      <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
                       <p className="text-[10px] text-muted-foreground">{s.label}</p>
                     </div>
                   ))}

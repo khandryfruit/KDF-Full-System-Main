@@ -5,8 +5,6 @@ import {
   LayoutDashboard, Package, Bike, MessageCircle, Grid3X3, LogOut,
 } from "lucide-react";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 interface NavItem {
   href:  string;
   label: string;
@@ -60,13 +58,12 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
       {/* ── Bottom nav ── */}
       <nav className="fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-sm border-t border-border flex items-center justify-around z-20 px-1">
         {ALL_NAV.map(item => {
-          const href   = `${BASE}${item.href}`;
           const active = item.href === "/"
-            ? location === "/" || location === "" || location === BASE
+            ? location === "/" || location === "" || location === "/"
             : location.startsWith(item.href);
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={href}>
+            <Link key={item.href} href={item.href}>
               <button className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-xl transition-all active:scale-95">
                 <div className={`w-9 h-8 rounded-xl flex items-center justify-center transition-colors ${
                   active ? "bg-primary/15" : ""

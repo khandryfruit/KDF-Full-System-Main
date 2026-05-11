@@ -32,25 +32,24 @@ export default function WhatsAppPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "open" | "pending">("all");
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data: rawData, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["wa-conversations", filter],
-    queryFn:  () => apiFetch(`/admin/wa/conversations?status=${filter === "all" ? "" : filter}&limit=50`, token),
+    queryFn:  () => apiFetch(
+      `/admin/whatsapp/conversations${filter !== "all" ? `?status=${filter}` : ""}`,
+      token
+    ),
     refetchInterval: 20_000,
   });
 
-  const { data: unreadData } = useQuery({
-    queryKey: ["wa-unread"],
-    queryFn:  () => apiFetch("/admin/wa/unread-count", token),
-    refetchInterval: 15_000,
-  });
+  const allConversations: any[] = Array.isArray(rawData) ? rawData : (rawData?.conversations ?? rawData?.rows ?? []);
 
-  const conversations = (data?.conversations ?? []).filter((c: any) =>
+  const conversations = allConversations.filter((c: any) =>
     !search ||
-    (c.customer_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (c.contact_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (c.phone ?? "").includes(search)
   );
 
-  const unread = unreadData?.count ?? 0;
+  const unread = allConversations.reduce((sum: number, c: any) => sum + (Number(c.unread_count) || 0), 0);
 
   return (
     <AppShell title="WhatsApp">
@@ -120,7 +119,7 @@ export default function WhatsAppPage() {
                 {/* Avatar */}
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center font-bold text-green-400 text-sm">
-                    {(c.customer_name ?? c.phone ?? "?")[0].toUpperCase()}
+                    {(c.contact_name ?? c.phone ?? "?")[0].toUpperCase()}
                   </div>
                   <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${statusDot(c.status)}`} />
                 </div>
@@ -128,7 +127,7 @@ export default function WhatsAppPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-sm text-foreground truncate">
-                      {c.customer_name ?? "Unknown"}
+                      {c.contact_name ?? "Unknown"}
                     </span>
                     <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 shrink-0">
                       <Clock className="w-3 h-3" />

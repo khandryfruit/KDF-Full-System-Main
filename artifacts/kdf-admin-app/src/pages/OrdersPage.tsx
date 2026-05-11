@@ -33,8 +33,8 @@ export default function OrdersPage() {
   });
 
   const orders     = data?.orders ?? [];
-  const total      = data?.pagination?.total ?? 0;
-  const totalPages = data?.pagination?.pages ?? 1;
+  const total      = data?.total ?? data?.pagination?.total ?? 0;
+  const totalPages = data?.pagination?.pages ?? (total > 0 ? Math.ceil(total / 20) : 1);
 
   return (
     <AppShell title="Orders">

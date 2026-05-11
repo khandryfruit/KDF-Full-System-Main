@@ -1,11 +1,9 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/App";
 import { useLocation } from "wouter";
 import { TrendingUp, ShoppingBag, Bike, AlertCircle, Zap, Package, Users, BarChart3, MessageCircle } from "lucide-react";
 import { useState } from "react";
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function apiFetch(path: string, token: string | null, opts?: RequestInit) {
   return fetch(`/api${path}`, {
@@ -51,7 +49,6 @@ export default function DashboardPage() {
     refetchInterval: 15_000,
   });
 
-  // Dashboard API returns flat (no stats wrapper)
   const s  = dash ?? {};
   const rs = riderStats?.stats ?? {};
 
@@ -76,12 +73,12 @@ export default function DashboardPage() {
   }
 
   const quickActions = [
-    { label: "Auto-Assign Riders", icon: Zap,          action: handleAutoAssign,                                                      color: "bg-primary/10 text-primary border-primary/20"          },
-    { label: "View Orders",        icon: Package,       action: () => navigate(`${BASE}/orders`),                                      color: "bg-blue-500/10 text-blue-400 border-blue-500/20"       },
-    { label: "WhatsApp Chats",     icon: MessageCircle, action: () => navigate(`${BASE}/wa`),                                          color: "bg-green-500/10 text-green-400 border-green-500/20"    },
-    { label: "Customers",          icon: Users,         action: () => navigate(`${BASE}/customers`),                                   color: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" },
-    { label: "Analytics",          icon: BarChart3,     action: () => navigate(`${BASE}/analytics`),                                   color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-    { label: "Rider Management",   icon: Bike,          action: () => navigate(`${BASE}/riders`),                                      color: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
+    { label: "Auto-Assign Riders", icon: Zap,          action: handleAutoAssign,              color: "bg-primary/10 text-primary border-primary/20"          },
+    { label: "View Orders",        icon: Package,       action: () => navigate("/orders"),      color: "bg-blue-500/10 text-blue-400 border-blue-500/20"       },
+    { label: "WhatsApp Chats",     icon: MessageCircle, action: () => navigate("/wa"),          color: "bg-green-500/10 text-green-400 border-green-500/20"    },
+    { label: "Customers",          icon: Users,         action: () => navigate("/customers"),   color: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" },
+    { label: "Analytics",          icon: BarChart3,     action: () => navigate("/analytics"),   color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+    { label: "Rider Management",   icon: Bike,          action: () => navigate("/riders"),      color: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
   ];
 
   return (

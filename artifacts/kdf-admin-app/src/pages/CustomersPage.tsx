@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AppShell from "@/components/AppShell";
 import { useAuth } from "@/App";
-import { Users, Search, Phone, ShoppingBag, RefreshCw } from "lucide-react";
+import { Users, Search, Phone, ShoppingBag, RefreshCw, Mail } from "lucide-react";
 
 function apiFetch(path: string, token: string | null) {
   return fetch(`/api${path}`, {
@@ -21,17 +21,20 @@ function Badge({ label, color }: { label: string; color: string }) {
 export default function CustomersPage() {
   const { token } = useAuth();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["app-customers", search],
+    queryKey: ["app-customers", search, page],
     queryFn:  () => apiFetch(
-      `/admin/shopify/customers?limit=40${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+      `/admin/shopify/customers?limit=30&page=${page}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
       token
     ),
     staleTime: 30_000,
   });
 
-  const customers = data?.customers ?? data?.data ?? [];
+  const customers  = data?.customers ?? data?.data ?? [];
+  const total      = data?.total ?? 0;
+  const totalPages = total > 0 ? Math.ceil(total / 30) : 1;
 
   return (
     <AppShell title="Customers">
@@ -43,7 +46,7 @@ export default function CustomersPage() {
               <Users className="w-5 h-5 text-blue-400" />
               Customers
             </h2>
-            <p className="text-xs text-muted-foreground">{data?.total ?? customers.length} total customers</p>
+            <p className="text-xs text-muted-foreground">{total.toLocaleString()} total customers</p>
           </div>
           <button
             onClick={() => refetch()}
@@ -57,7 +60,7 @@ export default function CustomersPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
-            value={search} onChange={e => setSearch(e.target.value)}
+            value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search name, phone or email…"
             className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
           />
@@ -77,9 +80,11 @@ export default function CustomersPage() {
         ) : (
           <div className="space-y-2">
             {customers.map((c: any) => {
-              const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || c.name || "Unknown";
-              const orders = c.orders_count ?? c.ordersCount ?? 0;
-              const spent  = Number(c.total_spent ?? c.totalSpent ?? 0);
+              const name    = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.first_name || c.name || "Unknown";
+              const orders  = c.totalOrders ?? c.orders_count ?? 0;
+              const spent   = Number(c.totalSpent ?? c.total_spent ?? 0);
+              const contact = c.phone ?? c.email ?? "";
+              const isEmail = !c.phone && !!c.email;
               return (
                 <div key={c.id}
                   className="bg-card border border-border rounded-2xl p-3.5 flex items-start gap-3 active:scale-[0.99] transition-transform">
@@ -97,30 +102,53 @@ export default function CustomersPage() {
                         </span>
                       )}
                     </div>
-                    {(c.phone ?? c.email) && (
+                    {contact && (
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <Phone className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="text-xs text-muted-foreground truncate">
-                          {c.phone ?? c.email}
-                        </span>
+                        {isEmail
+                          ? <Mail  className="w-3 h-3 text-muted-foreground shrink-0" />
+                          : <Phone className="w-3 h-3 text-muted-foreground shrink-0" />}
+                        <span className="text-xs text-muted-foreground truncate">{contact}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <ShoppingBag className="w-3 h-3" />
                         {orders} order{orders !== 1 ? "s" : ""}
                       </div>
-                      {c.tags && (
-                        <Badge label={c.tags.split(",")[0].trim()} color="bg-primary/10 text-primary" />
-                      )}
                       {c.city && (
                         <Badge label={c.city} color="bg-muted text-muted-foreground" />
+                      )}
+                      {c.tags && (
+                        <Badge label={c.tags.split(",")[0].trim()} color="bg-primary/10 text-primary" />
                       )}
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)}
+              className="flex-1 h-10 rounded-xl bg-card border border-border text-sm text-foreground disabled:opacity-40 transition hover:bg-accent"
+            >
+              ← Prev
+            </button>
+            <span className="flex items-center px-3 text-xs text-muted-foreground">
+              {page}/{totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="flex-1 h-10 rounded-xl bg-card border border-border text-sm text-foreground disabled:opacity-40 transition hover:bg-accent"
+            >
+              Next →
+            </button>
           </div>
         )}
       </div>

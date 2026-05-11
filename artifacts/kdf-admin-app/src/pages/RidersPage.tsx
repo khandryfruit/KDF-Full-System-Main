@@ -14,11 +14,16 @@ function apiFetch(path: string, token: string | null, opts?: RequestInit) {
   });
 }
 
-const STATUS_DOT: Record<string, string> = {
-  online:  "bg-green-500",
-  offline: "bg-gray-500",
-  busy:    "bg-yellow-500",
-};
+function riderDot(r: any) {
+  if (r.is_online) return "bg-green-500";
+  if (r.status === "active") return "bg-gray-400";
+  return "bg-red-500";
+}
+
+function riderStatusLabel(r: any) {
+  if (r.is_online) return "● Online";
+  return "○ Offline";
+}
 
 export default function RidersPage() {
   const { token } = useAuth();
@@ -39,6 +44,12 @@ export default function RidersPage() {
 
   const riders = data?.riders ?? [];
   const stats  = statsData?.stats ?? {};
+
+  const onlineCount    = stats.active_riders ?? "—";
+  const totalLahore    = stats.total_lahore   ?? "—";
+  const totalAssigned  = stats.total_assigned ?? "—";
+  const unassignedCount = (stats.total_lahore != null && stats.total_assigned != null)
+    ? Number(stats.total_lahore) - Number(stats.total_assigned) : "—";
 
   const toggleOnline = async (riderId: number, currentStatus: string) => {
     setToggling(riderId);
@@ -71,9 +82,9 @@ export default function RidersPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Total",    value: stats.total_count   ?? riders.length, color: "text-foreground"  },
-            { label: "Online",   value: stats.online_count  ?? "—",           color: "text-green-400"   },
-            { label: "Unassign", value: stats.unassigned_count ?? "—",        color: "text-orange-400"  },
+            { label: "Total (Lahore)", value: totalLahore,    color: "text-foreground"  },
+            { label: "Online",         value: onlineCount,    color: "text-green-400"   },
+            { label: "Unassigned",     value: unassignedCount, color: "text-orange-400" },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-xl p-3 text-center">
               <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -112,7 +123,7 @@ export default function RidersPage() {
                     <span className="text-base font-bold text-foreground">
                       {(r.name ?? "R")[0].toUpperCase()}
                     </span>
-                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-card ${STATUS_DOT[r.status] ?? "bg-gray-500"}`} />
+                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-card ${riderDot(r)}`} />
                   </div>
 
                   {/* Info */}
@@ -120,7 +131,7 @@ export default function RidersPage() {
                     <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
                     <p className="text-xs text-muted-foreground">{r.phone}</p>
                     <p className="text-xs text-muted-foreground">
-                      {r.active_deliveries ?? 0} active · {r.today_deliveries ?? 0} today
+                      {r.active_deliveries ?? 0} active · {r.total_delivered ?? 0} delivered
                     </p>
                   </div>
 
@@ -129,12 +140,12 @@ export default function RidersPage() {
                     disabled={toggling === r.id}
                     onClick={() => toggleOnline(r.id, r.status)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 ${
-                      r.status === "online"
+                      r.is_online
                         ? "bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20"
                         : "bg-muted text-muted-foreground border-border hover:bg-accent"
                     } ${toggling === r.id ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    {toggling === r.id ? "..." : r.status === "online" ? "● Online" : "○ Offline"}
+                    {toggling === r.id ? "..." : riderStatusLabel(r)}
                   </button>
                 </div>
               </div>
