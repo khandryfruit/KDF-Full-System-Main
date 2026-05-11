@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { clearToken, isLoggedIn, api, setToken } from "@/lib/api";
+import { clearToken, isLoggedIn, isTenantLoggedIn, clearTenantToken, api, setToken } from "@/lib/api";
 
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
@@ -12,6 +12,11 @@ import PlansPage from "@/pages/PlansPage";
 import StorefrontBuilderPage from "@/pages/StorefrontBuilderPage";
 import ActivityPage from "@/pages/ActivityPage";
 import NotFound from "@/pages/not-found";
+
+import PortalLandingPage from "@/pages/PortalLandingPage";
+import TenantRegisterPage from "@/pages/TenantRegisterPage";
+import TenantLoginPage from "@/pages/TenantLoginPage";
+import TenantDashboardPage from "@/pages/TenantDashboardPage";
 
 const queryClient = new QueryClient();
 
@@ -48,7 +53,7 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${active
                 ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30"
                 : "text-slate-400 hover:text-white hover:bg-slate-800"
-                }`}
+              }`}
             >
               <span className="text-base">{item.icon}</span>
               {item.label}
@@ -57,7 +62,13 @@ function Sidebar({ onLogout }: { onLogout: () => void }) {
         })}
       </nav>
 
-      <div className="px-3 py-4 border-t border-slate-800">
+      <div className="px-3 py-4 border-t border-slate-800 space-y-1">
+        <button
+          onClick={() => navigate("/portal")}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+        >
+          <span>🌐</span> Tenant Portal
+        </button>
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
@@ -80,7 +91,7 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
   );
 }
 
-function AppRoutes({ onLogout }: { onLogout: () => void }) {
+function AdminRoutes({ onLogout }: { onLogout: () => void }) {
   return (
     <Layout onLogout={onLogout}>
       <Switch>
@@ -96,18 +107,39 @@ function AppRoutes({ onLogout }: { onLogout: () => void }) {
   );
 }
 
+function PortalRoutes() {
+  return (
+    <Switch>
+      <Route path="/portal" component={PortalLandingPage} />
+      <Route path="/portal/register" component={TenantRegisterPage} />
+      <Route path="/portal/login" component={TenantLoginPage} />
+      <Route path="/portal/dashboard">
+        {isTenantLoggedIn()
+          ? <TenantDashboardPage />
+          : <Redirect to="/portal/login" />
+        }
+      </Route>
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [location] = useLocation();
+
+  const isPortal = location.startsWith("/portal");
 
   useEffect(() => {
+    if (isPortal) { setAuthed(false); return; }
     if (!isLoggedIn()) { setAuthed(false); return; }
     api.me().then(() => setAuthed(true)).catch(() => { clearToken(); setAuthed(false); });
-  }, []);
+  }, [isPortal]);
 
   function handleLogin() { setAuthed(true); }
   function handleLogout() { clearToken(); setAuthed(false); }
 
-  if (authed === null) {
+  if (authed === null && !isPortal) {
     return (
       <div className="min-h-screen bg-[#080d1a] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -115,17 +147,32 @@ function App() {
     );
   }
 
+  if (isPortal) {
+    return (
+      <>
+        <PortalRoutes />
+        <Toaster />
+      </>
+    );
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-        {!authed
-          ? <LoginPage onLogin={handleLogin} />
-          : <AppRoutes onLogout={handleLogout} />
-        }
-      </WouterRouter>
+    <>
+      {!authed
+        ? <LoginPage onLogin={handleLogin} />
+        : <AdminRoutes onLogout={handleLogout} />
+      }
       <Toaster />
-    </QueryClientProvider>
+    </>
   );
 }
 
-export default App;
+export default function Root() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <App />
+      </WouterRouter>
+    </QueryClientProvider>
+  );
+}
