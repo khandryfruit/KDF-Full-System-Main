@@ -18,6 +18,10 @@ import PortalLandingPage from "@/pages/PortalLandingPage";
 import TenantRegisterPage from "@/pages/TenantRegisterPage";
 import TenantLoginPage from "@/pages/TenantLoginPage";
 import TenantDashboardPage from "@/pages/TenantDashboardPage";
+import TenantThemePage from "@/pages/TenantThemePage";
+import TenantSettingsPage from "@/pages/TenantSettingsPage";
+import TenantUpgradePage from "@/pages/TenantUpgradePage";
+import TenantLayout from "@/components/TenantLayout";
 
 const queryClient = new QueryClient();
 
@@ -111,14 +115,33 @@ function AdminRoutes({ onLogout }: { onLogout: () => void }) {
 }
 
 function PortalRoutes() {
+  const loggedIn = isTenantLoggedIn();
   return (
     <Switch>
       <Route path="/portal" component={PortalLandingPage} />
       <Route path="/portal/register" component={TenantRegisterPage} />
       <Route path="/portal/login" component={TenantLoginPage} />
       <Route path="/portal/dashboard">
-        {isTenantLoggedIn()
-          ? <TenantDashboardPage />
+        {loggedIn
+          ? <TenantLayout><TenantDashboardPage /></TenantLayout>
+          : <Redirect to="/portal/login" />
+        }
+      </Route>
+      <Route path="/portal/theme">
+        {loggedIn
+          ? <TenantLayout><TenantThemePage /></TenantLayout>
+          : <Redirect to="/portal/login" />
+        }
+      </Route>
+      <Route path="/portal/settings">
+        {loggedIn
+          ? <TenantLayout><TenantSettingsPage /></TenantLayout>
+          : <Redirect to="/portal/login" />
+        }
+      </Route>
+      <Route path="/portal/upgrade">
+        {loggedIn
+          ? <TenantLayout><TenantUpgradePage /></TenantLayout>
           : <Redirect to="/portal/login" />
         }
       </Route>

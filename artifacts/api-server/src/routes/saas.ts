@@ -578,6 +578,30 @@ saasRouter.get("/saas/admin/revenue", saasAdminAuth, async (_req, res) => {
   });
 });
 
+/* GET /api/saas/tenant/settings */
+saasRouter.get("/saas/tenant/settings", tenantAuth, async (req, res) => {
+  const tenantId = (req as any).tenantPayload.id;
+  const [tenant] = await db.select({ settings: saasTenantTable.settings })
+    .from(saasTenantTable).where(eq(saasTenantTable.id, tenantId)).limit(1);
+  if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(tenant.settings ?? {});
+});
+
+/* PUT /api/saas/tenant/settings */
+saasRouter.put("/saas/tenant/settings", tenantAuth, async (req, res) => {
+  const tenantId = (req as any).tenantPayload.id;
+  const incoming = req.body ?? {};
+  const [tenant] = await db.select({ settings: saasTenantTable.settings })
+    .from(saasTenantTable).where(eq(saasTenantTable.id, tenantId)).limit(1);
+  if (!tenant) { res.status(404).json({ error: "Not found" }); return; }
+  const merged = { ...(tenant.settings ?? {}), ...incoming };
+  await db.update(saasTenantTable)
+    .set({ settings: merged, updatedAt: new Date() })
+    .where(eq(saasTenantTable.id, tenantId));
+  await logActivity({ tenantId, actorType: "tenant", actorId: tenantId, action: "update_settings", meta: { keys: Object.keys(incoming) } });
+  res.json({ ok: true, settings: merged });
+});
+
 /* GET /api/saas/me  (tenant) */
 saasRouter.get("/saas/me", async (req, res) => {
   const auth = req.headers.authorization;

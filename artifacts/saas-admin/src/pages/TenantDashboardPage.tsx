@@ -100,33 +100,7 @@ export default function TenantDashboardPage() {
     .map(([k]) => k);
 
   return (
-    <div className="min-h-screen bg-[#080d1a] flex flex-col">
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-[#0d1424] px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-sm">⚡</div>
-          <div>
-            <div className="text-white font-bold text-sm">{me.storeName}</div>
-            <div className="text-slate-500 text-xs">Tenant Dashboard</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs px-2.5 py-1 rounded-full ${statusColor(me.status)}`}>{me.status}</span>
-            <span className={`text-xs px-2.5 py-1 rounded-full ${tierColor(me.plan?.tier ?? "starter")}`}>
-              {me.plan?.name ?? "Free"}
-            </span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-slate-500 hover:text-red-400 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-500/10"
-          >
-            🚪 Sign Out
-          </button>
-        </div>
-      </header>
-
-      <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-8 space-y-8">
+    <div className="space-y-8">
         {/* Trial banner */}
         {daysLeftTrial !== null && daysLeftTrial <= 14 && (
           <div className={`rounded-xl border px-5 py-4 flex items-center justify-between ${
@@ -142,7 +116,7 @@ export default function TenantDashboardPage() {
                 Upgrade your plan to keep using all features without interruption.
               </p>
             </div>
-            <button className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors ml-4 shrink-0">
+            <button onClick={() => navigate("/portal/upgrade")} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors ml-4 shrink-0">
               Upgrade Plan
             </button>
           </div>
@@ -221,7 +195,7 @@ export default function TenantDashboardPage() {
                 </div>
               )}
             </div>
-            <button className="mt-5 w-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/30 text-emerald-400 text-xs font-medium py-2.5 rounded-lg transition-colors">
+            <button onClick={() => navigate("/portal/upgrade")} className="mt-5 w-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/30 text-emerald-400 text-xs font-medium py-2.5 rounded-lg transition-colors">
               Upgrade Plan →
             </button>
           </div>
@@ -232,19 +206,22 @@ export default function TenantDashboardPage() {
           <h2 className="text-sm font-semibold text-white mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { icon: "🛍️", label: "Manage Products" },
-              { icon: "📦", label: "View Orders" },
-              { icon: "🎨", label: "Customize Theme" },
-              { icon: "📊", label: "Analytics" },
+              { icon: "🎨", label: "Customize Theme",  path: "/portal/theme",    color: "hover:border-purple-500/50 hover:bg-purple-500/5" },
+              { icon: "⚙️", label: "Store Settings",   path: "/portal/settings", color: "hover:border-blue-500/50 hover:bg-blue-500/5" },
+              { icon: "🚀", label: "Upgrade Plan",     path: "/portal/upgrade",  color: "hover:border-emerald-500/50 hover:bg-emerald-500/5" },
+              { icon: "📊", label: "Analytics",        path: null,               color: "hover:border-slate-600 opacity-60" },
             ].map(action => (
               <button
                 key={action.label}
-                className="flex flex-col items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 transition-all text-center group"
+                onClick={() => action.path ? navigate(action.path) : null}
+                disabled={!action.path}
+                className={`flex flex-col items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl p-4 transition-all text-center group ${action.color}`}
               >
                 <span className="text-2xl">{action.icon}</span>
                 <span className="text-xs text-slate-300 group-hover:text-white transition-colors font-medium leading-tight">
                   {action.label}
                 </span>
+                {!action.path && <span className="text-xs text-slate-600">Coming soon</span>}
               </button>
             ))}
           </div>
@@ -275,7 +252,6 @@ export default function TenantDashboardPage() {
             ))}
           </div>
         </div>
-      </div>
     </div>
   );
 }

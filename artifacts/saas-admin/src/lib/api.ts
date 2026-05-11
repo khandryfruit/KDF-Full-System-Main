@@ -146,5 +146,8 @@ export const api = {
 
     getTheme: () => tenantRequest("/saas/tenant/theme"),
     updateTheme: (data: any) => tenantRequest("/saas/tenant/theme", { method: "PUT", body: JSON.stringify(data) }),
+
+    getSettings: () => tenantRequest("/saas/tenant/settings"),
+    updateSettings: (data: any) => tenantRequest("/saas/tenant/settings", { method: "PUT", body: JSON.stringify(data) }),
   },
 };
