@@ -1,0 +1,101 @@
+You are a senior Node.js production debugging engineer.
+
+My SMTP email system is already built, but emails are failing in production.
+
+IMPORTANT:
+Do NOT redesign the email templates.
+Only FIX the SMTP sending infrastructure and configuration.
+
+Current Problem:
+The SMTP system is using Titan Email SMTP but mail sending/testing is failing.
+
+Current Configuration:
+
+SMTP Host:
+smtp.titan.email
+
+SMTP Username:
+support@khandryfruit.com
+
+Current Wrong From Address:
+khandryfruit.pk@gmail.com
+
+Problem:
+The From Address domain does NOT match the Titan SMTP authenticated domain.
+
+Your task is to:
+
+1. Fix the SMTP configuration completely.
+
+2. Ensure the FROM ADDRESS automatically matches:
+support@khandryfruit.com
+
+3. Add proper Nodemailer production configuration.
+
+4. Add Titan SMTP best-practice setup.
+
+5. Add fallback support:
+- Port 465 + SSL
+- Port 587 + STARTTLS
+
+6. Detect if running on:
+- Replit
+- Render
+- VPS
+- Docker
+
+and automatically apply stable SMTP settings.
+
+7. Fix common production issues:
+- ETIMEDOUT
+- Greeting timeout
+- SSL handshake failure
+- EAUTH
+- Invalid login
+- TLS rejection
+- Connection closed
+
+8. Add automatic SMTP verification.
+
+9. Add detailed logs:
+- SMTP Connected
+- SMTP Failed
+- Auth Success
+- Mail Sent
+- Retry Triggered
+
+10. Add safe production transporter config:
+
+Example requirements:
+- connectionTimeout
+- greetingTimeout
+- socketTimeout
+- TLS handling
+- rejectUnauthorized false
+- requireTLS true
+
+11. Add fallback retry logic:
+If port 465 fails → automatically retry with 587.
+
+12. Ensure mail sending NEVER crashes the backend.
+
+13. Add production-safe async sendMail() function.
+
+14. Add queue-safe mail sending support.
+
+15. Add PM2-safe implementation.
+
+16. Add Redis/Bull compatibility.
+
+17. Fix Replit SMTP compatibility issues.
+
+18. Keep ALL existing email templates unchanged.
+
+19. Generate final production-ready code for:
+- config/mail.js
+- services/sendMail.js
+- SMTP verify logic
+- retry logic
+- fallback logic
+
+20. Make the system enterprise-grade and production stable.

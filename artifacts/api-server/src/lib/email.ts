@@ -59,17 +59,81 @@ async function getSettings() {
   return s ?? null;
 }
 
-async function getTransport() {
+/**
+ * Resolves the correct FROM address.
+ * Rule: smtpFrom must share the same domain as smtpUser (Titan SMTP requirement).
+ * If smtpFrom is a Gmail / mismatched domain → fall back to smtpUser.
+ */
+function resolveFrom(smtpUser: string, smtpFrom?: string | null): string {
+  if (!smtpFrom) return smtpUser;
+  try {
+    const fromDomain = smtpFrom.split("@")[1]?.toLowerCase();
+    const userDomain = smtpUser.split("@")[1]?.toLowerCase();
+    if (!fromDomain || !userDomain || fromDomain !== userDomain) {
+      logger.warn({ smtpFrom, smtpUser }, "email: FROM domain mismatch — using smtpUser as FROM");
+      return smtpUser;
+    }
+    return smtpFrom;
+  } catch {
+    return smtpUser;
+  }
+}
+
+/**
+ * Builds a nodemailer transporter with production-safe settings for Titan SMTP.
+ * Tries the configured port; caller can override port/secure for fallback.
+ */
+function buildTransport(s: {
+  smtpHost: string;
+  smtpUser: string;
+  smtpPass: string;
+  smtpPort?: number | null;
+}, overridePort?: number) {
+  const port   = overridePort ?? s.smtpPort ?? 587;
+  const secure = port === 465;
+  return nodemailer.createTransport({
+    host:               s.smtpHost,
+    port,
+    secure,
+    auth:               { user: s.smtpUser, pass: s.smtpPass },
+    connectionTimeout:  30_000,
+    greetingTimeout:    20_000,
+    socketTimeout:      30_000,
+    tls: {
+      rejectUnauthorized: false,
+      minVersion:         "TLSv1.2",
+    },
+    ...(secure ? {} : { requireTLS: true }),
+  } as any);
+}
+
+/**
+ * Returns a verified transport, attempting port 465 → 587 fallback.
+ * Never throws — returns null if SMTP is not configured or both ports fail.
+ */
+async function getTransport(): Promise<{
+  transport: nodemailer.Transporter;
+  from: string;
+  settings: NonNullable<Awaited<ReturnType<typeof getSettings>>>;
+} | null> {
   const s = await getSettings();
   if (!s?.emailEnabled || !s.smtpHost || !s.smtpUser || !s.smtpPass) return null;
-  const transport = nodemailer.createTransport({
-    host:   s.smtpHost,
-    port:   s.smtpPort ?? 587,
-    secure: (s.smtpPort ?? 587) === 465,
-    auth:   { user: s.smtpUser, pass: s.smtpPass },
-    tls:    { rejectUnauthorized: false },
-  } as any);
-  return { transport, from: s.smtpFrom || s.smtpUser, settings: s };
+
+  const from      = resolveFrom(s.smtpUser, s.smtpFrom);
+  const primary   = s.smtpPort ?? 587;
+  const fallback  = primary === 465 ? 587 : 465;
+
+  for (const port of [primary, fallback]) {
+    try {
+      const transport = buildTransport(s, port);
+      await transport.verify();
+      logger.info({ host: s.smtpHost, port }, "SMTP connected and verified");
+      return { transport, from, settings: s };
+    } catch (err: any) {
+      logger.warn({ host: s.smtpHost, port, err: err?.message }, `SMTP port ${port} failed — ${port === fallback ? "giving up" : "trying fallback"}`);
+    }
+  }
+  return null;
 }
 
 /* ─── Logger ─────────────────────────────────────────────────── */
@@ -100,29 +164,58 @@ async function logEmail(opts: {
 
 /* ─── Core Send ──────────────────────────────────────────────── */
 
+/**
+ * Production-safe sendEmail — never throws, never crashes the server.
+ * Retries once on transient SMTP errors (ETIMEDOUT, ECONNRESET, greeting).
+ */
 async function sendEmail(opts: {
-  type:        EmailType;
-  to:          string;
-  subject:     string;
-  html:        string;
-  orderId?:    number;
+  type:         EmailType;
+  to:           string;
+  subject:      string;
+  html:         string;
+  orderId?:     number;
   orderNumber?: string;
 }): Promise<boolean> {
-  const conn = await getTransport();
-  if (!conn) {
-    logger.warn({ type: opts.type, to: opts.to }, "email: transport not configured — skipping");
-    return false;
-  }
+  let conn: Awaited<ReturnType<typeof getTransport>>;
   try {
-    await conn.transport.sendMail({ from: conn.from, to: opts.to, subject: opts.subject, html: opts.html });
-    logger.info({ type: opts.type, to: opts.to, subject: opts.subject }, "email sent");
-    await logEmail({ type: opts.type, to: opts.to, subject: opts.subject, status: "sent", orderId: opts.orderId, orderNumber: opts.orderNumber });
-    return true;
+    conn = await getTransport();
   } catch (err: any) {
-    logger.error({ type: opts.type, to: opts.to, err: err?.message }, "email send failed");
-    await logEmail({ type: opts.type, to: opts.to, subject: opts.subject, status: "failed", errorMessage: String(err?.message ?? err), orderId: opts.orderId, orderNumber: opts.orderNumber });
+    logger.error({ type: opts.type, err: err?.message }, "email: getTransport() threw unexpectedly");
+    conn = null;
+  }
+
+  if (!conn) {
+    logger.warn({ type: opts.type, to: opts.to }, "email: SMTP not configured or unreachable — skipping");
     return false;
   }
+
+  const TRANSIENT = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|greeting|socket|timeout/i;
+  const MAX_RETRIES = 2;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await conn.transport.sendMail({
+        from:    conn.from,
+        to:      opts.to,
+        subject: opts.subject,
+        html:    opts.html,
+      });
+      logger.info({ type: opts.type, to: opts.to, subject: opts.subject, attempt }, "Mail Sent ✓");
+      await logEmail({ type: opts.type, to: opts.to, subject: opts.subject, status: "sent", orderId: opts.orderId, orderNumber: opts.orderNumber });
+      return true;
+    } catch (err: any) {
+      const msg = String(err?.message ?? err);
+      if (attempt < MAX_RETRIES && TRANSIENT.test(msg)) {
+        logger.warn({ type: opts.type, to: opts.to, attempt, err: msg }, "email: transient error — Retry Triggered");
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+      logger.error({ type: opts.type, to: opts.to, err: msg }, "SMTP Failed ✗");
+      await logEmail({ type: opts.type, to: opts.to, subject: opts.subject, status: "failed", errorMessage: msg, orderId: opts.orderId, orderNumber: opts.orderNumber });
+      return false;
+    }
+  }
+  return false;
 }
 
 /* ═══════════════════════════════════════════════════════════════

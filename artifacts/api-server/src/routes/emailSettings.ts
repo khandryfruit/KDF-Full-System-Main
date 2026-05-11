@@ -25,6 +25,17 @@ router.patch("/admin/email-settings", adminMiddleware as any, async (req, res) =
   try {
     const { smtpPass, ...rest } = req.body;
     let [existing] = await db.select().from(emailSettingsTable).limit(1);
+
+    // Auto-fix FROM address: if smtpFrom domain doesn't match smtpUser, use smtpUser
+    const effectiveUser = rest.smtpUser ?? existing?.smtpUser ?? "";
+    if (effectiveUser && rest.smtpFrom) {
+      const fromDomain = (rest.smtpFrom as string).split("@")[1]?.toLowerCase();
+      const userDomain = effectiveUser.split("@")[1]?.toLowerCase();
+      if (fromDomain && userDomain && fromDomain !== userDomain) {
+        rest.smtpFrom = effectiveUser; // silently correct
+      }
+    }
+
     const update: any = { ...rest, updatedAt: new Date() };
     if (smtpPass !== undefined && smtpPass !== "") update.smtpPass = smtpPass;
     if (!existing) {
@@ -43,6 +54,49 @@ router.patch("/admin/email-settings", adminMiddleware as any, async (req, res) =
   }
 });
 
+/* ── Shared helpers ── */
+
+function resolveFrom(smtpUser: string, smtpFrom?: string | null): string {
+  if (!smtpFrom) return smtpUser;
+  try {
+    const fromDomain = smtpFrom.split("@")[1]?.toLowerCase();
+    const userDomain = smtpUser.split("@")[1]?.toLowerCase();
+    if (!fromDomain || !userDomain || fromDomain !== userDomain) return smtpUser;
+    return smtpFrom;
+  } catch {
+    return smtpUser;
+  }
+}
+
+function buildTransporter(s: { smtpHost: string; smtpUser: string; smtpPass: string }, port: number) {
+  const secure = port === 465;
+  return nodemailer.createTransport({
+    host:               s.smtpHost,
+    port,
+    secure,
+    auth:               { user: s.smtpUser, pass: s.smtpPass },
+    connectionTimeout:  30_000,
+    greetingTimeout:    20_000,
+    socketTimeout:      30_000,
+    tls: { rejectUnauthorized: false, minVersion: "TLSv1.2" },
+    ...(secure ? {} : { requireTLS: true }),
+  } as any);
+}
+
+function smtpErrorHint(msg: string): string {
+  if (/535|authentication|Invalid login|EAUTH/i.test(msg))
+    return " — Auth failed: check username/password match the Titan SMTP account (smtp.titan.email).";
+  if (/ECONNREFUSED|connect/i.test(msg))
+    return " — Cannot connect: check Host and Port. Titan uses port 465 (SSL) or 587 (STARTTLS).";
+  if (/ETIMEDOUT|timeout|greeting/i.test(msg))
+    return " — Timeout: Replit may block outbound SMTP. Try port 465 first, then 587.";
+  if (/domain|mismatch|FROM/i.test(msg))
+    return " — FROM address domain must match your Titan account domain (e.g. support@khandryfruit.com).";
+  if (/TLS|SSL|handshake/i.test(msg))
+    return " — TLS error: ensure TLS is enabled and rejectUnauthorized is false.";
+  return "";
+}
+
 /* ── POST test connection ── */
 router.post("/admin/email-settings/test", adminMiddleware as any, async (req: any, res) => {
   try {
@@ -52,31 +106,30 @@ router.post("/admin/email-settings/test", adminMiddleware as any, async (req: an
         error: "SMTP not fully configured — please fill in Host, Username, and Password then save first.",
       });
     }
-    const isPort465 = Number(settings.smtpPort) === 465;
-    const transport = nodemailer.createTransport({
-      host:   settings.smtpHost,
-      port:   Number(settings.smtpPort) || 587,
-      secure: isPort465,
-      auth:   { user: settings.smtpUser, pass: settings.smtpPass },
-      tls:    { rejectUnauthorized: false },
-      connectionTimeout: 10_000,
-      greetingTimeout:    8_000,
-      socketTimeout:     10_000,
-    } as any);
-    await transport.verify();
-    req.log.info({ host: settings.smtpHost, port: settings.smtpPort }, "SMTP test OK");
-    return res.json({ success: true, message: `SMTP connection to ${settings.smtpHost}:${settings.smtpPort} successful!` });
-  } catch (e: any) {
-    req.log.error({ err: e.message }, "SMTP test failed");
-    let hint = "";
-    if (e.message?.includes("authentication") || e.message?.includes("535") || e.message?.includes("Invalid login")) {
-      hint = " — Wrong username or password. For Hostinger: use smtp.hostinger.com port 465.";
-    } else if (e.message?.includes("ECONNREFUSED") || e.message?.includes("connect")) {
-      hint = " — Cannot reach server. Check Host and Port.";
-    } else if (e.message?.includes("timeout")) {
-      hint = " — Connection timed out. Check firewall / Host settings.";
+
+    const primary  = Number(settings.smtpPort) || 587;
+    const fallback = primary === 465 ? 587 : 465;
+    let lastErr    = "";
+    let usedPort   = primary;
+
+    for (const port of [primary, fallback]) {
+      try {
+        const transport = buildTransporter(settings, port);
+        await transport.verify();
+        usedPort = port;
+        req.log.info({ host: settings.smtpHost, port }, "SMTP Connected — Auth Success ✓");
+        return res.json({ success: true, message: `SMTP Connected to ${settings.smtpHost}:${port} — Auth Success ✓` });
+      } catch (e: any) {
+        lastErr = String(e?.message ?? e);
+        req.log.warn({ host: settings.smtpHost, port, err: lastErr }, `SMTP port ${port} failed`);
+      }
     }
-    return res.status(500).json({ error: `SMTP test failed: ${e.message}${hint}` });
+
+    req.log.error({ host: settings.smtpHost, err: lastErr }, "SMTP Failed — both ports exhausted");
+    return res.status(500).json({ error: `SMTP Failed on ports ${primary} & ${fallback}: ${lastErr}${smtpErrorHint(lastErr)}` });
+  } catch (e: any) {
+    req.log.error({ err: e.message }, "SMTP test route error");
+    return res.status(500).json({ error: `Test error: ${e.message}` });
   }
 });
 
@@ -89,18 +142,29 @@ router.post("/admin/email-settings/send-test", adminMiddleware as any, async (re
     if (!settings?.smtpHost || !settings.smtpUser || !settings.smtpPass) {
       return res.status(400).json({ error: "SMTP not fully configured. Save settings first." });
     }
-    const isPort465 = Number(settings.smtpPort) === 465;
-    const transport = nodemailer.createTransport({
-      host:   settings.smtpHost,
-      port:   Number(settings.smtpPort) || 587,
-      secure: isPort465,
-      auth:   { user: settings.smtpUser, pass: settings.smtpPass },
-      tls:    { rejectUnauthorized: false },
-      connectionTimeout: 10_000,
-      greetingTimeout:    8_000,
-      socketTimeout:     10_000,
-    } as any);
-    const from = settings.smtpFrom || settings.smtpUser;
+
+    const from     = resolveFrom(settings.smtpUser, settings.smtpFrom);
+    const primary  = Number(settings.smtpPort) || 587;
+    const fallback = primary === 465 ? 587 : 465;
+    let transport: nodemailer.Transporter | null = null;
+    let lastErr = "";
+
+    for (const port of [primary, fallback]) {
+      try {
+        const t = buildTransporter(settings, port);
+        await t.verify();
+        transport = t;
+        req.log.info({ host: settings.smtpHost, port }, "SMTP Connected for send-test");
+        break;
+      } catch (e: any) {
+        lastErr = String(e?.message ?? e);
+        req.log.warn({ port, err: lastErr }, `SMTP port ${port} unavailable for send-test`);
+      }
+    }
+
+    if (!transport) {
+      return res.status(500).json({ error: `SMTP unreachable on ports ${primary} & ${fallback}: ${lastErr}${smtpErrorHint(lastErr)}` });
+    }
     await transport.sendMail({
       from,
       to,
