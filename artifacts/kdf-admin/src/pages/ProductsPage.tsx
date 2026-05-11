@@ -21,6 +21,7 @@ import {
   Plus, Search, Edit, Trash2, Upload, X, ImageIcon, Loader2,
   Tag, Package, Layers, DollarSign, Info, Palette, Sparkles,
   CheckCircle2, ExternalLink, Eye, ChevronDown, Globe,
+  Star, RefreshCw, ZoomIn, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { AIGenerateButton, AIActionsMenu } from "@/components/AIGenerateButton";
 import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
@@ -58,75 +59,392 @@ function getImageUrl(path: string): string {
   return path;
 }
 
+/* ─── Upload types ───────────────────────────────────────── */
+interface UploadingItem {
+  id: string;
+  name: string;
+  preview: string;     // object URL for instant preview
+  progress: number;    // 0-100
+  savedPct?: number;   // compression saving %
+  error?: string;
+  done: boolean;
+}
+
 /* ─── Upload hook ────────────────────────────────────────── */
 function useProductImageUpload() {
-  const [isUploading, setIsUploading] = useState(false);
-  const uploadFile = useCallback(async (file: File): Promise<string | null> => {
-    setIsUploading(true);
+  const uploadFile = useCallback(async (
+    file: File,
+    onProgress: (pct: number) => void,
+  ): Promise<{ path: string; savedPct: number } | null> => {
     try {
       const token = localStorage.getItem("kdf_admin_token") ?? "";
       const formData = new FormData();
       formData.append("file", file);
+
+      // Simulate progress 0→85% while uploading
+      let fake = 0;
+      const ticker = setInterval(() => {
+        fake = Math.min(fake + Math.random() * 18, 85);
+        onProgress(Math.round(fake));
+      }, 120);
+
       const res = await fetch("/api/storage/uploads/image", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+      clearInterval(ticker);
       if (!res.ok) throw new Error("Upload failed");
-      const { objectPath } = await res.json();
-      return objectPath;
-    } catch { return null; } finally { setIsUploading(false); }
+      const data = await res.json();
+      onProgress(100);
+      return { path: data.objectPath, savedPct: data.savedPct ?? 0 };
+    } catch {
+      onProgress(0);
+      return null;
+    }
   }, []);
-  return { uploadFile, isUploading };
+  return { uploadFile };
+}
+
+/* ─── Full-screen image preview ─────────────────────────── */
+function ImagePreviewLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <img
+        src={src}
+        alt="Preview"
+        className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
 }
 
 /* ─── Image Uploader component ────────────────────────────── */
 function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { uploadFile, isUploading } = useProductImageUpload();
-  const { toast } = useToast();
+  const fileInputRef   = useRef<HTMLInputElement>(null);
+  const replaceRef     = useRef<HTMLInputElement>(null);
+  const replaceIdx     = useRef<number>(-1);
+  const { uploadFile } = useProductImageUpload();
+  const { toast }      = useToast();
+  const [uploading, setUploading] = useState<UploadingItem[]>([]);
+  const [dragOver, setDragOver]   = useState(false);
+  const [preview, setPreview]     = useState<string | null>(null);
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || !files.length) return;
-    const uploaded: string[] = [];
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith("image/")) { toast({ variant: "destructive", title: `${file.name} is not an image` }); continue; }
-      if (file.size > 5 * 1024 * 1024) { toast({ variant: "destructive", title: `${file.name} exceeds 5 MB` }); continue; }
-      const path = await uploadFile(file);
-      if (path) uploaded.push(path);
-      else toast({ variant: "destructive", title: `Failed to upload ${file.name}` });
+  const ALLOWED = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
+  const MAX_MB  = 25;
+
+  const processFiles = useCallback(async (files: File[]) => {
+    const valid: File[] = [];
+    for (const f of files) {
+      if (!ALLOWED.has(f.type)) {
+        toast({ variant: "destructive", title: `${f.name}`, description: "Only JPG, PNG, WEBP, GIF allowed" });
+        continue;
+      }
+      if (f.size > MAX_MB * 1024 * 1024) {
+        toast({ variant: "destructive", title: `${f.name}`, description: `Exceeds ${MAX_MB} MB limit` });
+        continue;
+      }
+      valid.push(f);
     }
-    if (uploaded.length) onChange([...images, ...uploaded]);
+    if (!valid.length) return;
+
+    const newItems: UploadingItem[] = valid.map(f => ({
+      id: Math.random().toString(36).slice(2),
+      name: f.name,
+      preview: URL.createObjectURL(f),
+      progress: 0,
+      done: false,
+    }));
+    setUploading(prev => [...prev, ...newItems]);
+
+    const results: string[] = [];
+    for (let i = 0; i < valid.length; i++) {
+      const item = newItems[i];
+      const result = await uploadFile(valid[i], (pct) => {
+        setUploading(prev => prev.map(u => u.id === item.id ? { ...u, progress: pct } : u));
+      });
+      if (result) {
+        results.push(result.path);
+        setUploading(prev => prev.map(u =>
+          u.id === item.id ? { ...u, done: true, savedPct: result.savedPct, progress: 100 } : u
+        ));
+        setTimeout(() => {
+          URL.revokeObjectURL(item.preview);
+          setUploading(prev => prev.filter(u => u.id !== item.id));
+        }, 1800);
+      } else {
+        setUploading(prev => prev.map(u =>
+          u.id === item.id ? { ...u, error: "Upload failed", progress: 0 } : u
+        ));
+        setTimeout(() => {
+          URL.revokeObjectURL(item.preview);
+          setUploading(prev => prev.filter(u => u.id !== item.id));
+        }, 2500);
+        toast({ variant: "destructive", title: `Failed: ${valid[i].name}` });
+      }
+    }
+    if (results.length) onChange([...images, ...results]);
+  }, [images, onChange, uploadFile, toast]);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    processFiles(Array.from(e.dataTransfer.files));
   };
 
+  const handleReplace = useCallback(async (files: FileList | null) => {
+    if (!files?.length || replaceIdx.current < 0) return;
+    const idx = replaceIdx.current;
+    const result = await uploadFile(files[0], () => {});
+    if (result) {
+      const next = [...images];
+      next[idx] = result.path;
+      onChange(next);
+      toast({ title: "Image replaced", description: `Saved ${result.savedPct}%` });
+    } else {
+      toast({ variant: "destructive", title: "Replace failed" });
+    }
+    replaceIdx.current = -1;
+    if (replaceRef.current) replaceRef.current.value = "";
+  }, [images, onChange, uploadFile, toast]);
+
+  const setMain = (i: number) => {
+    if (i === 0) return;
+    const next = [...images];
+    const [item] = next.splice(i, 1);
+    next.unshift(item);
+    onChange(next);
+  };
+
+  const moveUp = (i: number) => {
+    if (i === 0) return;
+    const next = [...images];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    onChange(next);
+  };
+
+  const moveDown = (i: number) => {
+    if (i >= images.length - 1) return;
+    const next = [...images];
+    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    onChange(next);
+  };
+
+  const isActive = uploading.length > 0;
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+
+      {/* Existing images grid */}
       {images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {images.map((img, i) => (
-            <div key={i} className="relative group w-20 h-20 rounded-lg overflow-hidden border bg-muted">
-              <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" loading="lazy" />
-              <button type="button" onClick={() => onChange(images.filter((_, j) => j !== i))}
-                className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <X className="w-3 h-3 text-white" />
-              </button>
-              {i === 0 && <span className="absolute bottom-0.5 left-0.5 text-[9px] font-bold bg-black/50 text-white px-1 rounded">Main</span>}
+            <div
+              key={img + i}
+              className="relative group rounded-xl overflow-hidden border-2 bg-muted aspect-square"
+              style={{ borderColor: i === 0 ? "#5FA800" : "#e5e7eb" }}
+            >
+              <img
+                src={getImageUrl(img)}
+                alt={`Product image ${i + 1}`}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+
+              {/* Main badge */}
+              {i === 0 && (
+                <div className="absolute top-1.5 left-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                  style={{ background: "#5FA800" }}>
+                  <Star className="w-2.5 h-2.5 fill-white" /> Main
+                </div>
+              )}
+
+              {/* Action overlay */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5">
+                  {/* Preview */}
+                  <button
+                    type="button"
+                    onClick={() => setPreview(getImageUrl(img))}
+                    className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-gray-700 hover:bg-white transition-colors shadow"
+                    title="Preview"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                  {/* Set as main */}
+                  {i !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMain(i)}
+                      className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center hover:bg-white transition-colors shadow"
+                      title="Set as main"
+                      style={{ color: "#5FA800" }}
+                    >
+                      <Star className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {/* Replace */}
+                  <button
+                    type="button"
+                    onClick={() => { replaceIdx.current = i; replaceRef.current?.click(); }}
+                    className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-blue-600 hover:bg-white transition-colors shadow"
+                    title="Replace image"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  {/* Remove */}
+                  <button
+                    type="button"
+                    onClick={() => onChange(images.filter((_, j) => j !== i))}
+                    className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-red-500 hover:bg-white transition-colors shadow"
+                    title="Remove"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Reorder arrows — always visible bottom row */}
+              <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button type="button" onClick={() => moveUp(i)} disabled={i === 0}
+                  className="w-6 h-6 rounded-md bg-black/50 text-white flex items-center justify-center disabled:opacity-30 hover:bg-black/70"
+                  title="Move left">
+                  <ArrowUp className="w-3 h-3" />
+                </button>
+                <button type="button" onClick={() => moveDown(i)} disabled={i === images.length - 1}
+                  className="w-6 h-6 rounded-md bg-black/50 text-white flex items-center justify-center disabled:opacity-30 hover:bg-black/70"
+                  title="Move right">
+                  <ArrowDown className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Uploading queue */}
+      {uploading.length > 0 && (
+        <div className="space-y-2">
+          {uploading.map(item => (
+            <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl border bg-muted/40">
+              <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                <img src={item.preview} alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate text-foreground">{item.name}</p>
+                {item.error ? (
+                  <p className="text-xs text-destructive mt-0.5">{item.error}</p>
+                ) : item.done ? (
+                  <p className="text-xs mt-0.5" style={{ color: "#5FA800" }}>
+                    ✓ Uploaded · {item.savedPct}% saved via WEBP
+                  </p>
+                ) : (
+                  <>
+                    <div className="h-1.5 bg-muted rounded-full mt-1.5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-200"
+                        style={{ width: `${item.progress}%`, background: "linear-gradient(90deg,#5FA800,#78c800)" }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Optimizing & uploading… {item.progress}%
+                    </p>
+                  </>
+                )}
+              </div>
+              {(item.error || item.done) && (
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${item.error ? "bg-destructive/10 text-destructive" : "text-white"}`}
+                  style={item.done ? { background: "#5FA800" } : {}}>
+                  {item.done ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Drop zone */}
       <div
-        className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-        onClick={() => !isUploading && fileInputRef.current?.click()}
-        onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
-        onDragOver={(e) => e.preventDefault()}
+        className="relative border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200"
+        style={{
+          borderColor: dragOver ? "#5FA800" : "#d1d5db",
+          background: dragOver ? "rgba(95,168,0,0.04)" : "transparent",
+        }}
+        onClick={() => !isActive && fileInputRef.current?.click()}
+        onDrop={handleDrop}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
       >
-        {isUploading
-          ? <div className="flex flex-col items-center gap-2 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /><span className="text-sm">Uploading…</span></div>
-          : <div className="flex flex-col items-center gap-2 text-muted-foreground"><Upload className="w-6 h-6" /><span className="text-sm font-medium">Click or drag images here</span><span className="text-xs">PNG, JPG, WEBP · Max 5 MB each · First image is main</span></div>
-        }
+        <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 text-center">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+            style={{ background: dragOver ? "rgba(95,168,0,0.12)" : "#f3f4f6" }}>
+            {isActive
+              ? <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#5FA800" }} />
+              : <Upload className="w-5 h-5" style={{ color: dragOver ? "#5FA800" : "#6b7280" }} />
+            }
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {dragOver ? "Drop images here" : isActive ? "Uploading…" : "Click or drag images here"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              PNG, JPG, WEBP · Auto-compressed to WEBP · Max {MAX_MB} MB each
+            </p>
+          </div>
+          {!isActive && (
+            <div className="flex items-center gap-3 mt-1">
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" /> Auto WEBP
+              </span>
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" /> Smart compression
+              </span>
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" /> Multi-upload
+              </span>
+            </div>
+          )}
+        </div>
       </div>
-      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+
+      {/* Image count summary */}
+      {images.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {images.length} image{images.length !== 1 ? "s" : ""} · First image is the main product photo
+          {images.length > 1 && " · Hover to reorder, set main, or replace"}
+        </p>
+      )}
+
+      {/* Hidden inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => { processFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }}
+      />
+      <input
+        ref={replaceRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleReplace(e.target.files)}
+      />
+
+      {/* Lightbox */}
+      {preview && <ImagePreviewLightbox src={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

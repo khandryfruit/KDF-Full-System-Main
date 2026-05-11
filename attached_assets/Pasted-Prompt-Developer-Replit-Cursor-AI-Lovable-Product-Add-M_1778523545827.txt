@@ -1,0 +1,251 @@
+Prompt (Developer / Replit / Cursor AI / Lovable کے لیے):
+
+Product Add Modal کے اندر Images Upload Section کو production-level upgrade کریں۔
+Current UI/UX کو modern, fast, mobile responsive اور optimized بنائیں، خاص طور پر Android/iPhone browsers کے لیے۔
+
+Required Features:
+
+1. Smart Image Compression & Optimization System
+
+جب بھی Admin یا Seller نئی product image upload کرے:
+
+System automatically image optimize کرے۔
+
+Large image files کو compress کرے بغیر visible quality خراب کیے۔
+
+PNG, JPG, JPEG files support ہوں۔
+
+WEBP format default اور preferred format ہو۔
+
+اگر image PNG/JPG/JPEG ہو تو backend automatically اسے optimized WEBP میں convert کرے۔
+
+Original image dimensions intelligently resize ہوں:
+
+Product thumbnails کے لیے optimized sizes generate ہوں۔
+
+Large unnecessary resolution auto reduce ہو۔
+
+
+Compression کے بعد image lightweight ہو تاکہ:
+
+Website fast load ہو۔
+
+Mobile performance improve ہو۔
+
+SEO بہتر ہو۔
+
+Bandwidth کم use ہو۔
+
+
+
+Compression Requirements:
+
+Maintain high visual quality.
+
+Use lossless or smart compression.
+
+Avoid blurry or pixelated images.
+
+Auto strip unnecessary metadata.
+
+Lazy loading compatible output ہو۔
+
+
+Backend Requirements:
+
+Backend میں complete image processing pipeline add کریں:
+
+Upload validation
+
+Compression engine
+
+WEBP conversion
+
+Optimized naming system
+
+Storage cleanup
+
+Duplicate prevention
+
+Async processing support
+
+CDN-ready structure
+
+
+Suggested Backend Logic:
+
+Laravel backend میں image intervention/sharp level optimization use کریں۔
+
+Upload کے وقت:
+
+Compress image
+
+Convert to WEBP
+
+Generate thumbnail
+
+Save optimized version only
+
+
+Maximum upload size configurable ہو۔
+
+Failed uploads properly handle ہوں۔
+
+
+
+---
+
+2. Frontend Upload Experience Upgrade
+
+Current upload box کو modern drag & drop uploader میں convert کریں۔
+
+Features:
+
+Drag & Drop upload
+
+Multi-image upload
+
+Real-time upload preview
+
+Upload progress bar
+
+Compression progress indicator
+
+Mobile-friendly upload area
+
+Smooth animations
+
+Error handling UI
+
+
+Image Preview Actions:
+
+ہر uploaded image کے اوپر یہ options ہوں:
+
+Remove Image ❌
+
+Replace Image 🔄
+
+Set as Main Image ⭐
+
+Preview Full Image 👁️
+
+
+Important:
+
+User image upload کرنے کے بعد فوراً image preview دیکھ سکے۔
+
+
+---
+
+3. Delete / Remove Image Feature
+
+Currently uploaded images کو modal کے اندر سے remove/delete کرنے کا option add کریں۔
+
+Requirements:
+
+Single image delete
+
+Multiple image remove
+
+Confirm delete popup
+
+Deleted image backend storage سے بھی remove ہو
+
+Main image auto reassign ہو اگر پہلی image delete ہو جائے
+
+
+
+---
+
+4. Performance & Mobile Optimization
+
+Special focus on:
+
+iPhone Safari
+
+Android Chrome
+
+Slow internet connections
+
+
+Optimize:
+
+Modal speed
+
+Upload speed
+
+Memory usage
+
+Mobile responsiveness
+
+Touch interactions
+
+
+
+---
+
+5. UI/UX Improvements
+
+UI زیادہ professional اور premium feel دے۔
+
+Improve:
+
+Spacing
+
+Button design
+
+Upload area styling
+
+Image cards
+
+Responsive tabs
+
+Better typography
+
+Smooth transitions
+
+
+Use brand colors:
+
+Green: #5FA800
+
+Orange: #F58300
+
+
+
+---
+
+6. Security & Validation
+
+Add secure validations:
+
+Block corrupted files
+
+Validate mime types
+
+Prevent oversized uploads
+
+Prevent duplicate uploads
+
+Sanitize filenames
+
+
+
+---
+
+7. Final Expected Result
+
+Final system ایسا ہونا چاہیے کہ:
+
+Large images بھی instantly optimized upload ہوں۔
+
+Website speed متاثر نہ ہو۔
+
+WEBP optimized images by default serve ہوں۔
+
+Seller/admin آسانی سے images upload/remove/manage کر سکے۔
+
+UI modern ecommerce platforms جیسا لگے۔
+
+Shopify/Amazon level upload experience feel ہو۔
