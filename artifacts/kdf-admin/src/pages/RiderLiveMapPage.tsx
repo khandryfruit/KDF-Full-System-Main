@@ -1,12 +1,22 @@
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  MapPin, Bike, RefreshCw, Users, Package, Clock,
-  Wifi, WifiOff, Navigation, Radio, Layers, AlertCircle,
-  Satellite, Route, Phone,
+  MapPin, Bike, RefreshCw, Users, Package,
+  Wifi, WifiOff, Navigation, Radio, AlertCircle, Phone,
+  Clock, TrendingUp, Activity,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+/* ── Fix Leaflet default icon paths broken by Vite ── */
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl:       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl:     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+});
 
 const API = "/api";
 const token = () => localStorage.getItem("kdf_admin_token") ?? "";
@@ -16,17 +26,6 @@ async function apiFetch(path: string) {
   return r.json();
 }
 
-/* ── Distance (Haversine) ── */
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/* ── Helpers ── */
 function isStale(ts: string | null): boolean {
   if (!ts) return true;
   return Date.now() - new Date(ts).getTime() > 10 * 60 * 1000;
@@ -45,104 +44,185 @@ const STATUS_COLOR: Record<string, string> = {
   inactive: "#94a3b8",
 };
 
-/* ── Google Maps script loader ── */
-let gmapsPromise: Promise<void> | null = null;
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  if ((window as any).google?.maps?.Map) return Promise.resolve();
-  if (gmapsPromise) return gmapsPromise;
-  gmapsPromise = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,directions`;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => { gmapsPromise = null; reject(new Error("Failed to load Google Maps")); };
-    document.head.appendChild(s);
+/* ── Create Leaflet divIcon for a rider ── */
+function createRiderIcon(rider: any, stale: boolean) {
+  const color   = stale ? "#f97316" : (STATUS_COLOR[rider.status] ?? "#22c55e");
+  const initial = rider.name.charAt(0).toUpperCase();
+  const orders  = Array.isArray(rider.active_orders) ? rider.active_orders.length : 0;
+
+  const html = `
+    <style>
+      @keyframes kdf-pulse {
+        0%,100% { transform:scale(1);   opacity:.25; }
+        50%      { transform:scale(1.7); opacity:.08; }
+      }
+    </style>
+    <div style="position:relative;cursor:pointer;width:40px;height:40px;">
+      ${!stale ? `<div style="position:absolute;inset:-6px;border-radius:50%;background:${color};opacity:.2;animation:kdf-pulse 2s ease-in-out infinite;"></div>` : ""}
+      <div style="
+        width:40px;height:40px;border-radius:50%;
+        background:${color};border:3px solid #fff;
+        box-shadow:0 4px 14px rgba(0,0,0,.35);
+        display:flex;align-items:center;justify-content:center;
+        font-weight:900;font-size:16px;color:#fff;
+        font-family:system-ui,sans-serif;position:relative;z-index:1;">
+        ${initial}
+      </div>
+      ${orders > 0 ? `<div style="
+        position:absolute;top:-3px;right:-3px;z-index:2;
+        background:#ef4444;color:#fff;border-radius:50%;
+        width:18px;height:18px;font-size:10px;font-weight:700;
+        display:flex;align-items:center;justify-content:center;
+        border:2px solid #fff;font-family:system-ui,sans-serif;
+        box-shadow:0 2px 6px rgba(0,0,0,.25);">
+        ${orders > 9 ? "9+" : orders}
+      </div>` : ""}
+    </div>`;
+
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize:   [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor:[0, -24],
   });
-  return gmapsPromise;
 }
 
-/* ── Rider sidebar card ── */
+/* ── Rider popup HTML ── */
+function buildPopupHtml(rider: any) {
+  const orders = Array.isArray(rider.active_orders) ? rider.active_orders : [];
+  const stale  = isStale(rider.location_updated_at);
+  const color  = STATUS_COLOR[rider.status] ?? "#94a3b8";
+
+  const ordersHtml = orders.length > 0
+    ? orders.slice(0, 3).map((o: any) => `
+        <div style="margin:4px 0;padding:7px 9px;background:#f8fafc;border-radius:8px;font-size:12px;border:1px solid #e2e8f0;">
+          <div style="font-weight:700;color:#1e293b;">#${o.shopify_order_number} · ${o.customer_name}</div>
+          <div style="color:#64748b;margin-top:2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${o.delivery_address ?? ""}</div>
+          <div style="color:#f97316;font-weight:700;margin-top:3px;font-size:12px;">PKR ${Number(o.cod_amount ?? 0).toLocaleString()}</div>
+        </div>`).join("")
+    : `<div style="color:#94a3b8;font-size:12px;padding:4px 0;text-align:center;">No active orders</div>`;
+
+  const mapsUrl = `https://www.google.com/maps?q=${rider.location_lat},${rider.location_lng}`;
+
+  return `
+    <div style="font-family:system-ui,-apple-system,sans-serif;min-width:230px;max-width:270px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;">
+        <div style="width:38px;height:38px;border-radius:50%;background:${color};
+          display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px;
+          flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.2);">
+          ${rider.name.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#0f172a;">${rider.name}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:1px;">${rider.phone ?? ""} · ${rider.vehicle_type ?? "Bike"}</div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:10px;margin-top:3px;color:${stale ? "#f97316" : "#22c55e"};">
+            <span style="font-size:8px;">●</span>
+            <span>${stale ? "Stale · " : "Live · "}${timeSince(rider.location_updated_at)}</span>
+          </div>
+        </div>
+      </div>
+
+      ${orders.length > 0 ? `<div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Active Orders (${orders.length})</div>` : ""}
+      ${ordersHtml}
+
+      <div style="margin-top:10px;display:flex;gap:7px;">
+        <a href="${mapsUrl}" target="_blank"
+          style="flex:1;text-align:center;padding:7px;background:#3b82f6;color:white;border-radius:8px;
+          font-size:11px;font-weight:700;text-decoration:none;display:block;">
+          📍 Google Maps
+        </a>
+        <a href="tel:${rider.phone}"
+          style="flex:1;text-align:center;padding:7px;background:#22c55e;color:white;border-radius:8px;
+          font-size:11px;font-weight:700;text-decoration:none;display:block;">
+          📞 Call Rider
+        </a>
+      </div>
+    </div>`;
+}
+
+/* ── Sidebar rider card ── */
 function RiderCard({ rider, selected, onClick }: { rider: any; selected: boolean; onClick: () => void }) {
-  const stale   = isStale(rider.location_updated_at);
-  const hasLoc  = rider.location_lat != null && rider.location_lng != null;
-  const orders  = Array.isArray(rider.active_orders) ? rider.active_orders : [];
+  const stale  = isStale(rider.location_updated_at);
+  const hasLoc = rider.location_lat != null && rider.location_lng != null;
+  const orders = Array.isArray(rider.active_orders) ? rider.active_orders : [];
+  const color  = STATUS_COLOR[rider.status] ?? "#94a3b8";
 
   return (
     <button
       onClick={onClick}
       className={`w-full text-left p-3 rounded-xl border transition-all mb-2 ${
         selected
-          ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+          ? "border-green-500 bg-green-50 shadow-sm"
           : "border-border bg-card hover:bg-accent/30"
       }`}
     >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-            style={{ background: STATUS_COLOR[rider.status] ?? "#94a3b8" }}>
-            {rider.name.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div className="font-semibold text-sm text-foreground truncate max-w-[100px]">{rider.name}</div>
-            <div className="text-[10px] text-muted-foreground">{rider.vehicle_type ?? "Bike"}</div>
-          </div>
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0 shadow-sm"
+          style={{ background: color }}
+        >
+          {rider.name.charAt(0).toUpperCase()}
         </div>
-        <Badge variant="outline"
-          className={`text-[10px] px-1.5 py-0 ${orders.length > 0 ? "border-orange-400 text-orange-600" : "border-border text-muted-foreground"}`}>
-          {orders.length} {orders.length === 1 ? "order" : "orders"}
-        </Badge>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <p className="font-bold text-sm text-foreground truncate">{rider.name}</p>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+              orders.length > 0 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"
+            }`}>
+              {orders.length} orders
+            </span>
+          </div>
+          <p className="text-[10px] text-muted-foreground capitalize">{rider.vehicle_type ?? "Bike"} · {rider.delivery_area ?? "Lahore"}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-1 text-[11px] mt-1">
+      <div className="flex items-center gap-1 text-[11px]">
         {hasLoc ? (
           stale
-            ? <><WifiOff className="w-3 h-3 text-orange-400" /><span className="text-orange-500">Stale · {timeSince(rider.location_updated_at)}</span></>
-            : <><Wifi className="w-3 h-3 text-green-500" /><span className="text-green-600">Live · {timeSince(rider.location_updated_at)}</span></>
+            ? <><WifiOff className="w-3 h-3 text-orange-400 shrink-0" /><span className="text-orange-500 font-medium">Stale · {timeSince(rider.location_updated_at)}</span></>
+            : <><Wifi className="w-3 h-3 text-green-500 shrink-0" /><span className="text-green-600 font-medium">Live · {timeSince(rider.location_updated_at)}</span></>
         ) : (
-          <><MapPin className="w-3 h-3 text-muted-foreground" /><span className="text-muted-foreground">No GPS yet</span></>
+          <><MapPin className="w-3 h-3 text-muted-foreground shrink-0" /><span className="text-muted-foreground">Waiting for GPS…</span></>
         )}
       </div>
 
       {orders.length > 0 && (
-        <div className="mt-1.5 space-y-0.5">
+        <div className="mt-1.5 space-y-0.5 pl-0.5">
           {orders.slice(0, 2).map((o: any) => (
             <div key={o.id} className="text-[10px] text-muted-foreground truncate">
-              #{o.shopify_order_number} · {o.customer_name}
+              #{o.shopify_order_number} · {o.customer_name} · PKR {Number(o.cod_amount ?? 0).toLocaleString()}
             </div>
           ))}
           {orders.length > 2 && <div className="text-[10px] text-muted-foreground">+{orders.length - 2} more</div>}
         </div>
+      )}
+
+      {/* Phone quick-call */}
+      {rider.phone && (
+        <a
+          href={`tel:${rider.phone}`}
+          onClick={e => e.stopPropagation()}
+          className="mt-2 flex items-center gap-1 text-[10px] text-green-700 bg-green-50 px-2 py-1 rounded-lg w-fit hover:bg-green-100 transition-colors font-semibold"
+        >
+          <Phone className="w-2.5 h-2.5" /> {rider.phone}
+        </a>
       )}
     </button>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   GOOGLE MAPS — MAIN PAGE
+   MAIN PAGE — Leaflet Map (no API key required)
 ═══════════════════════════════════════════════════════ */
 export default function RiderLiveMapPage() {
-  const mapDivRef       = useRef<HTMLDivElement>(null);
-  const gmapRef         = useRef<google.maps.Map | null>(null);
-  const markersRef      = useRef<Map<number, google.maps.marker.AdvancedMarkerElement | google.maps.Marker>>(new Map());
-  const infoWindowRef   = useRef<google.maps.InfoWindow | null>(null);
-  const directionsRef   = useRef<google.maps.DirectionsRenderer | null>(null);
+  const mapDivRef  = useRef<HTMLDivElement>(null);
+  const mapRef     = useRef<L.Map | null>(null);
+  const markersRef = useRef<Map<number, L.Marker>>(new Map());
+  const [mapReady,      setMapReady]      = useState(false);
+  const [selectedRider, setSelectedRider] = useState<any | null>(null);
 
-  const [mapReady,       setMapReady]       = useState(false);
-  const [mapsError,      setMapsError]      = useState(false);
-  const [mapType,        setMapType]        = useState<"roadmap" | "satellite">("roadmap");
-  const [showTraffic,    setShowTraffic]    = useState(false);
-  const [selectedRider,  setSelectedRider]  = useState<any | null>(null);
-  const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
-
-  /* ── Fetch Google Maps API key (admin endpoint) ── */
-  const { data: keyData } = useQuery({
-    queryKey: ["gmaps-key"],
-    queryFn:  () => apiFetch("/admin/location-settings/map-key"),
-    staleTime: 5 * 60_000,
-  });
-  const mapsApiKey: string | null = keyData?.apiKey ?? null;
-
-  /* ── Poll live rider locations every 8s ── */
+  /* ── Poll live locations every 8s ── */
   const { data, refetch, isFetching } = useQuery({
     queryKey: ["rider-live-locations"],
     queryFn:  () => apiFetch("/admin/riders/live-locations"),
@@ -150,72 +230,54 @@ export default function RiderLiveMapPage() {
   });
   const riders: any[] = data?.riders ?? [];
 
-  /* ── Init Google Maps once key is available ── */
+  /* ── Init Leaflet map ── */
   useEffect(() => {
-    if (!mapsApiKey || !mapDivRef.current || gmapRef.current) return;
+    if (!mapDivRef.current || mapRef.current) return;
 
-    loadGoogleMaps(mapsApiKey).then(() => {
-      if (!mapDivRef.current) return;
+    const map = L.map(mapDivRef.current, {
+      center:     [31.5204, 74.3587],
+      zoom:       12,
+      zoomControl: true,
+    });
 
-      const map = new google.maps.Map(mapDivRef.current, {
-        center: { lat: 31.5204, lng: 74.3587 },
-        zoom: 12,
-        mapTypeId: "roadmap",
-        disableDefaultUI: false,
-        zoomControl: true,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-          { featureType: "transit", elementType: "labels", stylers: [{ visibility: "simplified" }] },
-        ],
-      });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
 
-      infoWindowRef.current  = new google.maps.InfoWindow();
-      directionsRef.current  = new google.maps.DirectionsRenderer({
-        suppressMarkers: true,
-        polylineOptions: { strokeColor: "#3b82f6", strokeWeight: 4, strokeOpacity: 0.75 },
-      });
-      directionsRef.current.setMap(map);
+    /* KDF NUTS HQ marker */
+    L.marker([31.5204, 74.3587], {
+      icon: L.divIcon({
+        className: "",
+        html: `<div style="
+          width:36px;height:36px;border-radius:8px;
+          background:#1e40af;border:2px solid #fff;
+          box-shadow:0 3px 10px rgba(0,0,0,.3);
+          display:flex;align-items:center;justify-content:center;
+          font-size:18px;">🏪</div>`,
+        iconSize:   [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor:[0, -20],
+      }),
+    })
+      .addTo(map)
+      .bindPopup("<b>KDF NUTS HQ</b><br>Main Warehouse · Lahore");
 
-      gmapRef.current = map;
-      setMapReady(true);
-    }).catch(() => setMapsError(true));
+    mapRef.current = map;
+    setMapReady(true);
 
     return () => {
-      markersRef.current.forEach(m => {
-        if ((m as any).map !== undefined) (m as any).map = null;
-        else (m as google.maps.Marker).setMap(null);
-      });
+      markersRef.current.forEach(m => m.remove());
       markersRef.current.clear();
-      gmapRef.current = null;
+      map.remove();
+      mapRef.current = null;
     };
-  }, [mapsApiKey]);
-
-  /* ── Map type toggle ── */
-  useEffect(() => {
-    if (!gmapRef.current) return;
-    gmapRef.current.setMapTypeId(mapType);
-  }, [mapType]);
-
-  /* ── Traffic layer toggle ── */
-  useEffect(() => {
-    if (!gmapRef.current) return;
-    if (showTraffic) {
-      if (!trafficLayerRef.current) {
-        trafficLayerRef.current = new google.maps.TrafficLayer();
-      }
-      trafficLayerRef.current.setMap(gmapRef.current);
-    } else {
-      trafficLayerRef.current?.setMap(null);
-    }
-  }, [showTraffic, mapReady]);
+  }, []);
 
   /* ── Sync rider markers ── */
   const syncMarkers = useCallback(() => {
-    if (!gmapRef.current || !mapReady) return;
-    const map  = gmapRef.current;
+    if (!mapRef.current || !mapReady) return;
+    const map  = mapRef.current;
     const seen = new Set<number>();
 
     for (const rider of riders) {
@@ -223,257 +285,101 @@ export default function RiderLiveMapPage() {
       const lat   = parseFloat(rider.location_lat);
       const lng   = parseFloat(rider.location_lng);
       const stale = isStale(rider.location_updated_at);
-      const color = stale ? "#f97316" : (STATUS_COLOR[rider.status] ?? "#22c55e");
-      const orders = Array.isArray(rider.active_orders) ? rider.active_orders : [];
       seen.add(rider.id);
 
-      /* Build custom HTML marker */
-      const markerHtml = document.createElement("div");
-      markerHtml.innerHTML = `
-        <div style="position:relative;cursor:pointer;">
-          ${!stale ? `<div style="
-            position:absolute;inset:-4px;border-radius:50%;
-            background:${color};opacity:0.2;
-            animation:pulse 2s infinite;
-          "></div>` : ""}
-          <div style="
-            width:40px;height:40px;border-radius:50%;
-            background:${color};border:3px solid #fff;
-            box-shadow:0 3px 10px rgba(0,0,0,.3);
-            display:flex;align-items:center;justify-content:center;
-            font-weight:800;font-size:15px;color:#fff;
-            font-family:system-ui,sans-serif;position:relative;z-index:1;
-          ">${rider.name.charAt(0).toUpperCase()}</div>
-          ${orders.length > 0 ? `<div style="
-            position:absolute;top:-4px;right:-4px;z-index:2;
-            background:#ef4444;color:#fff;border-radius:50%;
-            width:18px;height:18px;font-size:10px;font-weight:700;
-            display:flex;align-items:center;justify-content:center;
-            border:2px solid #fff;font-family:system-ui,sans-serif;
-          ">${orders.length > 9 ? "9+" : orders.length}</div>` : ""}
-        </div>`;
-
-      const pos = new google.maps.LatLng(lat, lng);
-
       if (markersRef.current.has(rider.id)) {
-        const m = markersRef.current.get(rider.id) as google.maps.Marker;
-        m.setPosition(pos);
+        const m = markersRef.current.get(rider.id)!;
+        m.setLatLng([lat, lng]);
+        m.setIcon(createRiderIcon(rider, stale));
       } else {
-        const m = new google.maps.Marker({
-          position: pos,
-          map,
-          icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r="18" fill="${color}" stroke="white" stroke-width="3"/>
-              <text x="20" y="25" font-family="system-ui" font-size="16" font-weight="800"
-                fill="white" text-anchor="middle">${rider.name.charAt(0).toUpperCase()}</text>
-            </svg>
-          `)}`, scaledSize: new google.maps.Size(40, 40), anchor: new google.maps.Point(20, 20) },
+        const m = L.marker([lat, lng], {
+          icon:  createRiderIcon(rider, stale),
           title: rider.name,
-          zIndex: stale ? 1 : 10,
+          zIndexOffset: stale ? 0 : 100,
         });
-        m.addListener("click", () => {
+        m.addTo(map);
+        m.on("click", () => {
           setSelectedRider({ ...rider });
-          showRiderInfo({ ...rider }, m, map);
+          m.setPopupContent(buildPopupHtml(rider));
+          m.openPopup();
         });
+        m.bindPopup(buildPopupHtml(rider), { maxWidth: 280 });
         markersRef.current.set(rider.id, m);
       }
     }
 
-    /* Remove stale markers */
+    /* Remove riders no longer in response */
     for (const [id, m] of markersRef.current.entries()) {
       if (!seen.has(id)) {
-        (m as google.maps.Marker).setMap(null);
+        m.remove();
         markersRef.current.delete(id);
       }
     }
-  }, [riders, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [riders, mapReady]);
 
   useEffect(() => { syncMarkers(); }, [syncMarkers]);
-
-  /* ── Show Info Window ── */
-  const showRiderInfo = (rider: any, marker: google.maps.Marker, map: google.maps.Map) => {
-    const orders = Array.isArray(rider.active_orders) ? rider.active_orders : [];
-    const stale  = isStale(rider.location_updated_at);
-
-    const ordersHtml = orders.length > 0
-      ? orders.slice(0, 3).map((o: any) => `
-          <div style="margin:4px 0;padding:6px 8px;background:#f8fafc;border-radius:6px;font-size:12px;">
-            <div style="font-weight:600;color:#1e293b;">#${o.shopify_order_number} · ${o.customer_name}</div>
-            <div style="color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;">${o.delivery_address ?? ""}</div>
-            <div style="color:#f97316;font-weight:600;margin-top:2px;">PKR ${Number(o.cod_amount).toLocaleString()}</div>
-          </div>`).join("")
-      : `<div style="color:#94a3b8;font-size:12px;padding:4px 0;">No active orders</div>`;
-
-    const mapsUrl = `https://www.google.com/maps?q=${rider.location_lat},${rider.location_lng}`;
-
-    const content = `
-      <div style="font-family:system-ui,sans-serif;min-width:220px;max-width:260px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <div style="width:36px;height:36px;border-radius:50%;background:${STATUS_COLOR[rider.status] ?? "#94a3b8"};
-            display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:15px;">
-            ${rider.name.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div style="font-weight:700;font-size:14px;color:#1e293b;">${rider.name}</div>
-            <div style="font-size:11px;color:#64748b;">${rider.phone} · ${rider.vehicle_type ?? "Bike"}</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:4px;font-size:11px;margin-bottom:8px;
-          color:${stale ? "#f97316" : "#22c55e"};">
-          <span>●</span>
-          <span>${stale ? "Stale · " : "Live · "}${timeSince(rider.location_updated_at)}</span>
-        </div>
-        ${orders.length > 0 ? `<div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Active Orders (${orders.length})</div>` : ""}
-        ${ordersHtml}
-        <div style="margin-top:8px;display:flex;gap:6px;">
-          <a href="${mapsUrl}" target="_blank"
-            style="flex:1;text-align:center;padding:6px;background:#3b82f6;color:white;border-radius:6px;
-            font-size:11px;font-weight:600;text-decoration:none;">
-            📍 Open Maps
-          </a>
-          <a href="tel:${rider.phone}"
-            style="flex:1;text-align:center;padding:6px;background:#22c55e;color:white;border-radius:6px;
-            font-size:11px;font-weight:600;text-decoration:none;">
-            📞 Call
-          </a>
-        </div>
-      </div>`;
-
-    infoWindowRef.current!.setContent(content);
-    infoWindowRef.current!.open({ anchor: marker, map });
-
-    /* Show route to first active order if address available */
-    if (orders.length > 0 && orders[0].delivery_address && rider.location_lat && rider.location_lng && mapsApiKey) {
-      const directionsService = new google.maps.DirectionsService();
-      directionsService.route({
-        origin: new google.maps.LatLng(parseFloat(rider.location_lat), parseFloat(rider.location_lng)),
-        destination: orders[0].delivery_address,
-        travelMode: google.maps.TravelMode.DRIVING,
-      }, (result, status) => {
-        if (status === "OK" && result) {
-          directionsRef.current?.setDirections(result);
-        }
-      });
-    }
-  };
 
   /* ── Pan to rider ── */
   const panToRider = (rider: any) => {
     setSelectedRider(rider);
-    if (rider.location_lat && rider.location_lng && gmapRef.current) {
-      gmapRef.current.panTo({ lat: parseFloat(rider.location_lat), lng: parseFloat(rider.location_lng) });
-      gmapRef.current.setZoom(15);
-      const marker = markersRef.current.get(rider.id) as google.maps.Marker | undefined;
-      if (marker) showRiderInfo(rider, marker, gmapRef.current);
+    if (rider.location_lat && rider.location_lng && mapRef.current) {
+      mapRef.current.flyTo(
+        [parseFloat(rider.location_lat), parseFloat(rider.location_lng)],
+        16,
+        { animate: true, duration: 0.9 }
+      );
+      const m = markersRef.current.get(rider.id);
+      if (m) {
+        m.setPopupContent(buildPopupHtml(rider));
+        m.openPopup();
+      }
     }
   };
 
   /* ── Stats ── */
-  const liveCount    = riders.filter(r => !isStale(r.location_updated_at) && r.location_lat != null).length;
-  const totalActive  = riders.filter(r => r.status === "active").length;
-  const withLocation = riders.filter(r => r.location_lat != null).length;
-  const totalOrders  = riders.reduce((s, r) => s + (Array.isArray(r.active_orders) ? r.active_orders.length : 0), 0);
-
-  /* ── If no Maps key configured ── */
-  if (mapsApiKey === null && keyData !== undefined) {
-    return (
-      <div className="flex flex-col h-[calc(100vh-80px)] items-center justify-center gap-4 p-8">
-        <AlertCircle className="w-12 h-12 text-orange-500" />
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-foreground mb-2">Google Maps Not Configured</h2>
-          <p className="text-muted-foreground text-sm max-w-md">
-            To enable the Live Rider Map with Google Maps, please add your Google Maps API key in
-            <strong> Settings → Location Settings</strong>. Make sure to enable the Maps JavaScript API
-            and Directions API in your Google Cloud Console.
-          </p>
-          <a href="/admin/location-settings" className="mt-4 inline-block text-sm text-blue-600 underline">
-            → Go to Location Settings
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  if (mapsError) {
-    return (
-      <div className="flex flex-col h-[calc(100vh-80px)] items-center justify-center gap-4 p-8">
-        <AlertCircle className="w-12 h-12 text-red-500" />
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-foreground mb-2">Failed to Load Google Maps</h2>
-          <p className="text-muted-foreground text-sm">Check that your API key has the Maps JavaScript API enabled.</p>
-          <Button className="mt-4" onClick={() => { setMapsError(false); gmapsPromise = null; }}>Retry</Button>
-        </div>
-      </div>
-    );
-  }
+  const liveCount   = riders.filter(r => !isStale(r.location_updated_at) && r.location_lat != null).length;
+  const activeCount = riders.filter(r => r.status === "active").length;
+  const totalOrders = riders.reduce((s, r) => s + (Array.isArray(r.active_orders) ? r.active_orders.length : 0), 0);
+  const totalCOD    = riders.reduce((s, r) => {
+    const orders = Array.isArray(r.active_orders) ? r.active_orders : [];
+    return s + orders.reduce((ss: number, o: any) => ss + Number(o.cod_amount ?? 0), 0);
+  }, 0);
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)]">
-      {/* ── Pulse animation style ── */}
       <style>{`
-        @keyframes pulse {
-          0%   { transform: scale(1);   opacity: 0.25; }
-          50%  { transform: scale(1.5); opacity: 0.1;  }
-          100% { transform: scale(1);   opacity: 0.25; }
-        }
+        .leaflet-container { font-family: system-ui, sans-serif; }
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+        .leaflet-popup-content { margin: 14px 16px; }
+        .leaflet-popup-tip { background: white; }
       `}</style>
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card flex-shrink-0 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Radio className="w-4 h-4 text-green-600 animate-pulse" />
+          <Radio className="w-4 h-4 text-green-500 animate-pulse" />
           <h1 className="text-lg font-bold text-foreground">Live Rider Map</h1>
-          <Badge variant="outline" className="text-[11px] gap-1">
+          <Badge variant="outline" className="text-[10px] gap-1.5 border-green-300">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
-            {liveCount} live · {withLocation} tracked
+            {liveCount} live
           </Badge>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Stats */}
-          <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground mr-2">
-            <span className="flex items-center gap-1"><Users className="w-3 h-3" />{totalActive} active</span>
-            <span className="flex items-center gap-1"><Package className="w-3 h-3" />{totalOrders} orders</span>
+          {/* Mini stats */}
+          <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {activeCount} active</span>
+            <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {totalOrders} orders</span>
+            <span className="flex items-center gap-1 text-orange-600 font-semibold">PKR {totalCOD.toLocaleString()}</span>
           </div>
 
-          {/* Traffic toggle */}
-          <Button
-            variant={showTraffic ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowTraffic(p => !p)}
-            className="gap-1.5 h-8 text-xs"
-          >
-            <Route className="w-3.5 h-3.5" />
-            Traffic
-          </Button>
-
-          {/* Map type toggle */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setMapType(p => p === "roadmap" ? "satellite" : "roadmap")}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="gap-1.5 h-8 text-xs"
           >
-            {mapType === "roadmap"
-              ? <><Satellite className="w-3.5 h-3.5" />Satellite</>
-              : <><Layers className="w-3.5 h-3.5" />Map</>
-            }
-          </Button>
-
-          {/* Clear route */}
-          {selectedRider && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setSelectedRider(null); directionsRef.current?.setDirections({ routes: [] } as any); infoWindowRef.current?.close(); }}
-              className="h-8 text-xs"
-            >
-              Clear
-            </Button>
-          )}
-
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5 h-8 text-xs">
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -482,27 +388,32 @@ export default function RiderLiveMapPage() {
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar ── */}
-        <div className="w-64 flex-shrink-0 border-r border-border bg-card/50 flex flex-col">
-          <div className="p-3 border-b border-border">
-            <div className="grid grid-cols-2 gap-1.5 text-center">
-              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-2">
-                <div className="text-lg font-bold text-green-700">{liveCount}</div>
-                <div className="text-[9px] text-green-600 uppercase tracking-wide">Live GPS</div>
-              </div>
-              <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-2">
-                <div className="text-lg font-bold text-orange-700">{totalOrders}</div>
-                <div className="text-[9px] text-orange-600 uppercase tracking-wide">Active Orders</div>
-              </div>
+
+        {/* ── Left sidebar ── */}
+        <div className="w-64 flex-shrink-0 border-r border-border bg-card/60 flex flex-col overflow-hidden">
+          {/* Stats */}
+          <div className="p-3 border-b border-border grid grid-cols-2 gap-2">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 text-center">
+              <div className="text-xl font-black text-green-700">{liveCount}</div>
+              <div className="text-[9px] text-green-600 uppercase tracking-wider font-semibold mt-0.5">Live GPS</div>
+            </div>
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-2.5 text-center">
+              <div className="text-xl font-black text-orange-700">{totalOrders}</div>
+              <div className="text-[9px] text-orange-600 uppercase tracking-wider font-semibold mt-0.5">On Delivery</div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-center col-span-2">
+              <div className="text-base font-black text-blue-700">PKR {totalCOD.toLocaleString()}</div>
+              <div className="text-[9px] text-blue-600 uppercase tracking-wider font-semibold mt-0.5">COD Pending</div>
             </div>
           </div>
 
+          {/* Rider list */}
           <div className="flex-1 overflow-y-auto p-2">
             {riders.length === 0 ? (
-              <div className="text-center text-xs text-muted-foreground py-8">
-                <Bike className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p>No active riders</p>
-                <p className="text-[10px] mt-1 opacity-60">Add riders from Logistics → Riders</p>
+              <div className="text-center text-xs text-muted-foreground py-10">
+                <Bike className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">No active riders</p>
+                <p className="text-[10px] mt-1 opacity-60">Riders appear here when they go online and share GPS</p>
               </div>
             ) : (
               riders.map(r => (
@@ -518,39 +429,54 @@ export default function RiderLiveMapPage() {
 
           {/* Legend */}
           <div className="p-3 border-t border-border">
-            <div className="text-[10px] text-muted-foreground space-y-1">
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live GPS (&lt;10 min)</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-orange-500" />Stale / offline</div>
-              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" />No location yet</div>
+            <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Legend</p>
+            <div className="space-y-1.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+                <span>Live GPS (updated &lt; 10 min)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0" />
+                <span>Stale location (&gt; 10 min)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-gray-300 shrink-0" />
+                <span>No GPS received yet</span>
+              </div>
             </div>
-            <div className="text-[9px] text-muted-foreground mt-2 flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-blue-500 inline-block" />
-              Google Maps · Auto-refresh 8s
-            </div>
+            <p className="text-[9px] text-muted-foreground mt-2 opacity-60">
+              GPS updates every 8s from Rider App.<br/>
+              Map auto-refreshes every 8s.
+            </p>
           </div>
         </div>
 
         {/* ── Map ── */}
-        <div className="flex-1 relative">
-          {/* Loading overlay */}
-          {!mapReady && !mapsError && (
-            <div className="absolute inset-0 bg-card flex items-center justify-center z-10">
-              <div className="text-center text-sm text-muted-foreground">
-                <MapPin className="w-8 h-8 mx-auto mb-2 animate-bounce opacity-50" />
-                <p>Loading Google Maps…</p>
+        <div className="flex-1 relative overflow-hidden">
+          {/* No riders with GPS — overlay hint */}
+          {mapReady && riders.filter(r => r.location_lat != null).length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center z-[1000] pointer-events-none">
+              <div className="bg-white/95 backdrop-blur rounded-2xl shadow-xl px-6 py-5 text-center max-w-xs border border-gray-100">
+                <Navigation className="w-10 h-10 mx-auto mb-2 text-blue-400 opacity-60" />
+                <p className="font-bold text-gray-700 text-sm">No GPS data yet</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Riders share their GPS automatically when they open the KDF Rider app.<br/>
+                  Location updates every 8 seconds.
+                </p>
               </div>
             </div>
           )}
 
-          <div ref={mapDivRef} className="w-full h-full" />
-
-          {/* No location banner */}
-          {mapReady && withLocation === 0 && riders.length > 0 && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-card border border-border rounded-xl px-4 py-2 shadow text-xs text-muted-foreground flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-              Riders haven't shared GPS yet. Location updates when the Rider App is open.
+          {/* Live indicator top-right */}
+          {mapReady && (
+            <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1.5 bg-white/95 border border-gray-100 rounded-full px-3 py-1.5 shadow-md text-xs font-semibold text-gray-600">
+              <Activity className={`w-3 h-3 ${isFetching ? "text-blue-500 animate-pulse" : "text-green-500"}`} />
+              {isFetching ? "Syncing…" : `${liveCount} riders live`}
             </div>
           )}
+
+          {/* Leaflet map container */}
+          <div ref={mapDivRef} className="w-full h-full" />
         </div>
       </div>
     </div>

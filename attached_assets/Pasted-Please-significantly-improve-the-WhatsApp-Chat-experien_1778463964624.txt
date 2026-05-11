@@ -1,0 +1,193 @@
+Please significantly improve the WhatsApp Chat experience and add Live Rider Tracking inside the KDF Admin Mobile App.
+
+The app will be heavily used on mobile, so the WhatsApp support system and rider tracking must feel modern, smooth, and professional like Uber/Careem business systems.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. WHATSAPP CHAT UI/UX IMPROVEMENT
+    ━━━━━━━━━━━━━━━━━━━━
+
+Current chat system is basic and needs major improvement for mobile usage.
+
+Please redesign the WhatsApp Chat module professionally.
+
+Need:
+
+* Cleaner modern chat UI
+* Better message bubbles
+* Better spacing
+* Faster workflow
+* Better mobile responsiveness
+* Professional support-chat experience
+
+Make it similar to:
+
+* WhatsApp Business
+* Intercom
+* Shopify Inbox
+* Zendesk mobile support
+
+━━━━━━━━━━━━━━━━━━━━
+2. MOBILE CHAT EXPERIENCE IMPROVEMENT
+━━━━━━━━━━━━━━━━━━━━
+
+Current issues:
+
+* Chat area feels compressed
+* Input area basic
+* Quick replies limited
+* Customer/order actions not optimized
+
+Please improve:
+
+* Message composer
+* Send button
+* Voice/media support
+* Quick action buttons
+* Reply templates
+* Typing experience
+* Better scrolling behavior
+* Sticky customer header
+* Smooth animations
+
+━━━━━━━━━━━━━━━━━━━━
+3. QUICK REPLY & SUPPORT TOOLS
+━━━━━━━━━━━━━━━━━━━━
+
+Inside chat add:
+
+* Greeting templates
+* Order status templates
+* Delivery templates
+* Payment templates
+* Thank you templates
+* COD confirmation templates
+
+Need faster support workflow from mobile.
+
+━━━━━━━━━━━━━━━━━━━━
+4. ORDER & CUSTOMER TOOLS INSIDE CHAT
+━━━━━━━━━━━━━━━━━━━━
+
+Inside WhatsApp chat screen show:
+
+* Customer details
+* Order history
+* Current order status
+* Tracking number
+* Payment status
+* Rider details
+* Delivery ETA
+
+Add quick buttons:
+
+* Open Order
+* Track Order
+* Assign Rider
+* Send Invoice
+* Call Customer
+* Send Tracking Link
+
+━━━━━━━━━━━━━━━━━━━━
+5. LIVE RIDER TRACKING FEATURE REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+Please add REAL-TIME rider live tracking inside Admin Mobile App.
+
+Need Uber/Careem-style live tracking.
+
+Admin should see:
+
+* Rider current location
+* Moving bike/car icon on map
+* Real-time movement
+* Delivery route
+* ETA
+* Online/offline status
+* Last updated time
+
+━━━━━━━━━━━━━━━━━━━━
+6. LIVE MAP INTEGRATION
+━━━━━━━━━━━━━━━━━━━━
+
+Please integrate:
+
+* Google Maps
+    OR
+* Mapbox
+
+Need:
+
+* Real-time GPS updates
+* Live rider movement
+* Smooth tracking
+* Auto refresh location
+* Rider route visualization
+
+Map should show:
+
+* Rider icon
+* Customer location
+* Delivery route
+* Live movement animation
+
+━━━━━━━━━━━━━━━━━━━━
+7. RIDER APP LOCATION TRACKING
+━━━━━━━━━━━━━━━━━━━━
+
+Rider App should:
+
+* Continuously send GPS location
+* Update backend in real time
+* Sync with admin panel
+* Work in background
+* Handle reconnection properly
+
+Use:
+
+* Socket.IO/WebSockets
+* GPS background services
+* Real-time location sync
+
+━━━━━━━━━━━━━━━━━━━━
+8. DELIVERY MONITORING SYSTEM
+━━━━━━━━━━━━━━━━━━━━
+
+Admin should easily monitor:
+
+* Which rider is active
+* Which orders are in delivery
+* Rider movement
+* Delayed deliveries
+* Rider idle status
+
+Need proper logistics dashboard.
+
+━━━━━━━━━━━━━━━━━━━━
+9. MOBILE UI IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+Please improve:
+
+* Header spacing
+* Footer size
+* Bottom navigation
+* Chat layout
+* Map responsiveness
+* Touch interactions
+
+Need compact professional mobile layout.
+
+━━━━━━━━━━━━━━━━━━━━
+10. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF Admin Mobile App should become a complete operational app where:
+
+* Customer support works professionally
+* WhatsApp chats are smooth and fast
+* Orders can be managed easily
+* Riders can be tracked live
+* Logistics monitored in real time
+
+Need enterprise-level mobile support + live tracking system.

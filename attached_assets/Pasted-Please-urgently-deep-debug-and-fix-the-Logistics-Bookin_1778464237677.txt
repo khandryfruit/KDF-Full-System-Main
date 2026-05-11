@@ -1,0 +1,268 @@
+Please urgently deep-debug and fix the Logistics Booking System, Rider Assignment Automation, Courier Workflow, Payment Automation, and Abandoned Checkout Automation.
+
+These are critical automation and operational problems on LIVE production.
+
+━━━━━━━━━━━━━━━━━━━━
+
+1. PAYMENT SUCCESS WHATSAPP AUTOMATION REQUIRED
+    ━━━━━━━━━━━━━━━━━━━━
+
+Please add a NEW WhatsApp automation for paid orders.
+
+Required Flow:
+
+When customer successfully pays online and order status becomes:
+✅ PAID
+
+Then automatically:
+
+* Send WhatsApp confirmation message
+* Thank customer professionally
+* Update order status/tag
+* Show payment confirmation in dashboard
+
+Required WhatsApp Message Content:
+
+* Customer Name
+* Order Number
+* Paid Amount
+* Payment Status
+* Order Details
+* Thank You Message
+
+Important:
+Message should clearly and boldly mention:
+✅ Your payment has been received successfully
+✅ Remaining balance is Rs. 0
+
+Also:
+
+* Add “Paid Order” tag automatically
+* Update status everywhere in real time
+* Sync with Admin + Mobile App
+
+Please integrate:
+
+* Shopify payment webhooks
+* Node.js payment event handlers
+* Meta WhatsApp API
+* Real-time socket updates
+
+━━━━━━━━━━━━━━━━━━━━
+2. COURIER BOOKING BUTTON NOT WORKING
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+Inside KDF Admin Mobile App → Logistics module:
+
+* “Book Courier” button is clickable
+* But courier booking is NOT happening
+* No booking created
+* No courier workflow opening
+* No tracking generation
+
+This is broken.
+
+Please fully debug:
+
+* onTap actions
+* API requests
+* Courier booking endpoint
+* Node.js backend routes
+* Authentication/session
+* Booking payload
+* Error handling
+* Response validation
+
+━━━━━━━━━━━━━━━━━━━━
+3. FULL COURIER BOOKING PAGE REQUIRED
+━━━━━━━━━━━━━━━━━━━━
+
+When admin clicks:
+“Book Courier”
+
+Then a FULL booking page/modal should open like professional courier systems.
+
+Required Fields:
+
+* Customer Name
+* Phone Number
+* Address
+* City
+* COD Amount
+* Parcel Weight
+* Courier Selection
+* Delivery Type
+* Tracking Notes
+* Parcel Dimensions
+* Pickup Branch
+
+Required Features:
+
+* Manual Booking
+* Auto Booking
+* Bulk Booking
+* Save Booking
+* Print Label
+* Download Label
+* Thermal Print
+* Barcode/QR support
+
+Need complete booking workflow like:
+
+* Daraz Seller Center
+* Shopify Shipping
+* Professional courier systems
+
+━━━━━━━━━━━━━━━━━━━━
+4. COURIER BOOKING AUTOMATION
+━━━━━━━━━━━━━━━━━━━━
+
+After successful booking:
+
+* Tracking ID generated
+* Booking status updated
+* Customer receives WhatsApp notification
+* Tracking link sent automatically
+* Order timeline updated
+* Booking visible everywhere
+
+━━━━━━━━━━━━━━━━━━━━
+5. LAHORE RIDER AUTO ASSIGNMENT NOT WORKING
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+Lahore orders are NOT automatically assigning to riders.
+
+Also:
+Manual assignment partially broken.
+
+Please deeply debug:
+
+* Lahore city detection
+* Rider availability
+* Auto assignment logic
+* Node.js event handlers
+* Queue workers
+* Socket.IO sync
+* Rider mobile app API
+* Database assignment flow
+
+Required:
+As soon as Lahore order arrives:
+
+* Rider automatically assigned
+* Rider instantly notified
+* Order appears in Rider App immediately
+
+━━━━━━━━━━━━━━━━━━━━
+6. MANUAL ASSIGNMENT MUST ALSO WORK
+━━━━━━━━━━━━━━━━━━━━
+
+If admin manually assigns rider:
+
+* Assignment should instantly sync
+* Rider app should update instantly
+* Customer should receive notification
+* Rider should receive WhatsApp + push notification
+
+━━━━━━━━━━━━━━━━━━━━
+7. WHATSAPP DELIVERY AUTOMATION
+━━━━━━━━━━━━━━━━━━━━
+
+When:
+
+* Courier booked
+* Rider assigned
+* Out for delivery
+* Delivered
+
+Then customer should automatically receive WhatsApp updates.
+
+Required Messages:
+
+* Tracking number
+* Rider details
+* Delivery ETA
+* Courier details
+* Tracking link
+
+━━━━━━━━━━━━━━━━━━━━
+8. ABANDONED CHECKOUT AUTOMATION BROKEN
+━━━━━━━━━━━━━━━━━━━━
+
+Current Problem:
+Customers who leave checkout abandoned in Shopify are NOT receiving WhatsApp recovery messages.
+
+Please fix abandoned order automation.
+
+Required Flow:
+
+Customer:
+
+* Adds products
+* Starts checkout
+* Leaves without ordering
+
+Then automatically:
+
+* Detect abandoned checkout
+* Trigger WhatsApp reminder
+* Send recovery message/template
+* Include cart details
+* Include checkout recovery link
+
+━━━━━━━━━━━━━━━━━━━━
+9. ABANDONED ORDER SYSTEM REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+Need:
+
+* Shopify abandoned checkout webhook
+* Node.js automation handlers
+* Delayed message scheduler
+* Meta WhatsApp template integration
+* Recovery analytics
+
+Suggested Timing:
+
+* 15 mins reminder
+* 1 hour reminder
+* Final reminder after few hours
+
+━━━━━━━━━━━━━━━━━━━━
+10. AUTOMATION SYSTEM NEEDS MAJOR ATTENTION
+━━━━━━━━━━━━━━━━━━━━
+
+Please carefully audit and fix ALL automations.
+
+Current issue:
+Many automations exist visually but are unstable or incomplete.
+
+Need complete verification of:
+
+* WhatsApp automation
+* Rider automation
+* Courier automation
+* Payment automation
+* Order confirmation automation
+* Booking automation
+* Shopify webhooks
+* Socket.IO events
+* Queue/background jobs
+
+━━━━━━━━━━━━━━━━━━━━
+11. FINAL EXPECTATION
+━━━━━━━━━━━━━━━━━━━━
+
+KDF system should become FULLY automated and production stable.
+
+Every automation should:
+
+* Trigger automatically
+* Sync instantly
+* Update statuses correctly
+* Send WhatsApp notifications
+* Handle logistics workflows properly
+
+Please prioritize automation stability and deep backend debugging.
