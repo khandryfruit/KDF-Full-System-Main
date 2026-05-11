@@ -2350,4 +2350,204 @@ router.get("/admin/riders/daily-report/logs", adminMiddleware, async (req, res) 
   }
 });
 
+/* ═══════════════════════════════════════════════════════
+   RIDER RESET — clear active assignments only (keep completed history)
+═══════════════════════════════════════════════════════ */
+
+/* POST /api/admin/riders/:id/reset */
+router.post("/admin/riders/:id/reset", adminMiddleware, async (req, res) => {
+  try {
+    const riderId = parseInt(req.params["id"] as string);
+    if (isNaN(riderId)) { res.status(400).json({ error: "Invalid rider ID" }); return; }
+
+    const riderRows = await db.execute(sql`SELECT id, name, phone FROM riders WHERE id = ${riderId} LIMIT 1`);
+    if (!riderRows.rows.length) { res.status(404).json({ error: "Rider not found" }); return; }
+    const rider = riderRows.rows[0] as any;
+
+    /* Count active before reset */
+    const countRows = await db.execute(sql`
+      SELECT COUNT(*)::int AS count FROM rider_deliveries
+      WHERE rider_id = ${riderId}
+        AND status IN ('assigned','picked','out_for_delivery','near_customer','delayed','rescheduled')
+    `);
+    const activeCount = Number((countRows.rows[0] as any)?.count ?? 0);
+
+    /* Clear ONLY active/in-progress — preserve delivered/failed/returned history */
+    const cleared = await db.execute(sql`
+      UPDATE rider_deliveries SET
+        rider_id   = NULL,
+        status     = 'assigned',
+        updated_at = NOW()
+      WHERE rider_id = ${riderId}
+        AND status IN ('assigned','picked','out_for_delivery','near_customer','delayed','rescheduled')
+      RETURNING id, shopify_order_number
+    `);
+
+    logger.info(
+      { riderId, riderName: rider.name, before: activeCount, cleared: cleared.rows.length },
+      "Rider active assignments reset by admin — completed history preserved"
+    );
+
+    /* SSE broadcast so live dashboard updates instantly */
+    try {
+      const { broadcastSSE } = await import("../lib/sse.js");
+      broadcastSSE("rider_reset", { riderId, riderName: rider.name, cleared: cleared.rows.length });
+    } catch {}
+
+    res.json({
+      ok: true,
+      cleared: cleared.rows.length,
+      message: `Cleared ${cleared.rows.length} active order(s) from ${rider.name}. Completed deliveries preserved in history.`,
+      orders: cleared.rows,
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET active deliveries for a specific rider (admin view)
+═══════════════════════════════════════════════════════ */
+
+/* GET /api/admin/riders/:id/active-deliveries */
+router.get("/admin/riders/:id/active-deliveries", adminMiddleware, async (req, res) => {
+  try {
+    const riderId = parseInt(req.params["id"] as string);
+    if (isNaN(riderId)) { res.status(400).json({ error: "Invalid rider ID" }); return; }
+
+    const rows = await db.execute(sql`
+      SELECT
+        rd.id, rd.status, rd.shopify_order_number, rd.customer_name, rd.customer_phone,
+        rd.delivery_address, rd.cod_amount, rd.is_paid, rd.assigned_at,
+        rd.shopify_order_db_id, rd.notes, rd.eta_minutes
+      FROM rider_deliveries rd
+      WHERE rd.rider_id = ${riderId}
+        AND rd.status IN ('assigned','picked','out_for_delivery','near_customer','delayed','rescheduled')
+      ORDER BY rd.assigned_at DESC
+      LIMIT 200
+    `);
+
+    res.json({ deliveries: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   UNASSIGN — remove rider from specific delivery IDs
+═══════════════════════════════════════════════════════ */
+
+/* POST /api/admin/riders/deliveries/unassign */
+router.post("/admin/riders/deliveries/unassign", adminMiddleware, async (req, res) => {
+  try {
+    const { delivery_ids } = req.body;
+    if (!Array.isArray(delivery_ids) || delivery_ids.length === 0) {
+      res.status(400).json({ error: "delivery_ids array required" });
+      return;
+    }
+    const ids = delivery_ids.map(Number).filter(n => Number.isFinite(n) && n > 0);
+    if (!ids.length) { res.status(400).json({ error: "No valid delivery IDs" }); return; }
+
+    const idList = ids.join(",");
+    const result = await db.execute(sql.raw(`
+      UPDATE rider_deliveries SET
+        rider_id   = NULL,
+        status     = 'assigned',
+        updated_at = NOW()
+      WHERE id IN (${idList})
+        AND status NOT IN ('delivered','returned','failed','cancelled')
+      RETURNING id, shopify_order_number, shopify_order_db_id
+    `));
+
+    logger.info({ ids, unassigned: result.rows.length }, "Rider unassigned from deliveries by admin");
+
+    try {
+      const { broadcastSSE } = await import("../lib/sse.js");
+      broadcastSSE("deliveries_unassigned", { ids, count: result.rows.length });
+    } catch {}
+
+    res.json({ ok: true, unassigned: result.rows.length, deliveries: result.rows });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   REASSIGN — move selected deliveries to a different rider
+═══════════════════════════════════════════════════════ */
+
+/* POST /api/admin/riders/deliveries/reassign */
+router.post("/admin/riders/deliveries/reassign", adminMiddleware, async (req, res) => {
+  try {
+    const { delivery_ids, new_rider_id } = req.body;
+    if (!Array.isArray(delivery_ids) || delivery_ids.length === 0) {
+      res.status(400).json({ error: "delivery_ids array required" });
+      return;
+    }
+    if (!new_rider_id) { res.status(400).json({ error: "new_rider_id required" }); return; }
+
+    const riderRows = await db.execute(sql`
+      SELECT * FROM riders WHERE id = ${parseInt(String(new_rider_id))} LIMIT 1
+    `);
+    if (!riderRows.rows.length) { res.status(404).json({ error: "New rider not found" }); return; }
+    const rider = riderRows.rows[0] as any;
+
+    const ids = delivery_ids.map(Number).filter(n => Number.isFinite(n) && n > 0);
+    if (!ids.length) { res.status(400).json({ error: "No valid delivery IDs" }); return; }
+
+    const idList = ids.join(",");
+    const result = await db.execute(sql.raw(`
+      UPDATE rider_deliveries SET
+        rider_id    = ${rider.id},
+        status      = 'assigned',
+        assigned_at = NOW(),
+        updated_at  = NOW()
+      WHERE id IN (${idList})
+        AND status NOT IN ('delivered','returned','failed','cancelled')
+      RETURNING id, shopify_order_number, customer_name, cod_amount, is_paid, delivery_address
+    `));
+
+    logger.info(
+      { ids, newRiderId: rider.id, riderName: rider.name, count: result.rows.length },
+      "Deliveries reassigned to new rider by admin"
+    );
+
+    res.json({
+      ok: true,
+      reassigned: result.rows.length,
+      riderName: rider.name,
+      deliveries: result.rows,
+    });
+
+    /* Non-blocking: push notification + SSE */
+    setImmediate(async () => {
+      try {
+        if (rider.expo_push_token) {
+          const { sendExpoPush } = await import("../lib/ondriveEngine.js");
+          await sendExpoPush({
+            to: rider.expo_push_token,
+            title: `📦 ${result.rows.length} Order${result.rows.length !== 1 ? "s" : ""} Assigned`,
+            body: `You have ${result.rows.length} new order${result.rows.length !== 1 ? "s" : ""} to deliver. Open app to view.`,
+            data: { type: "new_order", count: result.rows.length },
+            channelId: "new_order",
+          }).catch(() => {});
+        }
+
+        const { broadcastSSE } = await import("../lib/sse.js");
+        broadcastSSE("deliveries_reassigned", {
+          newRiderId: rider.id,
+          riderName: rider.name,
+          count: result.rows.length,
+        });
+      } catch {}
+    });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

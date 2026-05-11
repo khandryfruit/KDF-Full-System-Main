@@ -10,7 +10,8 @@ import {
   DollarSign, CreditCard, Printer, BarChart2, Clock, AlertCircle,
   RotateCcw, Bike, KeyRound, Eye, EyeOff, Zap, ShieldCheck, Activity,
   AlertTriangle, Banknote, FileText, Send, Trophy, Filter,
-  ChevronDown, CalendarDays, Star,
+  ChevronDown, CalendarDays, Star, ArrowRightLeft, ListChecks,
+  UserCheck, Shuffle, Square, CheckSquare,
 } from "lucide-react";
 
 const API = "/api";
@@ -229,14 +230,328 @@ function SetPasswordModal({ rider, onClose }: { rider: any; onClose: () => void 
   );
 }
 
+/* ── RESET / REASSIGN MODAL ──────────────────────────── */
+function ResetReassignModal({
+  rider,
+  allRiders,
+  onClose,
+  onDone,
+}: {
+  rider: any;
+  allRiders: any[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"reset" | "reassign">("reset");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [newRiderId, setNewRiderId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  const { data, isLoading: loadingDeliveries, refetch } = useQuery({
+    queryKey: ["rider-active-deliveries", rider.id],
+    queryFn: () => apiFetch(`/admin/riders/${rider.id}/active-deliveries`),
+  });
+  const deliveries: any[] = data?.deliveries ?? [];
+
+  const toggleAll = () => {
+    if (selected.size === deliveries.length) setSelected(new Set());
+    else setSelected(new Set(deliveries.map((d: any) => d.id)));
+  };
+
+  const toggle = (id: number) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const handleReset = async () => {
+    if (!confirm(`Clear ALL ${deliveries.length} active assignment(s) from ${rider.name}? Completed deliveries are NOT affected.`)) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch(`/admin/riders/${rider.id}/reset`, { method: "POST" });
+      if (res.ok) {
+        toast({ title: `✅ Reset complete`, description: res.message });
+        onDone();
+        onClose();
+      } else {
+        toast({ title: "Reset failed", description: res.error ?? "Unknown error", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  const handleUnassign = async () => {
+    if (!selected.size) { toast({ title: "Select deliveries first", variant: "destructive" }); return; }
+    if (!confirm(`Unassign ${selected.size} order(s) from ${rider.name}? They will go back to the unassigned queue.`)) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch("/admin/riders/deliveries/unassign", {
+        method: "POST",
+        body: JSON.stringify({ delivery_ids: Array.from(selected) }),
+      });
+      if (res.ok) {
+        toast({ title: `Unassigned ${res.unassigned} order(s)` });
+        setSelected(new Set());
+        refetch();
+        onDone();
+      } else {
+        toast({ title: "Failed", description: res.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  const handleReassign = async () => {
+    if (!selected.size) { toast({ title: "Select deliveries to reassign", variant: "destructive" }); return; }
+    if (!newRiderId) { toast({ title: "Pick a new rider first", variant: "destructive" }); return; }
+    const targetRider = allRiders.find((r: any) => String(r.id) === newRiderId);
+    if (!confirm(`Reassign ${selected.size} order(s) from ${rider.name} → ${targetRider?.name}?`)) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch("/admin/riders/deliveries/reassign", {
+        method: "POST",
+        body: JSON.stringify({ delivery_ids: Array.from(selected), new_rider_id: Number(newRiderId) }),
+      });
+      if (res.ok) {
+        toast({ title: `✅ Reassigned ${res.reassigned} order(s) to ${res.riderName}` });
+        setSelected(new Set());
+        refetch();
+        onDone();
+        onClose();
+      } else {
+        toast({ title: "Failed", description: res.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  const otherRiders = allRiders.filter((r: any) => r.id !== rider.id && r.status !== "inactive");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-gradient-to-r from-orange-50 to-amber-50 rounded-t-2xl shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Shuffle size={18} className="text-orange-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base leading-none">Reset / Reassign Orders</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{rider.name} — {deliveries.length} active order(s)</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-5 pt-4 shrink-0">
+          {([
+            { id: "reset",    label: "Reset Rider",    icon: RotateCcw },
+            { id: "reassign", label: "Reassign Orders", icon: ArrowRightLeft },
+          ] as const).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                tab === id
+                  ? id === "reset"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-blue-100 text-blue-700"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+
+          {/* ── RESET TAB ── */}
+          {tab === "reset" && (
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm text-orange-800">
+                <p className="font-bold flex items-center gap-1.5 mb-1"><AlertTriangle size={14} /> What this does</p>
+                <ul className="space-y-1 text-xs list-disc ml-5">
+                  <li>Removes <strong>{rider.name}</strong> from all <strong>active / in-progress</strong> assignments</li>
+                  <li>Those orders go back to the unassigned queue (status = <code>assigned</code>, rider = none)</li>
+                  <li><strong>Delivered, failed, and returned</strong> orders are <em>never</em> touched</li>
+                  <li>Rider's earnings history and completed deliveries remain intact</li>
+                </ul>
+              </div>
+
+              {loadingDeliveries ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">Loading active orders…</div>
+              ) : deliveries.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle size={32} className="mx-auto mb-2 text-green-400" />
+                  <p className="text-sm font-medium">No active orders — rider is clean!</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Active orders that will be unassigned ({deliveries.length})
+                  </p>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto border border-border rounded-xl p-2 bg-slate-50">
+                    {deliveries.map((d: any) => (
+                      <div key={d.id} className="flex items-center justify-between text-xs px-2 py-1.5 bg-white rounded-lg border border-border/50">
+                        <span className="font-mono font-semibold text-blue-700">{d.shopify_order_number}</span>
+                        <span className="text-muted-foreground truncate mx-2 max-w-[140px]">{d.customer_name}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full font-semibold capitalize ${
+                          d.status === "picked" ? "bg-purple-100 text-purple-700" :
+                          d.status === "out_for_delivery" ? "bg-orange-100 text-orange-700" :
+                          "bg-blue-100 text-blue-700"
+                        }`}>{d.status.replace(/_/g, " ")}</span>
+                        <span className="font-bold text-slate-700 ml-1">Rs.{Number(d.cod_amount ?? 0).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleReset}
+                disabled={loading || deliveries.length === 0}
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white gap-2"
+              >
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                {loading ? "Resetting…" : `Reset — Clear ${deliveries.length} Active Order(s)`}
+              </Button>
+            </div>
+          )}
+
+          {/* ── REASSIGN TAB ── */}
+          {tab === "reassign" && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+                <p className="font-bold mb-1 flex items-center gap-1.5"><ArrowRightLeft size={13} /> How to reassign</p>
+                <p>Select orders below → pick a new rider → click Reassign. Only active orders can be reassigned.</p>
+              </div>
+
+              {/* Delivery list with checkboxes */}
+              {loadingDeliveries ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">Loading…</div>
+              ) : deliveries.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle size={32} className="mx-auto mb-2 text-green-400" />
+                  <p className="text-sm font-medium">No active orders to reassign</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Select Orders ({selected.size} / {deliveries.length} selected)
+                    </p>
+                    <button
+                      onClick={toggleAll}
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      {selected.size === deliveries.length ? <><CheckSquare size={11} /> Deselect all</> : <><Square size={11} /> Select all</>}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto border border-border rounded-xl p-2 bg-slate-50">
+                    {deliveries.map((d: any) => {
+                      const isSel = selected.has(d.id);
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => toggle(d.id)}
+                          className={`w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg border text-left transition-all ${
+                            isSel ? "bg-blue-50 border-blue-300" : "bg-white border-border/50 hover:border-blue-200"
+                          }`}
+                        >
+                          {isSel ? <CheckSquare size={12} className="text-blue-600 shrink-0" /> : <Square size={12} className="text-muted-foreground shrink-0" />}
+                          <span className="font-mono font-bold text-blue-700 shrink-0">{d.shopify_order_number}</span>
+                          <span className="text-muted-foreground truncate flex-1">{d.customer_name}</span>
+                          <span className={`px-1.5 py-0.5 rounded-full font-semibold capitalize shrink-0 ${
+                            d.status === "picked" ? "bg-purple-100 text-purple-700" :
+                            d.status === "out_for_delivery" ? "bg-orange-100 text-orange-700" :
+                            "bg-blue-100 text-blue-700"
+                          }`}>{d.status.replace(/_/g, " ")}</span>
+                          <span className="font-bold text-slate-700 shrink-0">Rs.{Number(d.cod_amount ?? 0).toLocaleString()}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* New rider picker */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
+                  <UserCheck size={11} className="inline mr-1" />Assign to Rider
+                </label>
+                {otherRiders.length === 0 ? (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    No other active riders available. Add another rider first.
+                  </p>
+                ) : (
+                  <select
+                    value={newRiderId}
+                    onChange={e => setNewRiderId(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-background"
+                  >
+                    <option value="">— Pick a rider —</option>
+                    {otherRiders.map((r: any) => (
+                      <option key={r.id} value={String(r.id)}>
+                        {r.name} ({r.delivery_area || "All areas"}) — {r.active_deliveries ?? 0} active
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleUnassign}
+                  disabled={loading || selected.size === 0}
+                  variant="outline"
+                  className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 gap-1.5"
+                >
+                  {loading ? <RefreshCw size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                  Unassign ({selected.size})
+                </Button>
+                <Button
+                  onClick={handleReassign}
+                  disabled={loading || selected.size === 0 || !newRiderId}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                >
+                  {loading ? <RefreshCw size={13} className="animate-spin" /> : <ArrowRightLeft size={13} />}
+                  Reassign ({selected.size})
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t shrink-0">
+          <Button variant="outline" onClick={onClose} className="w-full">Close</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── RIDER CARD ──────────────────────────────────────── */
-function RiderCard({ rider, onEdit, onDelete, onRefresh, codPending = 0 }: {
-  rider: any; onEdit: () => void; onDelete: () => void; onRefresh: () => void; codPending?: number;
+function RiderCard({ rider, allRiders, onEdit, onDelete, onRefresh, codPending = 0 }: {
+  rider: any; allRiders: any[]; onEdit: () => void; onDelete: () => void; onRefresh: () => void; codPending?: number;
 }) {
   const { toast } = useToast();
   const [loadingDel, setLoadingDel] = useState(false);
   const [showDeliveries, setShowDeliveries] = useState(false);
   const [showPwModal, setShowPwModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const { data: delData } = useQuery({
     queryKey: ["rider-deliveries", rider.id],
@@ -290,6 +605,13 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh, codPending = 0 }: {
             </button>
             <button onClick={() => setShowPwModal(true)} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Set app password">
               <KeyRound size={13} />
+            </button>
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-orange-50 hover:text-orange-600 transition-colors"
+              title="Reset / Reassign orders"
+            >
+              <Shuffle size={13} />
             </button>
             <button onClick={onEdit} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors" title="Edit rider">
               <Pencil size={13} />
@@ -374,6 +696,15 @@ function RiderCard({ rider, onEdit, onDelete, onRefresh, codPending = 0 }: {
 
       {showPwModal && (
         <SetPasswordModal rider={rider} onClose={() => setShowPwModal(false)} />
+      )}
+
+      {showResetModal && (
+        <ResetReassignModal
+          rider={rider}
+          allRiders={allRiders}
+          onClose={() => setShowResetModal(false)}
+          onDone={onRefresh}
+        />
       )}
     </div>
   );
@@ -1554,6 +1885,7 @@ export default function RidersPage() {
                   <RiderCard
                     key={rider.id}
                     rider={rider}
+                    allRiders={data?.riders ?? []}
                     codPending={codPendingMap[rider.id] ?? 0}
                     onEdit={() => { setEditRider(rider); setShowModal(true); }}
                     onDelete={refresh}

@@ -1,0 +1,66 @@
+```txt
+Do NOT generate a new APK right now.
+
+The rider app UI is working, but after publishing on the production server, new delivery orders are not appearing inside the rider app.
+
+In local preview/testing mode, orders are showing correctly, but in the production APK and live server environment, orders are missing.
+
+Please fully debug and inspect the backend + production API connection instead of rebuilding the app.
+
+Check all of these carefully:
+
+1. Production API Base URL
+- Verify the APK is using the correct live production API URL.
+- Ensure it is NOT still pointing to localhost, staging, Replit preview URL, or old API endpoints.
+
+2. Environment Variables
+- Check all .env production variables.
+- Verify EXPO_PUBLIC_API_URL or API config values are correct in production builds.
+
+3. Authentication / Token
+- Verify rider login tokens are correctly generated and sent in production.
+- Check if authorization headers are missing or expired.
+
+4. Admin Panel Order Assignment
+- Confirm orders are actually assigned to riders in the production database.
+- Verify assignment APIs work on the live server.
+
+5. API Response Debugging
+- Add console logs for:
+  - Orders API response
+  - Authentication response
+  - Rider ID
+  - Assigned orders count
+- Check production logs for errors.
+
+6. Database Connection
+- Verify production server database is connected correctly.
+- Confirm rider_orders / deliveries tables contain live records.
+
+7. CORS / HTTPS / SSL
+- Check if API requests are blocked because of HTTPS, SSL, or CORS issues.
+
+8. Socket / Real-time Updates
+- Verify socket.io or realtime listeners are connected on production.
+- Ensure production socket URL is correct.
+
+9. Build Cache
+- Make sure old cached API configs are not being used inside the APK.
+
+10. API Test
+- Manually test the live API endpoints from browser/Postman and verify orders are returned.
+
+11. Production Server Logs
+- Inspect server logs for:
+  - 401
+  - 403
+  - 404
+  - 500
+  - socket disconnects
+  - database query failures
+
+Important:
+Do not create another APK until the backend issue is identified and fixed.
+
+Need complete root-cause analysis of why orders show in development but not in production APK/server.
+```
