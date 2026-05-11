@@ -14,7 +14,7 @@ import { seoSettingsTable } from "@workspace/db/schema";
 // Resolve static dist directories from project root
 const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
 const adminAppDist = path.resolve(process.cwd(), "artifacts/kdf-admin-app/dist/public");
-const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-nuts/dist/public");
+const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
 const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
 
 const adminStatic    = express.static(adminDist,    { index: false });
