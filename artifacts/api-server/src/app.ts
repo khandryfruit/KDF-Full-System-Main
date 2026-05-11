@@ -116,16 +116,6 @@ app.get("/robots.txt", async (req: Request, res: Response) => {
 });
 
 /**
- * Hostname-based static file serving (production only, catch-all — must be last).
- *
- * admin.*                  → serve kdf-admin build (built with BASE_PATH="/")
- * khanbabadryfruits.com    → serve kdf-nuts  build (built with BASE_PATH="/")
- * everything else          → serve kdf-plus  build (built with BASE_PATH="/")
- *
- * In development the individual Vite dev servers handle static serving via
- * the proxy's path routing, so this middleware is skipped entirely.
- */
-/**
  * Server-side 301 redirect for unclean product URLs.
  * Handles: /products/Cashews%20nuts%20250g  →  /products/cashews-nuts-250g
  * Works for both KDF NUTS and KDF Plus storefronts (hostname-routed in production,
@@ -154,9 +144,38 @@ app.use((req: Request, res: Response, next: () => void) => {
   next();
 });
 
-/* ── SSR middleware for kdf-nuts product pages (production only) ── */
 if (process.env.NODE_ENV === "production") {
-  /* Only run SSR for the kdf-nuts hostname — skip for admin/kdf-plus */
+  /**
+   * ── Admin Panel: PATH-based routing (highest priority, hostname-agnostic) ──
+   *
+   * khanbabadryfruits.com/admin/*  →  kdf-admin SPA (built with BASE_PATH="/admin/")
+   * admin.khanbabadryfruits.com/*  →  kdf-admin SPA (hostname-based, same build)
+   *
+   * kdf-admin is built with BASE_PATH="/admin/" so all its asset URLs are
+   * prefixed with /admin/. Mounting express.static at "/admin" makes Express
+   * strip that prefix when looking up files in adminDist:
+   *   GET /admin/assets/main.js  →  adminDist/assets/main.js  ✓
+   */
+  app.use("/admin", express.static(adminDist, { index: false }));
+  app.get(["/admin", "/admin/*"], (req: Request, res: Response) => {
+    const indexHtml = path.join(adminDist, "index.html");
+    if (existsSync(indexHtml)) {
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.set("Pragma", "no-cache");
+      res.set("Expires", "0");
+      res.sendFile(indexHtml);
+    } else {
+      res.status(503).send(
+        `Admin build not found at ${adminDist}. Ensure kdf-admin is built before deployment.`,
+      );
+    }
+  });
+
+  /**
+   * ── SSR middleware for kdf-nuts product pages ──
+   * Only runs for khanbabadryfruits.com hostname; skipped for admin paths
+   * (admin paths are already handled above and never reach this middleware).
+   */
   app.use((req: Request, res: Response, next: () => void) => {
     const rawHost = req.headers["x-forwarded-host"];
     const hostname = (Array.isArray(rawHost) ? rawHost[0] : typeof rawHost === "string" ? rawHost.split(",")[0].trim() : req.hostname ?? "");
@@ -167,11 +186,19 @@ if (process.env.NODE_ENV === "production") {
       next();
     }
   });
-}
 
-if (process.env.NODE_ENV === "production") {
+  /**
+   * ── Storefront catch-all: hostname-based ──
+   *
+   * khanbabadryfruits.com / www.khanbabadryfruits.com  →  kdf-nuts  (customer storefront)
+   * app.khanbabadryfruits.com                          →  kdf-admin-app
+   * admin.khanbabadryfruits.com                        →  kdf-admin  (subdomain alias)
+   * everything else (*.replit.app, kdf-plus domain)    →  kdf-plus
+   *
+   * By the time a request reaches this middleware, /admin/* has already been
+   * handled above — so this only serves non-admin paths.
+   */
   app.use((req: Request, res: Response) => {
-    // x-forwarded-host may be a comma-separated list; use the first entry.
     const rawHost = req.headers["x-forwarded-host"];
     const forwardedHost = Array.isArray(rawHost)
       ? rawHost[0]
@@ -179,12 +206,13 @@ if (process.env.NODE_ENV === "production") {
         ? rawHost.split(",")[0].trim()
         : undefined;
     const hostname = forwardedHost ?? req.hostname ?? "";
-    const isAdmin    = hostname.startsWith("admin.");
-    const isAdminApp = hostname === "app.khanbabadryfruits.com";
-    const isKhanbaba = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
 
-    const staticMw = isAdmin ? adminStatic : isAdminApp ? adminAppStatic : isKhanbaba ? nutsStatic : mainStatic;
-    const distPath = isAdmin ? adminDist   : isAdminApp ? adminAppDist   : isKhanbaba ? nutsDist   : mainDist;
+    const isAdminSubdomain = hostname.startsWith("admin.");
+    const isAdminApp       = hostname === "app.khanbabadryfruits.com";
+    const isKhanbaba       = hostname === "khanbabadryfruits.com" || hostname === "www.khanbabadryfruits.com";
+
+    const staticMw = isAdminSubdomain ? adminStatic : isAdminApp ? adminAppStatic : isKhanbaba ? nutsStatic : mainStatic;
+    const distPath = isAdminSubdomain ? adminDist   : isAdminApp ? adminAppDist   : isKhanbaba ? nutsDist   : mainDist;
 
     staticMw(req, res, () => {
       const indexHtml = path.join(distPath, "index.html");
@@ -194,11 +222,9 @@ if (process.env.NODE_ENV === "production") {
         res.set("Expires", "0");
         res.sendFile(indexHtml);
       } else {
-        res
-          .status(503)
-          .send(
-            `Static build not found at ${distPath}. Ensure the frontend is built before deployment.`,
-          );
+        res.status(503).send(
+          `Static build not found at ${distPath}. Ensure the frontend is built before deployment.`,
+        );
       }
     });
   });
