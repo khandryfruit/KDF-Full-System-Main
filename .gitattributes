@@ -1,1 +1,2 @@
 user.zip filter=lfs diff=lfs merge=lfs -text
+kdf-rider-lahore-v3.0.0.apk filter=lfs diff=lfs merge=lfs -text

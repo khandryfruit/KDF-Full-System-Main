@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "ugA-P5-tVAfMh_A0mvryK"
@@ -24,3 +23,9 @@ id = "c9JHHorGxSaO3g0uHf_hs"
 uri = "file://artifacts/kdf-mobile/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[outputs]]
+id = "0gE6x4yl0CTbfzolMbqSY"
+uri = "file://kdf-rider-lahore-v3.0.0.zip"
+type = "unspecified"
+title = "KDF Rider Lahore v3.0.0 APK (ZIP)"
