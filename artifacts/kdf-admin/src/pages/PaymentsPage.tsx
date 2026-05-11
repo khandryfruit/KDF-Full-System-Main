@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Banknote, Plus, Settings, Trash2, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { CreditCard, Banknote, Plus, Settings, Trash2, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle, Copy, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,13 +19,66 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 const GATEWAY_PRESETS = [
-  { type: "cod", displayName: "Cash on Delivery", description: "Pay when order arrives", icon: "💵", color: "bg-green-50 border-green-200", requiresApiKey: false },
-  { type: "jazzcash", displayName: "JazzCash", description: "Mobile wallet payment via JazzCash", icon: "📱", color: "bg-red-50 border-red-200", requiresApiKey: true },
-  { type: "easypaisa", displayName: "EasyPaisa", description: "Mobile wallet payment via EasyPaisa", icon: "💚", color: "bg-emerald-50 border-emerald-200", requiresApiKey: true },
-  { type: "card", displayName: "Credit / Debit Card", description: "Visa, Mastercard via payment gateway", icon: "💳", color: "bg-blue-50 border-blue-200", requiresApiKey: true },
-  { type: "wallet", displayName: "KDF Wallet", description: "Pay using KDF store wallet balance", icon: "👛", color: "bg-purple-50 border-purple-200", requiresApiKey: false },
-  { type: "bank_transfer", displayName: "Bank Transfer", description: "Manual bank transfer (show bank details)", icon: "🏦", color: "bg-amber-50 border-amber-200", requiresApiKey: false },
+  { type: "cod",           displayName: "Cash on Delivery",    description: "Pay when order arrives",                  icon: "💵", color: "bg-green-50 border-green-200",   requiresApiKey: false },
+  { type: "jazzcash",      displayName: "JazzCash",            description: "Mobile wallet — hosted checkout",          icon: "📱", color: "bg-red-50 border-red-200",      requiresApiKey: true  },
+  { type: "easypaisa",     displayName: "EasyPaisa",           description: "Mobile wallet — hosted checkout",          icon: "💚", color: "bg-emerald-50 border-emerald-200", requiresApiKey: true },
+  { type: "card",          displayName: "Credit / Debit Card", description: "Visa, Mastercard via payment gateway",     icon: "💳", color: "bg-blue-50 border-blue-200",    requiresApiKey: true  },
+  { type: "wallet",        displayName: "KDF Wallet",          description: "Pay using KDF store wallet balance",       icon: "👛", color: "bg-purple-50 border-purple-200", requiresApiKey: false },
+  { type: "bank_transfer", displayName: "Bank Transfer",       description: "Manual bank transfer (show bank details)", icon: "🏦", color: "bg-amber-50 border-amber-200",  requiresApiKey: false },
 ];
+
+const GATEWAY_FIELDS: Record<string, { apiKeyLabel: string; apiKeyPlaceholder: string; secretKeyLabel: string; secretKeyPlaceholder: string; webhookSecretLabel?: string; webhookSecretPlaceholder?: string; callbackPath?: string; callbackNote?: string }> = {
+  jazzcash: {
+    apiKeyLabel: "Merchant ID",
+    apiKeyPlaceholder: "e.g. MC12345",
+    secretKeyLabel: "Password",
+    secretKeyPlaceholder: "JazzCash merchant password",
+    webhookSecretLabel: "Integration Salt",
+    webhookSecretPlaceholder: "JazzCash integration salt / hash key",
+    callbackPath: "/api/payments/jazzcash/callback",
+    callbackNote: "Register this URL in JazzCash merchant portal under Return URL & IPN URL",
+  },
+  easypaisa: {
+    apiKeyLabel: "Store ID",
+    apiKeyPlaceholder: "e.g. 12345",
+    secretKeyLabel: "Hash Key",
+    secretKeyPlaceholder: "EasyPaisa hash key",
+    callbackPath: "/api/payments/easypaisa/callback",
+    callbackNote: "Register this URL in EasyPaisa merchant portal as your callback URL",
+  },
+  card: {
+    apiKeyLabel: "API Key / Client ID",
+    apiKeyPlaceholder: "Gateway API key",
+    secretKeyLabel: "Secret Key",
+    secretKeyPlaceholder: "Gateway secret key",
+    webhookSecretLabel: "Webhook Secret (optional)",
+    webhookSecretPlaceholder: "Webhook signature secret",
+  },
+};
+
+function CallbackUrlRow({ path, note }: { path: string; note: string }) {
+  const { toast } = useToast();
+  const domain = window.location.origin;
+  const url = `${domain}${path}`;
+  return (
+    <div className="mt-3 rounded-lg bg-muted/50 border border-border p-3 space-y-1.5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Info size={12} /> Callback URL
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5 font-mono truncate">{url}</code>
+        <button
+          type="button"
+          className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={() => { navigator.clipboard.writeText(url); toast({ title: "Copied!" }); }}
+        >
+          <Copy size={13} />
+        </button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{note}</p>
+    </div>
+  );
+}
 
 function GatewayCard({ preset }: { preset: typeof GATEWAY_PRESETS[0] }) {
   const { toast } = useToast();
@@ -35,10 +88,24 @@ function GatewayCard({ preset }: { preset: typeof GATEWAY_PRESETS[0] }) {
 
   const [editing, setEditing] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [form, setForm] = useState({ apiKey: "", secretKey: "", webhookSecret: "" });
+  const [form, setForm] = useState({ apiKey: "", secretKey: "", webhookSecret: "", sandbox: true });
+
+  const fields = GATEWAY_FIELDS[preset.type];
 
   const save = useMutation({
-    mutationFn: () => apiFetch("/api/admin/payment-gateways", { method: "POST", body: JSON.stringify({ type: preset.type, displayName: preset.displayName, description: preset.description, apiKey: form.apiKey || undefined, secretKey: form.secretKey || undefined, webhookSecret: form.webhookSecret || undefined, isActive: true }) }),
+    mutationFn: () => apiFetch("/api/admin/payment-gateways", {
+      method: "POST",
+      body: JSON.stringify({
+        type: preset.type,
+        displayName: preset.displayName,
+        description: preset.description,
+        apiKey: form.apiKey || undefined,
+        secretKey: form.secretKey || undefined,
+        webhookSecret: form.webhookSecret || undefined,
+        config: { sandbox: form.sandbox },
+        isActive: true,
+      }),
+    }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/payment-gateways"] }); setEditing(false); toast({ title: `${preset.displayName} configured` }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
@@ -49,9 +116,16 @@ function GatewayCard({ preset }: { preset: typeof GATEWAY_PRESETS[0] }) {
   });
 
   const openEdit = () => {
-    setForm({ apiKey: config?.apiKey ?? "", secretKey: config?.secretKey ?? "", webhookSecret: config?.webhookSecret ?? "" });
+    setForm({
+      apiKey: config?.apiKey ?? "",
+      secretKey: config?.secretKey ?? "",
+      webhookSecret: config?.webhookSecret ?? "",
+      sandbox: config?.config?.sandbox !== false,
+    });
     setEditing(true);
   };
+
+  const isSandbox = config?.config?.sandbox !== false;
 
   return (
     <div className={`border-2 rounded-xl bg-card shadow-sm overflow-hidden ${config?.isActive ? preset.color : "border-border"}`}>
@@ -60,10 +134,15 @@ function GatewayCard({ preset }: { preset: typeof GATEWAY_PRESETS[0] }) {
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center text-2xl shadow-sm border border-border">{preset.icon}</div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-semibold">{preset.displayName}</h3>
                 {config?.isDefault && <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">Default</Badge>}
                 {config?.isActive && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                {config && fields && (
+                  <Badge variant="outline" className={`text-[10px] ${isSandbox ? "bg-yellow-50 text-yellow-700 border-yellow-300" : "bg-green-50 text-green-700 border-green-300"}`}>
+                    {isSandbox ? "Sandbox" : "Live"}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">{preset.description}</p>
             </div>
@@ -73,32 +152,48 @@ function GatewayCard({ preset }: { preset: typeof GATEWAY_PRESETS[0] }) {
           )}
         </div>
 
-        {editing && preset.requiresApiKey && (
+        {editing && preset.requiresApiKey && fields && (
           <div className="space-y-3 mt-4 pt-4 border-t border-border">
             <div className="space-y-1.5">
-              <Label>API Key / Client ID</Label>
+              <Label>{fields.apiKeyLabel}</Label>
               <div className="relative">
-                <Input type={showKey ? "text" : "password"} value={form.apiKey} onChange={e => setForm({ ...form, apiKey: e.target.value })} placeholder="API key" />
+                <Input type={showKey ? "text" : "password"} value={form.apiKey} onChange={e => setForm({ ...form, apiKey: e.target.value })} placeholder={fields.apiKeyPlaceholder} />
                 <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                   {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Secret Key</Label>
-              <Input type="password" value={form.secretKey} onChange={e => setForm({ ...form, secretKey: e.target.value })} placeholder="Secret key" />
+              <Label>{fields.secretKeyLabel}</Label>
+              <Input type="password" value={form.secretKey} onChange={e => setForm({ ...form, secretKey: e.target.value })} placeholder={fields.secretKeyPlaceholder} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Webhook Secret (optional)</Label>
-              <Input type="password" value={form.webhookSecret} onChange={e => setForm({ ...form, webhookSecret: e.target.value })} placeholder="Webhook secret" />
+            {fields.webhookSecretLabel && (
+              <div className="space-y-1.5">
+                <Label>{fields.webhookSecretLabel}</Label>
+                <Input type="password" value={form.webhookSecret} onChange={e => setForm({ ...form, webhookSecret: e.target.value })} placeholder={fields.webhookSecretPlaceholder} />
+              </div>
+            )}
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Sandbox / Test Mode</p>
+                <p className="text-xs text-muted-foreground">Use test credentials — no real money charged</p>
+              </div>
+              <Switch checked={form.sandbox} onCheckedChange={(v) => setForm({ ...form, sandbox: v })} />
             </div>
+            {fields.callbackPath && (
+              <CallbackUrlRow path={fields.callbackPath} note={fields.callbackNote!} />
+            )}
             <div className="flex gap-2">
-              <Button onClick={() => save.mutate()} disabled={save.isPending} className="flex-1">
+              <Button onClick={() => save.mutate()} disabled={save.isPending || !form.apiKey || !form.secretKey} className="flex-1">
                 {save.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save
               </Button>
               <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
             </div>
           </div>
+        )}
+
+        {!editing && config && fields?.callbackPath && (
+          <CallbackUrlRow path={fields.callbackPath} note={fields.callbackNote!} />
         )}
 
         <div className="flex gap-2 mt-4">
