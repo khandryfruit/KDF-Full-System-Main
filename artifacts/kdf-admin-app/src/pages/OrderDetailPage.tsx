@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/App";
-import { ArrowLeft, MapPin, Phone, Package, Truck, User, ClipboardList, RefreshCw } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Package, Truck, User, ClipboardList, RefreshCw, Send, CheckCircle, MessageCircle } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   pending:    "bg-yellow-500/15 text-yellow-400",
@@ -178,19 +179,85 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               )}
             </Section>
 
-            {/* Call customer */}
-            {custPhone !== "—" && (
-              <a
-                href={`tel:${custPhone}`}
-                className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm font-semibold"
-              >
-                <Phone className="w-4 h-4" />
-                Call {custName.split(" ")[0]}
-              </a>
-            )}
+            {/* Quick Actions */}
+            <div className="space-y-2">
+              {/* Send WA confirmation */}
+              <WASendButton orderId={orderId} token={token} />
+
+              {/* Call customer */}
+              {custPhone !== "—" && (
+                <a
+                  href={`tel:${custPhone}`}
+                  className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm font-semibold"
+                >
+                  <Phone className="w-4 h-4" />
+                  Call {custName.split(" ")[0]}
+                </a>
+              )}
+
+              {/* Open WA conversation */}
+              {custPhone !== "—" && (
+                <a
+                  href={`https://wa.me/${custPhone.replace(/[^0-9]/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-semibold"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Open WhatsApp Chat
+                </a>
+              )}
+            </div>
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function WASendButton({ orderId, token }: { orderId: string; token: string | null }) {
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const send = async () => {
+    setSending(true); setError("");
+    try {
+      const r = await fetch(`/api/admin/shopify/orders/${orderId}/send-confirmation`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok) setError(d.error ?? "Failed to send");
+      else setSent(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <div className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-semibold">
+        <CheckCircle className="w-4 h-4" />
+        WA Confirmation Sent!
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={send}
+        disabled={sending}
+        className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold disabled:opacity-50 active:scale-[0.99] transition"
+      >
+        <Send className="w-4 h-4" />
+        {sending ? "Sending…" : "Send WA Confirmation"}
+      </button>
+      {error && <p className="text-xs text-red-400 text-center">{error}</p>}
     </div>
   );
 }

@@ -73,6 +73,9 @@ import WhatsAppPage       from "@/pages/WhatsAppPage";
 import WAConversationPage from "@/pages/WAConversationPage";
 import CustomersPage      from "@/pages/CustomersPage";
 import AnalyticsPage      from "@/pages/AnalyticsPage";
+import ProductsPage       from "@/pages/ProductsPage";
+import LogisticsPage      from "@/pages/LogisticsPage";
+import StubPage           from "@/pages/StubPage";
 import MorePage           from "@/pages/MorePage";
 
 function ProtectedRoute({ component: C, params }: { component: React.ComponentType<any>; params?: any }) {
@@ -94,19 +97,35 @@ function Router() {
     <Switch>
       <Route path="/login"          component={LoginPage} />
       <Route path="/"               component={() => <ProtectedRoute component={DashboardPage}   />} />
+      {/* Orders */}
       <Route path="/orders"         component={() => <ProtectedRoute component={OrdersPage}       />} />
       <Route path="/orders/:id">
         {(params) => <ProtectedRoute component={OrderDetailPage} params={params} />}
       </Route>
+      {/* Riders */}
       <Route path="/riders"         component={() => <ProtectedRoute component={RidersPage}       />} />
+      {/* WhatsApp */}
       <Route path="/wa"             component={() => <ProtectedRoute component={WhatsAppPage}     />} />
       <Route path="/wa/:phone">
         {(params) => <ProtectedRoute component={WAConversationPage} params={params} />}
       </Route>
+      {/* Customers */}
       <Route path="/customers"      component={() => <ProtectedRoute component={CustomersPage}    />} />
+      {/* Analytics */}
       <Route path="/analytics"      component={() => <ProtectedRoute component={AnalyticsPage}    />} />
+      {/* Products */}
+      <Route path="/products"       component={() => <ProtectedRoute component={ProductsPage}     />} />
+      {/* Logistics */}
+      <Route path="/logistics"      component={() => <ProtectedRoute component={LogisticsPage}    />} />
+      {/* Stub pages — open in desktop admin panel */}
+      <Route path="/payments"       component={() => <ProtectedRoute component={() => <StubPage slug="payments"      />} />} />
+      <Route path="/branches"       component={() => <ProtectedRoute component={() => <StubPage slug="branches"      />} />} />
+      <Route path="/store"          component={() => <ProtectedRoute component={() => <StubPage slug="store"         />} />} />
+      <Route path="/notifications"  component={() => <ProtectedRoute component={() => <StubPage slug="notifications" />} />} />
+      {/* System */}
       <Route path="/more"           component={() => <ProtectedRoute component={MorePage}         />} />
       <Route path="/modules"        component={() => <ProtectedRoute component={ModulesPage}      />} />
+      {/* Fallback */}
       <Route                        component={() => <ProtectedRoute component={DashboardPage}    />} />
     </Switch>
   );
