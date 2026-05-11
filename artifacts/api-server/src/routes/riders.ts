@@ -29,11 +29,12 @@ async function getDeliverySettings(): Promise<{
   auto_wa_on_status: boolean;
   default_eta_minutes: number;
 }> {
+  let default_eta_minutes = 30;
   try {
-    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
-    if (rows.rows.length) return rows.rows[0] as any;
+    const rows = await db.execute(sql`SELECT default_eta_minutes FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
+    if (rows.rows.length) default_eta_minutes = Number((rows.rows[0] as any).default_eta_minutes) || 30;
   } catch {}
-  return { auto_delivery_mode: true, auto_wa_on_assign: true, auto_wa_on_status: true, default_eta_minutes: 30 };
+  return { auto_delivery_mode: true, auto_wa_on_assign: true, auto_wa_on_status: true, default_eta_minutes };
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -270,25 +271,27 @@ router.post("/admin/riders", adminMiddleware, async (req, res) => {
 ═══════════════════════════════════════════════════════ */
 router.get("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
   try {
-    const rows = await db.execute(sql`SELECT * FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
-    res.json(rows.rows[0] ?? {});
+    const rows = await db.execute(sql`SELECT default_eta_minutes FROM rider_delivery_settings WHERE id = 1 LIMIT 1`);
+    const eta = rows.rows.length ? Number((rows.rows[0] as any).default_eta_minutes) || 30 : 30;
+    res.json({ auto_delivery_mode: true, auto_wa_on_assign: true, auto_wa_on_status: true, default_eta_minutes: eta });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.put("/admin/riders/delivery-settings", adminMiddleware, async (req, res) => {
   try {
-    const { auto_delivery_mode, auto_wa_on_assign, auto_wa_on_status, default_eta_minutes } = req.body;
+    const { default_eta_minutes } = req.body;
     const rows = await db.execute(sql`
       UPDATE rider_delivery_settings SET
-        auto_delivery_mode   = COALESCE(${auto_delivery_mode   ?? null}, auto_delivery_mode),
-        auto_wa_on_assign    = COALESCE(${auto_wa_on_assign    ?? null}, auto_wa_on_assign),
-        auto_wa_on_status    = COALESCE(${auto_wa_on_status    ?? null}, auto_wa_on_status),
+        auto_delivery_mode   = true,
+        auto_wa_on_assign    = true,
+        auto_wa_on_status    = true,
         default_eta_minutes  = COALESCE(${default_eta_minutes != null ? parseInt(String(default_eta_minutes)) : null}, default_eta_minutes),
         updated_at = NOW()
       WHERE id = 1
       RETURNING *
     `);
-    res.json(rows.rows[0] ?? {});
+    const eta = rows.rows.length ? Number((rows.rows[0] as any).default_eta_minutes) || 30 : 30;
+    res.json({ auto_delivery_mode: true, auto_wa_on_assign: true, auto_wa_on_status: true, default_eta_minutes: eta });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

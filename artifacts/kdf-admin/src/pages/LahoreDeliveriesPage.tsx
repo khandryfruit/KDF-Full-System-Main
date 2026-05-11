@@ -822,19 +822,6 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
         </div>
       )}
 
-      {/* ── Auto-assign off warning ── */}
-      {!isLoading && !ds.auto_delivery_mode && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
-          <AlertCircle size={15} className="text-slate-500 shrink-0" />
-          <p className="text-xs text-slate-600 flex-1">
-            <strong>Auto-assign is OFF.</strong> New Lahore orders will NOT be auto-assigned. Enable it in Automation Settings below.
-          </p>
-          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2"
-            onClick={() => saveSetting("auto_delivery_mode", true)}>
-            Enable
-          </Button>
-        </div>
-      )}
 
       {/* Stat tiles */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2.5">
@@ -907,30 +894,37 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
             </div>
           </div>
 
-          {/* Auto Mode Settings */}
+          {/* Settings Panel */}
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b bg-slate-50/50 flex items-center gap-2">
               <Settings2 size={15} className="text-slate-600" />
-              <h3 className="font-semibold text-sm">Automation Settings</h3>
+              <h3 className="font-semibold text-sm">Settings</h3>
             </div>
             <div className="p-4 space-y-3">
-              {[
-                { key: "auto_delivery_mode", label: "Auto-Assign on Order", desc: "New Lahore orders auto-assigned to riders", icon: "⚡" },
-                { key: "auto_wa_on_assign", label: "Auto WA on Assign", desc: "Customer notified when rider assigned", icon: "🛵" },
-                { key: "auto_wa_on_status", label: "Auto WA on Status", desc: "Customer notified on every status change", icon: "📲" },
-              ].map(setting => (
-                <div key={setting.key} className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-medium">{setting.icon} {setting.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{setting.desc}</p>
-                  </div>
-                  <Switch
-                    checked={!!ds[setting.key]}
-                    onCheckedChange={v => saveSetting(setting.key, v)}
-                    className="data-[state=checked]:bg-green-600 shrink-0"
-                  />
+              {/* Always-on automation status */}
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2.5 space-y-1.5">
+                <p className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Automation Active</p>
+                <div className="space-y-1">
+                  {[
+                    { icon: "⚡", label: "Auto-Assign on Order", desc: "New Lahore orders assigned automatically" },
+                    { icon: "🛵", label: "Auto WA on Assign",    desc: "Customer notified when rider assigned" },
+                    { icon: "📲", label: "Auto WA on Status",    desc: "Customer notified on every status change" },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center gap-2">
+                      <span className="text-[11px]">{item.icon}</span>
+                      <div>
+                        <p className="text-[10px] font-semibold text-green-800">{item.label}</p>
+                        <p className="text-[9px] text-green-600">{item.desc}</p>
+                      </div>
+                      <span className="ml-auto text-[9px] font-bold text-green-700 bg-green-100 border border-green-300 px-1.5 py-0.5 rounded-full">
+                        ALWAYS ON
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {/* ETA */}
               <div>
                 <p className="text-xs font-medium mb-1.5">⏱️ Default ETA (minutes)</p>
                 <div className="flex flex-wrap gap-1">
@@ -942,6 +936,8 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
                   ))}
                 </div>
               </div>
+
+              {/* Sound Alerts */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
                 <div>
                   <p className="text-xs font-medium">{soundEnabled ? "🔊" : "🔇"} Sound Alerts</p>
