@@ -288,18 +288,24 @@ router.post("/admin-auth/login", async (req, res: Response): Promise<void> => {
 
     const token = signAdminUserToken({ adminUserId: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions });
 
-    /* Update last login */
-    const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
-    await db.update(adminUsersTable).set({ lastLoginAt: new Date(), lastLoginIp: ip, updatedAt: new Date() }).where(eq(adminUsersTable.id, user.id));
-
+    /* Send response immediately — do NOT await lastLogin update so DB slowness can't block the response */
     res.json({
       ok: true,
       token,
       user: { id: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions, roles },
     });
+
+    /* Fire-and-forget: update last login metadata after response is sent */
+    const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
+    db.update(adminUsersTable)
+      .set({ lastLoginAt: new Date(), lastLoginIp: ip, updatedAt: new Date() })
+      .where(eq(adminUsersTable.id, user.id))
+      .catch((e: any) => logger.warn({ err: e?.message }, "admin-auth: lastLogin update failed (non-critical)"));
   } catch (err: any) {
-    logger.error({ err: err.message }, "admin-auth login error");
-    res.status(500).json({ ok: false, error: err.message });
+    logger.error({ err: err?.message ?? String(err) }, "admin-auth login error");
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: err?.message ?? "Login failed — please try again." });
+    }
   }
 });
 
