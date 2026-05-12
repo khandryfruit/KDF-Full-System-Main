@@ -23,15 +23,25 @@ export default function LoginPage() {
   // across separate Railway services. Defaults to "" (relative) on Replit.
   const API = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
-  /** Fetch JSON safely — shows readable error when server returns non-JSON (HTML error page). */
+  /** Fetch JSON safely — 15 s timeout, shows readable error on non-JSON response. */
   const fetchJson = async (url: string, init: RequestInit) => {
-    const res  = await fetch(API + url, init);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 15_000);
+    let res: Response;
+    try {
+      res = await fetch(API + url, { ...init, signal: controller.signal });
+    } catch (e: any) {
+      clearTimeout(tid);
+      if (e?.name === "AbortError") throw new Error("Request timed out — please try again.");
+      throw new Error(e?.message ?? "Network error — please try again.");
+    }
+    clearTimeout(tid);
     const text = await res.text();
     let body: any;
     try { body = JSON.parse(text); }
     catch {
       const preview = text.replace(/<[^>]+>/g, " ").trim().slice(0, 120);
-      throw new Error(preview || `Server returned status ${res.status}`);
+      throw new Error(preview || `Server returned ${res.status}`);
     }
     return { res, body };
   };
