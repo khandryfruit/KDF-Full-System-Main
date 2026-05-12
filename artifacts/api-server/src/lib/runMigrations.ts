@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "fs";
+import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -68,18 +68,42 @@ function splitStatements(content: string): string[] {
 }
 
 export async function runMigrations(): Promise<void> {
-  // build.mjs copies migrations/ → dist/migrations/ so __dirname/migrations works
-  const migrationsDir = join(__dirname, "migrations");
+  // Resolve migrations directory — try multiple locations so the runner works
+  // whether or not build.mjs copied the SQL files into dist/.
+  //
+  // Priority order:
+  //   1. dist/migrations/  — post-build path (build.mjs copies SQL files here)
+  //   2. ../migrations/    — source path relative to dist/ (present when dist/
+  //                          is committed to git and ships without a build step,
+  //                          e.g. Railway running `start` without `build`)
+  //   3. ./migrations/     — cwd fallback
+  const candidatePaths = [
+    join(__dirname, "migrations"),          // dist/migrations/
+    join(__dirname, "..", "migrations"),    // artifacts/api-server/migrations/
+    join(process.cwd(), "migrations"),      // cwd/migrations/
+  ];
+
+  const migrationsDir = candidatePaths.find((p) => existsSync(p)) ?? null;
+
+  if (!migrationsDir) {
+    logger.warn(
+      { tried: candidatePaths },
+      "Migrations directory not found in any expected location — skipping schema migrations"
+    );
+    return;
+  }
+
+  logger.info({ migrationsDir }, "Using migrations directory");
 
   let files: string[];
   try {
     files = readdirSync(migrationsDir)
       .filter((f) => f.endsWith(".sql"))
       .sort();
-  } catch {
+  } catch (err) {
     logger.warn(
-      { migrationsDir },
-      "Migrations directory not found — skipping schema migrations"
+      { migrationsDir, err },
+      "Could not read migrations directory — skipping schema migrations"
     );
     return;
   }
