@@ -217,13 +217,14 @@ const LOGISTICS_NAV_ITEMS = [
   { href: "/logistics/automation",     label: "Automation",        icon: Zap             },
 ];
 
-const KDF_NUTS_BASE = "/kdf-nuts";
-const REAL_STORE_URL = "https://www.khanbabadryfruits.com";
+const STORE_URL = "https://khanbabadryfruits.com";
+const IS_DEV    = import.meta.env.DEV;
+
 const WEBSITE_LINKS = [
-  { label: "View Store Home", path: REAL_STORE_URL,                             icon: Home    },
-  { label: "View Products",   path: `${REAL_STORE_URL}/collections/all`,        icon: Package },
-  { label: "View Categories", path: `${REAL_STORE_URL}/collections`,            icon: Tags    },
-  { label: "Preview (Local)", path: `${KDF_NUTS_BASE}/home`,                    icon: Globe   },
+  { label: "View Store Home", path: STORE_URL,                      icon: Home    },
+  { label: "View Products",   path: `${STORE_URL}/products`,        icon: Package },
+  { label: "View Categories", path: `${STORE_URL}/categories`,      icon: Tags    },
+  ...(IS_DEV ? [{ label: "Preview (Local)", path: "/",              icon: Globe   }] : []),
 ];
 
 /* ═══════════════════════════════════════════════
