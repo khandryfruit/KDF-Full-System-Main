@@ -88,6 +88,10 @@ import MobileReelsPage from "@/pages/MobileReelsPage";
 import GoogleIndexingPage from "@/pages/GoogleIndexingPage";
 import GoogleMerchantPage from "@/pages/GoogleMerchantPage";
 import ModulesPage from "@/pages/ModulesPage";
+import SEODashboardPage from "@/pages/SEODashboardPage";
+import SEORedirectsPage from "@/pages/SEORedirectsPage";
+import SEOSchemaPage from "@/pages/SEOSchemaPage";
+import SEOAIWriterPage from "@/pages/SEOAIWriterPage";
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 
@@ -161,6 +165,10 @@ function Router() {
       <Route path="/website-settings"><ProtectedRoute component={LogoManagementPage} /></Route>
       <Route path="/abandoned-checkouts"><ProtectedRoute component={AbandonedCheckoutsPage} /></Route>
       <Route path="/blog"><ProtectedRoute component={BlogPostsPage} /></Route>
+      <Route path="/seo/dashboard"><ProtectedRoute component={SEODashboardPage} /></Route>
+      <Route path="/seo/redirects"><ProtectedRoute component={SEORedirectsPage} /></Route>
+      <Route path="/seo/schema"><ProtectedRoute component={SEOSchemaPage} /></Route>
+      <Route path="/seo/ai-writer"><ProtectedRoute component={SEOAIWriterPage} /></Route>
       <Route path="/seo"><ProtectedRoute component={SEOSettingsPage} /></Route>
       <Route path="/seo/fast-indexing"><ProtectedRoute component={GoogleIndexingPage} /></Route>
       <Route path="/seo/merchant-center"><ProtectedRoute component={GoogleMerchantPage} /></Route>

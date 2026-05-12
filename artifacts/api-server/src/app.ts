@@ -9,7 +9,18 @@ import { logger } from "./lib/logger";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
 import { db } from "@workspace/db";
-import { seoSettingsTable } from "@workspace/db/schema";
+import { seoSettingsTable, productsTable, blogPostsTable } from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+
+function escapeXml(str: string): string {
+  return (str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function getBase(req: Request, canonicalDomain?: string | null): string {
+  const proto = req.headers["x-forwarded-proto"] ?? "https";
+  const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? "";
+  return (canonicalDomain ?? `${proto}://${host}`).replace(/\/$/, "");
+}
 
 // Resolve static dist directories from project root
 const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
@@ -85,6 +96,128 @@ app.get("/sitemap.xml", async (req: Request, res: Response) => {
   }
 });
 
+/** Serve /sitemap-index.xml — master sitemap */
+app.get("/sitemap-index.xml", async (req: Request, res: Response) => {
+  try {
+    const rows = await db.select().from(seoSettingsTable).limit(1);
+    const base = getBase(req, (rows[0] as any)?.canonicalDomain);
+    const today = new Date().toISOString();
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>${base}/sitemap.xml</loc><lastmod>${today}</lastmod></sitemap>
+  <sitemap><loc>${base}/sitemap-images.xml</loc><lastmod>${today}</lastmod></sitemap>
+  <sitemap><loc>${base}/sitemap-news.xml</loc><lastmod>${today}</lastmod></sitemap>
+</sitemapindex>`;
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(xml);
+  } catch { res.status(500).send("Failed to generate sitemap index"); }
+});
+
+/** Serve /sitemap-images.xml — image sitemap for Google Image Search */
+app.get("/sitemap-images.xml", async (req: Request, res: Response) => {
+  try {
+    const rows = await db.select().from(seoSettingsTable).limit(1);
+    const base = getBase(req, (rows[0] as any)?.canonicalDomain);
+    const products = await db
+      .select({ slug: productsTable.slug, name: productsTable.name, images: productsTable.images, altText: productsTable.altText })
+      .from(productsTable)
+      .where(eq(productsTable.active, true))
+      .limit(1000);
+    const urls = products.filter(p => p.images && (p.images as string[]).length > 0).map(p => {
+      const rawImg = (p.images as string[])[0];
+      const imgUrl = rawImg.startsWith("http") ? rawImg : `${base}${rawImg}`;
+      return `  <url>
+    <loc>${escapeXml(`${base}/products/${p.slug ?? p.name}`)}</loc>
+    <image:image>
+      <image:loc>${escapeXml(imgUrl)}</image:loc>
+      <image:title>${escapeXml(p.name ?? "")}</image:title>
+      ${p.altText ? `<image:caption>${escapeXml(p.altText)}</image:caption>` : ""}
+    </image:image>
+  </url>`;
+    }).join("\n");
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${urls}
+</urlset>`;
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(xml);
+  } catch { res.status(500).send("Failed to generate image sitemap"); }
+});
+
+/** Serve /sitemap-news.xml — Google News sitemap for blog posts */
+app.get("/sitemap-news.xml", async (req: Request, res: Response) => {
+  try {
+    const rows = await db.select().from(seoSettingsTable).limit(1);
+    const base = getBase(req, (rows[0] as any)?.canonicalDomain);
+    const orgName = (rows[0] as any)?.orgName ?? "KDF NUTS";
+    const posts = await db
+      .select({ slug: blogPostsTable.slug, title: blogPostsTable.title, updatedAt: blogPostsTable.updatedAt })
+      .from(blogPostsTable)
+      .where(eq(blogPostsTable.status, "published"))
+      .orderBy(desc(blogPostsTable.updatedAt))
+      .limit(50);
+    const urls = posts.map(p => `  <url>
+    <loc>${escapeXml(`${base}/blog/${p.slug}`)}</loc>
+    <news:news>
+      <news:publication><news:name>${escapeXml(orgName)}</news:name><news:language>en</news:language></news:publication>
+      <news:publication_date>${new Date(p.updatedAt ?? new Date()).toISOString()}</news:publication_date>
+      <news:title>${escapeXml(p.title ?? "")}</news:title>
+    </news:news>
+  </url>`).join("\n");
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+${urls}
+</urlset>`;
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=1800");
+    res.send(xml);
+  } catch { res.status(500).send("Failed to generate news sitemap"); }
+});
+
+/** Serve /feeds/rss.xml — Blog RSS feed */
+app.get("/feeds/rss.xml", async (req: Request, res: Response) => {
+  try {
+    const rows = await db.select().from(seoSettingsTable).limit(1);
+    const base = getBase(req, (rows[0] as any)?.canonicalDomain);
+    const orgName = (rows[0] as any)?.orgName ?? "KDF NUTS";
+    const orgEmail = (rows[0] as any)?.orgEmail ?? "";
+    const posts = await db
+      .select()
+      .from(blogPostsTable)
+      .where(eq(blogPostsTable.status, "published"))
+      .orderBy(desc(blogPostsTable.updatedAt))
+      .limit(20);
+    const items = posts.map(p => `    <item>
+      <title>${escapeXml(p.title ?? "")}</title>
+      <link>${escapeXml(`${base}/blog/${p.slug}`)}</link>
+      <description>${escapeXml((p as any).excerpt ?? p.metaDescription ?? "")}</description>
+      <pubDate>${new Date(p.updatedAt ?? new Date()).toUTCString()}</pubDate>
+      <guid>${escapeXml(`${base}/blog/${p.slug}`)}</guid>
+      ${(p as any).featuredImage ? `<enclosure url="${escapeXml((p as any).featuredImage)}" type="image/jpeg" />` : ""}
+    </item>`).join("\n");
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeXml(orgName)} Blog</title>
+    <link>${escapeXml(base)}</link>
+    <description>Premium Dry Fruits &amp; Nuts — Tips, Health Benefits, Recipes</description>
+    <language>en-us</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <atom:link href="${escapeXml(`${base}/feeds/rss.xml`)}" rel="self" type="application/rss+xml" />
+    ${orgEmail ? `<managingEditor>${escapeXml(orgEmail)}</managingEditor>` : ""}
+${items}
+  </channel>
+</rss>`;
+    res.set("Content-Type", "application/rss+xml; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(xml);
+  } catch { res.status(500).send("Failed to generate RSS feed"); }
+});
+
 /** Serve /robots.txt directly at root level */
 app.get("/robots.txt", async (req: Request, res: Response) => {
   try {
@@ -101,7 +234,7 @@ app.get("/robots.txt", async (req: Request, res: Response) => {
       const proto = req.headers["x-forwarded-proto"] ?? "https";
       const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? "";
       const canonical = settings?.canonicalDomain ?? `${proto}://${host}`;
-      content = `User-agent: *\nAllow: /\n\nSitemap: ${canonical}/sitemap.xml\n`;
+      content = `User-agent: *\nAllow: /\n\nSitemap: ${canonical}/sitemap-index.xml\nSitemap: ${canonical}/sitemap.xml\nSitemap: ${canonical}/sitemap-images.xml\n`;
     }
 
     res.set("Content-Type", "text/plain; charset=utf-8");

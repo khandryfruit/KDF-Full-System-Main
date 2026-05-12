@@ -36,31 +36,50 @@ router.put(
         siteNoindex,
         sitemapEnabled,
         canonicalDomain,
-      } = req.body as {
-        googleVerificationCode?: string;
-        robotsTxtContent?: string;
-        siteNoindex?: boolean;
-        sitemapEnabled?: boolean;
-        canonicalDomain?: string;
-      };
+        // New fields
+        gtmId,
+        ga4Id,
+        orgName,
+        orgPhone,
+        orgAddress,
+        orgEmail,
+        orgLogo,
+        localBusinessJson,
+        breadcrumbEnabled,
+        faqSchemaEnabled,
+        reviewSchemaEnabled,
+      } = req.body as Record<string, any>;
 
-      const updated = await db
-        .update(seoSettingsTable)
-        .set({
-          ...(googleVerificationCode !== undefined && { googleVerificationCode }),
-          ...(robotsTxtContent !== undefined && { robotsTxtContent }),
-          ...(siteNoindex !== undefined && { siteNoindex }),
-          ...(sitemapEnabled !== undefined && { sitemapEnabled }),
-          ...(canonicalDomain !== undefined && { canonicalDomain }),
-          updatedAt: new Date(),
-        })
-        .where(
-          eq(seoSettingsTable.id, existing.id)
-        )
-        .returning();
-      res.json(updated[0]);
-    } catch {
-      res.status(500).json({ error: "Failed to update SEO settings" });
+      // Build raw SET clause for new columns (not in Drizzle schema yet)
+      const { sql } = await import("drizzle-orm");
+
+      await db.execute(sql`
+        UPDATE seo_settings SET
+          google_verification_code = COALESCE(${googleVerificationCode ?? null}, google_verification_code),
+          robots_txt_content       = COALESCE(${robotsTxtContent ?? null}, robots_txt_content),
+          site_noindex             = COALESCE(${siteNoindex ?? null}, site_noindex),
+          sitemap_enabled          = COALESCE(${sitemapEnabled ?? null}, sitemap_enabled),
+          canonical_domain         = COALESCE(${canonicalDomain ?? null}, canonical_domain),
+          gtm_id                   = COALESCE(${gtmId ?? null}, gtm_id),
+          ga4_id                   = COALESCE(${ga4Id ?? null}, ga4_id),
+          org_name                 = COALESCE(${orgName ?? null}, org_name),
+          org_phone                = COALESCE(${orgPhone ?? null}, org_phone),
+          org_address              = COALESCE(${orgAddress ?? null}, org_address),
+          org_email                = COALESCE(${orgEmail ?? null}, org_email),
+          org_logo                 = COALESCE(${orgLogo ?? null}, org_logo),
+          local_business_json      = COALESCE(${localBusinessJson ? JSON.stringify(localBusinessJson) : null}::jsonb, local_business_json),
+          breadcrumb_enabled       = COALESCE(${breadcrumbEnabled ?? null}, breadcrumb_enabled),
+          faq_schema_enabled       = COALESCE(${faqSchemaEnabled ?? null}, faq_schema_enabled),
+          review_schema_enabled    = COALESCE(${reviewSchemaEnabled ?? null}, review_schema_enabled),
+          updated_at               = NOW()
+        WHERE id = ${existing!.id}
+      `);
+
+      const { sql: sql2 } = await import("drizzle-orm");
+      const rows = await db.execute(sql2`SELECT * FROM seo_settings WHERE id = ${existing!.id}`);
+      res.json((rows as any).rows?.[0] ?? {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to update SEO settings" });
     }
   }
 );

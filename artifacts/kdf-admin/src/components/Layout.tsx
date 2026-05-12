@@ -72,6 +72,7 @@ import {
   UserCog,
   ListChecks,
   Crown,
+  Database,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -135,9 +136,13 @@ const MARKETING_NAV = [
   { href: "/social-ai",           label: "Social AI",          icon: Sparkles    },
   { href: "/bidding",             label: "Auctions / Bidding", icon: Gavel       },
   { href: "/restock",             label: "Restock Alerts",     icon: Bell        },
+  { href: "/seo/dashboard",       label: "SEO Command Center", icon: TrendingDown },
   { href: "/seo",                 label: "SEO Settings",       icon: Search      },
   { href: "/seo/fast-indexing",   label: "Fast Indexing",      icon: Zap         },
   { href: "/seo/merchant-center", label: "Google Merchant",    icon: ShoppingBag },
+  { href: "/seo/redirects",       label: "301 Redirects",      icon: ArrowRightLeft },
+  { href: "/seo/schema",          label: "Schema.org",         icon: Database    },
+  { href: "/seo/ai-writer",       label: "AI SEO Writer",      icon: Sparkles    },
 ];
 
 const OPERATIONS_NAV = [

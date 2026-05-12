@@ -54,6 +54,7 @@ import { TrackOrderPage } from "./pages/TrackOrderPage";
 
 import "./app.css";
 import { useState, useEffect } from "react";
+import { SchemaInjector } from "./components/SchemaInjector";
 
 const queryClient = new QueryClient();
 
@@ -171,6 +172,7 @@ function App() {
           <CartProvider>
             <WishlistProvider>
               <LocationProvider>
+                <SchemaInjector />
                 <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                   <Router />
                   <LocationGateModal />
