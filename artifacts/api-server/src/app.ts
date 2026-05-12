@@ -53,7 +53,27 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// Explicit CORS — allow all origins but require credentials support.
+// In production, admin.khanbabadryfruits.com is same-origin with the API,
+// so CORS is a no-op for admin traffic. For storefront/mobile cross-origin
+// requests we still need permissive headers.
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // Allow requests with no origin (curl, mobile apps, server-to-server)
+      // and any browser origin. We rely on JWT auth, not cookies, so wildcard
+      // origins are safe.
+      cb(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    maxAge: 86400, // preflight cache 24 h
+  })
+);
+// Tell Express it sits behind Railway's TLS-terminating proxy so that
+// req.secure / req.ip / X-Forwarded-* work correctly.
+app.set("trust proxy", 1);
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;

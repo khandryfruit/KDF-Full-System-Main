@@ -1,0 +1,109 @@
+Admin login page is loading correctly, but authentication API is returning HTTP 500 Internal Server Error.
+
+Current status:
+
+* Frontend UI loads successfully
+* Domain is connected correctly
+* Login request reaches server
+* Backend returns status 500 during authentication
+* Mobile sometimes works but desktop fails
+* Need full production-ready fix
+
+Please fully debug and fix the admin authentication system.
+
+Tasks to check and fix:
+
+1. Railway Backend Logs
+   Check Railway logs for:
+
+* Authentication errors
+* Database connection issues
+* Session errors
+* JWT errors
+* Missing environment variables
+* CORS issues
+* Cookie/session problems
+
+2. Database Verification
+   Verify:
+
+* DATABASE_URL is correct
+* Database is connected successfully
+* Admin tables exist
+* Users/admin accounts exist
+* Password hashes are valid
+* RBAC permissions tables are seeded correctly
+
+3. Session & Authentication
+   Fix:
+
+* Express session configuration
+* Secure cookies
+* SameSite cookie issues
+* HTTPS production cookies
+* JWT/session secret handling
+* Cross-origin authentication
+
+4. Environment Variables
+   Verify all required variables exist:
+
+DATABASE_URL=
+SESSION_SECRET=
+NODE_ENV=production
+BASE_PATH=/admin/
+VITE_API_BASE_URL=https://admin.khanbabadryfruits.com
+
+Also verify no conflicting old variables exist.
+
+5. API Routes
+   Verify:
+
+* /api/admin-auth/login
+* /admin/api/admin-auth/login
+
+Check which route is actually mounted in production.
+
+6. CORS Configuration
+   Allow:
+
+* https://admin.khanbabadryfruits.com
+* https://www.khanbabadryfruits.com
+
+Enable:
+
+* credentials: true
+* proper allowed headers
+* secure cookie support
+
+7. Production Cookie Fix
+   Ensure cookies work on:
+
+* Desktop Chrome
+* Safari
+* Mobile browsers
+
+Set:
+secure: true
+sameSite: "none"
+
+when HTTPS is enabled.
+
+8. Build & Deployment
+   After fixes:
+
+* rebuild all affected services
+* redeploy Railway services
+* verify health endpoint
+* verify login endpoint
+* verify session persistence
+
+9. Final Verification
+   Confirm:
+
+* Admin login works on desktop
+* Admin login works on mobile
+* Sessions persist after refresh
+* No HTTP 500 errors remain
+* Dashboard loads successfully
+
+Please fix this completely in production mode and redeploy all affected services.

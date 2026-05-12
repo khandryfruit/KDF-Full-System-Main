@@ -24,7 +24,21 @@ const isLocal =
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: isLocal ? false : { rejectUnauthorized: false },
+  // Maximum connections in the pool — Railway free plan has a 25-connection limit.
+  max: 8,
+  // How long (ms) to wait for a connection from the pool before throwing.
+  // Without this, a cold-start DB on Railway can hang indefinitely and cause
+  // Railway's proxy to return an empty 500 before Express responds.
+  connectionTimeoutMillis: 15_000,
+  // Release idle connections after 30 s to keep Railway's connection count low.
+  idleTimeoutMillis: 30_000,
+  // Per-query server-side timeout. Prevents runaway queries blocking the pool.
+  // Must be lower than Railway's 60 s proxy timeout.
+  query_timeout: 25_000,
+  // Client-level statement timeout (same value, belt-and-suspenders).
+  statement_timeout: 25_000,
 });
+
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
