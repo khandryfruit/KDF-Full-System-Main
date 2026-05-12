@@ -58,6 +58,15 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // Forward /api/* to the API server so Vite does not intercept these requests
+    // and return a "public base URL /admin/" error when base !== "/".
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   preview: {
     port,
