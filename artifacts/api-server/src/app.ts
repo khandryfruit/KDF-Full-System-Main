@@ -61,6 +61,30 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
+/**
+ * ── /admin/api/* → /api/* rewrite ──────────────────────────────────────────
+ *
+ * On admin.khanbabadryfruits.com (or any hostname where /admin/* serves the
+ * kdf-admin SPA), the browser is at /admin/login.  Because the Vite build sets
+ * base="/admin/", older code or misconfigured proxies may send API requests to
+ * /admin/api/… instead of /api/….
+ *
+ * This middleware strips the /admin prefix from any path that begins with
+ * /admin/api so the existing Express route handlers at /api/* handle them.
+ * It MUST run before any /api/* route registrations so the rewrite is visible
+ * to those handlers.
+ *
+ * Examples:
+ *   GET  /admin/api/healthz           →  GET  /api/healthz
+ *   POST /admin/api/admin-auth/login  →  POST /api/admin-auth/login
+ */
+app.use((req: Request, _res: Response, next: () => void) => {
+  if (req.url.startsWith("/admin/api/") || req.url === "/admin/api") {
+    req.url = req.url.slice("/admin".length); // strip leading /admin
+  }
+  next();
+});
+
 /** Serve API server's own public assets (logo, etc.) at /api/static */
 app.use("/api/static", express.static(apiPublicDir));
 

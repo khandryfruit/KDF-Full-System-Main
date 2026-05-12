@@ -61,7 +61,15 @@ export default defineConfig({
     // Forward /api/* to the API server so Vite does not intercept these requests
     // and return a "public base URL /admin/" error when base !== "/".
     proxy: {
+      // Forward /api/* directly to the Express server.
       "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+      // Forward /admin/api/* to Express as well (production-path alias).
+      // Express has a /admin/api → /api rewrite middleware that handles these.
+      "/admin/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
         secure: false,
