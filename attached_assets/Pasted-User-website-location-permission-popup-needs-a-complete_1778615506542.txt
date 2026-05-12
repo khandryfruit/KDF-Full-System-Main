@@ -1,0 +1,113 @@
+User website location permission popup needs a complete UI/UX redesign and optimization.
+
+Current issues:
+
+* Popup is too large on mobile devices
+* Bottom navigation bar overlaps with popup
+* Elements go outside visible screen area
+* Close button/chat widget overlap
+* Overall design looks unprofessional
+* Spacing and responsiveness are poor
+
+Need full professional redesign with modern mobile-first UI/UX.
+
+Requirements:
+
+1. Popup Position & Layout
+
+* Keep popup perfectly centered vertically and horizontally
+* Prevent overlap with bottom navigation bar
+* Prevent overlap with WhatsApp/chat widget
+* Add proper safe-area spacing for iPhone and Android
+* Fully responsive on:
+
+  * iPhone
+  * Android
+  * Tablets
+  * Desktop
+
+2. Mobile Optimization
+
+* Max-width optimized for mobile screens
+* Height auto-adjust based on content
+* Use compact professional spacing
+* Prevent content overflow
+* Smooth open/close animations
+* Add backdrop blur effect
+
+3. Professional UI Design
+
+* Premium modern grocery-app style UI
+* Beautiful rounded corners
+* Soft shadow
+* Elegant typography
+* Better icon alignment
+* Professional green theme matching brand colors
+* Improve button design
+* Better padding/margins
+* Smooth transitions and hover/touch effects
+
+4. Location Features
+   Integrate:
+
+* Google Maps Places API
+* Google Geolocation API
+* City auto-detection
+* Current GPS location detection
+* Pakistan cities database
+
+5. Default Pakistan Cities
+   Add searchable city selector with major Pakistan cities:
+
+* Peshawar
+* Islamabad
+* Lahore
+* Karachi
+* Rawalpindi
+* Faisalabad
+* Multan
+* Abbottabad
+* Swat
+* Mardan
+* Quetta
+* Hyderabad
+* Sialkot
+* Gujranwala
+* Bahawalpur
+  and all major Pakistan cities.
+
+6. Smart Behavior
+
+* If user denies permission:
+
+  * Show city selector manually
+* Save selected city in local storage/session
+* Auto-detect city on revisit
+* Prevent popup from repeatedly appearing
+* Add “Use Current Location” option
+
+7. Performance
+
+* Lightweight implementation
+* Fast loading
+* No layout shifting
+* Optimized for production
+* SEO-safe implementation
+
+8. Accessibility
+
+* Proper touch targets
+* Keyboard accessibility
+* High readability
+* Smooth mobile interaction
+
+9. Technical
+
+* Fix z-index conflicts
+* Fix bottom navigation overlap
+* Fix responsive breakpoints
+* Ensure popup stays inside viewport
+* Production-ready implementation
+
+10. Final Goal
+    Popup should look like a premium modern grocery/eCommerce application with excellent UI/UX and smooth mobile experience.
