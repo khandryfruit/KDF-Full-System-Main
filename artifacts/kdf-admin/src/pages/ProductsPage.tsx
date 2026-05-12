@@ -1,14 +1,12 @@
 import { useState, useRef, useCallback } from "react";
 import {
-  useListProducts,
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,
   useListCategories,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
-import { getListProductsQueryKey } from "@workspace/api-client-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
 
 import {
@@ -21,7 +19,8 @@ import {
   Plus, Search, Edit, Trash2, Upload, X, ImageIcon, Loader2,
   Tag, Package, Layers, DollarSign, Info, Palette, Sparkles,
   CheckCircle2, ExternalLink, Eye, ChevronDown, Globe,
-  Star, RefreshCw, ZoomIn, ArrowUp, ArrowDown,
+  Star, RefreshCw, ZoomIn, ArrowUp, ArrowDown, ToggleLeft, ToggleRight,
+  EyeOff,
 } from "lucide-react";
 import { AIGenerateButton, AIActionsMenu } from "@/components/AIGenerateButton";
 import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
@@ -631,23 +630,74 @@ const emptyForm = () => ({
   metaTitle: "", metaDescription: "", altText: "",
 });
 
+/* ─── Admin products fetcher — uses admin endpoint (shows ALL products) ── */
+const ADMIN_PRODUCTS_KEY = (page: number, search: string, status: string) =>
+  ["admin-products", page, search, status];
+
+function useAdminProducts(page: number, search: string, status: string) {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+  return useQuery({
+    queryKey: ADMIN_PRODUCTS_KEY(page, search, status),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: String(page), limit: "20",
+        ...(search ? { search } : {}),
+        ...(status !== "all" ? { status } : {}),
+      });
+      const res = await fetch(`/api/admin/products?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      return res.json() as Promise<{
+        items: any[]; total: number; activeCount: number; inactiveCount: number; page: number; limit: number;
+      }>;
+    },
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
 /* ─── Main Page ───────────────────────────────────────────── */
 export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("basic");
   const [tagInput, setTagInput] = useState("");
   const [createdProduct, setCreatedProduct] = useState<{ id: number; slug: string; name: string } | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
-  const { data: response, isLoading } = useListProducts({ page, limit: 10, search });
+  const { data: response, isLoading } = useAdminProducts(page, search, statusFilter);
   const { data: categoriesRes } = useListCategories();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
   const deleteMutation = useDeleteProduct();
+
+  const invalidateProducts = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+  };
+
+  const handleToggleActive = async (product: any) => {
+    setTogglingId(product.id);
+    const token = localStorage.getItem("kdf_admin_token") ?? "";
+    try {
+      const res = await fetch(`/api/admin/products/${product.id}/toggle-active`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      toast({ title: product.active ? "Product hidden from store" : "Product is now live on store" });
+      invalidateProducts();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update status" });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const [form, setForm] = useState(emptyForm());
 
@@ -746,10 +796,10 @@ export default function ProductsPage() {
     };
     const opts = {
       onSuccess: (data: any) => {
-        queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+        invalidateProducts();
         if (editingId) {
           setIsOpen(false);
-          toast({ title: "Product updated" });
+          toast({ title: "Product updated successfully" });
         } else {
           setCreatedProduct({ id: data.id, slug: data.slug, name: data.name });
         }
@@ -763,7 +813,7 @@ export default function ProductsPage() {
   const handleDelete = (id: number) => {
     if (!confirm("Delete this product?")) return;
     deleteMutation.mutate({ id }, {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() }); toast({ title: "Deleted" }); },
+      onSuccess: () => { invalidateProducts(); toast({ title: "Deleted" }); },
       onError: () => toast({ variant: "destructive", title: "Failed to delete" }),
     });
   };
@@ -1239,10 +1289,38 @@ export default function ProductsPage() {
         </Dialog>
       </div>
 
-      {/* Search */}
-      <div className="flex items-center relative w-full sm:w-96">
-        <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
-        <Input placeholder="Search products…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Search + Status Filter */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="flex items-center relative w-full sm:w-96">
+          <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
+          <Input placeholder="Search products…" className="pl-9" value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {(["all", "active", "inactive"] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors capitalize ${
+                statusFilter === s
+                  ? "bg-white shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s === "all"
+                ? `All (${(response?.activeCount ?? 0) + (response?.inactiveCount ?? 0)})`
+                : s === "active"
+                ? `Live (${response?.activeCount ?? 0})`
+                : `Hidden (${response?.inactiveCount ?? 0})`}
+            </button>
+          ))}
+        </div>
+        {(response?.inactiveCount ?? 0) > 0 && statusFilter !== "inactive" && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg">
+            <EyeOff className="w-3.5 h-3.5" />
+            <span>{response?.inactiveCount} product{response?.inactiveCount !== 1 ? "s" : ""} hidden from store</span>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -1274,7 +1352,7 @@ export default function ProductsPage() {
                 return (
                   <TableRow key={product.id}>
                     <TableCell>
-                      <div className="flex items-center gap-3">
+                      <div className={`flex items-center gap-3 ${!product.active ? "opacity-60" : ""}`}>
                         {(product as any).images?.[0] ? (
                           <img
                             src={getImageUrl((product as any).images[0])}
@@ -1288,7 +1366,10 @@ export default function ProductsPage() {
                           </div>
                         )}
                         <div>
-                          <div className="font-medium text-sm leading-tight">{product.name}</div>
+                          <div className="font-medium text-sm leading-tight flex items-center gap-1.5">
+                            {product.name}
+                            {!product.active && <EyeOff className="w-3 h-3 text-muted-foreground flex-shrink-0" title="Hidden from store" />}
+                          </div>
                           <div className="text-xs text-muted-foreground">{product.slug}</div>
                           {(product as any).tags?.length > 0 && (
                             <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -1358,6 +1439,19 @@ export default function ProductsPage() {
                         >
                           <ExternalLink className="w-4 h-4 text-muted-foreground" />
                         </Button>
+                        <Button
+                          variant="ghost" size="icon" className="h-8 w-8"
+                          title={product.active ? "Hide from store" : "Show on store"}
+                          disabled={togglingId === product.id}
+                          onClick={() => handleToggleActive(product)}
+                        >
+                          {togglingId === product.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : product.active
+                            ? <ToggleRight className="w-4 h-4 text-green-600" />
+                            : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
+                          }
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(product)}>
                           <Edit className="w-4 h-4 text-muted-foreground" />
                         </Button>
@@ -1382,11 +1476,11 @@ export default function ProductsPage() {
       </div>
 
       {/* Pagination */}
-      {response && response.total > 10 && (
+      {response && response.total > 20 && (
         <div className="flex justify-center items-center gap-4">
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-          <span className="text-sm text-muted-foreground">Page {page} of {Math.ceil(response.total / 10)}</span>
-          <Button variant="outline" size="sm" disabled={page >= Math.ceil(response.total / 10)} onClick={() => setPage(p => p + 1)}>Next</Button>
+          <span className="text-sm text-muted-foreground">Page {page} of {Math.ceil(response.total / 20)}</span>
+          <Button variant="outline" size="sm" disabled={page >= Math.ceil(response.total / 20)} onClick={() => setPage(p => p + 1)}>Next</Button>
         </div>
       )}
     </div>

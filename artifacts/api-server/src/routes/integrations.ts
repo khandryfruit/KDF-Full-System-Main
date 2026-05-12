@@ -180,13 +180,14 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
               // never overwrite them with external Shopify CDN URLs.
               const existingImgs = existing.images as string[] | null | undefined;
               const hasCustomImages = Array.isArray(existingImgs) && existingImgs.some((img: string) => img.startsWith("/objects/"));
+              // Never overwrite active status for existing products — admin controls visibility.
+              // Never overwrite custom-uploaded images with external Shopify CDN URLs.
               await db.update(productsTable).set({
                 name,
                 description,
                 price: String(price),
                 stock,
                 ...(hasCustomImages ? {} : { images }),
-                active,
                 shopifyProductId,
                 shopifyHandle: candidateSlug,
                 source: "shopify",
@@ -327,6 +328,8 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
               // never overwrite them with external WooCommerce CDN URLs.
               const existingImgs = existing.images as string[] | null | undefined;
               const hasCustomImages = Array.isArray(existingImgs) && existingImgs.some((img: string) => img.startsWith("/objects/"));
+              // Never overwrite active status for existing products — admin controls visibility.
+              // Never overwrite custom-uploaded images with external WooCommerce CDN URLs.
               await db.update(productsTable).set({
                 name,
                 description,
@@ -334,7 +337,6 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
                 originalPrice: originalPrice ? String(originalPrice) : undefined,
                 stock,
                 ...(hasCustomImages ? {} : { images }),
-                active,
                 woocommerceProductId,
                 source: "woocommerce",
                 externalId: woocommerceProductId,

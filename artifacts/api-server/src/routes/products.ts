@@ -84,6 +84,72 @@ router.get("/products/check-slug", adminMiddleware as any, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/products
+ * Admin-only: returns ALL products regardless of active status.
+ * Supports ?page, ?limit, ?search, ?status=active|inactive|all
+ * Must be above /products/:id to avoid route collision.
+ */
+router.get("/admin/products", adminMiddleware as any, async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit  = Math.min(200, parseInt(req.query.limit as string) || 20);
+    const offset = (page - 1) * limit;
+    const { search, status } = req.query;
+
+    const conditions: any[] = [];
+    if (search) conditions.push(ilike(productsTable.name, `%${search}%`));
+    if (status === "active")   conditions.push(eq(productsTable.active, true));
+    if (status === "inactive") conditions.push(eq(productsTable.active, false));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [items, countResult, activeCount, inactiveCount] = await Promise.all([
+      db.select().from(productsTable).where(where).orderBy(desc(productsTable.updatedAt)).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(productsTable).where(where),
+      db.select({ count: sql<number>`count(*)` }).from(productsTable).where(eq(productsTable.active, true)),
+      db.select({ count: sql<number>`count(*)` }).from(productsTable).where(eq(productsTable.active, false)),
+    ]);
+
+    res.json({
+      items,
+      total:         Number(countResult[0]?.count ?? 0),
+      activeCount:   Number(activeCount[0]?.count ?? 0),
+      inactiveCount: Number(inactiveCount[0]?.count ?? 0),
+      page,
+      limit,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to list products" });
+  }
+});
+
+/**
+ * PUT /api/admin/products/:id/toggle-active
+ * Admin-only: flip the active flag on a product.
+ */
+router.put("/admin/products/:id/toggle-active", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [existing] = await db
+      .select({ active: productsTable.active })
+      .from(productsTable)
+      .where(eq(productsTable.id, id))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    const [product] = await db
+      .update(productsTable)
+      .set({ active: !existing.active, updatedAt: new Date() })
+      .where(eq(productsTable.id, id))
+      .returning();
+    res.json(product);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to toggle" });
+  }
+});
+
+/**
  * POST /api/admin/products/backfill-slugs
  * One-time migration: sanitizes all existing product slugs.
  * Safe to run multiple times (idempotent).
