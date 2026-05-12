@@ -18,6 +18,24 @@ export default function LoginPage() {
   const [showPwd, setShow] = useState(false);
   const [error, setError]  = useState("");
 
+  // On Railway each service gets its own domain. Set VITE_API_BASE_URL to the
+  // full API service URL (e.g. https://kdf-api.up.railway.app) so login works
+  // across separate Railway services. Defaults to "" (relative) on Replit.
+  const API = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
+  /** Fetch JSON safely — shows readable error when server returns non-JSON (HTML error page). */
+  const fetchJson = async (url: string, init: RequestInit) => {
+    const res  = await fetch(API + url, init);
+    const text = await res.text();
+    let body: any;
+    try { body = JSON.parse(text); }
+    catch {
+      const preview = text.replace(/<[^>]+>/g, " ").trim().slice(0, 120);
+      throw new Error(preview || `Server returned status ${res.status}`);
+    }
+    return { res, body };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError("Email and password are required"); return; }
@@ -25,12 +43,11 @@ export default function LoginPage() {
     setLoad(true);
     try {
       /* ── Try new RBAC admin login first ── */
-      const res  = await fetch("/api/admin-auth/login", {
+      const { res, body: json } = await fetchJson("/api/admin-auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
-      const json = await res.json();
 
       if (res.ok && json.ok) {
         localStorage.setItem("kdf_admin_token", json.token);
@@ -41,12 +58,11 @@ export default function LoginPage() {
       }
 
       /* ── Fallback: legacy storefront admin (users table) ── */
-      const legacyRes  = await fetch("/api/auth/login", {
+      const { res: legacyRes, body: legacyJson } = await fetchJson("/api/auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ email: email.trim(), password }),
       });
-      const legacyJson = await legacyRes.json();
 
       if (legacyRes.ok && legacyJson.token) {
         if (legacyJson.user?.role !== "admin") {

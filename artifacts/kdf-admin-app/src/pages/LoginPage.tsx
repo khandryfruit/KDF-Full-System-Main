@@ -10,21 +10,32 @@ export default function LoginPage() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
+  // On Railway set VITE_API_BASE_URL to the full API service URL so this
+  // app can reach the API when deployed as a separate Railway service.
+  const API = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      const r = await fetch("/api/admin-auth/login", {
+      const r    = await fetch(API + "/api/admin-auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ email, password }),
       });
-      const d = await r.json();
+      const text = await r.text();
+      let d: any;
+      try { d = JSON.parse(text); }
+      catch {
+        const preview = text.replace(/<[^>]+>/g, " ").trim().slice(0, 120);
+        setError(preview || `Server error (${r.status})`);
+        return;
+      }
       if (!r.ok) { setError(d.error ?? "Login failed"); return; }
       login(d.token, d.user ?? d.admin);
       window.location.href = BASE;
-    } catch {
-      setError("Network error — check your connection");
+    } catch (err: any) {
+      setError(err.message ?? "Network error — check your connection");
     } finally {
       setLoading(false);
     }

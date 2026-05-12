@@ -12,10 +12,8 @@ if (!isBuild && !rawPort) {
 }
 const port = Number(rawPort ?? "3000");
 
-const basePath = process.env.BASE_PATH;
-if (!isBuild && !basePath) {
-  throw new Error("BASE_PATH environment variable is required but was not provided.");
-}
+// BASE_PATH defaults to "/app/" so Railway deployments work without setting this var.
+const basePath = process.env.BASE_PATH ?? "/app/";
 
 export default defineConfig({
   base: basePath ?? "/",
