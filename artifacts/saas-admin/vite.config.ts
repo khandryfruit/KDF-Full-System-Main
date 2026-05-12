@@ -55,9 +55,11 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // On Replit: API server runs on localhost:8080 — no env var needed.
+    // On Railway: set API_PROXY_TARGET=https://api.khanbabadryfruits.com
     proxy: {
       "/api": {
-        target: "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
         changeOrigin: true,
         secure: false,
       },
