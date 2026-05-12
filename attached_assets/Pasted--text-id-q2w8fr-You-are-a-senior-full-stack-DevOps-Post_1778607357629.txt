@@ -1,0 +1,207 @@
+```text id="q2w8fr"
+You are a senior full-stack DevOps + PostgreSQL + Railway + Replit engineer.
+
+Project Stack:
+- Monorepo Workspace
+- Railway deployment
+- Replit development
+- Node.js
+- Express API
+- Vite frontend
+- PNPM workspace
+- Drizzle ORM
+- PostgreSQL
+- Cloudflare DNS
+- Multiple apps/services
+
+Current Situation:
+- API server is running successfully on Railway at port 8080
+- Domains and subdomains are connected through Cloudflare
+- Admin panel is opening successfully
+- Login API failing because database tables/migrations are missing
+- Railway logs show:
+  - DrizzleQueryError
+  - No migrations directory found
+  - Failed query insert/select
+  - admin_permissions table missing
+  - JSON parse error from frontend because backend returns server error instead of valid JSON
+
+Your task:
+Perform a COMPLETE production-grade database setup and deployment fix without breaking existing apps.
+
+━━━━━━━━━━━━━━━
+STEP 1 — Analyze Workspace
+━━━━━━━━━━━━━━━
+
+1. Detect all apps/services in the monorepo
+2. Identify:
+   - api-server
+   - kdf-admin-app
+   - kdf-mobile
+   - saas-admin
+   - kdf-plus
+   - integrations
+3. Detect shared packages and database schema locations
+4. Verify PNPM workspace structure
+5. Verify package.json scripts for all apps
+
+━━━━━━━━━━━━━━━
+STEP 2 — PostgreSQL Connection
+━━━━━━━━━━━━━━━
+
+1. Verify DATABASE_URL exists in Railway variables
+2. Verify DATABASE_URL format is valid PostgreSQL URL
+3. Verify API server successfully connects to PostgreSQL
+4. Add SSL configuration if required
+5. Ensure production-safe database connection pooling
+
+━━━━━━━━━━━━━━━
+STEP 3 — Drizzle ORM Setup
+━━━━━━━━━━━━━━━
+
+1. Check drizzle.config.ts
+2. Check schema folder
+3. Create migrations folder if missing
+4. Generate migrations professionally
+5. Run migrations safely
+6. Push schema to Railway PostgreSQL
+
+Commands to run:
+- pnpm drizzle-kit generate
+- pnpm drizzle-kit push
+
+If pnpm fails:
+- npx drizzle-kit generate
+- npx drizzle-kit push
+
+━━━━━━━━━━━━━━━
+STEP 4 — Create Missing Tables
+━━━━━━━━━━━━━━━
+
+Ensure ALL required production tables exist:
+
+Authentication:
+- admins
+- admin_permissions
+- admin_roles
+- sessions
+- login_logs
+
+Users:
+- users
+- user_addresses
+- user_wallets
+- referrals
+
+Ecommerce:
+- products
+- categories
+- orders
+- order_items
+- carts
+- coupons
+- inventory
+
+Payments:
+- transactions
+- payment_logs
+
+WhatsApp:
+- whatsapp_sessions
+- whatsapp_messages
+- chatbot_flows
+- templates
+
+Delivery:
+- riders
+- rider_orders
+- tracking
+
+Notifications:
+- notifications
+- push_tokens
+- email_logs
+
+System:
+- settings
+- audit_logs
+- activity_logs
+
+━━━━━━━━━━━━━━━
+STEP 5 — Seed Default Data
+━━━━━━━━━━━━━━━
+
+1. Seed default admin user
+2. Seed default admin permissions
+3. Seed RBAC permissions
+4. Seed default system settings
+5. Seed initial categories if required
+
+━━━━━━━━━━━━━━━
+STEP 6 — API Error Fixes
+━━━━━━━━━━━━━━━
+
+1. Fix all backend query errors
+2. Fix JSON response handling
+3. Ensure APIs always return valid JSON
+4. Add proper try/catch handling
+5. Add production error middleware
+6. Fix invalid response parsing issues on frontend
+
+━━━━━━━━━━━━━━━
+STEP 7 — Railway Deployment Fix
+━━━━━━━━━━━━━━━
+
+1. Verify build commands
+2. Verify start commands
+3. Verify environment variables
+4. Verify port binding
+5. Ensure Railway deployment completes successfully
+6. Ensure no service crashes
+
+━━━━━━━━━━━━━━━
+STEP 8 — Frontend Integration
+━━━━━━━━━━━━━━━
+
+1. Verify frontend API URLs
+2. Verify environment configs
+3. Ensure admin login works
+4. Ensure protected routes work
+5. Ensure authentication tokens work
+6. Ensure dashboard loads properly
+
+━━━━━━━━━━━━━━━
+STEP 9 — Production Validation
+━━━━━━━━━━━━━━━
+
+Verify ALL of the following:
+
+✅ PostgreSQL connected
+✅ Migrations completed
+✅ All tables created
+✅ API server healthy
+✅ Admin login working
+✅ Frontend receiving valid JSON
+✅ Railway deployment successful
+✅ No DrizzleQueryError
+✅ No missing table errors
+✅ No server crash
+✅ Domain/subdomain working
+✅ Cloudflare DNS working
+✅ Session/auth working
+✅ RBAC permissions working
+
+━━━━━━━━━━━━━━━
+IMPORTANT RULES
+━━━━━━━━━━━━━━━
+
+- Do NOT break existing services
+- Do NOT delete existing production data
+- Use production-safe migrations
+- Keep Railway-compatible setup
+- Keep PNPM workspace compatible
+- Maintain monorepo structure
+- Fix all deployment issues completely
+- Apply best practices for scalability and security
+- Ensure clean logs without runtime database errors
+```
