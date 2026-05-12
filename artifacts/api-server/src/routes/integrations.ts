@@ -142,7 +142,7 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
             //           first sync with this code. Only matches rows that still
             //           lack a shopify_product_id to avoid false positives.
             let [existing] = await db
-              .select({ id: productsTable.id, slug: productsTable.slug })
+              .select({ id: productsTable.id, slug: productsTable.slug, images: productsTable.images })
               .from(productsTable)
               .where(
                 or(
@@ -159,7 +159,7 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
               // potential mislinks (e.g. two products sharing the same name).
               const lowerName = name.toLowerCase();
               const [byName] = await db
-                .select({ id: productsTable.id, slug: productsTable.slug })
+                .select({ id: productsTable.id, slug: productsTable.slug, images: productsTable.images })
                 .from(productsTable)
                 .where(sql`lower(${productsTable.name}) = ${lowerName} AND ${productsTable.shopifyProductId} IS NULL`)
                 .limit(1);
@@ -176,12 +176,16 @@ router.post("/integrations/shopify/sync", adminMiddleware as any, async (req, re
               // Product already exists — update content but preserve the slug.
               // Also store / refresh shopifyProductId and shopifyHandle so future
               // syncs always find this product by the stable Shopify ID.
+              // Preserve custom-uploaded images (paths starting with /objects/) —
+              // never overwrite them with external Shopify CDN URLs.
+              const existingImgs = existing.images as string[] | null | undefined;
+              const hasCustomImages = Array.isArray(existingImgs) && existingImgs.some((img: string) => img.startsWith("/objects/"));
               await db.update(productsTable).set({
                 name,
                 description,
                 price: String(price),
                 stock,
-                images,
+                ...(hasCustomImages ? {} : { images }),
                 active,
                 shopifyProductId,
                 shopifyHandle: candidateSlug,
@@ -306,7 +310,7 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
             // Tier 1: woocommerce_product_id (stable numeric ID, populated from first sync onwards)
             // Tier 2: slug = candidateSlug (backward-compat when slug/handle hasn't changed)
             const [existing] = await db
-              .select({ id: productsTable.id, slug: productsTable.slug })
+              .select({ id: productsTable.id, slug: productsTable.slug, images: productsTable.images })
               .from(productsTable)
               .where(
                 or(
@@ -319,13 +323,17 @@ router.post("/integrations/woocommerce/sync", adminMiddleware as any, async (req
             if (existing) {
               // Product already exists — update content but preserve the slug.
               // Refresh woocommerceProductId so future syncs always find it by ID.
+              // Preserve custom-uploaded images (paths starting with /objects/) —
+              // never overwrite them with external WooCommerce CDN URLs.
+              const existingImgs = existing.images as string[] | null | undefined;
+              const hasCustomImages = Array.isArray(existingImgs) && existingImgs.some((img: string) => img.startsWith("/objects/"));
               await db.update(productsTable).set({
                 name,
                 description,
                 price: String(price),
                 originalPrice: originalPrice ? String(originalPrice) : undefined,
                 stock,
-                images,
+                ...(hasCustomImages ? {} : { images }),
                 active,
                 woocommerceProductId,
                 source: "woocommerce",

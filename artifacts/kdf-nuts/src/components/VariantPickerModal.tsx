@@ -206,8 +206,8 @@ export function VariantPickerModal({ product, onClose }: Props) {
 
         {/* Sticky CTA — always visible above everything */}
         <div
-          className="flex-shrink-0 px-5 pt-3 border-t border-gray-100 bg-white"
-          style={{ paddingBottom: 'max(72px, calc(72px + env(safe-area-inset-bottom)))' }}
+          className="flex-shrink-0 px-5 pt-3 pb-5 border-t border-gray-100 bg-white"
+          style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}
         >
           {/* Total row */}
           <div className="flex items-center justify-between mb-3">
