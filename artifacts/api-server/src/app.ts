@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import path from "path";
@@ -399,5 +399,30 @@ if (process.env.NODE_ENV === "production") {
     });
   });
 }
+
+/**
+ * Global JSON error handler — must be the LAST middleware registered.
+ *
+ * Express's default error handler returns HTML (or an empty body on Railway)
+ * when an unhandled error reaches it. This replaces that behaviour with a
+ * JSON response so the admin frontend always gets a parseable error object
+ * instead of an empty 500 that shows up as "Server returned 500".
+ */
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const status = typeof err?.status === "number" ? err.status :
+                 typeof err?.statusCode === "number" ? err.statusCode : 500;
+  const message = err?.message ?? "Internal server error";
+
+  /* Log at appropriate level — 5xx as error, 4xx as warn */
+  if (status >= 500) {
+    (req as any).log?.error({ err, status }, "Unhandled error");
+  } else {
+    (req as any).log?.warn({ err, status }, "Request error");
+  }
+
+  if (!res.headersSent) {
+    res.status(status).json({ ok: false, error: message });
+  }
+});
 
 export default app;

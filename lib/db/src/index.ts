@@ -41,4 +41,14 @@ export const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 
+/**
+ * Prevent unhandled pool errors from crashing the process.
+ * pg.Pool emits 'error' on idle client errors (e.g. Neon auto-suspend,
+ * network drops). Without this handler Node exits with an uncaught exception.
+ */
+pool.on("error", (err) => {
+  /* eslint-disable-next-line no-console */
+  console.error("[db-pool] idle client error:", err.message);
+});
+
 export * from "./schema";
