@@ -64,13 +64,13 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
       /* Active products */
       db.select({ count: sql<number>`count(*)` }).from(productsTable),
 
-      /* Abandoned checkouts */
+      /* Abandoned checkouts — fault-tolerant */
       db.select({
         total:     sql<number>`count(*)`,
         active:    sql<number>`count(*) filter (where status = 'active')`,
         recovered: sql<number>`count(*) filter (where status = 'recovered')`,
         totalValue: sql<number>`coalesce(sum(subtotal::numeric), 0)`,
-      }).from(abandonedCheckoutsTable),
+      }).from(abandonedCheckoutsTable).catch(() => [{ total: 0, active: 0, recovered: 0, totalValue: 0 }]),
 
       /* Today stats from shopify_orders */
       db.select({
@@ -84,7 +84,7 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
         revenue: sql<number>`coalesce(sum(total_price::numeric), 0)`,
       }).from(shopifyOrdersTable).where(gte(shopifyOrdersTable.createdAt, monthStart)),
 
-      /* WA logs aggregate */
+      /* WA logs aggregate — fault-tolerant */
       db.select({
         total:     sql<number>`count(*)`,
         sent:      sql<number>`count(*) filter (where status = 'sent')`,
@@ -92,9 +92,9 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
         failed:    sql<number>`count(*) filter (where status = 'failed')`,
         delivered: sql<number>`count(*) filter (where delivery_status = 'delivered')`,
         read:      sql<number>`count(*) filter (where delivery_status = 'read')`,
-      }).from(whatsappLogsTable),
+      }).from(whatsappLogsTable).catch(() => [{ total: 0, sent: 0, received: 0, failed: 0, delivered: 0, read: 0 }]),
 
-      /* WA campaigns aggregate */
+      /* WA campaigns aggregate — fault-tolerant */
       db.select({
         total:       sql<number>`count(*)`,
         sent:        sql<number>`coalesce(sum(sent_count), 0)`,
@@ -104,14 +104,14 @@ router.get("/admin/dashboard", adminMiddleware as any, async (req, res) => {
         recipients:  sql<number>`coalesce(sum(recipient_count), 0)`,
         active:      sql<number>`count(*) filter (where status = 'sent')`,
         draft:       sql<number>`count(*) filter (where status = 'draft')`,
-      }).from(whatsappCampaignsTable),
+      }).from(whatsappCampaignsTable).catch(() => [{ total: 0, sent: 0, delivered: 0, read: 0, failed: 0, recipients: 0, active: 0, draft: 0 }]),
 
-      /* Email campaigns */
+      /* Email campaigns — fault-tolerant in case table is missing on older deployments */
       db.select({
         total: sql<number>`count(*)`,
         sent:  sql<number>`count(*) filter (where status = 'sent')`,
         draft: sql<number>`count(*) filter (where status = 'draft')`,
-      }).from(shopifyEmailCampaignsTable),
+      }).from(shopifyEmailCampaignsTable).catch(() => [{ total: 0, sent: 0, draft: 0 }]),
 
       /* New customers in last 30 days */
       db.select({ count: sql<number>`count(*)` }).from(usersTable)

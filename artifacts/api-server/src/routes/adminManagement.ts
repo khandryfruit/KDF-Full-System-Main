@@ -279,12 +279,17 @@ router.post("/admin-auth/login", async (req, res: Response): Promise<void> => {
     /* Collect permissions */
     const permissions = user.isSuper ? SUPER_ADMIN_PERMS : await getUserPermissions(user.id);
 
-    /* Fetch roles for response */
+    /* Fetch roles for response — fault-tolerant: admin_roles/admin_user_roles may not
+       exist on older Railway DB instances that haven't applied migration 0004 yet. */
     const roles = await db
       .select({ id: adminRolesTable.id, name: adminRolesTable.name, slug: adminRolesTable.slug, color: adminRolesTable.color })
       .from(adminUserRolesTable)
       .innerJoin(adminRolesTable, eq(adminUserRolesTable.roleId, adminRolesTable.id))
-      .where(eq(adminUserRolesTable.userId, user.id));
+      .where(eq(adminUserRolesTable.userId, user.id))
+      .catch((e: any) => {
+        logger.warn({ err: e?.message }, "admin-auth: roles fetch failed (admin_roles table may be missing) — returning empty roles");
+        return [] as { id: number; name: string; slug: string; color: string | null }[];
+      });
 
     const token = signAdminUserToken({ adminUserId: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions });
 
