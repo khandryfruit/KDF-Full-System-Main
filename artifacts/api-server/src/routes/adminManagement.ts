@@ -277,23 +277,26 @@ router.post("/admin-auth/login", async (req, res: Response): Promise<void> => {
     if (!ok) { res.status(401).json({ ok: false, error: "Invalid credentials" }); return; }
 
     /* Collect permissions */
+    logger.info({ userId: user.id, email: user.email }, "admin-auth: fetching permissions");
     const permissions = user.isSuper ? SUPER_ADMIN_PERMS : await getUserPermissions(user.id);
-
-    /* Fetch roles for response */
-    const roles = await db
-      .select({ id: adminRolesTable.id, name: adminRolesTable.name, slug: adminRolesTable.slug, color: adminRolesTable.color })
-      .from(adminUserRolesTable)
-      .innerJoin(adminRolesTable, eq(adminUserRolesTable.roleId, adminRolesTable.id))
-      .where(eq(adminUserRolesTable.userId, user.id));
+    logger.info({ userId: user.id, permissionCount: permissions.length }, "admin-auth: permissions fetched");
 
     const token = signAdminUserToken({ adminUserId: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions });
 
-    /* Send response immediately — do NOT await lastLogin update so DB slowness can't block the response */
+    /* Send response immediately — roles and lastLogin are non-critical and must not block login */
     res.json({
       ok: true,
       token,
-      user: { id: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions, roles },
+      user: { id: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions, roles: [] },
     });
+
+    /* Fire-and-forget: fetch roles after response is sent (non-critical) */
+    logger.info({ userId: user.id }, "admin-auth: fetching roles (post-response)");
+    db.select({ id: adminRolesTable.id, name: adminRolesTable.name, slug: adminRolesTable.slug, color: adminRolesTable.color })
+      .from(adminUserRolesTable)
+      .innerJoin(adminRolesTable, eq(adminUserRolesTable.roleId, adminRolesTable.id))
+      .where(eq(adminUserRolesTable.userId, user.id))
+      .catch((e: any) => logger.warn({ err: e?.message, userId: user.id }, "admin-auth: roles fetch failed (non-critical)"));
 
     /* Fire-and-forget: update last login metadata after response is sent */
     const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
