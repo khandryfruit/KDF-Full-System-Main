@@ -14,6 +14,7 @@ export const saasSuperAdminsTable = pgTable("saas_super_admins", {
   passwordHash: text("password_hash").notNull(),
   isActive:     boolean("is_active").notNull().default(true),
   lastLoginAt:  timestamp("last_login_at"),
+  settings:     jsonb("settings").$type<Record<string, any>>().default({}),
   createdAt:    timestamp("created_at").notNull().defaultNow(),
   updatedAt:    timestamp("updated_at").notNull().defaultNow(),
 });
