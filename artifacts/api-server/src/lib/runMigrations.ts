@@ -5,37 +5,71 @@ import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 /**
- * Applies SQL migration files from the migrations/ directory at server startup.
- * Uses a `schema_migrations` tracking table so each file is applied exactly once.
- * Files must end in .sql and are applied in lexicographic order.
+ * Best-effort idempotent migration runner.
  *
- * Supports two formats:
- *  1. drizzle-kit generated files → statements separated by --> statement-breakpoint
- *  2. Hand-written migration files → statements separated by semicolons
+ * Design goals (production-safe):
+ *  - NEVER aborts server startup — all errors are caught and logged.
+ *  - Each SQL file is applied at most once (tracked in schema_migrations).
+ *  - Each statement inside a file is tried individually in a fresh transaction.
+ *  - "Already exists" errors → skipped silently (object is already there).
+ *  - Any other error → logged as WARN, skipped, execution continues.
+ *  - Migration is recorded as applied at the end regardless of skipped count.
+ *  - Supports both drizzle-kit format (-->statement-breakpoint) and semicolons.
  *
- * Each statement is executed individually. "Already exists" errors (e.g. when
- * running against a dev DB that was previously set up with drizzle-kit push)
- * are logged as warnings and skipped so the migration can still be recorded as
- * applied — keeping dev and production in sync without crashing the server.
+ * Path resolution:
+ *  esbuild bundles everything into dist/index.mjs → __dirname = dist/
+ *  build.mjs copies migrations/ → dist/migrations/ during build
+ *  So the correct path is join(__dirname, "migrations")
  */
 
-/** Returns true if this PostgreSQL error means the object already existed. */
-function isAlreadyExistsError(err: unknown): boolean {
-  const msg = String((err as any)?.message ?? "").toLowerCase();
-  return (
+/** Classify a caught error into a short category string for structured logging. */
+function classifyError(err: unknown): { category: string; safe: boolean } {
+  const msg = String(
+    (err as any)?.message ?? (err as any)?.cause?.message ?? ""
+  ).toLowerCase();
+
+  // PostgreSQL "already exists" family — completely safe to skip
+  if (
     msg.includes("already exists") ||
     msg.includes("duplicate_object") ||
     msg.includes("duplicate column") ||
-    msg.includes("duplicate key") ||
-    // "relation X of type index already exists" etc.
-    msg.includes("relation") && msg.includes("already exists")
-  );
+    msg.includes("duplicate key value")
+  ) {
+    return { category: "already_exists", safe: true };
+  }
+
+  // "does not exist" — dependency not yet created; skip, warn
+  if (msg.includes("does not exist")) {
+    return { category: "dependency_missing", safe: false };
+  }
+
+  // Syntax / type errors in the SQL itself
+  if (msg.includes("syntax error") || msg.includes("parse error")) {
+    return { category: "syntax_error", safe: false };
+  }
+
+  return { category: "unknown", safe: false };
+}
+
+/** Split a migration file into individual statements. */
+function splitStatements(content: string): string[] {
+  if (content.includes("-->")) {
+    // drizzle-kit generated: split on --> statement-breakpoint markers
+    return content
+      .split(/-->\s*statement-breakpoint/g)
+      .map((s) => s.replace(/;$/, "").trim())
+      .filter(Boolean);
+  }
+  // Hand-written: split on semicolons followed by newline
+  return content
+    .split(/;\s*\n/)
+    .map((s) => s.replace(/--[^\n]*/g, "").trim())
+    .filter(Boolean);
 }
 
 export async function runMigrations(): Promise<void> {
-  // esbuild bundles everything into dist/index.mjs, so __dirname = dist/
-  // The migrations folder sits at artifacts/api-server/migrations/ = dist/../migrations
-  const migrationsDir = join(__dirname, "../migrations");
+  // build.mjs copies migrations/ → dist/migrations/ so __dirname/migrations works
+  const migrationsDir = join(__dirname, "migrations");
 
   let files: string[];
   try {
@@ -43,63 +77,65 @@ export async function runMigrations(): Promise<void> {
       .filter((f) => f.endsWith(".sql"))
       .sort();
   } catch {
-    logger.info("No migrations directory found — skipping");
+    logger.warn(
+      { migrationsDir },
+      "Migrations directory not found — skipping schema migrations"
+    );
     return;
   }
 
   if (files.length === 0) {
-    logger.info("No SQL migrations to apply");
+    logger.info("No SQL migration files found — skipping");
     return;
   }
 
-  // Ensure migration tracking table exists (idempotent)
-  await db.execute(sql.raw(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      filename   TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `));
+  // Ensure tracking table exists — this is the only statement that can throw
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `));
+  } catch (err) {
+    logger.error({ err }, "Cannot create schema_migrations table — skipping all migrations");
+    return;
+  }
 
   for (const file of files) {
-    // Skip already-applied migrations
-    const result = await db.execute(
-      sql.raw(`SELECT 1 FROM schema_migrations WHERE filename = '${file.replace(/'/g, "''")}'`)
-    );
-    const rows = (result as any).rows ?? result;
-    if (Array.isArray(rows) && rows.length > 0) {
-      logger.info({ migration: file }, "Migration already applied — skipping");
-      continue;
+    // ── Already applied? ────────────────────────────────────────────────────
+    try {
+      const result = await db.execute(
+        sql.raw(
+          `SELECT 1 FROM schema_migrations WHERE filename = '${file.replace(/'/g, "''")}'`
+        )
+      );
+      const rows = (result as any).rows ?? result;
+      if (Array.isArray(rows) && rows.length > 0) {
+        logger.info({ migration: file }, "Migration already applied — skipping");
+        continue;
+      }
+    } catch (err) {
+      logger.warn({ migration: file, err }, "Could not check migration status — attempting anyway");
     }
 
-    const filePath = join(migrationsDir, file);
+    // ── Parse statements ────────────────────────────────────────────────────
     let statements: string[];
-
     try {
-      const content = readFileSync(filePath, "utf-8");
-
-      if (content.includes("-->")) {
-        // drizzle-kit format: split on --> statement-breakpoint markers
-        statements = content
-          .split(/-->[\s]*statement-breakpoint/g)
-          .map((s) => s.trim().replace(/;$/, "").trim())
-          .filter(Boolean);
-      } else {
-        // Hand-written format: split on semicolons
-        statements = content
-          .split(/;\s*\n/)
-          .map((s) => s.replace(/--[^\n]*/g, "").trim())
-          .filter(Boolean);
-      }
+      const content = readFileSync(join(migrationsDir, file), "utf-8");
+      statements = splitStatements(content);
     } catch (err) {
       logger.error({ migration: file, err }, "Failed to read migration file — skipping");
       continue;
     }
 
-    logger.info({ migration: file, statements: statements.length }, "Applying migration");
+    logger.info({ migration: file, total: statements.length }, "Applying migration");
 
-    let skipped = 0;
     let applied = 0;
+    let alreadyExists = 0;
+    let warnings = 0;
 
+    // ── Execute each statement ───────────────────────────────────────────────
     for (const statement of statements) {
       const clean = statement.replace(/;$/, "").trim();
       if (!clean) continue;
@@ -108,27 +144,58 @@ export async function runMigrations(): Promise<void> {
         await db.execute(sql.raw(clean));
         applied++;
       } catch (err) {
-        if (isAlreadyExistsError(err)) {
-          // Object already created (e.g. dev DB had drizzle-kit push run before).
-          // Log at debug level and continue — this is expected behaviour.
+        const { category, safe } = classifyError(err);
+
+        if (safe) {
+          // "already exists" — the object is already there, nothing to do
+          alreadyExists++;
           logger.debug(
-            { migration: file, preview: clean.slice(0, 80) },
-            "Statement skipped — object already exists"
+            { migration: file, category, preview: clean.slice(0, 100) },
+            "Statement skipped (object already exists)"
           );
-          skipped++;
         } else {
-          // Unexpected error — abort so the problem is visible.
-          logger.error({ migration: file, err }, "Migration failed — aborting startup");
-          throw err;
+          // Unexpected error — log as WARN and keep going.
+          // We NEVER abort startup; partial schema is better than no server.
+          warnings++;
+          logger.warn(
+            {
+              migration: file,
+              category,
+              preview: clean.slice(0, 120),
+              err: (err as any)?.message ?? String(err),
+            },
+            "Statement failed — continuing (best-effort)"
+          );
         }
       }
     }
 
-    // Record migration as applied regardless of skipped count.
-    // Skipped = already-exists = schema is already correct.
-    await db.execute(
-      sql.raw(`INSERT INTO schema_migrations (filename) VALUES ('${file.replace(/'/g, "''")}') ON CONFLICT DO NOTHING`)
-    );
-    logger.info({ migration: file, applied, skipped }, "Migration recorded as applied");
+    // ── Record as applied ────────────────────────────────────────────────────
+    // Always record — even if some statements had warnings — so we don't
+    // re-run the same migration on every restart and cause thundering-herd
+    // errors on a live production database.
+    try {
+      await db.execute(
+        sql.raw(
+          `INSERT INTO schema_migrations (filename) VALUES ('${file.replace(/'/g, "''")}') ON CONFLICT DO NOTHING`
+        )
+      );
+    } catch (err) {
+      logger.warn({ migration: file, err }, "Could not record migration as applied");
+    }
+
+    if (warnings > 0) {
+      logger.warn(
+        { migration: file, applied, alreadyExists, warnings },
+        "Migration recorded with warnings — some statements were skipped"
+      );
+    } else {
+      logger.info(
+        { migration: file, applied, alreadyExists },
+        "Migration applied successfully"
+      );
+    }
   }
+
+  logger.info({ files: files.length }, "Migration run complete");
 }

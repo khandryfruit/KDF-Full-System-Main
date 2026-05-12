@@ -21,9 +21,13 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Apply idempotent SQL migrations before accepting traffic so any new
-// schema columns (e.g. shopify_product_id) exist before sync routes run.
+// Apply idempotent SQL migrations before accepting traffic.
+// runMigrations() is best-effort — it NEVER throws, so startup always proceeds.
 runMigrations()
+  .catch((err) => {
+    // Should never happen (runMigrations catches internally), but guard anyway.
+    logger.warn({ err }, "runMigrations() threw unexpectedly — continuing startup");
+  })
   .then(() => {
     app.listen(port, (err) => {
       if (err) {
@@ -39,8 +43,4 @@ runMigrations()
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
       startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
     });
-  })
-  .catch((err) => {
-    logger.error({ err }, "Failed to apply migrations — aborting startup");
-    process.exit(1);
   });
