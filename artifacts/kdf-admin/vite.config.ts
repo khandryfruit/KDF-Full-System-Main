@@ -7,7 +7,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 // Fixed dev/preview ports only in this file. Railway Railpack scans the whole monorepo for
 // the standard listen env key and may require it as a BuildKit secret during unrelated
 // static site builds — keep that key out of vite configs here.
-// Runtime listen port for preview: scripts/railway-preview.mjs (Railway injects the env var).
+// Runtime listen port for production static server: scripts/railway-static-server.mjs
 const DEV_PORT = 5173;
 const PREVIEW_PORT = 8080;
 

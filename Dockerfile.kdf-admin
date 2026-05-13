@@ -5,7 +5,7 @@
 #   Dockerfile path: Dockerfile.kdf-admin
 #   Root directory:   .  (repository root)
 #
-# Runtime: pnpm railway:serve → scripts/railway-preview.mjs (reads Railway PORT env at start)
+# Runtime: pnpm railway:serve → scripts/railway-static-server.mjs (reads Railway PORT at start; no Vite preview)
 
 FROM node:22-bookworm AS builder
 WORKDIR /app

@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "NODE_OPTIONS=--max-http-header-size=65536 vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
-    "serve": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-preview.mjs",
-    "railway:start": "vite build --config vite.config.ts",
-    "railway:serve": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-preview.mjs",
+    "serve": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-static-server.mjs",
+    "railway:build": "vite build --config vite.config.ts",
+    "railway:start": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-static-server.mjs",
+    "railway:serve": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-static-server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
