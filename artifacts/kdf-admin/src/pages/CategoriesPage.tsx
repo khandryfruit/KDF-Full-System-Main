@@ -27,8 +27,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 function getImageUrl(path: string): string {
   if (!path) return "";

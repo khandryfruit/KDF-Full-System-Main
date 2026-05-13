@@ -36,6 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { API_BASE } from "@/lib/apiBase";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface ProductVariant {
@@ -49,8 +50,6 @@ interface ProductVariant {
 }
 
 const VARIANT_TYPES = ["Weight", "Size", "Color", "Flavor", "Material", "Custom"] as const;
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
 /* ─── Image helpers ──────────────────────────────────────── */
 function getImageUrl(path: string): string {

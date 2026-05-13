@@ -21,7 +21,10 @@ export default function LoginPage() {
   // On Railway each service gets its own domain. Set VITE_API_BASE_URL to the
   // full API service URL (e.g. https://kdf-api.up.railway.app) so login works
   // across separate Railway services. Defaults to "" (relative) on Replit.
-  const API = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+  const API = (() => {
+    const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+    return raw.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  })();
 
   /** Fetch JSON safely — 15 s timeout, shows readable error on non-JSON response. */
   const fetchJson = async (url: string, init: RequestInit) => {

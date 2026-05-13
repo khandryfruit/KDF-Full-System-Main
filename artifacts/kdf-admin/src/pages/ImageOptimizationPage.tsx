@@ -11,6 +11,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, Info, Save,
   TrendingDown,
 } from "lucide-react";
+import { API_BASE } from "@/lib/apiBase";
 
 interface ImageOptSettings {
   enabled: boolean;
@@ -29,8 +30,6 @@ const DEFAULTS: ImageOptSettings = {
   generateThumbs: false,
   thumbWidthPx: 300,
 };
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
 function getAuthHeader() {
   return { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` };

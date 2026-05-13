@@ -1,3 +1,5 @@
+import { API_BASE } from "./apiBase";
+
 export interface UploadResult {
   objectPath: string;
   originalSize: number;
@@ -6,17 +8,6 @@ export interface UploadResult {
   savedPct: number;
   contentType: string;
 }
-
-/**
- * API base URL — on Railway, VITE_API_BASE_URL is the api-server's external
- * URL (e.g. https://workspaceapi-server-production-6674.up.railway.app).
- * On Replit (and local dev) it is empty, so all calls use relative paths.
- *
- * This bypasses the Vite proxy entirely on Railway, which can fail with
- * EAI_AGAIN DNS errors when the two Railway services try to talk internally
- * via the public domain.
- */
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
 /**
  * Upload an image file through the optimising API endpoint.

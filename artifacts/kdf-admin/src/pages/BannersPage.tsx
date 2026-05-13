@@ -21,8 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 /* ── Banner Image Uploader ──────────────────────────── */
 function BannerImageUploader({
