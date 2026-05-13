@@ -7,6 +7,7 @@ const router = Router();
 
 /** Only columns clients may set — avoids Drizzle rejecting unknown JSON keys. */
 const BANNER_WRITABLE_KEYS = new Set([
+  "title",
   "subtitle",
   "imageUrl",
   "mobileImageUrl",
@@ -76,15 +77,15 @@ router.get("/banners", async (req, res) => {
 router.post("/banners", adminMiddleware as any, async (req, res) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const picked = pickWritableBannerFields(body);
     const title = body.title;
     if (!title || typeof title !== "string") {
       res.status(400).json({ error: "title is required" });
       return;
     }
-    const picked = pickWritableBannerFields(body);
     const [banner] = await db
       .insert(bannersTable)
-      .values({ title, ...(picked as any) })
+      .values({ ...(picked as any), title } as any)
       .returning();
     req.log.info({ bannerId: banner?.id, hasImage: !!picked.imageUrl }, "banner created");
     res.status(201).json(banner);
