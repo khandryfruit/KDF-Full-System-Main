@@ -1,0 +1,137 @@
+اب فوری طور پر proper production debugging کریں کیونکہ نئے products upload ہو رہے ہیں لیکن live store پر show نہیں ہو رہے۔
+
+Issue Summary:
+
+* Admin panel میں product create ہو رہا ہے
+* Image upload بھی ہو رہی ہے
+* Cloudinary uploads بھی success ہیں
+* لیکن:
+
+  * Homepage پر products show نہیں ہو رہے
+  * Product detail page کبھی "Product not found" دے رہا ہے
+  * Featured products empty آ رہے ہیں
+  * بعض images render نہیں ہو رہیں
+  * Banners بھی show نہیں ہو رہے
+
+یہ اب simple frontend issue نہیں ہے۔
+
+Proper root-cause debugging کریں۔
+
+━━━━━━━━━━━━━━━
+CHECK EVERYTHING END-TO-END
+━━━━━━━━━━━━━━━
+
+1. DATABASE CHECK
+
+Production Railway PostgreSQL DB directly inspect کریں:
+
+Check کریں:
+
+* کیا products واقعی DB میں save ہو رہے ہیں؟
+* کیا slug save ہو رہا ہے؟
+* کیا status = active ہے؟
+* کیا featured = true save ہو رہا ہے؟
+* کیا images table/JSON میں URLs موجود ہیں؟
+* کیا relations break نہیں؟
+
+Run checks like:
+
+* SELECT id, name, slug, featured, status FROM products;
+* Check latest inserted product
+* Check image URLs stored in DB
+
+━━━━━━━━━━━━━━━
+
+2. API RESPONSE DEBUG
+
+Production API responses inspect کریں:
+
+Check کریں:
+
+* /products
+* /products/:slug
+* /products?featured=true
+
+کیا API empty array دے رہی ہے؟
+کیا filtering غلط ہے؟
+کیا published/active filters products hide کر رہے ہیں؟
+کیا slug query mismatch ہے؟
+کیا Prisma/ORM query issue ہے؟
+
+━━━━━━━━━━━━━━━
+
+3. IMAGE STORAGE DEBUG
+
+Check کریں images کہاں جا رہی ہیں:
+
+* Cloudinary؟
+* Old object storage؟
+* Broken URL؟
+* Wrong prefix؟
+* objects/objects/ issue؟
+* imageUrl helper؟
+* transformation issue؟
+
+Verify کریں:
+
+* DB میں stored URL
+* actual Cloudinary URL
+* rendered frontend URL
+
+━━━━━━━━━━━━━━━
+
+4. FRONTEND DATA FLOW DEBUG
+
+`@workspace/kdf-plus`
+
+Inspect کریں:
+
+* Homepage products fetch
+* Featured products fetch
+* Product detail fetch
+* SSR/CSR mismatch
+* API base URL
+* cache issue
+* hydration issue
+* filtering issue
+
+Check کریں:
+
+* Network tab
+* Actual API response
+* Rendered JSON
+* Console errors
+
+━━━━━━━━━━━━━━━
+
+5. DO NOT GUESS
+
+براہِ کرم assumptions نہ کریں۔
+
+Actual:
+
+* logs
+* API responses
+* DB data
+* network responses
+* rendered state
+
+inspect کریں۔
+
+━━━━━━━━━━━━━━━
+
+6. IMPORTANT
+
+صرف ان services پر کام کریں:
+
+* @workspace/kdf-plus
+* @workspace/api-server
+
+`kdf-nuts` کو touch نہ کریں۔
+
+Live production domain یہی ہے:
+https://khanbabadryfruits.com
+
+━━━━━━━━━━━━━━━
+
+میں کل سے مسلسل یہی issue debug کر رہا ہوں، ابھی تک نہ products properly show ہو رہے ہیں نہ images، اس لیے اب complete production-level debugging کریں اور exact root cause fix کریں۔
