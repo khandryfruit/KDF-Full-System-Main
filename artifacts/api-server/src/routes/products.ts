@@ -6,6 +6,35 @@ import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
 const router = Router();
 
+/** Storefront list projection — omits heavy HTML fields to shrink JSON and DB I/O. */
+const storefrontProductListColumns = {
+  id: productsTable.id,
+  categoryId: productsTable.categoryId,
+  name: productsTable.name,
+  slug: productsTable.slug,
+  shopifyProductId: productsTable.shopifyProductId,
+  shopifyHandle: productsTable.shopifyHandle,
+  woocommerceProductId: productsTable.woocommerceProductId,
+  price: productsTable.price,
+  originalPrice: productsTable.originalPrice,
+  stock: productsTable.stock,
+  images: productsTable.images,
+  gradient: productsTable.gradient,
+  tags: productsTable.tags,
+  variants: productsTable.variants,
+  weight: productsTable.weight,
+  unit: productsTable.unit,
+  active: productsTable.active,
+  featured: productsTable.featured,
+  rating: productsTable.rating,
+  reviewCount: productsTable.reviewCount,
+  altText: productsTable.altText,
+  source: productsTable.source,
+  externalId: productsTable.externalId,
+  createdAt: productsTable.createdAt,
+  updatedAt: productsTable.updatedAt,
+};
+
 /** Returns true if the slug is already in its canonical clean form */
 function isCleanSlug(slug: string): boolean {
   return generateSlugFromName(slug) === slug;
@@ -78,11 +107,18 @@ router.get("/products", async (req, res) => {
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 
     const [items, countResult] = await Promise.all([
-      db.select().from(productsTable).where(where).orderBy(orderBy).limit(limit).offset(offset),
+      db
+        .select(storefrontProductListColumns)
+        .from(productsTable)
+        .where(where)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(productsTable).where(where),
     ]);
 
     req.log.info({ featured, categoryId, search, count: items.length, total: Number(countResult[0]?.count ?? 0) }, "products list");
+    res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=120");
     res.json({ items, total: Number(countResult[0]?.count ?? 0), page, limit });
   } catch (err) {
     req.log.error(err);

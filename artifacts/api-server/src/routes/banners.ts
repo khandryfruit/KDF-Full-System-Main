@@ -86,6 +86,7 @@ router.get("/banners", async (req, res) => {
       .from(bannersTable)
       .where(whereClause)
       .orderBy(asc(bannersTable.sortOrder));
+    res.set("Cache-Control", "public, max-age=20, s-maxage=45, stale-while-revalidate=180");
     res.json(banners);
   } catch (err) {
     req.log.error(err);

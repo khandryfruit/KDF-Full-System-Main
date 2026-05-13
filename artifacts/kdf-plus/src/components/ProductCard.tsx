@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Link } from "wouter";
 import { Plus, Minus, Heart } from "lucide-react";
 import type { Product } from "@workspace/api-client-react";
@@ -11,7 +11,7 @@ interface ProductCardProps {
   product: Product;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+function ProductCardInner({ product }: ProductCardProps) {
   const { addItem, items, updateQty, removeItem } = useCart();
   const [wished, setWished] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
@@ -218,3 +218,5 @@ export function ProductCard({ product }: ProductCardProps) {
     </>
   );
 }
+
+export const ProductCard = memo(ProductCardInner);

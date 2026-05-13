@@ -10,7 +10,7 @@ function injectCloudinaryTransforms(absUrl: string, maxWidth?: number): string {
   const cap =
     maxWidth != null && maxWidth > 0 ? Math.min(Math.round(maxWidth), 2000) : 0;
   const transforms =
-    cap > 0 ? `f_auto,q_auto:good,c_limit,w_${cap}` : `f_auto,q_auto:good`;
+    cap > 0 ? `f_auto,q_auto:good,c_limit,w_${cap},dpr_auto` : `f_auto,q_auto:good`;
   return `${absUrl.slice(0, idx + IMAGE_UPLOAD.length)}${transforms}/${tail}`;
 }
 

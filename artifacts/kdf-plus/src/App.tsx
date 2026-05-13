@@ -9,15 +9,44 @@ import { AuthProvider } from "@/context/AuthContext";
 import { LocationProvider, useUserLocation } from "@/context/LocationContext";
 import { Header } from "@/components/Header";
 import { HeaderPromoStrip } from "@/components/HeaderPromoStrip";
-import { Footer } from "@/components/Footer";
 import { MiniCart } from "@/components/MiniCart";
 import { LocationDetectPopup } from "@/components/LocationDetectPopup";
-import { ChatWidget } from "@/components/ChatWidget";
 import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
 import { useGetSeoSettings } from "@workspace/api-client-react";
 import { Helmet } from "react-helmet-async";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import { getPublicApiOrigin } from "./lib/apiOrigin";
+
+const Footer = lazy(() => import("@/components/Footer").then((m) => ({ default: m.Footer })));
+const ChatWidget = lazy(() => import("@/components/ChatWidget").then((m) => ({ default: m.ChatWidget })));
+
+/** Loads chat after idle so first paint / TTI stay fast on mobile. */
+function DeferredChatWidget() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof window === "undefined") return undefined;
+    const ric = window.requestIdleCallback;
+    if (typeof ric === "function") {
+      const id = ric(() => { if (!cancelled) setShow(true); }, { timeout: 3200 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(() => { if (!cancelled) setShow(true); }, 2200);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+  if (!show) return null;
+  return (
+    <Suspense fallback={null}>
+      <ChatWidget />
+    </Suspense>
+  );
+}
 
 const HomePage        = lazy(() => import("@/pages/HomePage"));
 const ProductsPage    = lazy(() => import("@/pages/ProductsPage"));
@@ -95,7 +124,9 @@ function Layout({ children }: { children: React.ReactNode }) {
       <Header />
       <HeaderPromoStrip />
       <div className="flex-1">{children}</div>
-      <Footer />
+      <Suspense fallback={<div className="h-36 shrink-0 bg-muted/15 border-t border-border/40" aria-hidden />}>
+        <Footer />
+      </Suspense>
       <MiniCart />
     </div>
   );
@@ -108,6 +139,9 @@ function CleanLayout({ children }: { children: React.ReactNode }) {
       <Header />
       <HeaderPromoStrip />
       <div className="flex-1">{children}</div>
+      <Suspense fallback={<div className="h-36 shrink-0 bg-muted/15 border-t border-border/40" aria-hidden />}>
+        <Footer />
+      </Suspense>
       <MiniCart />
     </div>
   );
@@ -196,7 +230,7 @@ function App() {
                 <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                   <Router />
                   <LocationGate />
-                  <ChatWidget />
+                  <DeferredChatWidget />
                 </WouterRouter>
                 <FaviconManager />
                 <SeoManager />

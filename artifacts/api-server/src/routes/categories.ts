@@ -8,6 +8,7 @@ const router = Router();
 router.get("/categories", async (req, res) => {
   try {
     const categories = await db.select().from(categoriesTable).where(eq(categoriesTable.active, true)).orderBy(asc(categoriesTable.sortOrder));
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
     res.json(categories);
   } catch (err) {
     req.log.error(err);

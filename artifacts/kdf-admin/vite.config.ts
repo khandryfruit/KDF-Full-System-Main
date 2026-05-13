@@ -36,7 +36,7 @@ const proxy = {
   "/admin/api": { target: proxyTarget, changeOrigin: true, secure: false },
 };
 
-export default defineConfig({
+export default defineConfig(async ({ command }) => ({
   base: basePath,
   plugins: [
     react(),
@@ -64,6 +64,10 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
+  esbuild:
+    command === "build"
+      ? { legalComments: "none", drop: ["debugger"] as ("debugger")[] }
+      : undefined,
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
@@ -93,4 +97,4 @@ export default defineConfig({
     allowedHosts: true,
     proxy,
   },
-});
+}));
