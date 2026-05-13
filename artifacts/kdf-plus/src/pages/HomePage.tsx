@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet-async";
 import {
   ChevronLeft, ChevronRight, ArrowRight, Star, Truck, ShieldCheck,
   RefreshCw, Headphones, Flame, Sparkles, TrendingUp, Tag,
-  Volume2, VolumeX, Play, Pause, Smartphone,
+  Volume2, VolumeX, Play, Pause, Smartphone, Zap, Shield,
 } from "lucide-react";
 import { useListBanners, useListCategories, useListProducts } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -143,8 +143,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 
   if (loading) {
     return (
-      <div className="px-3 sm:px-6 py-4">
-        <Skeleton className="w-full h-[220px] sm:h-[420px] rounded-2xl" />
+      <div className="px-3 sm:px-6 py-3 sm:py-4">
+        <Skeleton className="w-full min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] rounded-[28px] sm:rounded-3xl" />
       </div>
     );
   }
@@ -153,10 +153,13 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   if (!banners.length) {
     const s = BANNER_AI_SLIDES[fallbackIdx];
     return (
-      <div className="px-3 sm:px-6 py-4">
+      <div className="px-3 sm:px-6 py-3 sm:py-4">
         <div
-          className="relative overflow-hidden h-[220px] sm:h-[420px] flex items-center active:scale-[0.995] transition-transform duration-200 cursor-pointer"
-          style={{ borderRadius: '24px', background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`, boxShadow: `0 16px 48px ${s.g3}55, 0 4px 16px rgba(0,0,0,0.4)` }}
+          className="relative flex flex-col justify-end overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] sm:justify-center rounded-[28px] sm:rounded-3xl cursor-pointer active:scale-[0.995] transition-transform ring-1 ring-black/[0.04]"
+          style={{
+            background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`,
+            boxShadow: `0 24px 64px ${s.g3}55, 0 8px 24px rgba(0,0,0,0.35)`,
+          }}
           onClick={() => setLocation('/products')}
         >
           {/* Animated floating orbs */}
@@ -175,7 +178,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           <div className="plus-shine-anim absolute inset-y-0 w-24 pointer-events-none"
             style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)' }} />
           {/* Content */}
-          <div className="relative z-10 px-6 sm:px-14 flex-1">
+          <div className="relative z-10 px-6 pb-8 pt-12 sm:px-14 sm:pb-0 sm:pt-0 flex-1 flex flex-col justify-end sm:justify-center">
             <span className="inline-block text-[11px] sm:text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 sm:mb-4"
               style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)' }}>
               {s.label}
@@ -220,13 +223,16 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 
   return (
     <div
-      className="px-3 sm:px-6 py-4"
+      className="px-3 sm:px-6 py-3 sm:py-4"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
       <div
-        className="relative overflow-hidden h-[220px] sm:h-[420px]"
-        style={{ borderRadius: '24px', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+        className="relative overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] sm:max-h-none rounded-[28px] sm:rounded-3xl ring-1 ring-black/[0.04]"
+        style={{
+          boxShadow:
+            "0 24px 64px rgba(13,43,0,0.18), 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.15)",
+        }}
       >
         {/* Slides */}
         {banners.map((banner, i) => {
@@ -294,34 +300,46 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               <div className="plus-shine-anim absolute inset-y-0 w-24 pointer-events-none z-[5]"
                 style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%)' }} />
 
-              {/* Gradient overlay for text readability */}
+              {/* Gradient overlay — mobile: bottom-heavy for luxury editorial layout */}
               <div
                 className="absolute inset-0"
                 style={{
                   background: bgImg
-                    ? "linear-gradient(to right, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.05) 100%)"
+                    ? isMobile
+                      ? "linear-gradient(180deg, rgba(13,43,0,0.15) 0%, rgba(0,0,0,0.25) 38%, rgba(0,0,0,0.82) 100%)"
+                      : "linear-gradient(to right, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.05) 100%)"
                     : `linear-gradient(135deg, ${DARK} 0%, #1a4d00 60%, #2d7a00 100%)`,
                 }}
               />
 
-              {/* Content row */}
-              <div className="absolute inset-0 flex items-center px-5 sm:px-12 gap-4 sm:gap-8 z-10">
+              {/* Content — mobile: bottom stack + glass CTAs; desktop: side-by-side */}
+              <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 px-4 pb-5 pt-12 sm:flex-row sm:items-center sm:justify-start sm:gap-8 sm:px-12 sm:pb-0 sm:pt-0">
 
-                {/* ── Left: text + CTA ── */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 sm:self-center">
+                  {/* Trust micro-row — mobile only */}
+                  {isMobile && (
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/95 backdrop-blur-md">
+                        <Zap className="w-3 h-3 text-amber-300" aria-hidden /> Instant checkout
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/95 backdrop-blur-md">
+                        <Shield className="w-3 h-3 text-emerald-200" aria-hidden /> Trusted quality
+                      </span>
+                    </div>
+                  )}
                   {banner.label && (
-                    <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-widest bg-white/20 text-white px-2.5 py-1 rounded-full mb-2 sm:mb-3">
+                    <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/95 px-3 py-1.5 rounded-full mb-2 sm:mb-3 border border-white/25 bg-white/10 backdrop-blur-md shadow-sm">
                       {banner.label}
                     </span>
                   )}
                   <h2
-                    className="text-xl sm:text-4xl lg:text-5xl font-black leading-tight mb-1.5 sm:mb-3 text-white drop-shadow"
-                    style={{ textShadow: "0 2px 12px rgba(0,0,0,0.4)" }}
+                    className="text-[1.65rem] leading-[1.12] sm:text-4xl lg:text-5xl font-black tracking-tight text-white drop-shadow-lg mb-1.5 sm:mb-3"
+                    style={{ textShadow: "0 4px 24px rgba(0,0,0,0.45)" }}
                   >
                     {banner.title}
                   </h2>
                   {banner.subtitle && (
-                    <p className="text-white/80 text-xs sm:text-base mb-3 sm:mb-5 max-w-xs sm:max-w-md line-clamp-2">
+                    <p className="text-white/85 text-sm sm:text-base mb-3 sm:mb-5 max-w-[20rem] sm:max-w-md line-clamp-2 font-medium leading-snug">
                       {banner.subtitle}
                     </p>
                   )}
@@ -330,13 +348,25 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                       <CountdownTimer endAt={(banner as any).countdownEndAt} />
                     </div>
                   )}
-                  <button
-                    className="inline-flex items-center gap-1.5 px-5 sm:px-8 py-2 sm:py-3 rounded-full font-bold text-xs sm:text-sm text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
-                    style={{ backgroundColor: GREEN }}
-                    onClick={(e) => { e.stopPropagation(); handleBannerClick(banner); }}
-                  >
-                    {banner.cta || "Shop Now"} <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <button
+                      className="inline-flex items-center gap-1.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-bold text-sm text-white shadow-lg transition-transform active:scale-[0.98] hover:brightness-110 ring-1 ring-white/20"
+                      style={{ backgroundColor: GREEN, boxShadow: `0 8px 28px ${GREEN}55` }}
+                      onClick={(e) => { e.stopPropagation(); handleBannerClick(banner); }}
+                    >
+                      {banner.cta || "Shop Now"} <ArrowRight className="w-4 h-4 sm:w-[1.05rem] sm:h-[1.05rem]" />
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-bold text-sm text-white border border-white/45 bg-white/12 backdrop-blur-md shadow-md transition-transform active:scale-[0.98] hover:bg-white/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLocation("/products");
+                      }}
+                    >
+                      Explore deals
+                    </button>
+                  </div>
                 </div>
 
                 {/* ── Right: inner floating card (desktop image in card) ── */}
@@ -783,15 +813,15 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
 /* ─── Trust Badges ───────────────────────────────────────────── */
 function TrustStrip() {
   return (
-    <div className="bg-white border-b border-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4">
+    <div className="bg-white/90 backdrop-blur-md border-b border-[#0D2B00]/[0.06]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-8">
+        <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 overflow-x-auto sm:overflow-visible gap-0 sm:gap-0 pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-hide sm:snap-none">
           {TRUST_BADGES.map(({ icon: Icon, title, desc }, i) => (
             <div
               key={title}
-              className={`flex items-center gap-2.5 py-3 px-3 sm:px-6 ${
-                i % 2 === 0 ? "border-r border-gray-100" : ""
-              } ${i < 2 ? "border-b border-gray-100 lg:border-b-0" : ""} lg:border-r lg:last:border-r-0`}
+              className={`flex min-w-[46%] sm:min-w-0 shrink-0 snap-start items-center gap-3 py-3.5 px-3 sm:px-6 sm:border-r sm:border-gray-100 sm:last:border-r-0 ${
+                i % 2 === 0 ? "sm:border-r" : ""
+              } ${i < 2 ? "lg:border-b-0" : ""}`}
             >
               <div
                 className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0"
@@ -855,9 +885,9 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
     return (
       <>
         {/* Mobile skeleton: 2-col grid */}
-        <div className="grid grid-cols-2 gap-3 sm:hidden">
+        <div className="flex gap-3 overflow-x-auto pb-2 sm:hidden snap-x snap-mandatory scrollbar-hide -mx-1 px-1">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i}>
+            <div key={i} className="flex-shrink-0 w-[min(78vw,280px)] snap-start">
               <Skeleton className="aspect-square rounded-2xl mb-2" />
               <Skeleton className="h-3 rounded w-3/4 mb-1" />
               <Skeleton className="h-3 rounded w-1/2" />
@@ -880,10 +910,15 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
 
   return (
     <>
-      {/* Mobile: full-width 2-column grid */}
-      <div className="grid grid-cols-2 gap-3 sm:hidden">
+      {/* Mobile: horizontal snap carousel (app-like browsing) */}
+      <div
+        className="flex gap-3 overflow-x-auto pb-2 sm:hidden snap-x snap-mandatory scrollbar-hide -mx-1 px-1"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <div key={product.id} className="flex-shrink-0 w-[min(78vw,280px)] snap-start first:pl-0.5">
+            <ProductCard product={product} />
+          </div>
         ))}
       </div>
 
@@ -923,10 +958,10 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
 function CategoryGrid({ categories, loading }: { categories: Category[]; loading: boolean }) {
   if (loading) {
     return (
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:mx-0 sm:px-0 snap-x snap-mandatory scrollbar-hide">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex-shrink-0 flex flex-col items-center gap-2">
-            <Skeleton className="w-20 h-20 rounded-2xl" />
+          <div key={i} className="flex-shrink-0 flex flex-col items-center gap-2 snap-start">
+            <Skeleton className="w-[88px] h-[88px] sm:w-24 sm:h-24 rounded-[22px]" />
             <Skeleton className="h-2.5 rounded w-14" />
           </div>
         ))}
@@ -935,12 +970,15 @@ function CategoryGrid({ categories, loading }: { categories: Category[]; loading
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+    <div
+      className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 -mx-1 px-1 snap-x snap-mandatory scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       {categories.map((cat) => (
-        <Link key={cat.id} href={`/category/${cat.slug}`} data-testid={`link-category-${cat.id}`}>
-          <div className="flex-shrink-0 flex flex-col items-center gap-2 group cursor-pointer">
+        <Link key={cat.id} href={`/category/${cat.slug}`} data-testid={`link-category-${cat.id}`} className="snap-start shrink-0">
+          <div className="flex flex-col items-center gap-2 group cursor-pointer w-[88px] sm:w-[104px]">
             <div
-              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-transparent group-hover:border-[#5FA800] group-hover:shadow-lg transition-all duration-200 relative"
+              className="w-[88px] h-[88px] sm:w-24 sm:h-24 rounded-[22px] overflow-hidden border border-black/[0.06] shadow-[0_8px_24px_rgba(13,43,0,0.08)] group-hover:shadow-[0_12px_32px_rgba(95,168,0,0.18)] group-active:scale-[0.97] transition-all duration-300 relative ring-1 ring-white/80"
               style={{ backgroundColor: cat.color || "#f0f7e6" }}
             >
               {cat.imageUrl ? (
@@ -948,6 +986,7 @@ function CategoryGrid({ categories, loading }: { categories: Category[]; loading
                   src={getProductImageSrc(cat.imageUrl, { maxWidth: 480 })}
                   alt={cat.name}
                   loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
@@ -959,7 +998,7 @@ function CategoryGrid({ categories, loading }: { categories: Category[]; loading
               {/* Overlay on hover */}
               <div className="absolute inset-0 bg-[#5FA800]/0 group-hover:bg-[#5FA800]/10 transition-colors duration-200 rounded-2xl" />
             </div>
-            <span className="text-xs font-semibold text-gray-700 text-center w-20 sm:w-24 line-clamp-2 group-hover:text-[#5FA800] transition-colors">
+            <span className="text-[11px] sm:text-xs font-bold text-gray-800 text-center w-[88px] sm:w-24 line-clamp-2 group-hover:text-[#5FA800] transition-colors leading-tight tracking-tight">
               {cat.name}
             </span>
           </div>
@@ -1106,7 +1145,7 @@ export default function HomePage() {
       {/* Scrolling announcement strip */}
       <MarqueeStrip announcements={announcements} />
 
-      <main className="bg-gray-50 min-h-screen">
+      <main className="min-h-screen bg-gradient-to-b from-[#f3faf1] via-[#f7f8f6] to-[#f0f2ee]">
 
         {/* Video hero only when at least one row has real media; otherwise image /fallback hero */}
         {playableVideoBanners.length > 0 ? (

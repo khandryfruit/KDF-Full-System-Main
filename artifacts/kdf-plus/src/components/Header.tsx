@@ -600,7 +600,7 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
 
 /* ─── Main Header ────────────────────────────────────────────── */
 export function Header() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [searchQuery, setSearchQuery]     = useState("");
   const [scrolled, setScrolled]           = useState(false);
   const [scrollY, setScrollY]             = useState(0);
@@ -716,6 +716,20 @@ export function Header() {
 
   const handleLogout = () => { logout(); navigate("/"); };
   const shrunk = scrollY > 80;
+
+  const hideMobileBottomNav =
+    location.startsWith("/checkout") ||
+    /^\/order\//.test(location) ||
+    location.startsWith("/login") ||
+    location.startsWith("/register");
+
+  const path = location.split("?")[0] ?? location;
+  const navActive = {
+    home: path === "/" || path === "",
+    categories: path.startsWith("/categor"),
+    deals: path.startsWith("/products"),
+    account: path.startsWith("/account") || path.startsWith("/login"),
+  };
 
   function getImgSrc(key: string | null | undefined) {
     if (!key) return null;
@@ -1046,45 +1060,76 @@ export function Header() {
         </header>
       </div>
 
-      {/* ── Mobile Bottom Navigation ── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[400] sm:hidden"
-        style={{
-          background: "rgba(255,255,255,0.97)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderTop: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 -4px 20px rgba(0,0,0,0.06)",
-        }}>
-        <div className="flex items-center justify-around px-2 py-2 safe-area-pb">
-          {[
-            { label: "Home",       href: "/",        icon: Home,        testId: "" },
-            { label: "Categories", href: "/products", icon: LayoutGrid,  testId: "" },
-            { label: "Search",     href: null,        icon: Search,      testId: "" },
-            { label: "Cart",       href: null,        icon: ShoppingBag, testId: "link-cart" },
-            { label: "Account",    href: user ? "/account" : "/login", icon: User, testId: "" },
-          ].map(({ label, href, icon: Icon, testId }) => (
-            <button key={label} type="button"
-              data-testid={testId || undefined}
-              className="flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all active:scale-90 relative"
-              onClick={() => {
-                if (label === "Search") { setSearchOverlay(true); }
-                else if (label === "Cart") { setMiniCartOpen(true); }
-                else if (href) { navigate(href); }
-              }}>
-              <div className="relative">
-                <Icon className="w-5 h-5 text-gray-500" />
-                {label === "Cart" && totalItems > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full text-white text-[9px] font-bold px-0.5"
-                    style={{ background: ORANGE, lineHeight: 1 }}>
-                    {totalItems > 9 ? "9+" : totalItems}
+      {/* ── Mobile bottom navigation (thumb-first; search stays in header) ── */}
+      {!hideMobileBottomNav && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-[400] sm:hidden"
+          style={{
+            background: "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.98) 40%, rgba(250,252,249,1) 100%)",
+            backdropFilter: "blur(20px) saturate(1.2)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.2)",
+            borderTop: "1px solid rgba(13,43,0,0.08)",
+            boxShadow: "0 -8px 32px rgba(13,43,0,0.06), 0 -1px 0 rgba(255,255,255,0.8) inset",
+          }}
+          aria-label="Primary"
+        >
+          <div className="flex items-stretch justify-between gap-0.5 px-1 pt-1 pb-[max(12px,env(safe-area-inset-bottom))] max-w-lg mx-auto">
+            {(
+              [
+                { key: "home", label: "Home", href: "/", Icon: Home, active: navActive.home },
+                { key: "categories", label: "Categories", href: "/categories", Icon: LayoutGrid, active: navActive.categories },
+                { key: "deals", label: "Deals", href: "/products", Icon: Flame, active: navActive.deals },
+                { key: "cart", label: "Cart", href: null as string | null, Icon: ShoppingBag, active: false },
+                { key: "account", label: "You", href: user ? "/account" : "/login", Icon: User, active: navActive.account },
+              ] as const
+            ).map(({ key, label, href, Icon, active }) => {
+              const inner = (
+                <>
+                  <div
+                    className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
+                      active ? "shadow-md ring-1 ring-[#5FA800]/25" : "bg-transparent"
+                    }`}
+                    style={active ? { backgroundColor: "rgba(95,168,0,0.12)" } : undefined}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: active ? GREEN : "#64748b" }} strokeWidth={active ? 2.25 : 2} />
+                    {key === "cart" && totalItems > 0 && (
+                      <span
+                        className="absolute -top-0.5 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-white text-[10px] font-bold px-0.5 shadow-sm"
+                        style={{ background: ORANGE, lineHeight: 1 }}
+                      >
+                        {totalItems > 9 ? "9+" : totalItems}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`mt-0.5 max-w-[4.5rem] text-center text-[9px] font-semibold leading-tight tracking-tight sm:max-w-none sm:text-[10px] ${active ? "text-gray-900" : "text-gray-500"}`}
+                  >
+                    {label}
                   </span>
-                )}
-              </div>
-              <span className="text-[9px] font-medium text-gray-500">{label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+                </>
+              );
+              if (key === "cart") {
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    data-testid="link-cart"
+                    className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl py-1.5 transition-transform active:scale-[0.97]"
+                    onClick={() => setMiniCartOpen(true)}
+                  >
+                    {inner}
+                  </button>
+                );
+              }
+              return (
+                <Link key={key} href={href!} className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl py-1.5 transition-transform active:scale-[0.97]">
+                  {inner}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
 
       {/* ── Overlays ── */}
       <MobileDrawer

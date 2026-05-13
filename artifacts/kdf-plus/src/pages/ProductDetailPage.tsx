@@ -780,7 +780,9 @@ export default function ProductDetailPage() {
       </main>
 
       {/* Sticky mobile CTA — compact premium */}
-      <div className="fixed bottom-14 sm:bottom-0 left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+      <div className="fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
+        style={{ bottom: "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))" }}
+      >
         {/* Price + name strip */}
         <div className="flex items-center justify-between mb-1.5 px-0.5">
           <p className="text-[11px] text-gray-400 truncate max-w-[55%]">{product.name}</p>

@@ -106,8 +106,15 @@ function SocialShareBar({ url, title, mobile }: { url: string; title: string; mo
 
   if (mobile) {
     return (
-      <div className="fixed bottom-14 left-0 right-0 z-[500] sm:hidden"
-        style={{ background: "rgba(255,255,255,0.97)", borderTop: "1px solid #e5e7eb", backdropFilter: "blur(8px)" }}>
+      <div
+        className="fixed left-0 right-0 z-[500] sm:hidden"
+        style={{
+          bottom: "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))",
+          background: "rgba(255,255,255,0.97)",
+          borderTop: "1px solid #e5e7eb",
+          backdropFilter: "blur(8px)",
+        }}
+      >
         <div className="flex items-center justify-around px-4 py-2.5">
           <span className="text-xs font-semibold text-gray-500 flex items-center gap-1">
             <Share2 className="w-3.5 h-3.5" /> Share

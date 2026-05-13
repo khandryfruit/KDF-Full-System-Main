@@ -438,7 +438,7 @@
 
 @media (max-width: 639px) {
   :root {
-    --mobile-nav-h: 56px;
+    --mobile-nav-h: 68px;
   }
 
   /* Spacer that pushes all page bottoms above the nav */
