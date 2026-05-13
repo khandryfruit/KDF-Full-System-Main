@@ -61,20 +61,22 @@ export default defineConfig({
     // Forward /api/* to the API server so Vite does not intercept these requests
     // and return a "public base URL /admin/" error when base !== "/".
     //
+    // Proxy target for server-side forwarding (Vite process, not the browser).
     // On Replit: API server runs on localhost:8080 — no env var needed.
-    // On Railway: set VITE_API_BASE_URL=https://<api-server-service>.up.railway.app
-    //   (the separate api-server Railway service URL).
+    // On Railway: set API_PROXY_TARGET=http://workspaceapi-server.railway.internal:8080
+    //   (Railway private network — avoids EAI_AGAIN DNS failures on public hostnames).
+    //   VITE_API_BASE_URL is used by the browser for direct calls; this is separate.
     proxy: {
       // Forward /api/* directly to the Express server.
       "/api": {
-        target: process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
         changeOrigin: true,
         secure: false,
       },
       // Forward /admin/api/* to Express as well (production-path alias).
       // Express has a /admin/api → /api rewrite middleware that handles these.
       "/admin/api": {
-        target: process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
         changeOrigin: true,
         secure: false,
       },
@@ -87,12 +89,12 @@ export default defineConfig({
     // Same proxy as dev server — required so vite preview forwards /api to the API service.
     proxy: {
       "/api": {
-        target: process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
         changeOrigin: true,
         secure: false,
       },
       "/admin/api": {
-        target: process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
         changeOrigin: true,
         secure: false,
       },
