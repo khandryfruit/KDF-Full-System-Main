@@ -84,5 +84,18 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Same proxy as dev server — required so vite preview forwards /api to the API service.
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/admin/api": {
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });
