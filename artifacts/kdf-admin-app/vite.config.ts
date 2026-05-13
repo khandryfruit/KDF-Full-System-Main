@@ -7,7 +7,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 const DEV_PORT = 5173;
 const PREVIEW_PORT = 8080;
 
-// BASE_PATH defaults to "/app/" so Railway deployments work without setting this var.
+// Fixed dev/preview ports only. Production uses scripts/railway-static-server.mjs (Railway PORT at runtime).
 const basePath = process.env.BASE_PATH ?? "/app/";
 
 export default defineConfig({

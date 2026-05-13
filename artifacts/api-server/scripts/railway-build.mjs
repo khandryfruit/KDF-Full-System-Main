@@ -31,7 +31,7 @@ run("pnpm", ["install", "--frozen-lockfile"]);
 const prod = { env: { NODE_ENV: "production" } };
 run("pnpm", ["--filter", "@workspace/kdf-plus", "run", "railway:build"], prod);
 run("pnpm", ["--filter", "@workspace/kdf-admin", "run", "railway:build"], prod);
-run("pnpm", ["--filter", "@workspace/kdf-admin-app", "run", "build"], prod);
+run("pnpm", ["--filter", "@workspace/kdf-admin-app", "run", "railway:build"], prod);
 run("pnpm", ["--filter", "@workspace/api-server", "run", "build"], prod);
 
 console.log("[railway-build] done.");

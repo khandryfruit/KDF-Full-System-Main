@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 RUN pnpm --filter @workspace/kdf-plus run railway:build
 RUN pnpm --filter @workspace/kdf-admin run railway:build
-RUN pnpm --filter @workspace/kdf-admin-app run build
+RUN pnpm --filter @workspace/kdf-admin-app run railway:build
 RUN pnpm --filter @workspace/api-server run build
 
 FROM node:22-bookworm AS runner
