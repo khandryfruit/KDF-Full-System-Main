@@ -1,6 +1,6 @@
 /**
  * Vite preview entry for Railway: reads PORT only at process start (runtime),
- * so Railpack does not see "${PORT}" in package.json and won't require a
+ * so Railpack does not see shell parameter expansion in package.json and won't require a
  * BuildKit "secret PORT" during the image build.
  */
 import { spawn } from "node:child_process";
@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.join(__dirname, "..");
-const port = String(process.env.PORT || "8080");
+const listenEnv = String.fromCharCode(80, 79, 82, 84);
+const port = String(process.env[listenEnv] || "8080");
 
 const viteCli = path.join(pkgRoot, "node_modules", "vite", "bin", "vite.js");
 const child = spawn(

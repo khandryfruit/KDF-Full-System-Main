@@ -4,13 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const isBuild = process.argv.includes("build");
-
-const rawPort = process.env.PORT;
-if (!isBuild && !rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
-const port = Number(rawPort ?? "3000");
+const DEV_PORT = 5173;
+const PREVIEW_PORT = 8080;
 
 // BASE_PATH defaults to "/saas-platform/" so Railway deployments work without setting this var.
 const basePath = process.env.BASE_PATH ?? "/saas-platform/";
@@ -48,7 +43,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port,
+    port: DEV_PORT,
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
@@ -66,7 +61,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port,
+    port: PREVIEW_PORT,
     host: "0.0.0.0",
     allowedHosts: true,
   },

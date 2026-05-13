@@ -4,16 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const isBuild = process.argv.includes("build");
-
-const rawPort = process.env.PORT;
-if (!isBuild && !rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
-const port = rawPort ? Number(rawPort) : 3000;
-if (rawPort && (Number.isNaN(port) || port <= 0)) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// Fixed dev/preview ports only in this file (see kdf-admin vite.config for Railpack note).
+const DEV_PORT = 5173;
+const PREVIEW_PORT = 8080;
 
 const basePath = process.env.BASE_PATH ?? "/";
 
@@ -78,7 +71,7 @@ export default defineConfig(async ({ command }) => ({
     },
   },
   server: {
-    port,
+    port: DEV_PORT,
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
@@ -88,7 +81,8 @@ export default defineConfig(async ({ command }) => ({
     },
   },
   preview: {
-    port,
+    port: PREVIEW_PORT,
+    strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
     proxy,

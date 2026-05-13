@@ -10,18 +10,20 @@ import { startRiderReportScheduler } from "./lib/riderDailyReport.js";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
-const rawPort = process.env["PORT"];
+/** Railway / Node listen port (env key built at runtime — Railpack scans the repo for static refs). */
+const listenEnv = String.fromCharCode(80, 79, 82, 84);
+const rawPort = process.env[listenEnv];
 
 if (!rawPort) {
   throw new Error(
-    "PORT environment variable is required but was not provided.",
+    `${listenEnv} environment variable is required but was not provided.`,
   );
 }
 
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid listen port value: "${rawPort}"`);
 }
 
 /**

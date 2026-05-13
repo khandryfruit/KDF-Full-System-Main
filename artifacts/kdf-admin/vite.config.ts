@@ -4,11 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// Do not read `process.env.PORT` at module scope. Railway Railpack may treat it as a
-// Docker BuildKit *secret* required during `vite build`; the build container often has
-// no PORT secret → `failed to solve: secret PORT not found`.
-// Use fixed defaults here; at runtime Railway sets PORT — use scripts/railway-preview.mjs
-// (do not put ${PORT} in package.json scripts or Railpack treats PORT as a build secret).
+// Fixed dev/preview ports only in this file. Railway Railpack scans the whole monorepo for
+// the standard listen env key and may require it as a BuildKit secret during unrelated
+// static site builds — keep that key out of vite configs here.
+// Runtime listen port for preview: scripts/railway-preview.mjs (Railway injects the env var).
 const DEV_PORT = 5173;
 const PREVIEW_PORT = 8080;
 
