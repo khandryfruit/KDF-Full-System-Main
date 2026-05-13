@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, productsTable } from "@workspace/db";
-import { eq, ilike, and, desc, asc, sql, or } from "drizzle-orm";
+import { db, productsTable, shopifyProductsTable } from "@workspace/db";
+import { eq, ilike, and, desc, asc, sql, or, exists } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
@@ -47,7 +47,27 @@ router.get("/products", async (req, res) => {
 
     const conditions: any[] = [eq(productsTable.active, true)];
     if (categoryId) conditions.push(eq(productsTable.categoryId, parseInt(categoryId as string)));
-    if (featured === "true") conditions.push(eq(productsTable.featured, true));
+    /* Featured on the storefront must match either `products.featured` (admin Products)
+       OR `shopify_products.is_featured` (admin Featured Products / chat flags), which
+       historically were not kept in sync. */
+    if (featured === "true") {
+      conditions.push(
+        or(
+          eq(productsTable.featured, true),
+          exists(
+            db
+              .select({ id: shopifyProductsTable.id })
+              .from(shopifyProductsTable)
+              .where(
+                and(
+                  eq(shopifyProductsTable.shopifyProductId, productsTable.shopifyProductId),
+                  eq(shopifyProductsTable.isFeatured, true),
+                ),
+              ),
+          ),
+        ),
+      );
+    }
     if (search) conditions.push(ilike(productsTable.name, `%${search}%`));
 
     let orderBy: any = desc(productsTable.createdAt);

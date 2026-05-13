@@ -402,11 +402,6 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 }
 
 /* ─── Cloudflare / YouTube / Direct video player helper ─────── */
-function getYoutubeId(url: string) {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
-
 type VideoBanner = {
   id: number; title: string; subtitle?: string;
   cfStreamId?: string; cfAccountId?: string;
@@ -426,6 +421,20 @@ type MobileReel = {
   ctaLabel?: string; ctaUrl?: string; linkedProductId?: number;
   viewCount: number; likeCount: number;
 };
+
+function getYoutubeId(url: string) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+/** Rows in `video_banners` without any playable media still hide image banners; filter those out. */
+function videoBannerHasRenderableMedia(b: VideoBanner): boolean {
+  if (b.cfStreamId && b.cfAccountId) return true;
+  if ((b.directVideoUrl ?? "").trim() || (b.mobileVideoUrl ?? "").trim()) return true;
+  if (b.youtubeUrl && getYoutubeId(b.youtubeUrl)) return true;
+  if ((b.fallbackImageUrl ?? "").trim() || (b.mobileFallbackImageUrl ?? "").trim()) return true;
+  return false;
+}
 
 /* ─── Video Banner Hero ──────────────────────────────────────── */
 function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
@@ -1060,6 +1069,8 @@ export default function HomePage() {
 
   const [isMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
+  const playableVideoBanners = (Array.isArray(videoBanners) ? videoBanners : []).filter(videoBannerHasRenderableMedia);
+
   return (
     <>
       <Helmet>
@@ -1072,9 +1083,9 @@ export default function HomePage() {
 
       <main className="bg-gray-50 min-h-screen">
 
-        {/* Video Banner Hero — shows above image banner if video banners exist */}
-        {videoBanners.length > 0 ? (
-          <VideoBannerHero banners={videoBanners} />
+        {/* Video hero only when at least one row has real media; otherwise image /fallback hero */}
+        {playableVideoBanners.length > 0 ? (
+          <VideoBannerHero banners={playableVideoBanners} />
         ) : (
           <HeroBanner banners={banners} loading={bannersLoading} />
         )}

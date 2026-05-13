@@ -5,6 +5,7 @@ import {
   shopifyProductsTable, shopifyCampaignsTable, shopifyWebhookLogsTable,
   shopifyEmailCampaignsTable, shopifyEmailLogsTable,
   syncJobsTable, campaignMessageQueueTable,
+  productsTable,
 } from "@workspace/db/schema";
 import { abandonedCheckoutsTable } from "@workspace/db/schema";
 import { emailSettingsTable, aiSettingsTable } from "@workspace/db/schema";
@@ -3323,7 +3324,21 @@ router.put("/admin/shopify/products/:id/flags", adminMiddleware as any, async (r
     if (typeof isRecommended === "boolean") updates.isRecommended = isRecommended;
     if (typeof recommendPriority === "number") updates.recommendPriority = recommendPriority;
 
+    const [existing] = await db
+      .select({ shopifyProductId: shopifyProductsTable.shopifyProductId })
+      .from(shopifyProductsTable)
+      .where(eq(shopifyProductsTable.id, id))
+      .limit(1);
+
     await db.update(shopifyProductsTable).set(updates).where(eq(shopifyProductsTable.id, id));
+
+    if (typeof isFeatured === "boolean" && existing?.shopifyProductId) {
+      await db
+        .update(productsTable)
+        .set({ featured: isFeatured, updatedAt: new Date() })
+        .where(eq(productsTable.shopifyProductId, existing.shopifyProductId));
+    }
+
     res.json({ ok: true });
   } catch (err: any) {
     req.log.error(err);
