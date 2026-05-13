@@ -6,7 +6,13 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const isBuild = process.argv.includes("build");
 
-const rawPort = process.env.PORT;
+// During `vite build` (Railpack build step), PORT is irrelevant — only dev/preview need it.
+// Bracket notation prevents Railpack's static scanner from adding PORT to the BuildKit
+// secret list, which causes "secret PORT not found" failures because Railway only provides
+// PORT at container runtime, not at image-build time.
+const rawPort: string | undefined = isBuild
+  ? undefined
+  : (process.env as Record<string, string | undefined>)["PORT"];
 if (!isBuild && !rawPort) {
   throw new Error("PORT environment variable is required but was not provided.");
 }
