@@ -1,5 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { Link } from "wouter";
+import { useMemo } from "react";
 import { useListCategories } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -26,9 +27,10 @@ function CategoryCard({ cat }: { cat: Category }) {
         >
           {cat.imageUrl ? (
             <img
-              src={getProductImageSrc(cat.imageUrl)}
+              src={getProductImageSrc(cat.imageUrl, { maxWidth: 480 })}
               alt={cat.name}
               loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
@@ -67,8 +69,14 @@ function CategoryCardSkeleton() {
 }
 
 export default function CategoriesPage() {
-  const { data: categoriesData, isLoading } = useListCategories();
-  const categories: Category[] = asArrayFromApi<Category>(categoriesData);
+  const { data: categoriesData, isLoading, isError, error, isFetching } = useListCategories({
+    query: { staleTime: 120_000, refetchOnWindowFocus: false },
+  });
+  const categories: Category[] = useMemo(
+    () => asArrayFromApi<Category>(categoriesData),
+    [categoriesData],
+  );
+  const showSkeleton = isLoading || (isFetching && categories.length === 0 && !isError);
 
   return (
     <>
@@ -86,24 +94,34 @@ export default function CategoriesPage() {
         <div className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">All Categories</h1>
           <p className="text-gray-500 mt-1 text-sm sm:text-base">
-            {isLoading ? "Loading categories…" : `${categories.length} categor${categories.length === 1 ? "y" : "ies"} available`}
+            {showSkeleton
+              ? "Loading categories…"
+              : isError
+                ? "Could not load categories."
+                : `${categories.length} categor${categories.length === 1 ? "y" : "ies"} available`}
           </p>
         </div>
 
         {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-          {isLoading
-            ? Array.from({ length: 8 }).map((_, i) => <CategoryCardSkeleton key={i} />)
-            : categories.length === 0
-            ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
-                <span className="text-5xl mb-4">🥜</span>
-                <h3 className="text-lg font-semibold text-gray-700">No categories yet</h3>
-                <p className="text-gray-400 text-sm mt-1">Check back soon.</p>
-              </div>
-            )
-            : categories.map((cat) => <CategoryCard key={cat.id} cat={cat} />)
-          }
+          {showSkeleton ? (
+            Array.from({ length: 8 }).map((_, i) => <CategoryCardSkeleton key={i} />)
+          ) : isError ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-destructive/20 bg-destructive/5 px-4">
+              <h3 className="text-lg font-semibold text-gray-800">Categories unavailable</h3>
+              <p className="text-gray-500 text-sm mt-2 max-w-md">
+                {error instanceof Error ? error.message : "Please refresh the page or try again shortly."}
+              </p>
+            </div>
+          ) : categories.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
+              <span className="text-5xl mb-4">🥜</span>
+              <h3 className="text-lg font-semibold text-gray-700">No categories yet</h3>
+              <p className="text-gray-400 text-sm mt-1">Check back soon.</p>
+            </div>
+          ) : (
+            categories.map((cat) => <CategoryCard key={cat.id} cat={cat} />)
+          )}
         </div>
       </main>
     </>

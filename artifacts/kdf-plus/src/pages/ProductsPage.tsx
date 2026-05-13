@@ -73,7 +73,9 @@ export default function ProductsPage() {
     }
   }, [search]);
 
-  const { data: categoriesData } = useListCategories();
+  const { data: categoriesData } = useListCategories({
+    query: { staleTime: 120_000, refetchOnWindowFocus: false },
+  });
   const categories = asArrayFromApi(categoriesData);
 
   const queryParams = {
@@ -88,7 +90,8 @@ export default function ProductsPage() {
   const { data, isError, error, refetch, isFetching, isPending } = useListProducts(queryParams, {
     query: {
       queryKey: ["products", JSON.stringify(queryParams)],
-      staleTime: 60_000,
+      staleTime: 120_000,
+      refetchOnWindowFocus: false,
     },
   });
 

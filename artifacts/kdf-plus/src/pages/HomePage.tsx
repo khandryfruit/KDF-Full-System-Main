@@ -230,9 +230,11 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
       >
         {/* Slides */}
         {banners.map((banner, i) => {
-          const desktopImg = banner.imageUrl ? getProductImageSrc(banner.imageUrl) : null;
-          const mobileImg  = (banner as any).mobileImageUrl
-            ? getProductImageSrc((banner as any).mobileImageUrl)
+          const desktopImg = banner.imageUrl
+            ? getProductImageSrc(banner.imageUrl, { maxWidth: isMobile ? 960 : 1600 })
+            : null;
+          const mobileImg = (banner as any).mobileImageUrl
+            ? getProductImageSrc((banner as any).mobileImageUrl, { maxWidth: 800 })
             : desktopImg;
           const bgImg = isMobile ? mobileImg : desktopImg;
 
@@ -268,6 +270,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                   alt={banner.title}
                   className="absolute inset-0 w-full h-full object-cover object-center"
                   loading={i === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={i === 0 ? "high" : "low"}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
@@ -941,7 +945,7 @@ function CategoryGrid({ categories, loading }: { categories: Category[]; loading
             >
               {cat.imageUrl ? (
                 <img
-                  src={getProductImageSrc(cat.imageUrl)}
+                  src={getProductImageSrc(cat.imageUrl, { maxWidth: 480 })}
                   alt={cat.name}
                   loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
@@ -1029,22 +1033,27 @@ function ProductGrid({ products, loading }: { products: Product[]; loading: bool
 
 /* ─── Main Page ───────────────────────────────────────────────── */
 export default function HomePage() {
-  const { data: bannersData, isLoading: bannersLoading } = useListBanners({
-    platform: "website",
-    placement: "hero",
+  const { data: bannersData, isLoading: bannersLoading } = useListBanners(
+    {
+      platform: "website",
+      placement: "hero",
+    },
+    { query: { staleTime: 120_000 } },
+  );
+  const { data: categoriesData, isLoading: catsLoading } = useListCategories({
+    query: { staleTime: 120_000 },
   });
-  const { data: categoriesData, isLoading: catsLoading }      = useListCategories();
   const { data: featuredData,   isLoading: featuredLoading }  = useListProducts(
     { featured: true, limit: 10 },
-    { query: { queryKey: ["products", "featured"], staleTime: 60_000 } },
+    { query: { queryKey: ["products", "featured"], staleTime: 120_000, refetchOnWindowFocus: false } },
   );
   const { data: allProductsData, isLoading: allLoading } = useListProducts(
     { limit: 20, sortBy: "newest" as const },
-    { query: { queryKey: ["products", "newest"], staleTime: 60_000 } },
+    { query: { queryKey: ["products", "newest"], staleTime: 120_000, refetchOnWindowFocus: false } },
   );
   const { data: dealsData, isLoading: dealsLoading } = useListProducts(
     { limit: 10, hasDiscount: true } as any,
-    { query: { queryKey: ["products", "deals"], staleTime: 60_000 } },
+    { query: { queryKey: ["products", "deals"], staleTime: 120_000, refetchOnWindowFocus: false } },
   );
 
   const banners = useMemo(() => asArrayFromApi<Banner>(bannersData), [bannersData]);
@@ -1065,20 +1074,22 @@ export default function HomePage() {
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["announcements"],
     queryFn: () => fetch("/api/announcements").then(r => r.ok ? r.json() : []),
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: videoBanners = [] } = useQuery<VideoBanner[]>({
     queryKey: ["video-banners"],
     queryFn: () => fetch("/api/video-banners?platform=website").then(r => r.ok ? r.json() : []),
-    staleTime: 60 * 1000,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: mobileReels = [] } = useQuery<MobileReel[]>({
     queryKey: ["mobile-reels"],
     queryFn: () => fetch("/api/mobile-reels").then(r => r.ok ? r.json() : []),
-    staleTime: 60 * 1000,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 
   const [isMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);

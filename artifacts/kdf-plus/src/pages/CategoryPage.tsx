@@ -13,7 +13,9 @@ import { asArrayFromApi } from "@/lib/asArrayFromApi";
 
 export default function CategoryPage() {
   const params = useParams<{ slug: string }>();
-  const { data: categoriesData } = useListCategories();
+  const { data: categoriesData } = useListCategories({
+    query: { staleTime: 120_000, refetchOnWindowFocus: false },
+  });
   const categories = asArrayFromApi(categoriesData);
   const category = categories.find((c) => c.slug === params.slug);
 

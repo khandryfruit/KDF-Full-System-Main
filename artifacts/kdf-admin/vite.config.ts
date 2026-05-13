@@ -67,6 +67,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: "es2018",
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@tanstack/react-query")) return "vendor-rq";
+          if (id.includes("lucide-react")) return "vendor-icons";
+        },
+      },
+    },
   },
   server: {
     port,

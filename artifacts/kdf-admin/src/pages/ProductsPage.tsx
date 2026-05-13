@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { API_BASE } from "@/lib/apiBase";
+import { optimizeCloudinaryDelivery } from "@/lib/imageDelivery";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface ProductVariant {
@@ -52,11 +53,17 @@ interface ProductVariant {
 const VARIANT_TYPES = ["Weight", "Size", "Color", "Flavor", "Material", "Custom"] as const;
 
 /* ─── Image helpers ──────────────────────────────────────── */
-function getImageUrl(path: string): string {
+function resolveProductImagePath(path: string): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
   if (path.startsWith("/objects/")) return `/api/storage${path}`;
   return path;
+}
+
+/** Catalog / table images — Cloudinary gets bounded width; previews use {@link resolveProductImagePath}. */
+function getImageUrl(path: string, opts?: { maxWidth?: number }): string {
+  const base = resolveProductImagePath(path);
+  return optimizeCloudinaryDelivery(base, opts?.maxWidth);
 }
 
 /* ─── Upload types ───────────────────────────────────────── */
@@ -88,21 +95,24 @@ function useProductImageUpload() {
         onProgress(Math.round(fake));
       }, 120);
 
-      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      clearInterval(ticker);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({})) as { error?: string; detail?: string };
-        const msg = errData.detail ?? errData.error ?? `Server error ${res.status}`;
-        onProgress(0);
-        return { error: msg };
+      try {
+        const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+          const msg = errData.detail ?? errData.error ?? `Server error ${res.status}`;
+          onProgress(0);
+          return { error: msg };
+        }
+        const data = await res.json();
+        onProgress(100);
+        return { path: data.objectPath, savedPct: data.savedPct ?? 0 };
+      } finally {
+        clearInterval(ticker);
       }
-      const data = await res.json();
-      onProgress(100);
-      return { path: data.objectPath, savedPct: data.savedPct ?? 0 };
     } catch (e: unknown) {
       onProgress(0);
       return { error: e instanceof Error ? e.message : "Network error — check connection" };
@@ -261,10 +271,11 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
               style={{ borderColor: i === 0 ? "#5FA800" : "#e5e7eb" }}
             >
               <img
-                src={getImageUrl(img)}
+                src={getImageUrl(img, { maxWidth: 640 })}
                 alt={`Product image ${i + 1}`}
                 className="w-full h-full object-cover"
                 loading="lazy"
+                decoding="async"
               />
 
               {/* Main badge */}
@@ -281,7 +292,7 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
                   {/* Preview */}
                   <button
                     type="button"
-                    onClick={() => setPreview(getImageUrl(img))}
+                    onClick={() => setPreview(resolveProductImagePath(img))}
                     className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-gray-700 hover:bg-white transition-colors shadow"
                     title="Preview"
                   >
@@ -1361,9 +1372,10 @@ export default function ProductsPage() {
                       <div className={`flex items-center gap-3 ${!product.active ? "opacity-60" : ""}`}>
                         {(product as any).images?.[0] ? (
                           <img
-                            src={getImageUrl((product as any).images[0])}
+                            src={getImageUrl((product as any).images[0], { maxWidth: 120 })}
                             alt={product.name}
                             loading="lazy"
+                            decoding="async"
                             className="w-10 h-10 rounded-lg object-cover border bg-muted flex-shrink-0"
                           />
                         ) : (

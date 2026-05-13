@@ -32,7 +32,7 @@ export function ProductCard({ product }: ProductCardProps) {
       : null;
 
   const rawImage = product.images?.[0];
-  const imageUrl = rawImage ? getProductImageSrc(rawImage) : null;
+  const imageUrl = rawImage ? getProductImageSrc(rawImage, { maxWidth: 560 }) : null;
 
   const initial = product.name?.[0]?.toUpperCase() ?? "N";
 

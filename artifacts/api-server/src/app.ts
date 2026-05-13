@@ -353,7 +353,7 @@ if (process.env.NODE_ENV === "production") {
    * strip that prefix when looking up files in adminDist:
    *   GET /admin/assets/main.js  →  adminDist/assets/main.js  ✓
    */
-  app.use("/admin", express.static(adminDist, { index: false }));
+  app.use("/admin", adminStatic);
   app.get(["/admin", "/admin/*path"], (req: Request, res: Response) => {
     const indexHtml = path.join(adminDist, "index.html");
     if (existsSync(indexHtml)) {
