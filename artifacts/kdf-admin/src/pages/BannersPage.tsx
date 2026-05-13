@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import {
   useListBanners, useCreateBanner, useUpdateBanner, useDeleteBanner,
   useListProducts, useListCategories,
+  getListBannersQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,25 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { API_BASE } from "@/lib/apiBase";
+
+/** DB default tailwind gradient — rows with real hero media should still list under Hero. */
+const DEFAULT_BANNER_BG = "from-[#5FA800] to-[#4d8a00]";
+
+function storagePublicUrl(path: string): string {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const base = API_BASE.replace(/\/+$/, "");
+  if (path.startsWith("/objects/")) return `${base}/api/storage${path}`;
+  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
+function isPromoCard(b: { bgColor?: string | null; imageUrl?: string | null; mobileImageUrl?: string | null; videoUrl?: string | null; mobileVideoUrl?: string | null }) {
+  const bg = typeof b?.bgColor === "string" ? b.bgColor.trim() : "";
+  if (!bg || !bg.startsWith("from-")) return false;
+  const hasHeroMedia = !!(b.imageUrl || b.mobileImageUrl || b.videoUrl || b.mobileVideoUrl);
+  if (bg === DEFAULT_BANNER_BG && hasHeroMedia) return false;
+  return true;
+}
 
 /* ── Banner Image Uploader ──────────────────────────── */
 function BannerImageUploader({
@@ -106,7 +126,7 @@ function BannerImageUploader({
 
       {value ? (
         <div className="relative border rounded-xl overflow-hidden bg-muted" style={{ aspectRatio }}>
-          <img src={value} alt="Banner preview" className="w-full h-full object-cover" />
+          <img src={storagePublicUrl(value)} alt="Banner preview" className="w-full h-full object-cover" />
           <button
             type="button"
             onClick={() => { onChange(""); setUploadSuccess(false); }}
@@ -483,11 +503,13 @@ export default function BannersPage() {
   const createMutation = useCreateBanner();
   const updateMutation = useUpdateBanner();
   const deleteMutation = useDeleteBanner();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/banners"] });
+  const listKey = getListBannersQueryKey();
+  const invalidateBanners = () =>
+    queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
 
-  /* split banners: promo = has bgColor set */
-  const heroBanners = (allBanners ?? []).filter((b: any) => !b.bgColor || b.bgColor === "");
-  const promoBanners = (allBanners ?? []).filter((b: any) => b.bgColor && b.bgColor !== "");
+  /* split banners: promo = gradient "from-" cards; hero = everything else */
+  const heroBanners = (allBanners ?? []).filter((b: any) => !isPromoCard(b));
+  const promoBanners = (allBanners ?? []).filter((b: any) => isPromoCard(b));
 
   const isBusy = createMutation.isPending || updateMutation.isPending;
 
@@ -542,20 +564,74 @@ export default function BannersPage() {
   }
   function handleHeroSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.imageUrl && !formData.videoUrl) { toast({ variant: "destructive", title: "Please upload a banner image or video" }); return; }
-    if (formData.targetType === "product" && !formData.targetId) { toast({ variant: "destructive", title: "Please select a product" }); return; }
-    if (formData.targetType === "category" && !formData.targetId) { toast({ variant: "destructive", title: "Please select a category" }); return; }
+    if (!formData.imageUrl && !formData.videoUrl) {
+      toast({ variant: "destructive", title: "Please upload a banner image or video" });
+      return;
+    }
+    if (formData.targetType === "product" && !formData.targetId) {
+      toast({ variant: "destructive", title: "Please select a product" });
+      return;
+    }
+    if (formData.targetType === "category" && !formData.targetId) {
+      toast({ variant: "destructive", title: "Please select a category" });
+      return;
+    }
     const payload = buildHeroPayload();
+    if (import.meta.env.DEV) {
+      // Temporary: trace full create flow in devtools
+      console.debug("[BannersPage] hero save payload", payload);
+    }
     if (heroEditId) {
-      updateMutation.mutate({ id: heroEditId, data: payload as any }, {
-        onSuccess: () => { invalidate(); setHeroOpen(false); toast({ title: "Banner updated" }); },
-        onError: () => toast({ variant: "destructive", title: "Failed to update banner" }),
-      });
+      toast({ title: "Updating banner…" });
+      updateMutation.mutate(
+        { id: heroEditId, data: payload as any },
+        {
+          onSuccess: (updated) => {
+            queryClient.setQueryData(listKey, (old: unknown) => {
+              const list = Array.isArray(old) ? old : [];
+              return list.map((row: any) => (row.id === updated.id ? updated : row));
+            });
+            void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+            setHeroOpen(false);
+            toast({ title: "Banner updated", description: "Changes are saved." });
+          },
+          onError: (err: unknown) => {
+            console.error("[BannersPage] update banner failed", err);
+            toast({
+              variant: "destructive",
+              title: "Failed to update banner",
+              description: err instanceof Error ? err.message : "Request failed",
+            });
+          },
+        },
+      );
     } else {
-      createMutation.mutate({ data: payload as any }, {
-        onSuccess: () => { invalidate(); setHeroOpen(false); toast({ title: "Banner created" }); },
-        onError: () => toast({ variant: "destructive", title: "Failed to create banner" }),
-      });
+      toast({ title: "Creating banner…", description: "Saving to database." });
+      createMutation.mutate(
+        { data: payload as any },
+        {
+          onSuccess: (created) => {
+            if (import.meta.env.DEV) {
+              console.debug("[BannersPage] banner created", created);
+            }
+            queryClient.setQueryData(listKey, (old: unknown) => {
+              const list = Array.isArray(old) ? old : [];
+              return [...list, created].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+            });
+            void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+            setHeroOpen(false);
+            toast({ title: "Banner created", description: "It appears in the list below." });
+          },
+          onError: (err: unknown) => {
+            console.error("[BannersPage] create banner failed", err);
+            toast({
+              variant: "destructive",
+              title: "Failed to create banner",
+              description: err instanceof Error ? err.message : "Check network tab for POST /api/banners",
+            });
+          },
+        },
+      );
     }
   }
 
@@ -594,14 +670,46 @@ export default function BannersPage() {
       platform: "mobile" as PlatformType,
     };
     if (promoEditId) {
+      toast({ title: "Updating promo card…" });
       updateMutation.mutate({ id: promoEditId, data: payload as any }, {
-        onSuccess: () => { invalidate(); setPromoOpen(false); toast({ title: "Promo card updated ✅" }); },
-        onError: () => toast({ variant: "destructive", title: "Failed to update" }),
+        onSuccess: (updated) => {
+          queryClient.setQueryData(listKey, (old: unknown) => {
+            const list = Array.isArray(old) ? old : [];
+            return list.map((row: any) => (row.id === updated.id ? updated : row));
+          });
+          void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+          setPromoOpen(false);
+          toast({ title: "Promo card updated", description: "Saved." });
+        },
+        onError: (err: unknown) => {
+          console.error("[BannersPage] update promo failed", err);
+          toast({
+            variant: "destructive",
+            title: "Failed to update",
+            description: err instanceof Error ? err.message : "Request failed",
+          });
+        },
       });
     } else {
+      toast({ title: "Creating promo card…" });
       createMutation.mutate({ data: payload as any }, {
-        onSuccess: () => { invalidate(); setPromoOpen(false); toast({ title: "Promo card created ✅" }); },
-        onError: () => toast({ variant: "destructive", title: "Failed to create" }),
+        onSuccess: (created) => {
+          queryClient.setQueryData(listKey, (old: unknown) => {
+            const list = Array.isArray(old) ? old : [];
+            return [...list, created].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+          });
+          void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+          setPromoOpen(false);
+          toast({ title: "Promo card created", description: "Saved." });
+        },
+        onError: (err: unknown) => {
+          console.error("[BannersPage] create promo failed", err);
+          toast({
+            variant: "destructive",
+            title: "Failed to create",
+            description: err instanceof Error ? err.message : "Request failed",
+          });
+        },
       });
     }
   }
@@ -609,8 +717,22 @@ export default function BannersPage() {
   function handleDelete(id: number, type: "hero" | "promo") {
     if (!confirm(`Delete this ${type === "promo" ? "promo card" : "banner"}?`)) return;
     deleteMutation.mutate({ id }, {
-      onSuccess: () => { invalidate(); toast({ title: "Deleted" }); },
-      onError: () => toast({ variant: "destructive", title: "Failed to delete" }),
+      onSuccess: () => {
+        queryClient.setQueryData(listKey, (old: unknown) => {
+          const list = Array.isArray(old) ? old : [];
+          return list.filter((row: any) => row.id !== id);
+        });
+        void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+        toast({ title: "Deleted" });
+      },
+      onError: (err: unknown) => {
+        console.error("[BannersPage] delete failed", err);
+        toast({
+          variant: "destructive",
+          title: "Failed to delete",
+          description: err instanceof Error ? err.message : "Request failed",
+        });
+      },
     });
   }
 
