@@ -88,7 +88,14 @@ async function uploadBufferToGcs(
   // Cloudinary errors propagate directly — no silent fallback to GCS, which is
   // not available outside of Replit. This gives clear error messages instead of
   // a confusing second failure from unconfigured object storage.
-  if (isCloudinaryConfigured() && !isRunningOnReplit()) {
+  if (!isRunningOnReplit()) {
+    if (!isCloudinaryConfigured()) {
+      throw new Error(
+        "Image uploads on Railway require Cloudinary to be configured. " +
+        "Please set CLOUDINARY_URL (format: cloudinary://api_key:api_secret@cloud_name) " +
+        "in your Railway environment variables and redeploy."
+      );
+    }
     return uploadBufferToCloudinary(buffer, "kdf-uploads");
   }
 

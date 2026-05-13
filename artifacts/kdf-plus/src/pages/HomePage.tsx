@@ -1109,19 +1109,21 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Featured Products */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-          <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
-            <SectionHeader
-              icon={Sparkles}
-              label="Hand-Picked"
-              title="Featured Products"
-              viewAllHref="/products?featured=true"
-              testId="link-all-featured"
-            />
-            <ProductCarousel products={featuredProducts} loading={featuredLoading} />
-          </div>
-        </section>
+        {/* Featured Products — only render when there are featured products or still loading */}
+        {(featuredLoading || featuredProducts.length > 0) && (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
+              <SectionHeader
+                icon={Sparkles}
+                label="Hand-Picked"
+                title="Featured Products"
+                viewAllHref="/products?featured=true"
+                testId="link-all-featured"
+              />
+              <ProductCarousel products={featuredProducts} loading={featuredLoading} />
+            </div>
+          </section>
+        )}
 
         {/* Mobile Reels */}
         {mobileReels.length > 0 && (

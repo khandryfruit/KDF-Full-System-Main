@@ -1,0 +1,253 @@
+CRITICAL FRONTEND FIX REQUIRED — Backend/API VERIFIED WORKING
+
+━━━━━━━━━━━━━━━
+CONFIRMED STATUS
+━━━━━━━━━━━━━━━
+
+Production API manually verified:
+
+https://api.khanbabadryfruits.com/api/products/almonds-250gm
+
+API correctly returns product JSON object.
+
+This means:
+
+✅ Product exists in Railway production DB
+✅ Slug exists correctly
+✅ Images exist
+✅ Featured flag exists
+✅ Backend routes working
+✅ Database working
+✅ Cloudinary uploads working
+
+So the remaining issue is ONLY in:
+
+`@workspace/kdf-plus`
+
+━━━━━━━━━━━━━━━
+CURRENT PRODUCTION BUGS
+━━━━━━━━━━━━━━━
+
+Live site:
+https://khanbabadryfruits.com
+
+Issues:
+
+❌ Product detail page shows "Product not found"
+❌ Featured products not rendering correctly
+❌ Hero banners not rendering
+❌ Some product images missing
+❌ Frontend rendering inconsistent despite valid API data
+
+━━━━━━━━━━━━━━━
+ROOT CAUSE LIKELY
+━━━━━━━━━━━━━━━
+
+Frontend is likely expecting WRONG API response shape.
+
+Backend returns DIRECT OBJECT:
+
+```json id="i65g5y"
+{
+  "id": 5,
+  "name": "almonds 250gm",
+  "slug": "almonds-250gm"
+}
+```
+
+But frontend likely expects:
+
+```js id="88c4x8"
+data.product
+```
+
+OR:
+
+```js id="fsljcu"
+data.data
+```
+
+Result:
+
+```js id="79n9n8"
+undefined
+```
+
+which triggers:
+
+```text id="kqjlwm"
+Product not found
+```
+
+━━━━━━━━━━━━━━━
+REQUIRED FIXES
+━━━━━━━━━━━━━━━
+
+1. FIX PRODUCT DETAIL FETCHING
+
+Inspect:
+
+* product detail page
+* `/products/[slug]`
+* `fetchProductBySlug`
+* API service layer
+* React Query/SWR hooks
+* SSR loader
+* hydration logic
+
+Fix incorrect parsing.
+
+━━━━━━━━━━━━━━━
+
+2. CORRECT RESPONSE HANDLING
+
+Likely current broken code:
+
+❌ WRONG:
+
+```js id="hupp0t"
+const product = response.data.product;
+```
+
+OR:
+
+```js id="j7x1hv"
+const product = response.data.data;
+```
+
+OR:
+
+```js id="w01i8y"
+const product = json.product;
+```
+
+━━━━━━━━━━━━━━━
+
+Correct implementation:
+
+✅ CORRECT:
+
+Axios:
+
+```js id="udf0x6"
+const product = response.data;
+```
+
+Fetch:
+
+```js id="zj1t9m"
+const product = await response.json();
+```
+
+Then:
+
+```js id="3s53vc"
+setProduct(product);
+```
+
+━━━━━━━━━━━━━━━
+3. FIX "PRODUCT NOT FOUND" LOGIC
+━━━━━━━━━━━━━━━
+
+Currently frontend is falsely triggering notFound state.
+
+Only show:
+
+```text id="tlgw8d"
+Product not found
+```
+
+when:
+
+* API returns actual 404
+* OR product is truly null
+
+NOT when parsing fails.
+
+━━━━━━━━━━━━━━━
+4. VERIFY ROUTE PARAMS
+━━━━━━━━━━━━━━━
+
+Inspect:
+
+```js id="9pdxtu"
+useParams()
+```
+
+Ensure:
+
+```js id="n8vk1j"
+slug === "almonds-250gm"
+```
+
+No:
+
+* undefined
+* array
+* malformed slug
+* extra slash
+* decoding issue
+
+━━━━━━━━━━━━━━━
+5. FIX FEATURED PRODUCTS
+━━━━━━━━━━━━━━━
+
+API already returns featured=true correctly.
+
+Inspect homepage featured query rendering.
+
+Check:
+
+* response parsing
+* array mapping
+* cache
+* stale query
+* filtering logic
+
+━━━━━━━━━━━━━━━
+6. FIX BANNER RENDERING
+━━━━━━━━━━━━━━━
+
+Hero banners upload successfully but do not render.
+
+Inspect:
+
+* banners API response
+* frontend mapping
+* image URL helper
+* filtering logic
+* active status checks
+* homepage rendering
+
+━━━━━━━━━━━━━━━
+7. FIX IMAGE RENDERING
+━━━━━━━━━━━━━━━
+
+Cloudinary URLs already exist in DB.
+
+Inspect:
+
+* image helper
+* image URL normalization
+* null guards
+* objects/ prefix handling
+* responsive image transforms
+
+━━━━━━━━━━━━━━━
+8. IMPORTANT
+━━━━━━━━━━━━━━━
+
+ONLY work on:
+
+* `@workspace/kdf-plus`
+* `@workspace/api-server`
+
+DO NOT touch:
+
+* `kdf-nuts`
+
+Live production frontend:
+
+https://khanbabadryfruits.com
+
+All debugging/fixes must be verified directly on live production.
