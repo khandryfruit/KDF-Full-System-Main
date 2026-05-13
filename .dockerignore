@@ -1,0 +1,16 @@
+# Keep Docker build context small; do not exclude workspace packages pnpm needs.
+.git
+**/.git
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+.next
+**/.next
+.expo
+**/.expo
+*.log
+.DS_Store
+.cursor
+terminals
+attached_assets/logs.*
