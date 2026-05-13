@@ -1,0 +1,35 @@
+# Optional Railway build for @workspace/api-server — builds embedded SPA dists then
+# the API bundle (same order as artifacts/api-server/scripts/railway-build.mjs).
+# Uses Debian Node instead of Railpack to avoid apt libatomic1 / secret-mount flakes.
+#
+# Railway (this service only): Settings → Build → Builder = Dockerfile
+#   Dockerfile path: Dockerfile.api-server
+#   Root directory:   .  (repository root)
+#
+# Runtime: pnpm --filter @workspace/api-server run start (requires Railway PORT).
+
+FROM node:22-bookworm AS builder
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+COPY . .
+
+RUN pnpm install --frozen-lockfile
+ENV NODE_ENV=production
+RUN pnpm --filter @workspace/kdf-plus run railway:build
+RUN pnpm --filter @workspace/kdf-admin run railway:build
+RUN pnpm --filter @workspace/kdf-admin-app run build
+RUN pnpm --filter @workspace/api-server run build
+
+FROM node:22-bookworm AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+COPY --from=builder /app /app
+
+WORKDIR /app
+EXPOSE 8080
+CMD ["pnpm", "--filter", "@workspace/api-server", "run", "start"]

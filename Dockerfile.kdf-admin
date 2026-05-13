@@ -1,9 +1,11 @@
 # Optional Railway build for @workspace/kdf-admin — uses full Debian Node image so we
-# avoid Railpack's "install apt packages: libatomic1" step (often flakes with context canceled).
+# avoid Railpack (mise node/pnpm + apt libatomic1), which often fails with "failed to solve: secret…".
 #
-# Railway (this service only): Build → Builder = Dockerfile
+# Railway (this service only): Settings → Build → Builder = Dockerfile (not Railpack)
 #   Dockerfile path: Dockerfile.kdf-admin
 #   Root directory:   .  (repository root)
+#
+# Related: Dockerfile.kdf-plus, Dockerfile.api-server
 #
 # Runtime: pnpm railway:serve → scripts/railway-static-server.mjs (reads Railway PORT at start; no Vite preview)
 

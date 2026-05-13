@@ -25,7 +25,7 @@ function run(cmd, args, opts = {}) {
 console.log("[railway-build] repo root:", repoRoot);
 
 run("corepack", ["enable"]);
-run("corepack", ["prepare", "pnpm@9.15.0", "--activate"]);
+run("corepack", ["prepare", "pnpm@9.15.9", "--activate"]);
 run("pnpm", ["install", "--frozen-lockfile"]);
 
 const prod = { env: { NODE_ENV: "production" } };
