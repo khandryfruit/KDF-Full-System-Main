@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import compression from "compression";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import path from "path";
@@ -46,9 +47,11 @@ if (process.env.NODE_ENV === "production") {
   );
 }
 
-const adminStatic    = express.static(adminDist,    { index: false });
-const adminAppStatic = express.static(adminAppDist, { index: false });
-const mainStatic     = express.static(mainDist,     { index: false });
+const prodStaticMaxAge = process.env.NODE_ENV === "production" ? 31_536_000_000 : 0; /* 365d */
+const staticOpts = { index: false as const, maxAge: prodStaticMaxAge, immutable: prodStaticMaxAge > 0 };
+const adminStatic    = express.static(adminDist,    staticOpts);
+const adminAppStatic = express.static(adminAppDist, staticOpts);
+const mainStatic     = express.static(mainDist,     staticOpts);
 
 const app: Express = express();
 
@@ -92,6 +95,8 @@ app.use(
 // Tell Express it sits behind Railway's TLS-terminating proxy so that
 // req.secure / req.ip / X-Forwarded-* work correctly.
 app.set("trust proxy", 1);
+/* gzip/brotli-compatible compression for JSON + API payloads (Railway-friendly). */
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -124,7 +129,7 @@ app.use((req: Request, _res: Response, next: () => void) => {
 });
 
 /** Serve API server's own public assets (logo, etc.) at /api/static */
-app.use("/api/static", express.static(apiPublicDir));
+app.use("/api/static", express.static(apiPublicDir, { maxAge: 86_400_000, index: false }));
 
 /** Public invoice — also at /api/invoice (must be BEFORE /api router so it isn't swallowed) */
 app.use("/api/invoice", publicInvoiceRouter);
