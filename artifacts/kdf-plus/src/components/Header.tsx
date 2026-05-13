@@ -11,6 +11,7 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/context/LocationContext";
 import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
+import { getProductImageSrc } from "@/lib/imageUrl";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -573,7 +574,7 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b border-gray-50 text-left"
                 onClick={() => go(`/products/${p.slug || p.id}`)}>
                 {p.image
-                  ? <img src={p.image.startsWith("http") ? p.image : `/api/storage/objects/${p.image}`} alt={p.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                  ? <img src={getProductImageSrc(p.image)} alt={p.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                   : <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: GREEN }}>{p.name[0]}</div>
                 }
                 <div className="flex-1 min-w-0">

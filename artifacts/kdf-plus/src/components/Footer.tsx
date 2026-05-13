@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
+import { getProductImageSrc } from "@/lib/imageUrl";
 
 const GREEN  = "#5FA800";
 const ORANGE = "#F58300";
@@ -138,7 +139,7 @@ function BlogCard({ post }: { post: any }) {
       <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-white/10">
         {imgSrc ? (
           <img
-            src={imgSrc.startsWith("/objects/") ? `/api/storage${imgSrc}` : imgSrc}
+            src={getProductImageSrc(imgSrc)}
             alt={post.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
