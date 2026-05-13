@@ -8,6 +8,17 @@ import {
   processImage,
 } from "../lib/imageOptimizer";
 import { adminMiddleware } from "../lib/auth";
+import { isCloudinaryConfigured, uploadBufferToCloudinary } from "../lib/cloudinaryStorage";
+
+/** Returns true when the Replit object-storage sidecar is reachable. */
+async function isReplitStorageAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch("http://127.0.0.1:1106/health", { signal: AbortSignal.timeout(500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 // Explicit allowlist of MIME types accepted for public review image uploads.
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -78,6 +89,11 @@ async function uploadBufferToGcs(
   extension: string,
   visibility: "public" | "private" = "private"
 ): Promise<string> {
+  // On Railway (or any non-Replit host), use Cloudinary when configured.
+  if (isCloudinaryConfigured() && !(await isReplitStorageAvailable())) {
+    return uploadBufferToCloudinary(buffer, "kdf-uploads");
+  }
+
   const privateDir = objectStorageService.getPrivateObjectDir();
   const objectId = randomUUID();
   const fullPath = `${privateDir}/uploads/${objectId}.${extension}`;
