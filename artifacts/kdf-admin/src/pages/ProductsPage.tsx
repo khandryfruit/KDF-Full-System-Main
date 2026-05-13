@@ -76,7 +76,7 @@ function useProductImageUpload() {
   const uploadFile = useCallback(async (
     file: File,
     onProgress: (pct: number) => void,
-  ): Promise<{ path: string; savedPct: number } | null> => {
+  ): Promise<{ path: string; savedPct: number } | { error: string }> => {
     try {
       const token = localStorage.getItem("kdf_admin_token") ?? "";
       const formData = new FormData();
@@ -97,14 +97,16 @@ function useProductImageUpload() {
       clearInterval(ticker);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({})) as { error?: string; detail?: string };
-        throw new Error(errData.detail ?? errData.error ?? "Upload failed");
+        const msg = errData.detail ?? errData.error ?? `Server error ${res.status}`;
+        onProgress(0);
+        return { error: msg };
       }
       const data = await res.json();
       onProgress(100);
       return { path: data.objectPath, savedPct: data.savedPct ?? 0 };
-    } catch {
+    } catch (e: unknown) {
       onProgress(0);
-      return null;
+      return { error: e instanceof Error ? e.message : "Network error — check connection" };
     }
   }, []);
   return { uploadFile };
@@ -178,7 +180,7 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
       const result = await uploadFile(valid[i], (pct) => {
         setUploading(prev => prev.map(u => u.id === item.id ? { ...u, progress: pct } : u));
       });
-      if (result) {
+      if ("path" in result) {
         results.push(result.path);
         setUploading(prev => prev.map(u =>
           u.id === item.id ? { ...u, done: true, savedPct: result.savedPct, progress: 100 } : u
@@ -189,13 +191,13 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
         }, 1800);
       } else {
         setUploading(prev => prev.map(u =>
-          u.id === item.id ? { ...u, error: "Upload failed", progress: 0 } : u
+          u.id === item.id ? { ...u, error: result.error, progress: 0 } : u
         ));
         setTimeout(() => {
           URL.revokeObjectURL(item.preview);
           setUploading(prev => prev.filter(u => u.id !== item.id));
         }, 2500);
-        toast({ variant: "destructive", title: `Failed: ${valid[i].name}` });
+        toast({ variant: "destructive", title: `Failed: ${valid[i].name}`, description: result.error });
       }
     }
     if (results.length) onChange([...images, ...results]);
@@ -211,13 +213,13 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
     if (!files?.length || replaceIdx.current < 0) return;
     const idx = replaceIdx.current;
     const result = await uploadFile(files[0], () => {});
-    if (result) {
+    if ("path" in result) {
       const next = [...images];
       next[idx] = result.path;
       onChange(next);
       toast({ title: "Image replaced", description: `Saved ${result.savedPct}%` });
     } else {
-      toast({ variant: "destructive", title: "Replace failed" });
+      toast({ variant: "destructive", title: "Replace failed", description: result.error });
     }
     replaceIdx.current = -1;
     if (replaceRef.current) replaceRef.current.value = "";
