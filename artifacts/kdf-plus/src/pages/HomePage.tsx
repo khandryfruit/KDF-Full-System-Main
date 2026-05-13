@@ -1043,7 +1043,14 @@ export default function HomePage() {
     { query: { queryKey: ["products", "deals"], staleTime: 60_000 } },
   );
 
-  const banners         = Array.isArray(bannersData) ? (bannersData as Banner[]) : [];
+  const banners = useMemo(() => {
+    const d = bannersData as unknown;
+    if (Array.isArray(d)) return d as Banner[];
+    if (d != null && typeof d === "object" && Array.isArray((d as { items?: unknown }).items)) {
+      return (d as { items: Banner[] }).items;
+    }
+    return [];
+  }, [bannersData]);
   const categories      = Array.isArray(categoriesData) ? (categoriesData as Category[]) : [];
   const featuredProducts = useMemo(
     () => normalizeProductsListResponse(featuredData).items as Product[],

@@ -3,7 +3,8 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
+import { getApiBase } from "@/lib/apiBase";
 
 import { Layout } from "@/components/Layout";
 import NotFound from "@/pages/not-found";
@@ -92,6 +93,14 @@ import SEODashboardPage from "@/pages/SEODashboardPage";
 import SEORedirectsPage from "@/pages/SEORedirectsPage";
 import SEOSchemaPage from "@/pages/SEOSchemaPage";
 import SEOAIWriterPage from "@/pages/SEOAIWriterPage";
+
+/* Orval / React Query hooks use relative `/api/...` unless base URL is set.
+   Uploads already use `API_BASE` (VITE_API_BASE_URL) — without this, banners list/create
+   hit the admin host instead of the API server on split Railway deploys. */
+const adminApiBase = getApiBase();
+if (adminApiBase) {
+  setBaseUrl(adminApiBase);
+}
 
 setAuthTokenGetter(() => localStorage.getItem("kdf_admin_token") ?? "");
 

@@ -507,9 +507,17 @@ export default function BannersPage() {
   const invalidateBanners = () =>
     queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
 
+  const bannerRows: any[] = Array.isArray(allBanners)
+    ? (allBanners as any[])
+    : allBanners != null &&
+        typeof allBanners === "object" &&
+        Array.isArray((allBanners as { items?: unknown }).items)
+      ? ((allBanners as { items: any[] }).items)
+      : [];
+
   /* split banners: promo = gradient "from-" cards; hero = everything else */
-  const heroBanners = (allBanners ?? []).filter((b: any) => !isPromoCard(b));
-  const promoBanners = (allBanners ?? []).filter((b: any) => isPromoCard(b));
+  const heroBanners = bannerRows.filter((b: any) => !isPromoCard(b));
+  const promoBanners = bannerRows.filter((b: any) => isPromoCard(b));
 
   const isBusy = createMutation.isPending || updateMutation.isPending;
 
