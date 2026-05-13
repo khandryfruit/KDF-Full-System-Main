@@ -10,14 +10,9 @@ import {
 import { adminMiddleware } from "../lib/auth";
 import { isCloudinaryConfigured, uploadBufferToCloudinary } from "../lib/cloudinaryStorage";
 
-/** Returns true when the Replit object-storage sidecar is reachable. */
-async function isReplitStorageAvailable(): Promise<boolean> {
-  try {
-    const res = await fetch("http://127.0.0.1:1106/health", { signal: AbortSignal.timeout(500) });
-    return res.ok;
-  } catch {
-    return false;
-  }
+/** True when running inside a Replit container (REPL_ID is always set there). */
+function isRunningOnReplit(): boolean {
+  return !!process.env.REPL_ID;
 }
 
 // Explicit allowlist of MIME types accepted for public review image uploads.
@@ -90,7 +85,7 @@ async function uploadBufferToGcs(
   visibility: "public" | "private" = "private"
 ): Promise<string> {
   // On Railway (or any non-Replit host), use Cloudinary when configured.
-  if (isCloudinaryConfigured() && !(await isReplitStorageAvailable())) {
+  if (isCloudinaryConfigured() && !isRunningOnReplit()) {
     return uploadBufferToCloudinary(buffer, "kdf-uploads");
   }
 
@@ -157,8 +152,8 @@ router.post(
         // Mark as public so GET /storage/objects/* serves it without requiring auth.
         const objectPath = await uploadBufferToGcs(req.file.buffer, req.file.mimetype, ext, "public");
         res.json({ objectPath, originalSize: req.file.size, processedSize: req.file.size });
-      } catch {
-        res.status(500).json({ error: "Upload failed" });
+      } catch (fallbackErr: any) {
+        res.status(500).json({ error: "Upload failed", detail: fallbackErr?.message ?? String(fallbackErr) });
       }
     }
   }
@@ -211,9 +206,9 @@ router.post(
           "public"
         );
         processedSize = req.file.size;
-      } catch (fallbackErr) {
+      } catch (fallbackErr: any) {
         req.log.error({ err: fallbackErr }, "Fallback upload also failed");
-        res.status(500).json({ error: "Upload failed" });
+        res.status(500).json({ error: "Upload failed", detail: fallbackErr?.message ?? String(fallbackErr) });
         return;
       }
     }
@@ -279,10 +274,58 @@ router.post(
         "public"
       );
       res.json({ objectPath, size: req.file.size, contentType: req.file.mimetype });
-    } catch (err) {
+    } catch (err: any) {
       req.log.error({ err }, "Video upload failed");
-      res.status(500).json({ error: "Upload failed" });
+      res.status(500).json({ error: "Upload failed", detail: err?.message ?? String(err) });
     }
+  }
+);
+
+/**
+ * GET /admin/upload-diagnostics
+ * Safe diagnostic: confirms storage backend, env vars (presence only), and platform.
+ * Requires admin auth.
+ */
+router.get(
+  "/admin/upload-diagnostics",
+  adminMiddleware as any,
+  async (_req: Request, res: Response) => {
+    const onReplit = isRunningOnReplit();
+    const cloudinaryOk = isCloudinaryConfigured();
+
+    // Test a tiny Cloudinary upload if configured and not on Replit
+    let cloudinaryTest: string | null = null;
+    if (cloudinaryOk && !onReplit) {
+      try {
+        // 1×1 white JPEG — ~631 bytes
+        const tinyJpeg = Buffer.from(
+          "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8U" +
+          "HRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgN" +
+          "DRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy" +
+          "MjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAA" +
+          "AAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAA" +
+          "AAAA/9oADAMBAAIRAxEAPwCwABmX/9k=",
+          "base64"
+        );
+        cloudinaryTest = await uploadBufferToCloudinary(tinyJpeg, "kdf-diagnostics");
+      } catch (e: any) {
+        cloudinaryTest = `ERROR: ${e?.message ?? String(e)}`;
+      }
+    }
+
+    res.json({
+      platform: onReplit ? "replit" : "other (railway/vps)",
+      repl_id_set: !!process.env.REPL_ID,
+      cloudinary: {
+        configured: cloudinaryOk,
+        cloud_name_set: !!process.env.CLOUDINARY_CLOUD_NAME,
+        api_key_set: !!process.env.CLOUDINARY_API_KEY,
+        api_secret_set: !!process.env.CLOUDINARY_API_SECRET,
+        test_upload: cloudinaryTest,
+      },
+      private_object_dir_set: !!process.env.PRIVATE_OBJECT_DIR,
+      storage_bucket_set: !!process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID,
+    });
   }
 );
 
