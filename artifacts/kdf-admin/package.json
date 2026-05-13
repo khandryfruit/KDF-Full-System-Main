@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-static-server.mjs",
     "dev": "NODE_OPTIONS=--max-http-header-size=65536 vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "NODE_OPTIONS=--max-http-header-size=65536 node ./scripts/railway-static-server.mjs",
