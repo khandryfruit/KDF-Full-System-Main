@@ -2,9 +2,7 @@
 # the API bundle (same order as artifacts/api-server/scripts/railway-build.mjs).
 # Uses Debian Node instead of Railpack to avoid apt libatomic1 / secret-mount flakes.
 #
-# Railway (this service only): Settings → Build → Builder = Dockerfile
-#   Dockerfile path: Dockerfile.api-server
-#   Root directory:   .  (repository root)
+# Railway: root = repo root. Config: /railway.api-server.json or RAILWAY_DOCKERFILE_PATH=Dockerfile.api-server
 #
 # Runtime: pnpm --filter @workspace/api-server run start (requires Railway PORT).
 
