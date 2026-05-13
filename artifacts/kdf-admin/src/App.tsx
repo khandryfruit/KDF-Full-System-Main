@@ -8,6 +8,7 @@ import { getApiBase } from "@/lib/apiBase";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
+import { ThemeProvider } from "next-themes";
 
 import { Layout } from "@/components/Layout";
 import NotFound from "@/pages/not-found";
@@ -274,18 +275,26 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AdminAuthProvider>
-          <BranchAuthProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <NotificationProvider>
-                <Router />
-              </NotificationProvider>
-            </WouterRouter>
-          </BranchAuthProvider>
-        </AdminAuthProvider>
-        <Toaster />
-      </TooltipProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem={false}
+        storageKey="kdf-admin-theme"
+        disableTransitionOnChange
+      >
+        <TooltipProvider>
+          <AdminAuthProvider>
+            <BranchAuthProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <NotificationProvider>
+                  <Router />
+                </NotificationProvider>
+              </WouterRouter>
+            </BranchAuthProvider>
+          </AdminAuthProvider>
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

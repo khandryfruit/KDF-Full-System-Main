@@ -882,7 +882,7 @@ function InvoiceDashboard() {
   const recentBills    = MOCK_HISTORY.filter(h => h.type === "bill");
 
   return (
-    <div className="space-y-6">
+    <div className="rounded-2xl border border-border/50 bg-card/70 dark:bg-card/45 backdrop-blur-md p-4 md:p-6 shadow-sm dark:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.55)] space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>

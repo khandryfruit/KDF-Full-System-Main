@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -9,6 +9,14 @@ import {
   Activity, Loader2, ChevronRight, MapPin, Bike, BadgeCheck,
   PackageX, RotateCcw, Banknote, Navigation,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 function api(path: string) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -19,11 +27,6 @@ function fmt(n: number | undefined | null, decimals = 0): string {
   const v = parseFloat(String(n ?? "0"));
   if (isNaN(v)) return "0";
   return v.toLocaleString("en-PK", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
-
-function pct(part: number, total: number): string {
-  if (!total) return "0%";
-  return ((part / total) * 100).toFixed(1) + "%";
 }
 
 function timeGreeting(): string {
@@ -48,13 +51,44 @@ type DashStats = {
   recentOrders: any[];
 };
 
+type AnalyticsForChart = {
+  dailyRevenue: { date: string; revenue: number; orders: number }[];
+};
+
 const WIDGET_DEFAULTS = {
-  overview: true, revenue: true, pipeline: true, marketing: true,
-  abandoned: true, recentOrders: true, quickActions: true,
-  logistics: true, activityFeed: true,
+  snapshots: true,
+  waStrip: true,
+  overview: true,
+  revenueChart: true,
+  revenue: true,
+  pipeline: true,
+  marketing: true,
+  abandoned: true,
+  recentOrders: true,
+  quickActions: true,
+  logistics: true,
+  activityFeed: true,
 };
 
 type WidgetKey = keyof typeof WIDGET_DEFAULTS;
+
+const WIDGET_LABELS: Record<WidgetKey, string> = {
+  snapshots: "Today snapshot",
+  waStrip: "WA quick row",
+  overview: "Overview metrics",
+  revenueChart: "Revenue chart (30d)",
+  revenue: "Revenue & payments",
+  pipeline: "Order pipeline",
+  marketing: "Marketing & WA",
+  abandoned: "Abandoned carts",
+  recentOrders: "Recent orders",
+  quickActions: "Quick actions",
+  logistics: "Logistics",
+  activityFeed: "Activity feed",
+};
+
+const CARD_SHELL =
+  "rounded-2xl border border-border/50 bg-card/85 dark:bg-card/55 backdrop-blur-sm shadow-sm transition-all duration-300 dark:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.55)]";
 
 /* ── Rider / Logistics Stats type ── */
 type RiderStats = {
@@ -90,11 +124,11 @@ function LogisticsWidget() {
   ];
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className={`${CARD_SHELL} p-5`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center">
-            <Truck className="w-4 h-4 text-emerald-600" />
+          <div className="w-7 h-7 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg flex items-center justify-center">
+            <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
             <h3 className="font-semibold leading-none">Logistics</h3>
@@ -190,7 +224,7 @@ function ActivityFeed({ orders }: { orders: any[] }) {
   ].sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 8);
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className={`${CARD_SHELL} p-5`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -228,13 +262,13 @@ function ActivityFeed({ orders }: { orders: any[] }) {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: "text-amber-600 bg-amber-50 border-amber-200",
-  confirmed: "text-sky-600 bg-sky-50 border-sky-200",
-  processing: "text-blue-600 bg-blue-50 border-blue-200",
-  shipped: "text-purple-600 bg-purple-50 border-purple-200",
-  out_for_delivery: "text-orange-600 bg-orange-50 border-orange-200",
-  delivered: "text-green-600 bg-green-50 border-green-200",
-  cancelled: "text-red-600 bg-red-50 border-red-200",
+  pending: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-800",
+  confirmed: "text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-300 dark:bg-sky-950/40 dark:border-sky-800",
+  processing: "text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-950/40 dark:border-blue-800",
+  shipped: "text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-300 dark:bg-purple-950/40 dark:border-purple-800",
+  out_for_delivery: "text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/40 dark:border-orange-800",
+  delivered: "text-green-700 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-950/40 dark:border-green-800",
+  cancelled: "text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-800",
 };
 
 function StatCard({ label, value, sub, icon: Icon, color, href, trend }: {
@@ -245,7 +279,7 @@ function StatCard({ label, value, sub, icon: Icon, color, href, trend }: {
   return (
     <div
       onClick={() => href && nav(href)}
-      className={`bg-card border border-border rounded-xl p-5 flex items-start gap-4 transition-all ${href ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""}`}>
+      className={`${CARD_SHELL} p-5 flex items-start gap-4 ${href ? "cursor-pointer hover:border-primary/30 hover:-translate-y-0.5" : ""}`}>
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
         <Icon className="w-5 h-5" />
       </div>
@@ -279,7 +313,7 @@ function PipelineBar({ stats }: { stats: DashStats }) {
   const total = stages.reduce((s, x) => s + x.count, 0) || 1;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className={`${CARD_SHELL} p-5`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">Order Pipeline</h3>
         <button onClick={() => nav("/orders")} className="text-xs text-primary flex items-center gap-1 hover:underline">
@@ -320,6 +354,24 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const { data: analytics } = useQuery<AnalyticsForChart>({
+    queryKey: ["admin-analytics-chart"],
+    queryFn: () => api("/admin/analytics"),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    enabled: widgets.revenueChart,
+  });
+
+  const chartData = useMemo(
+    () =>
+      (analytics?.dailyRevenue ?? []).map(d => ({
+        day: d.date.length > 5 ? d.date.slice(5) : d.date,
+        revenue: Number(d.revenue) || 0,
+        orders: Number(d.orders) || 0,
+      })),
+    [analytics],
+  );
+
   useEffect(() => {
     localStorage.setItem("dash_widgets", JSON.stringify(widgets));
   }, [widgets]);
@@ -345,19 +397,28 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5 pb-8">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{timeGreeting()}, Admin 👋</h1>
+          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+            {timeGreeting()}, Admin 👋
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {new Date().toLocaleDateString("en-PK", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => refetch()} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 transition-colors">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border/70 rounded-xl px-3 py-1.5 transition-colors hover:border-primary/30"
+          >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-          <button onClick={() => setEditMode(e => !e)}
-            className={`flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${editMode ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+          <button
+            type="button"
+            onClick={() => setEditMode(e => !e)}
+            className={`flex items-center gap-1.5 text-xs border rounded-xl px-3 py-1.5 transition-colors ${editMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
             <Settings className="w-3.5 h-3.5" /> {editMode ? "Done" : "Customize"}
           </button>
         </div>
@@ -365,14 +426,27 @@ export default function DashboardPage() {
 
       {/* ── Widget toggles (edit mode) ── */}
       {editMode && (
-        <div className="bg-muted/50 border border-border rounded-xl p-4">
-          <p className="text-sm font-medium mb-3">Show / hide dashboard sections:</p>
+        <div className={`${CARD_SHELL} p-4`}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+            <p className="text-sm font-medium">Show / hide dashboard sections</p>
+            <button
+              type="button"
+              onClick={() => setWidgets({ ...WIDGET_DEFAULTS })}
+              className="text-xs text-muted-foreground hover:text-foreground border border-border/70 rounded-lg px-2.5 py-1 transition-colors self-start sm:self-auto"
+            >
+              Reset layout
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(widgets) as WidgetKey[]).map(k => (
-              <button key={k} onClick={() => toggleWidget(k)}
-                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors capitalize ${widgets[k] ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+              <button
+                key={k}
+                type="button"
+                onClick={() => toggleWidget(k)}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border font-medium transition-colors ${widgets[k] ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}
+              >
                 {widgets[k] ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                {k.replace(/([A-Z])/g, " $1")}
+                {WIDGET_LABELS[k]}
               </button>
             ))}
           </div>
@@ -380,47 +454,58 @@ export default function DashboardPage() {
       )}
 
       {/* ── Today's Snapshot ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl p-4">
-          <p className="text-xs font-medium opacity-80">Today's Revenue</p>
-          <p className="text-2xl font-bold mt-1">PKR {fmt(stats.todayRevenue)}</p>
-          <p className="text-xs opacity-70 mt-1">{stats.todayOrders} orders today</p>
+      {widgets.snapshots && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-2xl bg-gradient-to-br from-primary to-primary/75 text-primary-foreground p-4 shadow-lg shadow-primary/25">
+            <p className="text-xs font-medium opacity-80">Today's Revenue</p>
+            <p className="text-2xl font-bold mt-1">PKR {fmt(stats.todayRevenue)}</p>
+            <p className="text-xs opacity-70 mt-1">{stats.todayOrders} orders today</p>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 shadow-lg shadow-blue-500/20">
+            <p className="text-xs font-medium opacity-80">This Month</p>
+            <p className="text-2xl font-bold mt-1">PKR {fmt(stats.monthRevenue)}</p>
+            <p className="text-xs opacity-70 mt-1">{stats.monthOrders} orders</p>
+          </div>
+          <div
+            className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white p-4 cursor-pointer shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all"
+            onClick={() => nav("/orders")}
+          >
+            <p className="text-xs font-medium opacity-80">Pending Action</p>
+            <p className="text-2xl font-bold mt-1">{stats.pendingOrders + stats.confirmedOrders + stats.processingOrders}</p>
+            <p className="text-xs opacity-70 mt-1">orders need attention</p>
+          </div>
+          <div
+            className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 cursor-pointer shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all"
+            onClick={() => nav("/wa-chat")}
+          >
+            <p className="text-xs font-medium opacity-80">WA Messages</p>
+            <p className="text-2xl font-bold mt-1">{stats.whatsapp.received}</p>
+            <p className="text-xs opacity-70 mt-1">tap → Unified Inbox</p>
+          </div>
         </div>
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-4">
-          <p className="text-xs font-medium opacity-80">This Month</p>
-          <p className="text-2xl font-bold mt-1">PKR {fmt(stats.monthRevenue)}</p>
-          <p className="text-xs opacity-70 mt-1">{stats.monthOrders} orders</p>
-        </div>
-        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl p-4 cursor-pointer hover:from-emerald-600" onClick={() => nav("/orders")}>
-          <p className="text-xs font-medium opacity-80">Pending Action</p>
-          <p className="text-2xl font-bold mt-1">{stats.pendingOrders + stats.confirmedOrders + stats.processingOrders}</p>
-          <p className="text-xs opacity-70 mt-1">orders need attention</p>
-        </div>
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-4 cursor-pointer hover:from-purple-600" onClick={() => nav("/wa-chat")}>
-          <p className="text-xs font-medium opacity-80">WA Messages</p>
-          <p className="text-2xl font-bold mt-1">{stats.whatsapp.received}</p>
-          <p className="text-xs opacity-70 mt-1">tap → Unified Inbox</p>
-        </div>
-      </div>
+      )}
 
       {/* ── WA Chat Quick Panel ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "WA Sent", value: stats.whatsapp.sent, color: "text-[#25D366]", bg: "bg-[#25D366]/10", href: "/wa-chat" },
-          { label: "WA Received", value: stats.whatsapp.received, color: "text-blue-600", bg: "bg-blue-50", href: "/wa-chat" },
-          { label: "WA Read", value: stats.whatsapp.read, color: "text-violet-600", bg: "bg-violet-50", href: "/wa-chat" },
-          { label: "WA Failed", value: stats.whatsapp.failed, color: "text-red-500", bg: "bg-red-50", href: "/wa-chat" },
-        ].map(s => (
-          <button
-            key={s.label}
-            onClick={() => nav(s.href)}
-            className={`${s.bg} border border-transparent hover:border-gray-200 rounded-xl p-3 text-left transition-all group`}
-          >
-            <p className={`text-xl font-bold ${s.color}`}>{s.value ?? 0}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
-          </button>
-        ))}
-      </div>
+      {widgets.waStrip && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "WA Sent", value: stats.whatsapp.sent, color: "text-[#25D366]", bg: "bg-[#25D366]/10", href: "/wa-chat" },
+            { label: "WA Received", value: stats.whatsapp.received, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/40", href: "/wa-chat" },
+            { label: "WA Read", value: stats.whatsapp.read, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/40", href: "/wa-chat" },
+            { label: "WA Failed", value: stats.whatsapp.failed, color: "text-red-500 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/40", href: "/wa-chat" },
+          ].map(s => (
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => nav(s.href)}
+              className={`${s.bg} border border-border/40 dark:border-border/50 rounded-2xl p-3 text-left transition-all hover:border-primary/35 hover:shadow-md`}
+            >
+              <p className={`text-xl font-bold ${s.color}`}>{s.value ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Key Metrics ── */}
       {widgets.overview && (
@@ -449,12 +534,58 @@ export default function DashboardPage() {
       {/* ── Order Pipeline ── */}
       {widgets.pipeline && <PipelineBar stats={stats} />}
 
+      {/* ── Revenue trend (30 days) ── */}
+      {widgets.revenueChart && (
+        <div className={`${CARD_SHELL} p-5`}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold leading-tight">Revenue trend</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Last 30 days · Shopify orders</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => nav("/analytics")}
+              className="text-xs text-primary flex items-center gap-1 hover:underline"
+            >
+              Analytics <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          {chartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-10">No chart data yet</p>
+          ) : (
+            <div className="h-[220px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="dashRevFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={v => (Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(0)}k` : String(v))} />
+                  <RechartsTooltip
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid hsl(var(--border))",
+                      background: "hsl(var(--card))",
+                    }}
+                    formatter={(value: number) => [`PKR ${fmt(value)}`, "Revenue"]}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#dashRevFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Revenue + Recent Orders ── */}
       {(widgets.revenue || widgets.recentOrders) && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {widgets.revenue && (
             <div className="lg:col-span-2 space-y-3">
-              <div className="bg-card border border-border rounded-xl p-5">
+              <div className={`${CARD_SHELL} p-5`}>
                 <h3 className="font-semibold mb-4">Revenue Breakdown</h3>
                 <div className="space-y-3">
                   {[
@@ -475,7 +606,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
-              <div className="bg-card border border-border rounded-xl p-5">
+              <div className={`${CARD_SHELL} p-5`}>
                 <h3 className="font-semibold mb-3">Payment Status</h3>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -511,7 +642,7 @@ export default function DashboardPage() {
             </div>
           )}
           {widgets.recentOrders && (
-            <div className={`${widgets.revenue ? "lg:col-span-3" : "lg:col-span-5"} bg-card border border-border rounded-xl p-5`}>
+            <div className={`${widgets.revenue ? "lg:col-span-3" : "lg:col-span-5"} ${CARD_SHELL} p-5`}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Recent Orders</h3>
                 <button onClick={() => nav("/orders")} className="text-xs text-primary flex items-center gap-1 hover:underline">
@@ -550,7 +681,7 @@ export default function DashboardPage() {
       {widgets.marketing && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* WhatsApp Stats */}
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className={`${CARD_SHELL} p-5`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 bg-[#25D366]/10 rounded-lg flex items-center justify-center">
@@ -603,7 +734,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Email Campaigns */}
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className={`${CARD_SHELL} p-5`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 bg-pink-100 rounded-lg flex items-center justify-center">
@@ -674,7 +805,7 @@ export default function DashboardPage() {
 
       {/* ── Quick Actions ── */}
       {widgets.quickActions && (
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className={`${CARD_SHELL} p-5`}>
           <h3 className="font-semibold mb-3">Quick Actions</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {[

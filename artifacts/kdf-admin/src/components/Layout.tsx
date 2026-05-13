@@ -78,6 +78,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 
@@ -289,10 +290,10 @@ function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavIt
       <div
         title={!expanded ? label : undefined}
         className={`
-          relative flex items-center rounded-lg transition-all duration-150 cursor-pointer group
+          relative flex items-center rounded-lg transition-all duration-200 cursor-pointer group
           ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
           ${isActive
-            ? "bg-primary/10 text-primary"
+            ? "bg-primary/12 text-primary ring-1 ring-primary/25 dark:shadow-[0_0_28px_-8px_hsla(93,100%,33%,0.45)]"
             : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
           }
         `}
@@ -474,7 +475,7 @@ function SidebarContent({
   const { waUnread } = useNotifications();
 
   return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden">
+    <div className="flex flex-col h-full border-r border-sidebar-border/70 bg-sidebar/95 backdrop-blur-xl dark:bg-sidebar/88 dark:border-sidebar-border/50 overflow-hidden shadow-[4px_0_32px_-12px_rgba(0,0,0,0.35)]">
 
       {/* Logo area */}
       <div className={`h-[52px] flex items-center border-b border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "px-4 gap-3 justify-between" : "px-0 justify-center"}`}>
@@ -699,6 +700,64 @@ function SidebarContent({
   );
 }
 
+function MobileBottomNav({
+  location,
+  onOpenMenu,
+}: {
+  location: string;
+  onOpenMenu: () => void;
+}) {
+  const [, nav] = useLocation();
+  const homeActive = location === "/" || location === "/dashboard";
+  const ordersActive = location.startsWith("/orders");
+  const productsActive = location.startsWith("/products");
+
+  const itemCls = (active: boolean) =>
+    `flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-semibold tracking-tight transition-colors ${
+      active ? "text-primary" : "text-muted-foreground"
+    }`;
+  const iconWrap = (active: boolean) =>
+    `flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+      active
+        ? "bg-primary/15 text-primary shadow-[0_0_22px_-8px_hsla(93,100%,33%,0.55)]"
+        : "text-muted-foreground"
+    }`;
+
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/60 bg-card/88 backdrop-blur-xl pb-[calc(env(safe-area-inset-bottom)+6px)] pt-1 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.4)] dark:bg-card/70"
+      aria-label="Mobile primary navigation"
+    >
+      <div className="flex max-w-lg mx-auto">
+        <button type="button" className={itemCls(homeActive)} onClick={() => nav("/dashboard")}>
+          <span className={iconWrap(homeActive)}>
+            <LayoutDashboard size={18} strokeWidth={2} />
+          </span>
+          Home
+        </button>
+        <button type="button" className={itemCls(ordersActive)} onClick={() => nav("/orders")}>
+          <span className={iconWrap(ordersActive)}>
+            <ShoppingCart size={18} strokeWidth={2} />
+          </span>
+          Orders
+        </button>
+        <button type="button" className={itemCls(productsActive)} onClick={() => nav("/products")}>
+          <span className={iconWrap(productsActive)}>
+            <Package size={18} strokeWidth={2} />
+          </span>
+          Products
+        </button>
+        <button type="button" className={itemCls(false)} onClick={onOpenMenu}>
+          <span className={iconWrap(false)}>
+            <Menu size={18} strokeWidth={2} />
+          </span>
+          More
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 /* ═══════════════════════════════════════════════
    LAYOUT
 ═══════════════════════════════════════════════ */
@@ -740,6 +799,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p)) setSettingsOpen(true);
     if (location.startsWith("/admin/")) setAdminIamOpen(true);
   }, [location]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setLocation("/orders");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setLocation]);
 
   const handleLogout = () => {
     localStorage.removeItem("kdf_admin_token");
@@ -820,10 +890,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
 
         {/* Desktop topbar */}
-        <div className="hidden md:flex h-12 border-b border-border bg-card items-center justify-between px-5 gap-3 shrink-0">
-          {/* Left: current section breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="hidden md:flex h-12 border-b border-border/70 bg-card/80 backdrop-blur-md items-center justify-between px-5 gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
             <button
+              type="button"
               onClick={handleToggleCollapse}
               className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-accent text-muted-foreground transition-colors"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -831,22 +901,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {isCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
             </button>
           </div>
-          {/* Right: actions */}
-          <div className="flex items-center gap-2">
+          <div className="hidden lg:flex flex-1 justify-center min-w-0 px-6">
+            <button
+              type="button"
+              onClick={() => setLocation("/orders")}
+              className="relative flex w-full max-w-md items-center gap-2 rounded-xl border border-border/50 bg-muted/25 px-3 py-2 text-left text-sm text-muted-foreground transition-all hover:bg-muted/45 hover:border-border hover:text-foreground"
+            >
+              <Search size={14} className="shrink-0 opacity-70" />
+              <span className="truncate">Search orders, SKUs, customers…</span>
+              <kbd className="ml-auto hidden sm:inline-flex h-5 items-center rounded-md border border-border/60 bg-background/70 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <WebsitePreviewButton />
+            <ThemeToggle />
             <NotificationBell />
           </div>
         </div>
 
         {/* Mobile header */}
-        <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 md:hidden sticky top-0 z-10">
+        <header className="h-14 border-b border-border/70 bg-card/90 backdrop-blur-md flex items-center justify-between px-4 md:hidden sticky top-0 z-30">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-sm shadow-primary/25">
               <span className="text-primary-foreground text-xs font-black">KD</span>
             </div>
-            <h1 className="font-bold text-base text-foreground">KDF NUTS</h1>
+            <h1 className="font-bold text-base text-foreground tracking-tight">KDF NUTS</h1>
           </div>
           <div className="flex items-center gap-1">
+            <ThemeToggle />
             <NotificationBell />
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -854,7 +938,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Menu size={20} />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-72 border-r-0">
+              <SheetContent side="left" className="p-0 w-72 border-r-0 bg-sidebar/95 backdrop-blur-xl">
                 <SidebarContent
                   {...sharedProps}
                   expanded={true}
@@ -871,11 +955,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {children}
           </main>
         ) : (
-          <main className="flex-1 overflow-y-auto p-4 md:p-7">
+          <main className="flex-1 overflow-y-auto p-4 md:p-7 pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-7">
             <div className="mx-auto max-w-6xl">
               {children}
             </div>
           </main>
+        )}
+
+        {!isFullScreen && (
+          <MobileBottomNav location={location} onOpenMenu={() => setMobileOpen(true)} />
         )}
       </div>
     </div>
