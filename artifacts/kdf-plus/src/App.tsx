@@ -15,7 +15,7 @@ import { ChatWidget } from "@/components/ChatWidget";
 import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
 import { useGetSeoSettings } from "@workspace/api-client-react";
 import { Helmet } from "react-helmet-async";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 
 const HomePage        = lazy(() => import("@/pages/HomePage"));
 const ProductsPage    = lazy(() => import("@/pages/ProductsPage"));
@@ -35,6 +35,13 @@ const PolicyPage      = lazy(() => import("@/pages/PolicyPage"));
 import NotFound from "@/pages/not-found";
 
 setAuthTokenGetter(() => { try { return localStorage.getItem("kdf_web_token") ?? ""; } catch { return ""; } });
+
+// On Railway (or any host where VITE_API_BASE_URL is set), point the API
+// client at the absolute URL so all generated hooks reach the right server.
+const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+if (apiBase) {
+  setBaseUrl(apiBase.replace(/\/+$/, ""));
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

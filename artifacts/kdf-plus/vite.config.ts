@@ -17,6 +17,17 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
 
 const basePath = process.env.BASE_PATH ?? "/";
 
+// On Railway: set API_PROXY_TARGET=http://workspaceapi-server.railway.internal:8080
+// Locally: falls back to the shared Replit proxy (api-server on PORT 8080)
+const proxyTarget =
+  process.env.API_PROXY_TARGET ??
+  process.env.VITE_API_BASE_URL ??
+  "http://localhost:8080";
+
+const proxy = {
+  "/api": { target: proxyTarget, changeOrigin: true, secure: false },
+};
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -57,6 +68,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy,
     fs: {
       strict: true,
     },
@@ -65,5 +77,6 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy,
   },
 });

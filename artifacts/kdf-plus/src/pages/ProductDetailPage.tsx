@@ -278,7 +278,8 @@ function RelatedProducts({ currentId }: { currentId: number }) {
           return (
             <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer border border-border rounded-2xl overflow-hidden bg-card hover:shadow-md transition-all hover:-translate-y-0.5">
               <div className="aspect-square bg-muted/20 overflow-hidden relative">
-                {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
+                {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
                 {rDisc && <span className="absolute top-2 left-2 bg-[#F58300] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{rDisc}% OFF</span>}
               </div>
               <div className="p-3">
@@ -489,7 +490,8 @@ export default function ProductDetailPage() {
               <img src={getProductImageSrc(images[selectedImage])} alt={(product as any).altText || product.name}
                 className="w-full h-full object-contain transition-transform duration-200"
                 style={imgZoomed ? { transform: "scale(1.6)", transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : {}}
-                data-testid="img-product-main" />
+                data-testid="img-product-main"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
               {discount && <div className="absolute top-3 left-3 bg-[#F58300] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">{discount}% OFF</div>}
               {product.featured && <div className="absolute top-3 right-3"><Badge className="bg-secondary text-secondary-foreground text-xs">Featured</Badge></div>}
               {images.length > 1 && (<>
@@ -501,7 +503,8 @@ export default function ProductDetailPage() {
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {images.map((img, i) => (
                   <button key={i} onClick={() => setSelectedImage(i)} className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all hover:scale-105 ${i === selectedImage ? "border-primary shadow-md" : "border-border hover:border-primary/40"}`} data-testid={`button-image-thumb-${i}`}>
-                    <img src={getProductImageSrc(img)} alt={`${product.name} view ${i + 1}`} className="w-full h-full object-cover" />
+                    <img src={getProductImageSrc(img)} alt={`${product.name} view ${i + 1}`} className="w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   </button>
                 ))}
               </div>

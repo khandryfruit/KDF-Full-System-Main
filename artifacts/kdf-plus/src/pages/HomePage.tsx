@@ -266,6 +266,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                   alt={banner.title}
                   className="absolute inset-0 w-full h-full object-cover object-center"
                   loading={i === 0 ? "eager" : "lazy"}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
                 /* No image — AI gradient background */
@@ -513,7 +514,8 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
             ) : fb ? (
               /* Fallback image */
               <img src={fb.startsWith("http") ? fb : `/api/storage/objects/${fb}`}
-                className="absolute inset-0 w-full h-full object-cover" alt={banner.title} />
+                className="absolute inset-0 w-full h-full object-cover" alt={banner.title}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-[#0D2B00] to-[#1a5200]" />
             )}
@@ -672,7 +674,8 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
                       preload={i === 0 ? "auto" : "metadata"}
                     />
                   ) : thumb ? (
-                    <img src={thumb} className="absolute inset-0 w-full h-full object-cover" alt={reel.title} />
+                    <img src={thumb} className="absolute inset-0 w-full h-full object-cover" alt={reel.title}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-b from-gray-800 to-gray-900" />
                   )}
@@ -727,7 +730,8 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
                   <video src={vid} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     muted={isMuted} loop playsInline preload="metadata" autoPlay />
                 ) : thumb ? (
-                  <img src={thumb} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={reel.title} />
+                  <img src={thumb} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={reel.title}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-b from-gray-700 to-gray-900" />
                 )}
@@ -930,6 +934,7 @@ function CategoryGrid({ categories, loading }: { categories: Category[]; loading
                   alt={cat.name}
                   loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-3xl">
