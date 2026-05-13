@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, productsTable } from "@workspace/db";
-import { eq, ilike, and, desc, asc, sql } from "drizzle-orm";
+import { eq, ilike, and, desc, asc, sql, or } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
@@ -62,6 +62,7 @@ router.get("/products", async (req, res) => {
       db.select({ count: sql<number>`count(*)` }).from(productsTable).where(where),
     ]);
 
+    req.log.info({ featured, categoryId, search, count: items.length, total: Number(countResult[0]?.count ?? 0) }, "products list");
     res.json({ items, total: Number(countResult[0]?.count ?? 0), page, limit });
   } catch (err) {
     req.log.error(err);
@@ -228,7 +229,7 @@ router.get("/products/:id", async (req, res) => {
     // Try exact slug match first
     let [product] = await db.select().from(productsTable).where(eq(productsTable.slug, param)).limit(1);
 
-    // Fallback: clean the param and try again (handles legacy %20-decoded spaces and uppercase)
+    // Fallback 1: clean the param (handles legacy spaces and uppercase)
     if (!product) {
       const cleaned = generateSlugFromName(param);
       if (cleaned !== param && cleaned.length > 0) {
@@ -236,6 +237,12 @@ router.get("/products/:id", async (req, res) => {
       }
     }
 
+    // Fallback 2: case-insensitive ilike match (handles uppercase slugs stored in DB)
+    if (!product) {
+      [product] = await db.select().from(productsTable).where(ilike(productsTable.slug, param)).limit(1);
+    }
+
+    req.log.info({ param, found: !!product, slug: product?.slug }, "product detail lookup");
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
     // If the requested param differs from the canonical slug, handle accordingly.

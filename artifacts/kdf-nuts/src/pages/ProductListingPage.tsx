@@ -4,6 +4,7 @@ import { useLocation, useSearch } from 'wouter';
 import { useCart } from '../context/CartContext';
 import { ProductCard } from '../components/ProductCard';
 import { useListProducts, useListCategories, ListProductsSortBy } from '@workspace/api-client-react';
+import { getProductImageSrc } from '../lib/imageUrl';
 import { BottomNav } from '../components/BottomNav';
 
 const BG_COLOR = '#F8F9FB';
@@ -26,9 +27,7 @@ export function ProductListingPage() {
   const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
   function getImgSrc(key: string | null | undefined) {
-    if (!key) return null;
-    if (key.startsWith("http")) return key;
-    return `${BASE_URL}api/storage/objects/${key}`;
+    return getProductImageSrc(key) || null;
   }
 
   useEffect(() => {

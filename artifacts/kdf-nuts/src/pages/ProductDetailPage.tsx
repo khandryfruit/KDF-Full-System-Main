@@ -423,7 +423,8 @@ export function ProductDetailPage() {
   const [bidForm, setBidForm] = useState({ bidderName: "", bidderPhone: "", amount: "" });
 
   /* Supports both /product/123 (ID) and /product/premium-almonds (slug) */
-  const param = (params as any).id ?? "";
+  /* Route is /products/:slug — fall back to .id for legacy /product/:id links */
+  const param = (params as any).slug ?? (params as any).id ?? "";
   const { data: product, isLoading, isError } = useQuery({
     queryKey: ["product", param],
     queryFn: async () => {

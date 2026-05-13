@@ -299,7 +299,8 @@ export function HomePage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const { data: productsData } = useListProducts({ limit: 20 });
+  const { data: productsData } = useListProducts({ limit: 50 });
+  const { data: featuredData } = useListProducts({ featured: true, limit: 20 });
   const { data: categoriesData } = useListCategories();
   const { data: bannersData } = useListBanners({ platform: 'mobile' } as any);
 
@@ -323,7 +324,11 @@ export function HomePage() {
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   };
 
-  const featuredProducts = products.filter((p: any) => p.featured);
+  // Use dedicated featured API query; fall back to client-side filter from full list
+  const featuredFromApi = featuredData?.items ?? [];
+  const featuredProducts = featuredFromApi.length > 0
+    ? featuredFromApi
+    : products.filter((p: any) => p.featured);
   const allProducts = products;
 
   const { data: announcements = [] } = useQuery<any[]>({
@@ -483,7 +488,8 @@ export function HomePage() {
                     onMouseDown={(e) => { e.preventDefault(); setLocation(`/products/${p.slug || p.id}`); setShowHints(false); setSearchQuery(''); }}
                   >
                     {p.image ? (
-                      <img src={`${BASE_URL}api/storage/objects/${p.image}`} alt={p.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                      <img src={getProductImageSrc(p.image)} alt={p.name} className="w-10 h-10 rounded-xl object-cover shrink-0"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
                       <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
                         <Search size={14} className="text-gray-400" />
