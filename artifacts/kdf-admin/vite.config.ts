@@ -6,13 +6,11 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const isBuild = process.argv.includes("build");
 
-// During `vite build` (Railpack build step), PORT is irrelevant — only dev/preview need it.
-// Bracket notation prevents Railpack's static scanner from adding PORT to the BuildKit
-// secret list, which causes "secret PORT not found" failures because Railway only provides
-// PORT at container runtime, not at image-build time.
-const rawPort: string | undefined = isBuild
-  ? undefined
-  : (process.env as Record<string, string | undefined>)["PORT"];
+// PORT is only meaningful for dev/preview servers, not during `vite build`.
+// When deploying on Railway, set PORT=8080 as an explicit service variable so
+// Railpack can inject it at build time (even though isBuild=true means it isn't
+// actually used). Railway also overrides PORT at runtime automatically.
+const rawPort = process.env.PORT;
 if (!isBuild && !rawPort) {
   throw new Error("PORT environment variable is required but was not provided.");
 }
@@ -22,7 +20,21 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
 }
 
 // Admin is always served at /admin/ (both dev and production).
+// On Railway set BASE_PATH=/ to serve from the root domain.
 const basePath = process.env.BASE_PATH ?? "/admin/";
+
+// Proxy target for Vite's dev/preview server-side proxy.
+// On Replit: api-server runs on localhost:8080 (no var needed).
+// On Railway: set API_PROXY_TARGET=http://workspaceapi-server.railway.internal:8080
+const proxyTarget =
+  process.env.API_PROXY_TARGET ??
+  process.env.VITE_API_BASE_URL ??
+  "http://localhost:8080";
+
+const proxy = {
+  "/api": { target: proxyTarget, changeOrigin: true, secure: false },
+  "/admin/api": { target: proxyTarget, changeOrigin: true, secure: false },
+};
 
 export default defineConfig({
   base: basePath,
@@ -61,49 +73,13 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
-    fs: {
-      strict: true,
-    },
-    // Forward /api/* to the API server so Vite does not intercept these requests
-    // and return a "public base URL /admin/" error when base !== "/".
-    //
-    // Proxy target for server-side forwarding (Vite process, not the browser).
-    // On Replit: API server runs on localhost:8080 — no env var needed.
-    // On Railway: set API_PROXY_TARGET=http://workspaceapi-server.railway.internal:8080
-    //   (Railway private network — avoids EAI_AGAIN DNS failures on public hostnames).
-    //   VITE_API_BASE_URL is used by the browser for direct calls; this is separate.
-    proxy: {
-      // Forward /api/* directly to the Express server.
-      "/api": {
-        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
-        changeOrigin: true,
-        secure: false,
-      },
-      // Forward /admin/api/* to Express as well (production-path alias).
-      // Express has a /admin/api → /api rewrite middleware that handles these.
-      "/admin/api": {
-        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    fs: { strict: true },
+    proxy,
   },
   preview: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
-    // Same proxy as dev server — required so vite preview forwards /api to the API service.
-    proxy: {
-      "/api": {
-        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/admin/api": {
-        target: process.env.API_PROXY_TARGET ?? process.env.VITE_API_BASE_URL ?? "http://localhost:8080",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    proxy,
   },
 });
