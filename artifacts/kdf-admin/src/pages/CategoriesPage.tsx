@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
 function getImageUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
@@ -47,7 +49,7 @@ function useCategoryImageUpload() {
       const formData = new FormData();
       formData.append("file", file);
       setProgress(30);
-      const res = await fetch("/api/storage/uploads/image", {
+      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
         method: "POST",
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: formData,

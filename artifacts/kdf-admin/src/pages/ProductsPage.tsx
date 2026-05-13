@@ -50,6 +50,8 @@ interface ProductVariant {
 
 const VARIANT_TYPES = ["Weight", "Size", "Color", "Flavor", "Material", "Custom"] as const;
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
 /* ─── Image helpers ──────────────────────────────────────── */
 function getImageUrl(path: string): string {
   if (!path) return "";
@@ -87,13 +89,16 @@ function useProductImageUpload() {
         onProgress(Math.round(fake));
       }, 120);
 
-      const res = await fetch("/api/storage/uploads/image", {
+      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       clearInterval(ticker);
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(errData.detail ?? errData.error ?? "Upload failed");
+      }
       const data = await res.json();
       onProgress(100);
       return { path: data.objectPath, savedPct: data.savedPct ?? 0 };

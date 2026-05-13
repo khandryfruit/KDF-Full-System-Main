@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "./lib/runMigrations";
+import { isCloudinaryConfigured } from "./lib/cloudinaryStorage";
 import { startAbandonedRecoveryScheduler } from "./lib/whatsappRecovery";
 import { startCampaignQueueProcessor } from "./lib/campaignQueue";
 import { startShopifyAutoSync, autoRegisterWebhooksOnStartup } from "./lib/shopifyAutoSync";
@@ -71,7 +72,22 @@ warmUpDb()
         process.exit(1);
       }
 
-      logger.info({ port }, "Server listening");
+      const onReplit = !!process.env.REPL_ID;
+      const cloudinaryOk = isCloudinaryConfigured();
+      logger.info(
+        {
+          port,
+          platform: onReplit ? "replit" : "railway/vps",
+          storageBackend: onReplit ? "replit-object-storage" : cloudinaryOk ? "cloudinary" : "NONE-CONFIGURED",
+          cloudinaryConfigured: cloudinaryOk,
+        },
+        "Server listening"
+      );
+      if (!onReplit && !cloudinaryOk) {
+        logger.warn(
+          "No image storage backend configured! Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET to enable uploads on Railway."
+        );
+      }
       startAbandonedRecoveryScheduler();
       startCampaignQueueProcessor();
       startShopifyAutoSync(15); /* incremental sync every 15 minutes */

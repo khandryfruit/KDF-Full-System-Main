@@ -30,6 +30,8 @@ const DEFAULTS: ImageOptSettings = {
   thumbWidthPx: 300,
 };
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
 function getAuthHeader() {
   return { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` };
 }
@@ -82,7 +84,7 @@ export default function ImageOptimizationPage() {
     try {
       const fd = new FormData();
       fd.append("file", testFile);
-      const r = await fetch("/api/storage/uploads/image", {
+      const r = await fetch(`${API_BASE}/api/storage/uploads/image`, {
         method: "POST",
         headers: getAuthHeader(),
         body: fd,

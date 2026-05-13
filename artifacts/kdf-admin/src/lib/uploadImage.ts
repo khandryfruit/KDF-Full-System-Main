@@ -8,9 +8,19 @@ export interface UploadResult {
 }
 
 /**
- * Upload an image file through the optimizing API endpoint.
+ * API base URL — on Railway, VITE_API_BASE_URL is the api-server's external
+ * URL (e.g. https://workspaceapi-server-production-6674.up.railway.app).
+ * On Replit (and local dev) it is empty, so all calls use relative paths.
+ *
+ * This bypasses the Vite proxy entirely on Railway, which can fail with
+ * EAI_AGAIN DNS errors when the two Railway services try to talk internally
+ * via the public domain.
+ */
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
+/**
+ * Upload an image file through the optimising API endpoint.
  * The server converts to WebP, compresses, and resizes automatically.
- * Falls back to a direct presigned-URL upload if the optimized endpoint fails.
  */
 export async function uploadImage(file: File): Promise<string> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -18,15 +28,21 @@ export async function uploadImage(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch("/api/storage/uploads/image", {
+  const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(err.error ?? "Image upload failed");
+    let errMsg = "Image upload failed";
+    try {
+      const err = await res.json() as { error?: string; detail?: string };
+      errMsg = err.detail ?? err.error ?? errMsg;
+    } catch {
+      errMsg = `Upload failed (HTTP ${res.status})`;
+    }
+    throw new Error(errMsg);
   }
 
   const data = (await res.json()) as UploadResult;
@@ -39,7 +55,7 @@ export async function uploadImage(file: File): Promise<string> {
 export async function uploadFile(file: File, folder = "general"): Promise<string> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
 
-  const metaRes = await fetch("/api/storage/uploads/request-url", {
+  const metaRes = await fetch(`${API_BASE}/api/storage/uploads/request-url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -22,6 +22,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
 /* ── Banner Image Uploader ──────────────────────────── */
 function BannerImageUploader({
   value,
@@ -71,14 +73,17 @@ function BannerImageUploader({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/storage/uploads/image", {
+      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}`,
         },
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(errData.detail ?? errData.error ?? `Upload failed (${res.status})`);
+      }
       const { objectPath } = await res.json();
 
       onChange(objectPath);
@@ -187,14 +192,14 @@ function BannerVideoUploader({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/storage/uploads/video", {
+      const res = await fetch(`${API_BASE}/api/storage/uploads/video`, {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` },
         body: formData,
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Upload failed");
+        const err = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(err.detail ?? err.error ?? "Upload failed");
       }
       const { objectPath } = await res.json();
       onChange(objectPath);
