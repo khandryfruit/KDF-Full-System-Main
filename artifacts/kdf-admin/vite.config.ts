@@ -4,20 +4,12 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const isBuild = process.argv.includes("build");
-
-// PORT is only meaningful for dev/preview servers, not during `vite build`.
-// When deploying on Railway, set PORT=8080 as an explicit service variable so
-// Railpack can inject it at build time (even though isBuild=true means it isn't
-// actually used). Railway also overrides PORT at runtime automatically.
-const rawPort = process.env.PORT;
-if (!isBuild && !rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
-const port = rawPort ? Number(rawPort) : 3000;
-if (rawPort && (Number.isNaN(port) || port <= 0)) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// Do not read `process.env.PORT` at module scope. Railway Railpack may treat it as a
+// Docker BuildKit *secret* required during `vite build`; the build container often has
+// no PORT secret → `failed to solve: secret PORT not found`.
+// Use fixed defaults here; override at runtime via CLI (`--port $PORT`) in package.json.
+const DEV_PORT = 5173;
+const PREVIEW_PORT = 8080;
 
 // Admin is always served at /admin/ (both dev and production).
 // On Railway set BASE_PATH=/ to serve from the root domain.
@@ -84,7 +76,7 @@ export default defineConfig(async ({ command }) => ({
     },
   },
   server: {
-    port,
+    port: DEV_PORT,
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
@@ -92,7 +84,8 @@ export default defineConfig(async ({ command }) => ({
     proxy,
   },
   preview: {
-    port,
+    port: PREVIEW_PORT,
+    strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
     proxy,
