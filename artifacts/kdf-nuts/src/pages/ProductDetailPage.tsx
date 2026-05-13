@@ -743,7 +743,8 @@ export function ProductDetailPage() {
             {images.map((img: string, i: number) => (
               <button key={i} onClick={() => setSelectedImageIndex(i)}
                 className={`flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${i === selectedImageIndex ? 'border-[#5FA800] shadow-md scale-105' : 'border-gray-200'}`}>
-                <img src={getProductImageSrc(img) ?? ''} alt={`view ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                <img src={getProductImageSrc(img) ?? ''} alt={`view ${i + 1}`} className="w-full h-full object-cover" loading="lazy"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
               </button>
             ))}
           </div>
@@ -979,7 +980,8 @@ export function ProductDetailPage() {
                   <div key={prod.id} onClick={() => setLocation(`/products/${prod.slug || prod.id}`)}
                     className="cursor-pointer flex-shrink-0 w-36 border border-gray-100 rounded-2xl overflow-hidden snap-start shadow-sm active:scale-[0.97] transition-transform">
                     <div className={`w-full aspect-square bg-gradient-to-br ${prod.gradient || 'from-green-400 to-emerald-600'} relative overflow-hidden`}>
-                      {rImage && <img src={getProductImageSrc(rImage) ?? ''} alt={prod.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />}
+                      {rImage && <img src={getProductImageSrc(rImage) ?? ''} alt={prod.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                       {rDisc && <span className="absolute top-1.5 left-1.5 bg-[#F58300] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{rDisc}% OFF</span>}
                     </div>
                     <div className="p-2.5">

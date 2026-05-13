@@ -17,6 +17,18 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
 
 const basePath = process.env.BASE_PATH ?? "/";
 
+// Proxy target for Vite's dev/preview server-side proxy.
+// On Replit: api-server runs on localhost:8080 (no var needed).
+// On Railway: set API_PROXY_TARGET=http://workspaceapi-server.railway.internal:8080
+const proxyTarget =
+  process.env.API_PROXY_TARGET ??
+  process.env.VITE_API_BASE_URL ??
+  "http://localhost:8080";
+
+const proxy = {
+  "/api": { target: proxyTarget, changeOrigin: true, secure: false },
+};
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -60,10 +72,12 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    proxy,
   },
   preview: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy,
   },
 });

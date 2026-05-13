@@ -96,10 +96,16 @@ export function ProductCard({ product, mode = 'scroll' }: ProductCardProps) {
 
           <div className="w-full h-[150px] relative overflow-hidden bg-gray-50">
             {image ? (
-              <img src={getProductImageSrc(image)} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-            ) : (
-              <div className={`w-full h-full bg-gradient-to-br ${product.gradient || 'from-green-400 to-emerald-600'}`} />
-            )}
+              <img
+                src={getProductImageSrc(image)}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : null}
+            <div className={`absolute inset-0 bg-gradient-to-br ${product.gradient || 'from-green-400 to-emerald-600'}`}
+              style={{ zIndex: image ? -1 : 0 }} />
           </div>
 
           <div className="p-3 flex flex-col flex-grow gap-1.5">
@@ -146,10 +152,16 @@ export function ProductCard({ product, mode = 'scroll' }: ProductCardProps) {
 
         <div className="w-full h-[140px] relative overflow-hidden bg-gray-50">
           {image ? (
-            <img src={getProductImageSrc(image)} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-          ) : (
-            <div className={`w-full h-full bg-gradient-to-br ${product.gradient || 'from-green-400 to-emerald-600'}`} />
-          )}
+            <img
+              src={getProductImageSrc(image)}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            />
+          ) : null}
+          <div className={`absolute inset-0 bg-gradient-to-br ${product.gradient || 'from-green-400 to-emerald-600'}`}
+            style={{ zIndex: image ? -1 : 0 }} />
         </div>
 
         <div className="p-3 flex flex-col flex-grow gap-1.5">

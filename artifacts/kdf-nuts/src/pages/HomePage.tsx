@@ -86,7 +86,8 @@ function PromoBannerCard({
       {/* Real image */}
       {banner.imageUrl && (
         <img src={getProductImageSrc(banner.imageUrl)} alt={banner.title}
-          className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+          className="absolute inset-0 w-full h-full object-cover" loading="lazy"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
       )}
       {banner.imageUrl && <div className="absolute inset-0 bg-black/38" />}
 
@@ -645,6 +646,7 @@ export function HomePage() {
                     alt={cur.title}
                     className="absolute inset-0 w-full h-full object-cover"
                     loading="lazy"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                   />
                 )}
                 {(cur as any).imageUrl && <div className="absolute inset-0 bg-black/35" />}
