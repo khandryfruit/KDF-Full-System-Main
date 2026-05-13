@@ -1,0 +1,161 @@
+Critical production issue ابھی بھی unresolved ہے۔
+
+میں نے ابھی admin پر Hero Banner upload کیا:
+
+admin.khanbabadryfruits.com/admin/banners
+
+Upload successful تھا،
+image Cloudinary پر بھی جا رہی ہے،
+DB میں save بھی ہو رہی ہے،
+
+لیکن:
+
+❌ Admin banners list میں show نہیں ہو رہی
+❌ Website پر show نہیں ہو رہی
+❌ Products بھی بعض جگہ render نہیں ہو رہے
+❌ Categories/data inconsistent ہیں
+❌ بعض APIs empty arrays دے رہی ہیں
+
+یہ clear indication ہے کہ صرف upload issue نہیں بلکہ:
+
+* frontend rendering
+* API fetching
+* DB reads
+* filtering
+* status handling
+* serialization
+* caching
+* ORM queries
+* publish/active logic
+* image mapping
+* banner retrieval
+
+میں کہیں نہ کہیں major inconsistency ہے۔
+
+━━━━━━━━━━━━━━━
+FULL SYSTEM DEBUG REQUIRED
+━━━━━━━━━━━━━━━
+
+Proper end-to-end debugging کریں۔
+
+صرف superficial fixes نہ کریں۔
+
+━━━━━━━━━━━━━━━
+
+1. DATABASE VERIFICATION
+   ━━━━━━━━━━━━━━━
+
+Production PostgreSQL inspect کریں:
+
+Check کریں:
+
+* banners table
+* products table
+* categories table
+* image fields
+* published flags
+* active flags
+* featured flags
+* slug values
+* relations
+
+Verify کریں:
+
+* newly uploaded banner DB میں موجود ہے؟
+* newly uploaded product DB میں موجود ہے؟
+* image URL stored ہے؟
+* status active ہے؟
+* queries filtered تو نہیں کر رہیں؟
+
+━━━━━━━━━━━━━━━
+2. API RESPONSE DEBUG
+━━━━━━━━━━━━━━━
+
+Production APIs manually inspect کریں:
+
+* /banners
+* /products
+* /products/:slug
+* /products?featured=true
+* /categories
+
+Actual JSON responses دیکھیں۔
+
+Check کریں:
+
+* empty arrays؟
+* incorrect filtering؟
+* null images؟
+* serialization issue؟
+* stale cache؟
+* wrong environment؟
+
+━━━━━━━━━━━━━━━
+3. CLOUDINARY / IMAGE PIPELINE
+━━━━━━━━━━━━━━━
+
+Verify کریں:
+
+* DB stored image URL
+* actual Cloudinary URL
+* frontend rendered URL
+
+Check کریں:
+
+* image helper
+* object mapping
+* objects/ prefix
+* transformations
+* nullable fields
+* broken parsing
+
+━━━━━━━━━━━━━━━
+4. FRONTEND RENDERING DEBUG
+━━━━━━━━━━━━━━━
+
+`@workspace/kdf-plus`
+
+Inspect کریں:
+
+* homepage queries
+* featured queries
+* banners queries
+* SSR/CSR mismatch
+* hydration
+* React state
+* API base URL
+* caching
+* stale fetches
+* filter conditions
+
+Network tab + console + rendered state سب inspect کریں۔
+
+━━━━━━━━━━━━━━━
+5. CATEGORY / PRODUCT RELATIONSHIPS
+━━━━━━━━━━━━━━━
+
+Check کریں:
+
+* products categories سے linked ہیں؟
+* category filters products hide تو نہیں کر رہیں؟
+* homepage sections empty کیوں ہیں؟
+* featured products کیوں missing ہیں؟
+
+━━━━━━━━━━━━━━━
+6. IMPORTANT
+━━━━━━━━━━━━━━━
+
+صرف ان services پر کام کریں:
+
+* @workspace/kdf-plus
+* @workspace/api-server
+
+`kdf-nuts` کو touch نہ کریں۔
+
+Live production یہی ہے:
+
+https://khanbabadryfruits.com
+
+━━━━━━━━━━━━━━━
+
+اب proper production-grade debugging کریں اور exact root cause identify کریں کیونکہ uploads successful ہونے کے باوجود frontend rendering/data retrieval inconsistent ہے۔

@@ -527,6 +527,7 @@ export default function BannersPage() {
     const { targetLabel: _l, ...rest } = formData;
     return {
       ...rest,
+      bgColor: "",
       platform: rest.platform || "both",
       targetType: rest.targetType || undefined,
       targetId: rest.targetId ?? undefined,
