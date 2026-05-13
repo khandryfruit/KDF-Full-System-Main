@@ -308,7 +308,16 @@ async function parseSuccessBody(
 
     case "text": {
       const text = await response.text();
-      return text === "" ? null : text;
+      if (text === "") return null;
+      const normalized = stripBom(text);
+      if (looksLikeJson(normalized)) {
+        try {
+          return JSON.parse(normalized);
+        } catch {
+          return text;
+        }
+      }
+      return text;
     }
 
     case "blob":
@@ -336,6 +345,10 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+
+  if (!headers.has("accept")) {
+    headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
 
   if (
     typeof init.body === "string" &&

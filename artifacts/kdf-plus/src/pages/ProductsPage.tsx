@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
@@ -28,6 +28,8 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest First" },
@@ -43,7 +45,12 @@ export default function ProductsPage() {
   const [, setLocation] = useLocation();
   const params = new URLSearchParams(search);
 
-  const [sortBy, setSortBy] = useState<string>(params.get("sortBy") || "newest");
+  const rawSortParam = params.get("sortBy") || params.get("sort") || "newest";
+  const initialSort =
+    rawSortParam === "best_selling" ? "rating" : rawSortParam;
+  const [sortBy, setSortBy] = useState<string>(
+    ["newest", "price_asc", "price_desc", "rating"].includes(initialSort) ? initialSort : "newest",
+  );
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | undefined>(
     params.get("categoryId") ? Number(params.get("categoryId")) : undefined
   );
@@ -54,6 +61,16 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const searchQuery = params.get("search") || undefined;
+
+  useEffect(() => {
+    const p = new URLSearchParams(search);
+    const fromUrl = p.get("sortBy") || p.get("sort");
+    if (!fromUrl) return;
+    const resolved = fromUrl === "best_selling" ? "rating" : fromUrl;
+    if (["newest", "price_asc", "price_desc", "rating"].includes(resolved)) {
+      setSortBy(resolved);
+    }
+  }, [search]);
 
   const { data: categoriesData } = useListCategories();
   const categories = Array.isArray(categoriesData) ? categoriesData : [];
@@ -67,12 +84,17 @@ export default function ProductsPage() {
     ...(searchQuery ? { search: searchQuery } : {}),
   };
 
-  const { data, isLoading } = useListProducts(queryParams, {
-    query: { queryKey: ["products", JSON.stringify(queryParams)] },
+  const { data, isError, error, refetch, isFetching, isPending } = useListProducts(queryParams, {
+    query: {
+      queryKey: ["products", JSON.stringify(queryParams)],
+      staleTime: 60_000,
+    },
   });
 
-  const products = data?.items ?? [];
-  const total = data?.total ?? 0;
+  const { items: products, total } = useMemo(
+    () => normalizeProductsListResponse(data),
+    [data],
+  );
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   useEffect(() => {
@@ -173,7 +195,11 @@ export default function ProductsPage() {
               {searchQuery ? `Results for "${searchQuery}"` : featured ? "Featured Products" : "All Products"}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {isLoading ? "Loading..." : `${total} products found`}
+              {(isPending || (isFetching && products.length === 0)) && !isError
+                ? "Loading..."
+                : isError
+                  ? "Could not load products"
+                  : `${total} product${total === 1 ? "" : "s"} found`}
             </p>
           </div>
 
@@ -241,13 +267,26 @@ export default function ProductsPage() {
 
           {/* Products Grid */}
           <div className="flex-1 min-w-0">
-            {isLoading ? (
+            {isError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>Something went wrong</AlertTitle>
+                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm">
+                    {(error as Error)?.message ?? "Failed to load products. Please try again."}
+                  </span>
+                  <Button type="button" variant="outline" size="sm" className="shrink-0 bg-background" onClick={() => refetch()}>
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            {(isPending || (isFetching && !products.length)) && !isError ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <Skeleton key={i} className="aspect-[3/4] rounded-xl" />
                 ))}
               </div>
-            ) : products.length === 0 ? (
+            ) : !isError && products.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="text-4xl mb-4">🥜</p>
                 <h3 className="text-lg font-semibold mb-2">No products found</h3>
@@ -256,7 +295,7 @@ export default function ProductsPage() {
                   Reset Filters
                 </Button>
               </div>
-            ) : (
+            ) : !isError ? (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                   {products.map((product) => (
@@ -291,7 +330,7 @@ export default function ProductsPage() {
                   </div>
                 )}
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </main>

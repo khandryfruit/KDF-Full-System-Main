@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import {
@@ -11,6 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useGetProduct, getGetProductQueryKey, useListProducts } from "@workspace/api-client-react";
 import { useCart } from "@/context/CartContext";
 import { getProductImageSrc } from "@/lib/imageUrl";
+import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -261,8 +262,17 @@ function ShippingTab() {
 /* ── Related Products ── */
 function RelatedProducts({ currentId }: { currentId: number }) {
   const [, setLocation] = useLocation();
-  const { data } = useListProducts({ limit: 7 });
-  const products = (data?.items ?? []).filter((p: any) => p.id !== currentId).slice(0, 6);
+  const { data } = useListProducts(
+    { limit: 7 },
+    { query: { queryKey: ["products", "related-pool"], staleTime: 60_000 } },
+  );
+  const products = useMemo(
+    () =>
+      normalizeProductsListResponse(data)
+        .items.filter((p: any) => p.id !== currentId)
+        .slice(0, 6),
+    [data, currentId],
+  );
   if (products.length === 0) return null;
 
   return (
@@ -278,7 +288,7 @@ function RelatedProducts({ currentId }: { currentId: number }) {
           return (
             <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer border border-border rounded-2xl overflow-hidden bg-card hover:shadow-md transition-all hover:-translate-y-0.5">
               <div className="aspect-square bg-muted/20 overflow-hidden relative">
-                {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy"
+                {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
                 {rDisc && <span className="absolute top-2 left-2 bg-[#F58300] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{rDisc}% OFF</span>}
               </div>

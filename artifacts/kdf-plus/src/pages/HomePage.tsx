@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import {
@@ -12,6 +12,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
+import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Banner = import("@workspace/api-client-react").Banner;
@@ -1031,22 +1032,31 @@ export default function HomePage() {
   const { data: categoriesData, isLoading: catsLoading }      = useListCategories();
   const { data: featuredData,   isLoading: featuredLoading }  = useListProducts(
     { featured: true, limit: 10 },
-    { query: { queryKey: ["products", "featured"] } }
+    { query: { queryKey: ["products", "featured"], staleTime: 60_000 } },
   );
   const { data: allProductsData, isLoading: allLoading } = useListProducts(
     { limit: 20, sortBy: "newest" as const },
-    { query: { queryKey: ["products", "newest"] } }
+    { query: { queryKey: ["products", "newest"], staleTime: 60_000 } },
   );
   const { data: dealsData, isLoading: dealsLoading } = useListProducts(
     { limit: 10, hasDiscount: true } as any,
-    { query: { queryKey: ["products", "deals"] } }
+    { query: { queryKey: ["products", "deals"], staleTime: 60_000 } },
   );
 
   const banners         = Array.isArray(bannersData) ? (bannersData as Banner[]) : [];
   const categories      = Array.isArray(categoriesData) ? (categoriesData as Category[]) : [];
-  const featuredProducts = featuredData?.items ?? [] as Product[];
-  const allProducts      = allProductsData?.items ?? [] as Product[];
-  const dealProducts     = dealsData?.items ?? [] as Product[];
+  const featuredProducts = useMemo(
+    () => normalizeProductsListResponse(featuredData).items as Product[],
+    [featuredData],
+  );
+  const allProducts = useMemo(
+    () => normalizeProductsListResponse(allProductsData).items as Product[],
+    [allProductsData],
+  );
+  const dealProducts = useMemo(
+    () => normalizeProductsListResponse(dealsData).items as Product[],
+    [dealsData],
+  );
 
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["announcements"],

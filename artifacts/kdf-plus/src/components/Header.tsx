@@ -304,8 +304,8 @@ function MobileDrawer({ open, onClose, onNavigate, user, logout, city, cities, s
               { href: "/", label: "Home", icon: Home },
               { href: "/products", label: "All Products", icon: LayoutGrid },
               { href: "/products?featured=true", label: "Deals", icon: Flame, color: ORANGE },
-              { href: "/products?sort=newest", label: "New Arrivals", icon: Sparkles },
-              { href: "/products?sort=best_selling", label: "Best Sellers", icon: Star },
+              { href: "/products?sortBy=newest", label: "New Arrivals", icon: Sparkles },
+              { href: "/products?sortBy=rating", label: "Best Sellers", icon: Star },
               { href: "/blog", label: "Blog", icon: Leaf },
               { href: "/track", label: "Track Order", icon: Truck, color: GREEN },
             ].map(({ href, label, icon: Icon, color }) => (
@@ -988,12 +988,12 @@ export function Header() {
                     <Flame className="w-3.5 h-3.5" />Deals
                   </button>
                 </Link>
-                <Link href="/products?sort=newest">
+                <Link href="/products?sortBy=newest">
                   <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-purple-50 hover:text-purple-700 transition-all whitespace-nowrap text-gray-600">
                     <Sparkles className="w-3.5 h-3.5" />New Arrivals
                   </button>
                 </Link>
-                <Link href="/products?sort=best_selling">
+                <Link href="/products?sortBy=rating">
                   <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-yellow-50 hover:text-yellow-700 transition-all whitespace-nowrap text-gray-600">
                     <Star className="w-3.5 h-3.5" />Best Sellers
                   </button>
