@@ -84,11 +84,15 @@ async function uploadBufferToGcs(
   extension: string,
   visibility: "public" | "private" = "private"
 ): Promise<string> {
-  // On Railway (or any non-Replit host), use Cloudinary when configured.
+  // On Railway (or any non-Replit host), prefer Cloudinary when configured.
+  // Cloudinary errors propagate directly — no silent fallback to GCS, which is
+  // not available outside of Replit. This gives clear error messages instead of
+  // a confusing second failure from unconfigured object storage.
   if (isCloudinaryConfigured() && !isRunningOnReplit()) {
     return uploadBufferToCloudinary(buffer, "kdf-uploads");
   }
 
+  // Replit / local: use Replit Object Storage (GCS-compatible).
   const privateDir = objectStorageService.getPrivateObjectDir();
   const objectId = randomUUID();
   const fullPath = `${privateDir}/uploads/${objectId}.${extension}`;
@@ -174,9 +178,19 @@ router.post(
       return;
     }
 
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(req.file.mimetype)) {
+      res.status(400).json({ error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed." });
+      return;
+    }
+
+    if (!hasImageMagicBytes(req.file.buffer)) {
+      res.status(400).json({ error: "File content does not match an allowed image format." });
+      return;
+    }
+
     const settings = await getImageOptSettings();
     let objectPath: string;
-    let processedSize: number;
+    let processedSize = 0;
     let originalSize = req.file.size;
     let contentType = req.file.mimetype;
 
@@ -195,8 +209,18 @@ router.post(
       processedSize = processed.processedSize;
       originalSize = processed.originalSize;
       contentType = processed.contentType;
-    } catch (err) {
-      req.log.warn({ err }, "Image processing failed, falling back to original");
+    } catch (err: any) {
+      req.log.warn({ err }, "Image processing or upload failed, falling back to original");
+      // Only fall back to raw upload if Cloudinary is NOT configured.
+      // If Cloudinary is configured but failed, surface the real error.
+      if (isCloudinaryConfigured() && !isRunningOnReplit()) {
+        req.log.error({ err }, "Cloudinary upload failed");
+        res.status(500).json({
+          error: "Upload failed",
+          detail: err?.message ?? String(err),
+        });
+        return;
+      }
       try {
         const ext = req.file.mimetype.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
         objectPath = await uploadBufferToGcs(
