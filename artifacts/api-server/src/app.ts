@@ -8,6 +8,7 @@ import publicInvoiceRouter from "./routes/public-invoice";
 import { logger } from "./lib/logger";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
+import { resolveApiPublicDir, resolveSpaDistDir, spaDistReady } from "./lib/resolveStaticDist";
 import { db } from "@workspace/db";
 import { seoSettingsTable, productsTable, blogPostsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -22,11 +23,28 @@ function getBase(req: Request, canonicalDomain?: string | null): string {
   return (canonicalDomain ?? `${proto}://${host}`).replace(/\/$/, "");
 }
 
-// Resolve static dist directories from project root
-const adminDist    = path.resolve(process.cwd(), "artifacts/kdf-admin/dist/public");
-const adminAppDist = path.resolve(process.cwd(), "artifacts/kdf-admin-app/dist/public");
-const mainDist     = path.resolve(process.cwd(), "artifacts/kdf-plus/dist/public");
-const apiPublicDir = path.resolve(process.cwd(), "artifacts/api-server/public");
+// Resolve static dist directories: works when CWD is monorepo root OR
+// `artifacts/api-server` (Railway "Root Directory"). See resolveStaticDist.ts.
+const adminDist = resolveSpaDistDir("kdf-admin");
+const adminAppDist = resolveSpaDistDir("kdf-admin-app");
+const mainDist = resolveSpaDistDir("kdf-plus");
+const apiPublicDir = resolveApiPublicDir();
+
+if (process.env.NODE_ENV === "production") {
+  logger.info(
+    {
+      cwd: process.cwd(),
+      kdfPlus: mainDist,
+      kdfPlusReady: spaDistReady(mainDist),
+      kdfAdmin: adminDist,
+      kdfAdminReady: spaDistReady(adminDist),
+      kdfAdminApp: adminAppDist,
+      kdfAdminAppReady: spaDistReady(adminAppDist),
+      apiPublic: apiPublicDir,
+    },
+    "Static SPA / public paths resolved (503 on storefront usually means kdfPlusReady is false or wrong CWD)",
+  );
+}
 
 const adminStatic    = express.static(adminDist,    { index: false });
 const adminAppStatic = express.static(adminAppDist, { index: false });
