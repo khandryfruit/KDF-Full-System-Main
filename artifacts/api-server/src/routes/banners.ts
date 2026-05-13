@@ -30,6 +30,7 @@ const BANNER_WRITABLE_KEYS = new Set([
   "videoAutoplay",
   "videoMuted",
   "videoLoop",
+  "placement",
 ]);
 
 function pickWritableBannerFields(body: Record<string, unknown>): Record<string, unknown> {
@@ -50,18 +51,22 @@ function pickWritableBannerFields(body: Record<string, unknown>): Record<string,
 
 router.get("/banners", async (req, res) => {
   try {
-    const { platform } = req.query;
+    const { platform, placement } = req.query;
     const activeFilter = eq(bannersTable.active, true);
-    const whereClause = platform
-      ? and(
-          activeFilter,
-          or(
-            eq(bannersTable.platform, platform as string),
-            eq(bannersTable.platform, "both"),
-            isNull(bannersTable.platform)
-          )
-        )
-      : activeFilter;
+    const conditions: unknown[] = [activeFilter];
+    if (platform) {
+      conditions.push(
+        or(
+          eq(bannersTable.platform, platform as string),
+          eq(bannersTable.platform, "both"),
+          isNull(bannersTable.platform),
+        ),
+      );
+    }
+    if (placement && typeof placement === "string") {
+      conditions.push(eq(bannersTable.placement, placement));
+    }
+    const whereClause = conditions.length === 1 ? conditions[0] : and(...(conditions as any));
     const banners = await db
       .select()
       .from(bannersTable)

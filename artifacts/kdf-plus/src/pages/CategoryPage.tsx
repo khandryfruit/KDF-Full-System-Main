@@ -9,11 +9,12 @@ import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
+import { asArrayFromApi } from "@/lib/asArrayFromApi";
 
 export default function CategoryPage() {
   const params = useParams<{ slug: string }>();
   const { data: categoriesData } = useListCategories();
-  const categories = Array.isArray(categoriesData) ? categoriesData : [];
+  const categories = asArrayFromApi(categoriesData);
   const category = categories.find((c) => c.slug === params.slug);
 
   const { data, isPending, isError, error, refetch, isFetching } = useListProducts(

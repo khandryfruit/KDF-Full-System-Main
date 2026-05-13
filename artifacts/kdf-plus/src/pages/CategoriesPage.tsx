@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useListCategories } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
+import { asArrayFromApi } from "@/lib/asArrayFromApi";
 
 type Category = {
   id: number;
@@ -67,7 +68,7 @@ function CategoryCardSkeleton() {
 
 export default function CategoriesPage() {
   const { data: categoriesData, isLoading } = useListCategories();
-  const categories: Category[] = Array.isArray(categoriesData) ? (categoriesData as Category[]) : [];
+  const categories: Category[] = asArrayFromApi<Category>(categoriesData);
 
   return (
     <>

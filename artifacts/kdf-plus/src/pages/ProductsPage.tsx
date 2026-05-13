@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
+import { asArrayFromApi } from "@/lib/asArrayFromApi";
 
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest First" },
@@ -73,7 +74,7 @@ export default function ProductsPage() {
   }, [search]);
 
   const { data: categoriesData } = useListCategories();
-  const categories = Array.isArray(categoriesData) ? categoriesData : [];
+  const categories = asArrayFromApi(categoriesData);
 
   const queryParams = {
     page,

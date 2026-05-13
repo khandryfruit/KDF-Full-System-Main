@@ -326,6 +326,13 @@ paths:
             enum: [mobile, website, both]
           required: false
           description: Filter banners by platform
+        - in: query
+          name: placement
+          schema:
+            type: string
+            enum: [hero, header, promo]
+          required: false
+          description: Filter by banner placement (home hero vs header strip vs promo cards)
       responses:
         "200":
           description: Banners
@@ -1651,6 +1658,10 @@ components:
         platform:
           type: string
           enum: [mobile, website, both]
+        placement:
+          type: string
+          enum: [hero, header, promo]
+          description: Where the banner is shown on the storefront
         sortOrder:
           type: integer
         active:
@@ -1689,6 +1700,9 @@ components:
         platform:
           type: string
           enum: [mobile, website, both]
+        placement:
+          type: string
+          enum: [hero, header, promo]
         sortOrder:
           type: integer
         active:

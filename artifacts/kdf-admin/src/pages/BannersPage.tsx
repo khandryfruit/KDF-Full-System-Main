@@ -3,6 +3,7 @@ import {
   useListBanners, useCreateBanner, useUpdateBanner, useDeleteBanner,
   useListProducts, useListCategories,
   getListBannersQueryKey,
+  normalizeListCache,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { API_BASE } from "@/lib/apiBase";
+import { Link } from "wouter";
 
 /** DB default tailwind gradient — rows with real hero media should still list under Hero. */
 const DEFAULT_BANNER_BG = "from-[#5FA800] to-[#4d8a00]";
@@ -492,11 +494,20 @@ const PROMO_EMPTY_FORM = {
   active: true,
 };
 
+const HEADER_BANNER_EMPTY = {
+  title: "",
+  imageUrl: "",
+  linkUrl: "/products",
+  sortOrder: 0,
+  active: true,
+  platform: "both" as PlatformType,
+};
+
 const ICON_SUGGESTIONS = ["🚚", "🎁", "📦", "⚡", "🔥", "💎", "🌟", "🎉", "🎯", "🛍️", "💰", "🏷️"];
 
 export default function BannersPage() {
   /* ── Shared state ── */
-  const [activeTab, setActiveTab] = useState<"hero" | "promo">("hero");
+  const [activeTab, setActiveTab] = useState<"hero" | "promo" | "header">("hero");
   const { data: allBanners, isLoading } = useListBanners();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -507,17 +518,15 @@ export default function BannersPage() {
   const invalidateBanners = () =>
     queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
 
-  const bannerRows: any[] = Array.isArray(allBanners)
-    ? (allBanners as any[])
-    : allBanners != null &&
-        typeof allBanners === "object" &&
-        Array.isArray((allBanners as { items?: unknown }).items)
-      ? ((allBanners as { items: any[] }).items)
-      : [];
+  const bannerRows: any[] = normalizeListCache(allBanners);
 
-  /* split banners: promo = gradient "from-" cards; hero = everything else */
-  const heroBanners = bannerRows.filter((b: any) => !isPromoCard(b));
-  const promoBanners = bannerRows.filter((b: any) => isPromoCard(b));
+  const headerBanners = bannerRows.filter((b: any) => b.placement === "header");
+  const promoBanners = bannerRows.filter((b: any) => b.placement === "promo" || isPromoCard(b));
+  const heroBanners = bannerRows.filter((b: any) => {
+    if (b.placement === "header" || b.placement === "promo") return false;
+    if (b.placement === "hero") return true;
+    return !isPromoCard(b);
+  });
 
   const isBusy = createMutation.isPending || updateMutation.isPending;
 
@@ -557,6 +566,7 @@ export default function BannersPage() {
     const { targetLabel: _l, ...rest } = formData;
     return {
       ...rest,
+      placement: "hero" as const,
       bgColor: "",
       platform: rest.platform || "both",
       targetType: rest.targetType || undefined,
@@ -596,7 +606,7 @@ export default function BannersPage() {
         {
           onSuccess: (updated) => {
             queryClient.setQueryData(listKey, (old: unknown) => {
-              const list = Array.isArray(old) ? old : [];
+              const list = normalizeListCache(old);
               return list.map((row: any) => (row.id === updated.id ? updated : row));
             });
             void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
@@ -623,7 +633,7 @@ export default function BannersPage() {
               console.debug("[BannersPage] banner created", created);
             }
             queryClient.setQueryData(listKey, (old: unknown) => {
-              const list = Array.isArray(old) ? old : [];
+              const list = normalizeListCache(old);
               return [...list, created].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
             });
             void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
@@ -647,6 +657,9 @@ export default function BannersPage() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoEditId, setPromoEditId] = useState<number | null>(null);
   const [promoForm, setPromoForm] = useState({ ...PROMO_EMPTY_FORM });
+  const [headerOpen, setHeaderOpen] = useState(false);
+  const [headerEditId, setHeaderEditId] = useState<number | null>(null);
+  const [headerForm, setHeaderForm] = useState({ ...HEADER_BANNER_EMPTY });
 
   function openPromoAdd() { setPromoForm({ ...PROMO_EMPTY_FORM }); setPromoEditId(null); setPromoOpen(true); }
   function openPromoEdit(banner: any) {
@@ -676,13 +689,14 @@ export default function BannersPage() {
       sortOrder: promoForm.sortOrder,
       active: promoForm.active,
       platform: "mobile" as PlatformType,
+      placement: "promo" as const,
     };
     if (promoEditId) {
       toast({ title: "Updating promo card…" });
       updateMutation.mutate({ id: promoEditId, data: payload as any }, {
         onSuccess: (updated) => {
           queryClient.setQueryData(listKey, (old: unknown) => {
-            const list = Array.isArray(old) ? old : [];
+            const list = normalizeListCache(old);
             return list.map((row: any) => (row.id === updated.id ? updated : row));
           });
           void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
@@ -703,7 +717,7 @@ export default function BannersPage() {
       createMutation.mutate({ data: payload as any }, {
         onSuccess: (created) => {
           queryClient.setQueryData(listKey, (old: unknown) => {
-            const list = Array.isArray(old) ? old : [];
+            const list = normalizeListCache(old);
             return [...list, created].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
           });
           void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
@@ -722,12 +736,100 @@ export default function BannersPage() {
     }
   }
 
-  function handleDelete(id: number, type: "hero" | "promo") {
-    if (!confirm(`Delete this ${type === "promo" ? "promo card" : "banner"}?`)) return;
+  /* ── Header strip (under main nav on website) ── */
+  function openHeaderAdd() {
+    setHeaderForm({ ...HEADER_BANNER_EMPTY });
+    setHeaderEditId(null);
+    setHeaderOpen(true);
+  }
+  function openHeaderEdit(banner: any) {
+    setHeaderForm({
+      title: banner.title ?? "",
+      imageUrl: banner.imageUrl ?? "",
+      linkUrl: banner.linkUrl ?? "/products",
+      sortOrder: banner.sortOrder ?? 0,
+      active: banner.active ?? true,
+      platform: (banner.platform ?? "both") as PlatformType,
+    });
+    setHeaderEditId(banner.id);
+    setHeaderOpen(true);
+  }
+  function buildHeaderPayload() {
+    return {
+      title: headerForm.title?.trim() || "Header offer",
+      imageUrl: headerForm.imageUrl,
+      linkUrl: headerForm.linkUrl || undefined,
+      platform: headerForm.platform || "both",
+      placement: "header" as const,
+      bgColor: "",
+      sortOrder: headerForm.sortOrder,
+      active: headerForm.active,
+    };
+  }
+  function handleHeaderSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!headerForm.imageUrl?.trim()) {
+      toast({ variant: "destructive", title: "Please upload a header banner image" });
+      return;
+    }
+    const payload = buildHeaderPayload();
+    if (headerEditId) {
+      toast({ title: "Updating header banner…" });
+      updateMutation.mutate(
+        { id: headerEditId, data: payload as any },
+        {
+          onSuccess: (updated) => {
+            queryClient.setQueryData(listKey, (old: unknown) => {
+              const list = normalizeListCache(old);
+              return list.map((row: any) => (row.id === updated.id ? updated : row));
+            });
+            void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+            setHeaderOpen(false);
+            toast({ title: "Header banner updated" });
+          },
+          onError: (err: unknown) => {
+            console.error("[BannersPage] update header failed", err);
+            toast({
+              variant: "destructive",
+              title: "Failed to update",
+              description: err instanceof Error ? err.message : "Request failed",
+            });
+          },
+        },
+      );
+    } else {
+      toast({ title: "Creating header banner…" });
+      createMutation.mutate(
+        { data: payload as any },
+        {
+          onSuccess: (created) => {
+            queryClient.setQueryData(listKey, (old: unknown) => {
+              const list = normalizeListCache(old);
+              return [...list, created].sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+            });
+            void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+            setHeaderOpen(false);
+            toast({ title: "Header banner created" });
+          },
+          onError: (err: unknown) => {
+            console.error("[BannersPage] create header failed", err);
+            toast({
+              variant: "destructive",
+              title: "Failed to create",
+              description: err instanceof Error ? err.message : "Request failed",
+            });
+          },
+        },
+      );
+    }
+  }
+
+  function handleDelete(id: number, type: "hero" | "promo" | "header") {
+    if (!confirm(`Delete this ${type === "promo" ? "promo card" : type === "header" ? "header banner" : "banner"}?`)) return;
     deleteMutation.mutate({ id }, {
       onSuccess: () => {
         queryClient.setQueryData(listKey, (old: unknown) => {
-          const list = Array.isArray(old) ? old : [];
+          const list = normalizeListCache(old);
           return list.filter((row: any) => row.id !== id);
         });
         void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
@@ -764,10 +866,11 @@ export default function BannersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Banners</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Manage hero banners &amp; mid-page promo cards
+            Hero (home carousel), header strip under navigation, and promo cards — each type is saved separately.
           </p>
         </div>
-        {activeTab === "hero" ? (
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {activeTab === "hero" && (
           <Dialog open={heroOpen} onOpenChange={setHeroOpen}>
             <DialogTrigger asChild>
               <Button onClick={openHeroAdd}><Plus className="w-4 h-4 mr-2" /> Add Hero Banner</Button>
@@ -844,7 +947,8 @@ export default function BannersPage() {
               </form>
             </DialogContent>
           </Dialog>
-        ) : (
+          )}
+          {activeTab === "promo" && (
           <Dialog open={promoOpen} onOpenChange={setPromoOpen}>
             <DialogTrigger asChild>
               <Button onClick={openPromoAdd} className="bg-violet-600 hover:bg-violet-700 text-white"><Plus className="w-4 h-4 mr-2" /> Add Promo Card</Button>
@@ -953,11 +1057,101 @@ export default function BannersPage() {
               </form>
             </DialogContent>
           </Dialog>
-        )}
+          )}
+          {activeTab === "header" && (
+          <Dialog open={headerOpen} onOpenChange={setHeaderOpen}>
+            <DialogTrigger asChild>
+              <Button variant="secondary" onClick={openHeaderAdd}>
+                <Plus className="w-4 h-4 mr-2" /> Add Header Banner
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{headerEditId ? "Edit Header Banner" : "Add Header Banner"}</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Slim strip under the main navigation. Recommended <strong>1200×120px</strong> (wide, short).
+                </p>
+              </DialogHeader>
+              <form onSubmit={handleHeaderSubmit} className="space-y-4 py-2">
+                <BannerImageUploader
+                  value={headerForm.imageUrl}
+                  onChange={(url) => setHeaderForm({ ...headerForm, imageUrl: url })}
+                  label="Header image"
+                  recommendedW={1200}
+                  recommendedH={120}
+                  aspectRatio="10 / 1"
+                />
+                <div className="space-y-1.5">
+                  <Label>Title <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                  <Input
+                    value={headerForm.title}
+                    onChange={(e) => setHeaderForm({ ...headerForm, title: e.target.value })}
+                    placeholder="E.g. Free delivery this week"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Link when clicked</Label>
+                  <Input
+                    value={headerForm.linkUrl}
+                    onChange={(e) => setHeaderForm({ ...headerForm, linkUrl: e.target.value })}
+                    placeholder="/products"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Platform</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PLATFORM_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setHeaderForm({ ...headerForm, platform: opt.value })}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-center text-xs font-semibold transition-all ${
+                          headerForm.platform === opt.value
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
+                        <span>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Sort order</Label>
+                    <Input
+                      type="number"
+                      value={headerForm.sortOrder}
+                      onChange={(e) =>
+                        setHeaderForm({ ...headerForm, sortOrder: parseInt(e.target.value, 10) || 0 })
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center gap-3 pt-6">
+                    <Switch
+                      checked={headerForm.active}
+                      onCheckedChange={(c) => setHeaderForm({ ...headerForm, active: c })}
+                    />
+                    <div>
+                      <Label>Active</Label>
+                      <p className="text-xs text-muted-foreground">Visible on site</p>
+                    </div>
+                  </div>
+                </div>
+                <Button type="submit" className="w-full" disabled={isBusy}>
+                  {isBusy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {headerEditId ? "Save header banner" : "Create header banner"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+          )}
+        </div>
       </div>
 
       {/* ── Tab switcher ── */}
-      <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit border">
+      <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit border flex-wrap">
         <button
           onClick={() => setActiveTab("hero")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "hero" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
@@ -971,6 +1165,13 @@ export default function BannersPage() {
         >
           ✨ Promo Cards
           <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 bg-violet-50 text-violet-600 border-violet-200">{promoBanners.length}</Badge>
+        </button>
+        <button
+          onClick={() => setActiveTab("header")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "header" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          📣 Header strip
+          <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">{headerBanners.length}</Badge>
         </button>
       </div>
 
@@ -1000,7 +1201,7 @@ export default function BannersPage() {
                       <TableCell className="font-mono text-sm text-muted-foreground">{banner.sortOrder}</TableCell>
                       <TableCell>
                         {banner.imageUrl ? (
-                          <div className="w-36 h-12 bg-muted rounded-lg overflow-hidden border"><img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" /></div>
+                          <div className="w-36 h-12 bg-muted rounded-lg overflow-hidden border"><img src={storagePublicUrl(banner.imageUrl)} alt={banner.title} className="w-full h-full object-cover" /></div>
                         ) : (
                           <div className="w-36 h-12 rounded-lg border flex items-center justify-center bg-muted"><ImageOff className="w-4 h-4 text-muted-foreground/40" /></div>
                         )}
@@ -1099,6 +1300,114 @@ export default function BannersPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === "header" && (
+        <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-muted/20 text-sm text-muted-foreground">
+            Shown as a slim bar under the site header on KDF Plus. Use the{" "}
+            <Link href="/video-banners" className="text-primary font-medium underline-offset-2 hover:underline">
+              Video Banners
+            </Link>{" "}
+            page for full-width video heroes (separate from this strip).
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30">
+                <TableHead className="w-12">Order</TableHead>
+                <TableHead className="w-44">Preview</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Link</TableHead>
+                <TableHead>Platform</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right w-24">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                [...Array(2)].map((_, i) => (
+                  <TableRow key={i}>
+                    {[...Array(7)].map((_, j) => (
+                      <TableCell key={j}>
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : headerBanners.length ? (
+                headerBanners.map((banner: any) => (
+                  <TableRow key={banner.id}>
+                    <TableCell className="font-mono text-sm text-muted-foreground">{banner.sortOrder}</TableCell>
+                    <TableCell>
+                      {banner.imageUrl ? (
+                        <div className="w-40 h-10 bg-muted rounded border overflow-hidden">
+                          <img
+                            src={storagePublicUrl(banner.imageUrl)}
+                            alt=""
+                            className="w-full h-full object-cover object-center"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-40 h-10 rounded border flex items-center justify-center bg-muted">
+                          <ImageOff className="w-4 h-4 text-muted-foreground/40" />
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-sm">{banner.title}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">
+                      {banner.linkUrl ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {banner.platform === "mobile" && (
+                        <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
+                          📱 Mobile
+                        </Badge>
+                      )}
+                      {banner.platform === "website" && (
+                        <Badge variant="outline" className="text-indigo-600 border-indigo-200 bg-indigo-50">
+                          🖥️ Website
+                        </Badge>
+                      )}
+                      {(!banner.platform || banner.platform === "both") && (
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                          🌐 Both
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          banner.active
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-gray-50 text-gray-500 border-gray-200"
+                        }
+                      >
+                        {banner.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openHeaderEdit(banner)}>
+                          <Edit className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(banner.id, "header")}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground text-sm">
+                    No header banners yet. Switch to this tab and click &quot;Add Header Banner&quot;.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

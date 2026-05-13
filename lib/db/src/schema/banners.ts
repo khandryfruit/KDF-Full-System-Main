@@ -16,6 +16,8 @@ export const bannersTable = pgTable("banners", {
   label: text("label"),
   cta: text("cta").default("Shop Now"),
   platform: text("platform").default("both"),
+  /** hero | header | promo — keeps storefront sections independent */
+  placement: text("placement").notNull().default("hero"),
   sortOrder: integer("sort_order").notNull().default(0),
   active: boolean("active").notNull().default(true),
   countdownEndAt: timestamp("countdown_end_at"),

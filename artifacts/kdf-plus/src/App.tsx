@@ -8,6 +8,7 @@ import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { LocationProvider, useUserLocation } from "@/context/LocationContext";
 import { Header } from "@/components/Header";
+import { HeaderPromoStrip } from "@/components/HeaderPromoStrip";
 import { Footer } from "@/components/Footer";
 import { MiniCart } from "@/components/MiniCart";
 import { LocationDetectPopup } from "@/components/LocationDetectPopup";
@@ -16,6 +17,7 @@ import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
 import { useGetSeoSettings } from "@workspace/api-client-react";
 import { Helmet } from "react-helmet-async";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
+import { getPublicApiOrigin } from "./lib/apiOrigin";
 
 const HomePage        = lazy(() => import("@/pages/HomePage"));
 const ProductsPage    = lazy(() => import("@/pages/ProductsPage"));
@@ -36,11 +38,11 @@ import NotFound from "@/pages/not-found";
 
 setAuthTokenGetter(() => { try { return localStorage.getItem("kdf_web_token") ?? ""; } catch { return ""; } });
 
-// On Railway (or any host where VITE_API_BASE_URL is set), point the API
-// client at the absolute URL so all generated hooks reach the right server.
-const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+// Match Orval/customFetch base URL to the same origin used by the fetch patch
+// (VITE_API_BASE_URL at build time, or runtime mapping for production www → api).
+const apiBase = getPublicApiOrigin();
 if (apiBase) {
-  setBaseUrl(apiBase.replace(/\/+$/, ""));
+  setBaseUrl(apiBase);
 }
 
 const queryClient = new QueryClient({
@@ -88,6 +90,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
+      <HeaderPromoStrip />
       <div className="flex-1">{children}</div>
       <Footer />
       <MiniCart />
@@ -100,6 +103,7 @@ function CleanLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
+      <HeaderPromoStrip />
       <div className="flex-1">{children}</div>
       <MiniCart />
     </div>

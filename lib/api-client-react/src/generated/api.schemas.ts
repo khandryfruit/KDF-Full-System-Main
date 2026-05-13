@@ -215,6 +215,15 @@ export const BannerPlatform = {
   both: "both",
 } as const;
 
+export type BannerPlacement =
+  (typeof BannerPlacement)[keyof typeof BannerPlacement];
+
+export const BannerPlacement = {
+  hero: "hero",
+  header: "header",
+  promo: "promo",
+} as const;
+
 export interface Banner {
   id: number;
   title: string;
@@ -229,6 +238,8 @@ export interface Banner {
   label?: string;
   cta?: string;
   platform?: BannerPlatform;
+  /** hero = home carousel; header = slim strip under nav; promo = mid-page cards */
+  placement?: BannerPlacement;
   sortOrder: number;
   active: boolean;
   createdAt?: string;
@@ -252,6 +263,15 @@ export const CreateBannerRequestPlatform = {
   both: "both",
 } as const;
 
+export type CreateBannerRequestPlacement =
+  (typeof CreateBannerRequestPlacement)[keyof typeof CreateBannerRequestPlacement];
+
+export const CreateBannerRequestPlacement = {
+  hero: "hero",
+  header: "header",
+  promo: "promo",
+} as const;
+
 export interface CreateBannerRequest {
   title: string;
   subtitle?: string;
@@ -265,6 +285,7 @@ export interface CreateBannerRequest {
   label?: string;
   cta?: string;
   platform?: CreateBannerRequestPlatform;
+  placement?: CreateBannerRequestPlacement;
   sortOrder?: number;
   active?: boolean;
 }
@@ -784,7 +805,20 @@ export type ListBannersParams = {
    * Filter banners by platform
    */
   platform?: ListBannersPlatform;
+  /**
+   * Filter by placement (home hero vs header strip vs promo)
+   */
+  placement?: ListBannersPlacement;
 };
+
+export type ListBannersPlacement =
+  (typeof ListBannersPlacement)[keyof typeof ListBannersPlacement];
+
+export const ListBannersPlacement = {
+  hero: "hero",
+  header: "header",
+  promo: "promo",
+} as const;
 
 export type ListBannersPlatform =
   (typeof ListBannersPlatform)[keyof typeof ListBannersPlatform];

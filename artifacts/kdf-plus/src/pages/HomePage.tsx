@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
+import { asArrayFromApi } from "@/lib/asArrayFromApi";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Banner = import("@workspace/api-client-react").Banner;
@@ -1028,7 +1029,10 @@ function ProductGrid({ products, loading }: { products: Product[]; loading: bool
 
 /* ─── Main Page ───────────────────────────────────────────────── */
 export default function HomePage() {
-  const { data: bannersData,    isLoading: bannersLoading }   = useListBanners({ platform: "website" } as any);
+  const { data: bannersData, isLoading: bannersLoading } = useListBanners({
+    platform: "website",
+    placement: "hero",
+  });
   const { data: categoriesData, isLoading: catsLoading }      = useListCategories();
   const { data: featuredData,   isLoading: featuredLoading }  = useListProducts(
     { featured: true, limit: 10 },
@@ -1043,15 +1047,8 @@ export default function HomePage() {
     { query: { queryKey: ["products", "deals"], staleTime: 60_000 } },
   );
 
-  const banners = useMemo(() => {
-    const d = bannersData as unknown;
-    if (Array.isArray(d)) return d as Banner[];
-    if (d != null && typeof d === "object" && Array.isArray((d as { items?: unknown }).items)) {
-      return (d as { items: Banner[] }).items;
-    }
-    return [];
-  }, [bannersData]);
-  const categories      = Array.isArray(categoriesData) ? (categoriesData as Category[]) : [];
+  const banners = useMemo(() => asArrayFromApi<Banner>(bannersData), [bannersData]);
+  const categories = useMemo(() => asArrayFromApi<Category>(categoriesData), [categoriesData]);
   const featuredProducts = useMemo(
     () => normalizeProductsListResponse(featuredData).items as Product[],
     [featuredData],
