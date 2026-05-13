@@ -101,6 +101,9 @@ export default function TrackOrderPage() {
   function imgSrc(key?: string) {
     if (!key) return null;
     if (key.startsWith("http")) return key;
+    if (key.startsWith("/api/storage")) return key;
+    if (key.startsWith("/objects/")) return `/api/storage${key}`;
+    if (key.startsWith("objects/")) return `/api/storage/${key}`;
     return `/api/storage/objects/${key}`;
   }
 

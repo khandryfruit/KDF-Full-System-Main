@@ -719,6 +719,9 @@ export function Header() {
   function getImgSrc(key: string | null | undefined) {
     if (!key) return null;
     if (key.startsWith("http")) return key;
+    if (key.startsWith("/api/storage")) return key;
+    if (key.startsWith("/objects/")) return `/api/storage${key}`;
+    if (key.startsWith("objects/")) return `/api/storage/${key}`;
     return `/api/storage/objects/${key}`;
   }
 
