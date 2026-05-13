@@ -237,7 +237,15 @@ router.get("/products/:id", async (req, res) => {
       }
     }
 
-    // Fallback 2: case-insensitive ilike match (handles uppercase slugs stored in DB)
+    // Fallback 2: normalize stored slug (handles spaces/special chars stored in DB)
+    // e.g. DB has "almonds 250gm" but URL param is "almonds-250gm"
+    if (!product) {
+      [product] = await db.select().from(productsTable)
+        .where(sql`lower(regexp_replace(regexp_replace(regexp_replace(${productsTable.slug}, '[^a-z0-9\\s-]', '', 'gi'), '[\\s]+', '-', 'g'), '-+', '-', 'g')) = ${param.toLowerCase()}`)
+        .limit(1);
+    }
+
+    // Fallback 3: case-insensitive ilike match (handles uppercase slugs stored in DB)
     if (!product) {
       [product] = await db.select().from(productsTable).where(ilike(productsTable.slug, param)).limit(1);
     }
