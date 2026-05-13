@@ -26,9 +26,6 @@ import { Switch } from "@/components/ui/switch";
 import { API_BASE } from "@/lib/apiBase";
 import { Link } from "wouter";
 
-/** DB default tailwind gradient — rows with real hero media should still list under Hero. */
-const DEFAULT_BANNER_BG = "from-[#5FA800] to-[#4d8a00]";
-
 function storagePublicUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
@@ -37,11 +34,20 @@ function storagePublicUrl(path: string): string {
   return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+function hasHeroStyleMedia(b: {
+  imageUrl?: string | null;
+  mobileImageUrl?: string | null;
+  videoUrl?: string | null;
+  mobileVideoUrl?: string | null;
+}) {
+  return !!(b.imageUrl || b.mobileImageUrl || b.videoUrl || b.mobileVideoUrl);
+}
+
+/** Gradient-only mid-page cards (no full hero image/video). */
 function isPromoCard(b: { bgColor?: string | null; imageUrl?: string | null; mobileImageUrl?: string | null; videoUrl?: string | null; mobileVideoUrl?: string | null }) {
+  if (hasHeroStyleMedia(b)) return false;
   const bg = typeof b?.bgColor === "string" ? b.bgColor.trim() : "";
   if (!bg || !bg.startsWith("from-")) return false;
-  const hasHeroMedia = !!(b.imageUrl || b.mobileImageUrl || b.videoUrl || b.mobileVideoUrl);
-  if (bg === DEFAULT_BANNER_BG && hasHeroMedia) return false;
   return true;
 }
 
@@ -521,11 +527,17 @@ export default function BannersPage() {
   const bannerRows: any[] = normalizeListCache(allBanners);
 
   const headerBanners = bannerRows.filter((b: any) => b.placement === "header");
-  const promoBanners = bannerRows.filter((b: any) => b.placement === "promo" || isPromoCard(b));
+  /* Image/video rows always show under Hero (never as gradient promo cards). */
+  const promoBanners = bannerRows.filter((b: any) => {
+    if (b.placement === "header") return false;
+    if (hasHeroStyleMedia(b)) return false;
+    return b.placement === "promo" || isPromoCard(b);
+  });
   const heroBanners = bannerRows.filter((b: any) => {
-    if (b.placement === "header" || b.placement === "promo") return false;
+    if (b.placement === "header") return false;
+    if (hasHeroStyleMedia(b)) return true;
     if (b.placement === "hero") return true;
-    return !isPromoCard(b);
+    return b.placement !== "promo" && !isPromoCard(b);
   });
 
   const isBusy = createMutation.isPending || updateMutation.isPending;

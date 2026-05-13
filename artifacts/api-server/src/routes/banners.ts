@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, bannersTable } from "@workspace/db";
-import { eq, asc, or, and, isNull } from "drizzle-orm";
+import { eq, ne, asc, or, and, isNull, sql } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -64,7 +64,21 @@ router.get("/banners", async (req, res) => {
       );
     }
     if (placement && typeof placement === "string") {
-      conditions.push(eq(bannersTable.placement, placement));
+      /* Home hero carousel: include true heroes plus any row with real media that is
+         not the header strip (fixes rows wrongly tagged `promo` by older migrations). */
+      if (placement === "hero") {
+        const hasBannerMedia = sql`(
+          length(trim(coalesce(${bannersTable.imageUrl}, ''))) > 0
+          or length(trim(coalesce(${bannersTable.mobileImageUrl}, ''))) > 0
+          or length(trim(coalesce(${bannersTable.videoUrl}, ''))) > 0
+          or length(trim(coalesce(${bannersTable.mobileVideoUrl}, ''))) > 0
+        )`;
+        conditions.push(
+          or(eq(bannersTable.placement, "hero"), and(ne(bannersTable.placement, "header"), hasBannerMedia)),
+        );
+      } else {
+        conditions.push(eq(bannersTable.placement, placement));
+      }
     }
     const whereClause = conditions.length === 1 ? conditions[0] : and(...(conditions as any));
     const banners = await db
