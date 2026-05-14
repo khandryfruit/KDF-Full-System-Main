@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNotifications } from "@/context/NotificationContext";
-import { apiPublicUrl } from "@/lib/apiBase";
+import { apiPublicUrl, adminApiUrl } from "@/lib/apiBase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle, Search, Send, Bot, User, RefreshCw, CheckCheck, Check,
@@ -13,7 +13,7 @@ import {
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  return fetch(`/api${path}`, {
+  return fetch(adminApiUrl(path), {
     ...opts,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
   });

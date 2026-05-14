@@ -6,10 +6,11 @@ import {
   BarChart3, Users, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { adminApiUrl } from "@/lib/apiBase";
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  return fetch(`/api${path}`, {
+  return fetch(adminApiUrl(path), {
     ...opts,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
   });

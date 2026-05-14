@@ -63,5 +63,11 @@ export function apiPublicUrl(pathWithQuery: string): string {
   return `${base}${p}`;
 }
 
+/** Path like `/admin/shopify/store` → URL for `/api/admin/shopify/store` (absolute when API base is set). */
+export function adminApiUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return apiPublicUrl(`/api${p}`);
+}
+
 /** Convenience — same as `getApiBase()`. */
 export const API_BASE = getApiBase();

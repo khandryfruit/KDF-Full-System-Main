@@ -4,10 +4,11 @@ import { RefreshCw, Search, Package, ChevronLeft, ChevronRight, Tag, BarChart2 }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { adminApiUrl } from "@/lib/apiBase";
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  return fetch(`/api${path}`, {
+  return fetch(adminApiUrl(path), {
     ...opts,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
   });

@@ -8,10 +8,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { adminApiUrl } from "@/lib/apiBase";
 
 const token = () => localStorage.getItem("kdf_admin_token") ?? "";
 function api(path: string, opts?: RequestInit) {
-  return fetch(`/api${path}`, {
+  return fetch(adminApiUrl(path), {
     ...opts,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}`, ...(opts?.headers ?? {}) },
   });
