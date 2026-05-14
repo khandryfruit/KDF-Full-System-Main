@@ -249,7 +249,7 @@ function handler(req, res) {
     return;
   }
 
-  /* GET/HEAD chat assets: bounce to real API so https://admin.*/api/widget.js still loads when Railway misroutes. */
+  // GET/HEAD: redirect /api/widget.js and /api/chat-embed to PUBLIC_API_ORIGIN when this static host serves them (Railway misroute).
   if (req.method === "GET" || req.method === "HEAD") {
     if (pathname === "/api/widget.js" || pathname === "/api/chat-embed") {
       let apiOrigin = runtimePublicApiOrigin().replace(/\/+$/, "");
