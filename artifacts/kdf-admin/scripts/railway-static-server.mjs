@@ -240,11 +240,36 @@ function corsHeadersForApiMisroute(req) {
 
 function handler(req, res) {
   let pathname;
+  let requestUrl;
   try {
-    pathname = new URL(req.url || "/", `http://${req.headers.host || "local"}`).pathname;
+    requestUrl = new URL(req.url || "/", `http://${req.headers.host || "local"}`);
+    pathname = requestUrl.pathname;
   } catch {
     res.writeHead(400).end();
     return;
+  }
+
+  /* GET/HEAD chat assets: bounce to real API so https://admin.*/api/widget.js still loads when Railway misroutes. */
+  if (req.method === "GET" || req.method === "HEAD") {
+    if (pathname === "/api/widget.js" || pathname === "/api/chat-embed") {
+      let apiOrigin = runtimePublicApiOrigin().replace(/\/+$/, "");
+      try {
+        const h = new URL(apiOrigin).hostname.toLowerCase();
+        if (h.startsWith("admin.")) apiOrigin = "";
+      } catch {
+        apiOrigin = "";
+      }
+      if (apiOrigin) {
+        const loc = `${apiOrigin}${requestUrl.pathname}${requestUrl.search}`;
+        res.writeHead(307, {
+          Location: loc,
+          "Cache-Control": "no-store",
+          "X-KDF-API-Redirect": "kdf-admin-static-to-api",
+        });
+        res.end();
+        return;
+      }
+    }
   }
 
   if (isApiPath(pathname)) {
@@ -262,7 +287,7 @@ function handler(req, res) {
         JSON.stringify({
           error: "api_not_served_here",
           message:
-            "This response is from the kdf-admin STATIC server (Node), not Express @workspace/api-server. Fix Railway: (1) Remove custom domain api.* from the kdf-admin service; attach api.* only to the api-server service. (2) If the api-server service still shows this message, it is running the wrong image—set Dockerfile Path to Dockerfile.api-server, or use root Dockerfile with KDF_RAILWAY_TARGET=api at build and runtime (see repo Dockerfile header). Deploy logs should show \"Server listening\" (api), not \"[kdf-admin] static\".",
+            "This response is from the kdf-admin STATIC server (Node), not Express @workspace/api-server. Fix Railway: (1) Remove custom domain api.* from the kdf-admin service; attach api.* only to the api-server service (Dockerfile.api-server). (2) GET /api/widget.js and GET /api/chat-embed on this host 307-redirect to PUBLIC_API_ORIGIN when set—use https://api.<domain>/api/widget.js in Shopify. Deploy logs should show \"Server listening\" (api), not \"[kdf-admin] static\".",
           service: "kdf-admin",
         }),
       );

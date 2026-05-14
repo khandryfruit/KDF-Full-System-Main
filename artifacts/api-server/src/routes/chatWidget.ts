@@ -15,6 +15,33 @@ function getBaseUrl(req: Request): string {
   return `${proto}://${host}`;
 }
 
+/** Canonical browser/API origin for widget.js & Liquid (avoids admin.* when Railway Host is wrong). */
+function getPublicApiOrigin(req: Request): string {
+  const raw = (
+    process.env.PUBLIC_API_ORIGIN ||
+    process.env.API_PUBLIC_ORIGIN ||
+    process.env.RAILWAY_PUBLIC_API_BASE ||
+    process.env.VITE_API_BASE_URL ||
+    ""
+  )
+    .toString()
+    .trim();
+  if (raw) {
+    try {
+      let u = raw.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
+      if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+      const parsed = new URL(u);
+      const host = parsed.hostname.toLowerCase();
+      if (host && !host.startsWith("admin.") && host !== "value") {
+        return `${parsed.protocol}//${parsed.host}`;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return getBaseUrl(req);
+}
+
 function host_is_dev(req: Request): boolean {
   const host = (req.headers["x-forwarded-host"] ?? req.headers.host ?? "") as string;
   return host.includes("replit") || host.includes("localhost") || host.includes("127.0.0.1");
@@ -25,7 +52,7 @@ function host_is_dev(req: Request): boolean {
    No kdf-nuts app, no storefront, pure chat UI
 ═══════════════════════════════════════════════════════════ */
 router.get("/chat-embed", (req: Request, res: Response) => {
-  const baseUrl = getBaseUrl(req);
+  const baseUrl = getPublicApiOrigin(req);
   const apiUrl  = `${baseUrl}/api`;
 
   const html = `<!DOCTYPE html>
@@ -36,8 +63,9 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 <title>KDF NUTS Chat</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html{height:100%;}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100dvh;min-height:-webkit-fill-available;height:100%;display:flex;flex-direction:column;overflow:hidden;-webkit-overflow-scrolling:touch;}
+  html{height:100%;position:relative;}
+  /* position:relative + absolute overlay (not fixed) avoids iOS Safari touch dead-zones inside cross-origin iframes */
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100dvh;min-height:-webkit-fill-available;height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden;-webkit-overflow-scrolling:touch;}
 
   /* ── Header ─────────────────────────────────── */
   #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;position:relative;z-index:20;}
@@ -854,7 +882,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
     var overlay = document.createElement('div');
     overlay.id = 'order-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:999;background:#F0F2F5;display:flex;flex-direction:column;overflow:hidden;';
+    overlay.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;width:100%;min-height:100%;z-index:999;background:#F0F2F5;display:flex;flex-direction:column;overflow:hidden;touch-action:manipulation;-webkit-overflow-scrolling:touch;';
     overlay.innerHTML = [
       /* Header */
       '<div style="background:linear-gradient(135deg,#5FA800,#4d8a00);padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;">',
@@ -972,13 +1000,13 @@ router.get("/chat-embed", (req: Request, res: Response) => {
    WhatsApp → window.open wa.me directly
 ═══════════════════════════════════════════════════════════ */
 router.get("/widget.js", (req: Request, res: Response) => {
-  const baseUrl   = getBaseUrl(req);
+  const baseUrl   = getPublicApiOrigin(req);
   const embedUrl  = `${baseUrl}/api/chat-embed`;
   const WA_NUMBER = "923049996000";
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.3 — Shopify-safe stacking + pointer-events */
+  const js = `/* KDF NUTS Chat Widget v3.4 — no full-viewport wrapper (fixes dead clicks / frozen Shopify page behind iframe) */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -992,11 +1020,9 @@ router.get("/widget.js", (req: Request, res: Response) => {
   /* ── Styles ─────────────────────────────────────────── */
   var s = document.createElement('style');
   s.textContent = \`
-    /* Full-viewport root: clicks pass through empty space; controls stay interactive (Shopify theme overlays). */
-    #kdf-chat-root{position:fixed;inset:0;z-index:2147483647;pointer-events:none;}
-    #kdf-w,#kdf-popup{pointer-events:auto;}
+    /* v3.4: FAB + iframe are appended directly to <body> — never a full-screen transparent layer over the storefront. */
     #kdf-w *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483647;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:auto;}
     #kdf-fab{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5FA800,#4a8500);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(95,168,0,0.48);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;touch-action:manipulation;}
     #kdf-fab:hover{transform:scale(1.08);box-shadow:0 6px 30px rgba(95,168,0,0.6);}
     #kdf-fab:active{transform:scale(0.95);}
@@ -1146,14 +1172,14 @@ router.get("/widget.js", (req: Request, res: Response) => {
    GET /api/chat/shopify-install — installation guide
 ═══════════════════════════════════════════════════════════ */
 router.get("/chat/shopify-install", (req: Request, res: Response) => {
-  const base      = getBaseUrl(req);
+  const base      = getPublicApiOrigin(req);
   const widgetUrl = `${base}/api/widget.js`;
   const embedUrl  = `${base}/api/chat-embed`;
 
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.3 — paste before </body>. Always set KDFChatConfig so the widget never reads undefined config. {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.4 — script src must be api.* (never admin.*). Set PUBLIC_API_ORIGIN on api-server if needed. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
     store: "shopify"
@@ -1179,6 +1205,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
       "6. If the chat ever feels frozen after a theme change, hard-refresh (Cmd+Shift+R) once",
       "7. 'WhatsApp' opens wa.me/923049996000 directly",
       "8. After deploy: lead form uses a higher z-index + native <form> submit so 'Start Chat' works reliably in the Shopify iframe (re-copy snippet if you still had cart only for logged-in customers).",
+      "9. Railway: attach custom domain api.* ONLY to the api-server service (Dockerfile.api-server). Do not attach api.* to kdf-admin. Set PUBLIC_API_ORIGIN=https://api.<your-domain> on api-server so widget URLs stay correct even if the Host header is unexpected.",
     ],
   });
 });

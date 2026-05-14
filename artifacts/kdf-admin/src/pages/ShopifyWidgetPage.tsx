@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Code2, Copy, CheckCheck, ExternalLink, Zap, Globe, Settings,
@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { getApiBase } from "@/lib/apiBase";
+import { apiPublicUrl, getApiBase } from "@/lib/apiBase";
 
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN()}` });
@@ -90,11 +90,22 @@ export default function ShopifyWidgetPage() {
     staleTime: 20000,
   });
 
+  const canonicalWidgetJs = apiPublicUrl("/api/widget.js");
   const widgetJsUrl =
-    installData?.widgetUrl ??
-    `${(getApiBase() || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "")}/api/widget.js`;
+    installData?.widgetUrl &&
+    /^https?:\/\//i.test(String(installData.widgetUrl)) &&
+    !/\/\/admin\./i.test(String(installData.widgetUrl))
+      ? String(installData.widgetUrl)
+      : canonicalWidgetJs;
   const widgetScriptTag = `<script src="${widgetJsUrl}" async></script>`;
-  const liquidSnippet = installData?.liquidSnippet ?? "Loading…";
+  const liquidSnippet = useMemo(() => {
+    const raw = installData?.liquidSnippet ?? "Loading…";
+    if (!installData?.liquidSnippet || raw === "Loading…") return raw;
+    return raw.replace(
+      /src="https?:\/\/[^"]*\/api\/widget\.js"/gi,
+      `src="${widgetJsUrl}"`,
+    );
+  }, [installData?.liquidSnippet, widgetJsUrl]);
   const themeInstructions: string[] = installData?.steps ?? installData?.themeInstructions ?? [];
 
   const advancedConfig = `<script>
@@ -132,7 +143,7 @@ export default function ShopifyWidgetPage() {
             Live
           </Badge>
           <a
-            href="/api/widget.js"
+            href={widgetJsUrl}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
@@ -201,8 +212,11 @@ export default function ShopifyWidgetPage() {
             <strong>before</strong> loading <code className="text-[11px] bg-white px-1 rounded border">widget.js</code> (guests get <code className="text-[11px] bg-white px-1 rounded border">store: &quot;shopify&quot;</code>; logged-in customers also get cart + profile).
           </li>
           <li>
-            Widget <strong>v3.3</strong> mounts inside a top-level <code className="text-[11px] bg-white px-1 rounded border">#kdf-chat-root</code> with correct{" "}
-            <code className="text-[11px] bg-white px-1 rounded border">pointer-events</code> so theme overlays are less likely to swallow the iframe.
+            Widget <strong>v3.4+</strong>: if someone pastes{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">admin.…/api/widget.js</code>, the admin static server{" "}
+            <strong>307-redirects</strong> those two paths to <code className="text-[11px] bg-white px-1 rounded border">PUBLIC_API_ORIGIN</code> (default{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">https://api.khanbabadryfruits.com</code>). Still fix Railway so{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">api.*</code> attaches only to api-server.
           </li>
           <li>
             The chat embed no longer forces <code className="text-[11px] bg-white px-1 rounded border">document.body.style.height</code> from{" "}
@@ -214,7 +228,7 @@ export default function ShopifyWidgetPage() {
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { icon: <Globe className="w-4 h-4 text-blue-500" />, label: "Widget URL", value: "/api/widget.js", sub: "CDN-ready script" },
+          { icon: <Globe className="w-4 h-4 text-blue-500" />, label: "Widget URL", value: widgetJsUrl.replace(/^https:\/\//, ""), sub: "Must be api.* host" },
           { icon: <MessageSquare className="w-4 h-4 text-[#5FA800]" />, label: "Chat Leads", value: totalLeads, sub: "All sources" },
           { icon: <ShoppingBag className="w-4 h-4 text-purple-500" />, label: "Shopify Leads", value: shopifyLeads, sub: `source = shopify` },
         ].map((s, i) => (
@@ -222,7 +236,7 @@ export default function ShopifyWidgetPage() {
             <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">{s.icon}</div>
             <div>
               <p className="text-xs text-gray-500">{s.label}</p>
-              <p className="text-base font-bold text-gray-800 truncate max-w-[120px]">{s.value}</p>
+              <p className="text-base font-bold text-gray-800 truncate max-w-[260px]">{s.value}</p>
               <p className="text-[10px] text-gray-400">{s.sub}</p>
             </div>
           </div>
