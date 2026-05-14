@@ -8,10 +8,11 @@ import {
   Bell, X, Gavel, Timer, TrendingUp, Camera, ImagePlus,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useGetProduct, getGetProductQueryKey, useListProducts } from "@workspace/api-client-react";
+import { useListProducts, useListCategories } from "@workspace/api-client-react";
 import { useCart } from "@/context/CartContext";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
+import { asArrayFromApi } from "@/lib/asArrayFromApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,11 @@ import {
   useCtaInView,
   type PairProduct,
 } from "@/components/product-detail/ProductConversionRail";
+import {
+  ProductGalleryEngagementZone,
+  type GalleryEngagementProduct,
+  type GalleryCategory,
+} from "@/components/product-detail/ProductGalleryEngagementZone";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
@@ -373,6 +379,34 @@ export default function ProductDetailPage() {
       }));
   }, [relatedPool, productId]);
 
+  const { data: categoriesRaw } = useListCategories({
+    query: { staleTime: 120_000, refetchOnWindowFocus: false },
+  });
+  const galleryCategories: GalleryCategory[] = useMemo(
+    () => asArrayFromApi<GalleryCategory>(categoriesRaw).slice(0, 12),
+    [categoriesRaw],
+  );
+
+  const { data: engagementPool } = useListProducts(
+    { limit: 24, sortBy: "newest" as const },
+    { query: { queryKey: ["products", "pdp-gallery-engagement"], staleTime: 60_000, refetchOnWindowFocus: false } },
+  );
+  const galleryEngagementProducts: GalleryEngagementProduct[] = useMemo(() => {
+    if (!productId || !engagementPool) return [];
+    return normalizeProductsListResponse(engagementPool)
+      .items.filter((p: any) => p.id !== productId)
+      .slice(0, 20)
+      .map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: Number(p.price),
+        images: p.images,
+        gradient: p.gradient,
+        variants: p.variants,
+      }));
+  }, [engagementPool, productId]);
+
   const { ref: desktopCtaRef, inView: desktopCtaInView } = useCtaInView<HTMLDivElement>();
 
   /* ── SEO: silently update address bar to canonical slug (no reload) ── */
@@ -469,6 +503,13 @@ export default function ProductDetailPage() {
     const url = window.location.href;
     if (navigator.share) await navigator.share({ title: product.name, url });
     else { await navigator.clipboard.writeText(url); toast({ title: "Link copied!" }); }
+  };
+
+  const handleQuickAddGallery = (p: GalleryEngagementProduct) => {
+    const vars = p.variants as any[] | undefined;
+    const v = vars?.find((x: any) => x.stock !== 0) ?? vars?.[0];
+    addItem(p as any, 1, v?.id, v?.value ?? "Standard");
+    toast({ title: "Added to cart", description: p.name });
   };
 
   const structuredData = {
@@ -568,6 +609,18 @@ export default function ProductDetailPage() {
               </div>
             )}
             </div>
+            <ProductGalleryEngagementZone
+              productId={productId}
+              productName={product.name}
+              discountPercent={discount}
+              stock={product.stock}
+              marqueeProducts={galleryEngagementProducts}
+              apiCategories={galleryCategories}
+              getImageSrc={getProductImageSrc}
+              onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
+              onQuickAdd={handleQuickAddGallery}
+              onPathNavigate={(path) => setLocation(path)}
+            />
           </div>
 
           {/* Right: Info — sticky glass buy column (no vh max-height: avoids zoom / OS scaling layout jumps) */}

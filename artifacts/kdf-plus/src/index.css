@@ -455,3 +455,33 @@
      use  bottom: var(--mobile-nav-h)  in inline styles,
      or   class="bottom-14 sm:bottom-0"  in Tailwind.        */
 }
+
+/* ── PDP gallery column: infinite marquees (pause on hover via animation-play-state) ── */
+@keyframes kdf-pdp-marquee-ltr {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes kdf-pdp-marquee-rtl {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+@keyframes kdf-pdp-flash-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+  50% { box-shadow: 0 0 32px rgba(249, 115, 22, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+}
+.animate-kdf-pdp-marquee-ltr {
+  animation: kdf-pdp-marquee-ltr 48s linear infinite;
+}
+.animate-kdf-pdp-marquee-rtl {
+  animation: kdf-pdp-marquee-rtl 52s linear infinite;
+}
+.animate-kdf-pdp-flash-glow {
+  animation: kdf-pdp-flash-glow 3.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-kdf-pdp-marquee-ltr,
+  .animate-kdf-pdp-marquee-rtl,
+  .animate-kdf-pdp-flash-glow {
+    animation: none !important;
+  }
+}
