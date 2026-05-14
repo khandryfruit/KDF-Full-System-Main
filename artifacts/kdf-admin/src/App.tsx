@@ -118,11 +118,22 @@ const queryClient = new QueryClient({
 
 function AdminRouteSpinner() {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center bg-background">
-      <div
-        className="h-9 w-9 rounded-full border-2 border-muted-foreground/30 border-t-primary animate-spin"
-        aria-hidden
-      />
+    <div
+      className="flex min-h-[50vh] flex-col items-center justify-center gap-6 bg-background px-6"
+      aria-busy="true"
+      aria-label="Loading admin page"
+    >
+      <div className="w-full max-w-lg space-y-3">
+        <div className="h-8 w-48 rounded-lg bg-muted/70 animate-pulse" />
+        <div className="h-3 w-full rounded-md bg-muted/45 animate-pulse" />
+        <div className="h-3 w-[88%] rounded-md bg-muted/45 animate-pulse" style={{ animationDelay: "80ms" }} />
+        <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="h-24 rounded-xl bg-muted/50 animate-pulse" />
+          <div className="h-24 rounded-xl bg-muted/50 animate-pulse" style={{ animationDelay: "100ms" }} />
+          <div className="h-24 rounded-xl bg-muted/50 animate-pulse" style={{ animationDelay: "200ms" }} />
+        </div>
+      </div>
+      <div className="h-9 w-9 rounded-full border-2 border-muted-foreground/25 border-t-primary animate-spin" aria-hidden />
     </div>
   );
 }

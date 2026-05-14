@@ -66,6 +66,10 @@ export default defineConfig(async ({ command }) => ({
           if (id.includes("lucide-react")) return "vendor-icons";
           if (id.includes("react-helmet-async")) return "vendor-helmet";
           if (id.includes("wouter")) return "vendor-router";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("recharts")) return "vendor-charts";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("embla-carousel")) return "vendor-carousel";
         },
       },
     },

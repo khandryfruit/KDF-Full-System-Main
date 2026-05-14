@@ -71,6 +71,9 @@ export default defineConfig(async ({ command }) => ({
           if (!id.includes("node_modules")) return;
           if (id.includes("@tanstack/react-query")) return "vendor-rq";
           if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("recharts")) return "vendor-charts";
+          if (id.includes("@radix-ui")) return "vendor-radix";
         },
       },
     },

@@ -18,7 +18,9 @@ export function useSiteSettings() {
   return useQuery<SiteSettings>({
     queryKey: ["site-settings"],
     queryFn: fetchSettings,
-    staleTime: 5_000,
+    /** Logo / name rarely change — long stale window cuts duplicate work on every navigation. */
+    staleTime: 300_000,
+    gcTime: 600_000,
   });
 }
 

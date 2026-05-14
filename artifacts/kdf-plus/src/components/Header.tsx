@@ -159,7 +159,7 @@ function AnnouncementBar({ items }: { items: any[] }) {
 /* ─── Mega Menu Dropdown ─────────────────────────────────────── */
 function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void }) {
   const [open, setOpen] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const enter = () => { clearTimeout(timerRef.current); setOpen(true); };
   const leave = () => { timerRef.current = setTimeout(() => setOpen(false), 120); };
@@ -574,7 +574,17 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b border-gray-50 text-left"
                 onClick={() => go(`/products/${p.slug || p.id}`)}>
                 {p.image
-                  ? <img src={getProductImageSrc(p.image)} alt={p.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                  ? (
+                    <img
+                      src={getProductImageSrc(p.image, { maxWidth: 128 })}
+                      alt={p.name}
+                      width={48}
+                      height={48}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-12 h-12 rounded-xl object-cover flex-shrink-0 bg-muted/30"
+                    />
+                  )
                   : <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: GREEN }}>{p.name[0]}</div>
                 }
                 <div className="flex-1 min-w-0">
@@ -602,8 +612,11 @@ function MobileSearchOverlay({ open, onClose, onNavigate }: { open: boolean; onC
 export function Header() {
   const [location, navigate] = useLocation();
   const [searchQuery, setSearchQuery]     = useState("");
-  const [scrolled, setScrolled]           = useState(false);
+  /** Single scroll metric — derive `scrolled` / `shrunk` in render to avoid double setState per frame. */
   const [scrollY, setScrollY]             = useState(0);
+  const scrollRafId                       = useRef<number | null>(null);
+  const scrolled                          = scrollY > 8;
+  const shrunk                            = scrollY > 80;
   const [cartBounce, setCartBounce]       = useState(false);
   const [drawerOpen, setDrawerOpen]       = useState(false);
   const [searchOverlay, setSearchOverlay] = useState(false);
@@ -673,13 +686,26 @@ export function Header() {
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["announcements"],
     queryFn: () => fetch("/api/announcements").then(r => r.ok ? r.json() : []),
-    staleTime: 30 * 1000,
+    staleTime: 120_000,
   });
 
   useEffect(() => {
-    const onScroll = () => { const y = window.scrollY; setScrolled(y > 8); setScrollY(y); };
+    const onScroll = () => {
+      if (scrollRafId.current != null) return;
+      scrollRafId.current = window.requestAnimationFrame(() => {
+        scrollRafId.current = null;
+        setScrollY(window.scrollY);
+      });
+    };
+    setScrollY(window.scrollY);
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (scrollRafId.current != null) {
+        window.cancelAnimationFrame(scrollRafId.current);
+        scrollRafId.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -691,15 +717,32 @@ export function Header() {
   }, [totalItems]);
 
   useEffect(() => {
-    const t = setTimeout(async () => {
-      if (!searchQuery.trim()) { setSearchHints({ products: [], categories: [] }); return; }
-      setHintLoading(true);
+    const ac = new AbortController();
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchHints({ products: [], categories: [] });
+      setHintLoading(false);
+      return () => ac.abort();
+    }
+    setHintLoading(true);
+    const t = window.setTimeout(async () => {
       try {
-        const r = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}&limit=6`);
-        if (r.ok) { setSearchHints(await r.json()); setShowHints(true); }
-      } catch { /* ignore */ } finally { setHintLoading(false); }
-    }, 280);
-    return () => clearTimeout(t);
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=6`, { signal: ac.signal });
+        if (r.ok) {
+          const data = await r.json();
+          setSearchHints(data);
+          setShowHints(true);
+        }
+      } catch (e: unknown) {
+        if ((e as Error)?.name === "AbortError") return;
+      } finally {
+        if (!ac.signal.aborted) setHintLoading(false);
+      }
+    }, 160);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
   }, [searchQuery]);
 
   useEffect(() => {
@@ -715,7 +758,6 @@ export function Header() {
   }, [searchQuery, navigate]);
 
   const handleLogout = () => { logout(); navigate("/"); };
-  const shrunk = scrollY > 80;
 
   const hideMobileBottomNav =
     location.startsWith("/checkout") ||
@@ -730,15 +772,6 @@ export function Header() {
     deals: path.startsWith("/products"),
     account: path.startsWith("/account") || path.startsWith("/login"),
   };
-
-  function getImgSrc(key: string | null | undefined) {
-    if (!key) return null;
-    if (key.startsWith("http")) return key;
-    if (key.startsWith("/api/storage")) return key;
-    if (key.startsWith("/objects/")) return `/api/storage${key}`;
-    if (key.startsWith("objects/")) return `/api/storage/${key}`;
-    return `/api/storage/objects/${key}`;
-  }
 
   return (
     <>
@@ -773,8 +806,15 @@ export function Header() {
               <Link href="/" className="flex items-center gap-2 flex-shrink-0" data-testid="link-logo">
                 {logoSrc(siteSettings?.logoPath) ? (
                   <>
-                    <img src={logoSrc(siteSettings?.logoPath)!} alt={siteSettings?.siteName ?? "KDF NUTS"}
-                      className={`w-auto object-contain flex-shrink-0 transition-all duration-300 ${shrunk ? "h-7" : "h-9"}`} />
+                    <img
+                      src={logoSrc(siteSettings?.logoPath)!}
+                      alt={siteSettings?.siteName ?? "KDF NUTS"}
+                      width={144}
+                      height={36}
+                      decoding="async"
+                      fetchPriority="high"
+                      className={`w-auto max-w-[9rem] sm:max-w-[11rem] object-contain flex-shrink-0 transition-all duration-300 ${shrunk ? "h-7" : "h-9"}`}
+                    />
                     <span className={`font-black text-gray-900 hidden sm:block transition-all duration-300 ${shrunk ? "text-base" : "text-lg"}`}>
                       {siteSettings?.siteName ?? "KDF NUTS"}
                     </span>
@@ -804,11 +844,18 @@ export function Header() {
                       value={searchQuery}
                       onChange={e => { setSearchQuery(e.target.value); setShowHints(true); }}
                       onFocus={() => searchQuery.length > 0 && setShowHints(true)}
-                      className="w-full h-[42px] pl-11 pr-24 rounded-2xl text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-all duration-200"
+                      className={[
+                        "w-full h-[42px] pl-11 pr-24 rounded-2xl text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-[background,box-shadow,border-color,transform] duration-200",
+                        scrolled ? "backdrop-blur-xl bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]" : "",
+                      ].join(" ")}
                       style={{
-                        background: showHints || searchQuery ? "#fff" : "#f3f4f6",
-                        border: showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid transparent",
-                        boxShadow: showHints || searchQuery ? `0 0 0 3px ${GREEN}15` : "none",
+                        background: showHints || searchQuery ? "#fff" : scrolled ? "rgba(255,255,255,0.72)" : "#f3f4f6",
+                        border: showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid rgba(0,0,0,0.06)",
+                        boxShadow: showHints || searchQuery
+                          ? `0 0 0 3px ${GREEN}18, 0 12px 40px rgba(95,168,0,0.08)`
+                          : scrolled
+                            ? "0 8px 32px rgba(15,23,42,0.06)"
+                            : "none",
                       }}
                       data-testid="input-search"
                     />
@@ -842,7 +889,17 @@ export function Header() {
                             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0 group"
                             onClick={() => { setShowHints(false); setSearchQuery(""); navigate(`/products/${p.slug || p.id}`); }}>
                             {p.image
-                              ? <img src={getImgSrc(p.image)!} alt={p.name} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                              ? (
+                                <img
+                                  src={getProductImageSrc(p.image, { maxWidth: 120 })}
+                                  alt={p.name}
+                                  width={40}
+                                  height={40}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="w-10 h-10 rounded-xl object-cover flex-shrink-0 bg-muted/30"
+                                />
+                              )
                               : <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0 text-sm" style={{ background: GREEN }}>{p.name[0]}</div>
                             }
                             <div className="flex-1 min-w-0">

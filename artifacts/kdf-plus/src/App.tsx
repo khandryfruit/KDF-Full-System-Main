@@ -156,8 +156,17 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
 }
 
 const PageFallback = () => (
-  <div className="flex-1 flex items-center justify-center min-h-[40vh]">
-    <div className="w-8 h-8 border-2 border-[#5FA800] border-t-transparent rounded-full animate-spin" />
+  <div className="flex-1 flex flex-col items-center justify-center min-h-[45vh] gap-6 px-6" aria-busy="true" aria-label="Loading page">
+    <div className="w-full max-w-md space-y-3">
+      <div className="h-9 w-2/3 rounded-xl bg-muted/60 animate-pulse" />
+      <div className="h-4 w-full rounded-lg bg-muted/40 animate-pulse" style={{ animationDelay: "75ms" }} />
+      <div className="h-4 w-5/6 rounded-lg bg-muted/40 animate-pulse" style={{ animationDelay: "150ms" }} />
+      <div className="grid grid-cols-2 gap-3 pt-4">
+        <div className="h-32 rounded-2xl bg-muted/50 animate-pulse" />
+        <div className="h-32 rounded-2xl bg-muted/50 animate-pulse" style={{ animationDelay: "100ms" }} />
+      </div>
+    </div>
+    <div className="h-9 w-9 border-2 border-[#5FA800]/40 border-t-[#5FA800] rounded-full animate-spin shrink-0" />
   </div>
 );
 
