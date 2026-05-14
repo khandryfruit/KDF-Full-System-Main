@@ -13,8 +13,17 @@ function normalizeApiOrigin(raw: string): string {
 
 export function getPublicApiOrigin(): string {
   const env = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  if (env && typeof env === "string" && env.trim()) {
-    return normalizeApiOrigin(env);
+  const env2 = import.meta.env.VITE_API_URL as string | undefined;
+  const raw = (env && env.trim()) || (env2 && env2.trim()) || "";
+  if (raw) {
+    let n = normalizeApiOrigin(raw);
+    try {
+      const host = new URL(n.startsWith("http") ? n : `https://${n}`).hostname.toLowerCase();
+      if (host.startsWith("admin.")) n = "";
+    } catch {
+      n = "";
+    }
+    if (n) return n;
   }
   if (typeof window === "undefined") return "";
   const h = window.location.hostname.toLowerCase();

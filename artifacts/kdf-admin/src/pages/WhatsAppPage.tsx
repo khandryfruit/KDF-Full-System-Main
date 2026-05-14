@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN()}` });
@@ -1232,7 +1233,7 @@ export default function WhatsAppPage() {
   useEffect(() => {
     if (tab !== "conversations") return;
     const token = localStorage.getItem("kdf_admin_token") ?? "";
-    const es = new EventSource(`/api/admin/sse?token=${encodeURIComponent(token)}`);
+    const es = new EventSource(apiPublicUrl(`/api/admin/sse?token=${encodeURIComponent(token)}`));
     sseRef.current = es;
     es.addEventListener("wa_message", (e: MessageEvent) => {
       try {

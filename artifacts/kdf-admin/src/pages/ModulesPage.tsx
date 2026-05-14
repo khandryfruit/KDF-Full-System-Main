@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { getApiBase } from "@/lib/apiBase";
 import { Badge } from "@/components/ui/badge";
 import {
   ShoppingCart, Truck, Navigation, FileText, MessageCircle,
@@ -9,7 +10,11 @@ import {
   RefreshCw, Activity, Wifi, WifiOff,
 } from "lucide-react";
 
-const API = "/api";
+function adminApiRoot(): string {
+  const b = getApiBase().replace(/\/$/, "");
+  return b ? `${b}/api` : "/api";
+}
+const API = adminApiRoot();
 const token = () => localStorage.getItem("kdf_admin_token") ?? "";
 const h = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${token()}` });
 async function apiFetch(path: string, opts: RequestInit = {}) {

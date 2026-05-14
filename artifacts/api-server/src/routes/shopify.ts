@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import {
   shopifyStoresTable, shopifyOrdersTable, shopifyCustomersTable,
@@ -28,6 +28,53 @@ import {
 
 const router = Router();
 const SHOPIFY_API_VERSION = "2024-01";
+
+/**
+ * Shopify webhooks must call the API origin (api.*), never the admin SPA host.
+ * Prefer env overrides, then optional body.callbackBaseUrl, then X-Forwarded-Host
+ * with admin.* → api.* rewrite.
+ */
+function resolveShopifyWebhookCallbackBase(req: Request): string {
+  const envCandidates = [
+    process.env.SHOPIFY_WEBHOOK_BASE_URL,
+    process.env.PUBLIC_API_ORIGIN,
+    process.env.API_BASE_URL,
+  ];
+  for (const raw of envCandidates) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const s = raw.trim().replace(/\/+$/, "");
+    try {
+      return new URL(s.startsWith("http") ? s : `https://${s}`).origin;
+    } catch {
+      continue;
+    }
+  }
+
+  const body = (req.body ?? {}) as { callbackBaseUrl?: string };
+  const custom = typeof body.callbackBaseUrl === "string" ? body.callbackBaseUrl.trim().replace(/\/+$/, "") : "";
+  if (custom) {
+    try {
+      return new URL(custom.startsWith("http") ? custom : `https://${custom}`).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const fwdHost = ((req.headers["x-forwarded-host"] as string) ?? "").split(",")[0].trim().split(":")[0];
+  const fwdProto = ((req.headers["x-forwarded-proto"] as string) ?? "https").split(",")[0].trim() || "https";
+  const replitDomains = process.env.REPLIT_DOMAINS ?? "";
+  const replitPrimary = replitDomains.split(",")[0]?.trim();
+
+  if (fwdHost && !fwdHost.includes("replit")) {
+    let host = fwdHost.toLowerCase();
+    if (host.startsWith("admin.")) {
+      host = "api." + host.slice("admin.".length);
+    }
+    return `${fwdProto}://${host}`;
+  }
+  if (replitPrimary) return `https://${replitPrimary}`;
+  return `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost"}`;
+}
 
 /* ─── Cursor-based pagination helper ─────────────────── */
 function parseNextPageInfo(linkHeader: string | null): string | null {
@@ -1830,18 +1877,7 @@ router.post("/admin/shopify/webhooks/register", adminMiddleware, async (req, res
     const store = await getActiveStore();
     if (!store) return res.status(400).json({ error: "No connected Shopify store" });
 
-    /* Determine the public base URL for the webhook callback */
-    const fwdHost = ((req.headers["x-forwarded-host"] as string) ?? "").split(",")[0].trim();
-    const fwdProto = ((req.headers["x-forwarded-proto"] as string) ?? "").split(",")[0].trim() || "https";
-    const replitDomains = process.env.REPLIT_DOMAINS ?? "";
-    const replitPrimary = replitDomains.split(",")[0]?.trim();
-    const customBase = (req.body.callbackBaseUrl as string | undefined)?.trim();
-
-    const baseUrl =
-      customBase ||
-      (fwdHost && !fwdHost.includes("replit") ? `${fwdProto}://${fwdHost}` : null) ||
-      (replitPrimary ? `https://${replitPrimary}` : null) ||
-      `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost"}`;
+    const baseUrl = resolveShopifyWebhookCallbackBase(req);
 
     const result = await registerShopifyWebhooks(store, baseUrl);
     res.json({ success: true, callbackUrl: `${baseUrl}/api/shopify/webhook`, ...result });

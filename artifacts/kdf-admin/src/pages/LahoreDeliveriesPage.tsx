@@ -15,6 +15,7 @@ import {
   Volume2, VolumeX, BarChart3, Shield, Smartphone,
   CheckSquare, Square,
 } from "lucide-react";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 const API = "/api";
 const token = () => localStorage.getItem("kdf_admin_token") ?? "";
@@ -1107,7 +1108,7 @@ export default function LahoreDeliveriesPage() {
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
   useEffect(() => {
-    const es = new EventSource(`/api/admin/sse`);
+    const es = new EventSource(apiPublicUrl("/api/admin/sse"));
     es.addEventListener("rider_assigned", (e: any) => {
       qc.invalidateQueries({ queryKey: ["live-dashboard"] });
       qc.invalidateQueries({ queryKey: ["lahore-orders"] });

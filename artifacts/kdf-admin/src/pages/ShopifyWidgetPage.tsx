@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { getApiBase } from "@/lib/apiBase";
 
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN()}` });
@@ -83,7 +84,9 @@ export default function ShopifyWidgetPage() {
     staleTime: 60000,
   });
 
-  const widgetJsUrl = installData?.widgetUrl ?? `${window.location.origin}/api/widget.js`;
+  const widgetJsUrl =
+    installData?.widgetUrl ??
+    `${(getApiBase() || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "")}/api/widget.js`;
   const widgetScriptTag = `<script src="${widgetJsUrl}" async></script>`;
   const liquidSnippet = installData?.liquidSnippet ?? "Loading…";
   const themeInstructions: string[] = installData?.steps ?? installData?.themeInstructions ?? [];

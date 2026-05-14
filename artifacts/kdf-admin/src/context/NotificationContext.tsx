@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useLocation } from "wouter";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════
    TYPES
@@ -257,7 +258,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     function connect() {
-      const es = new EventSource(`/api/admin/sse?token=${encodeURIComponent(token!)}`);
+      const es = new EventSource(
+        apiPublicUrl(`/api/admin/sse?token=${encodeURIComponent(token!)}`),
+      );
       sseRef.current = es;
 
       /* ── WA message (inbound) ── */

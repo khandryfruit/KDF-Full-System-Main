@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNotifications } from "@/context/NotificationContext";
+import { apiPublicUrl } from "@/lib/apiBase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle, Search, Send, Bot, User, RefreshCw, CheckCheck, Check,
@@ -544,7 +545,7 @@ export default function WaInboxPage() {
   /* SSE real-time — piggyback on global SSE via query invalidation */
   useEffect(() => {
     const token = localStorage.getItem("kdf_admin_token") ?? "";
-    const es = new EventSource(`/api/admin/sse?token=${encodeURIComponent(token)}`);
+    const es = new EventSource(apiPublicUrl(`/api/admin/sse?token=${encodeURIComponent(token)}`));
 
     es.addEventListener("wa_message", (e) => {
       const data = JSON.parse(e.data) as any;

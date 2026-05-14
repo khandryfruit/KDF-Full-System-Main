@@ -1,26 +1,67 @@
 /**
- * Normalised API base URL for direct browser → api-server calls.
+ * Normalised API base URL for browser → api-server (scheme + host, no path, no trailing slash).
  *
- * On Replit: VITE_API_BASE_URL is not set → "" → relative URLs → Vite proxy → api-server.
- * On Railway: VITE_API_BASE_URL = "https://workspaceapi-server-production-6674.up.railway.app"
- *             (NO trailing slash, NO /api suffix — we append /api/... ourselves).
+ * Railway: set `VITE_API_BASE_URL=https://api.khanbabadryfruits.com` (also accepts `VITE_API_URL`).
+ * Never set it to `https://admin.*` — that breaks uploads, SSE, and Shopify webhooks.
  *
- * This function strips any accidental trailing "/api" or "/" so that:
- *   apiBase() + "/api/storage/uploads/image"
- * never becomes "/api/api/storage/uploads/image".
+ * Strips accidental trailing `/api` or `/` so `API_BASE + "/api/..."` never doubles `/api`.
  */
-export function getApiBase(): string {
-  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
-  let base = raw.replace(/\/api\/?$/, "").replace(/\/$/, "");
-  // Production fallback when Railway build forgot VITE_* (same idea as kdf-plus apiOrigin map).
-  if (!base && typeof window !== "undefined") {
-    const h = window.location.hostname.toLowerCase();
-    if (h === "admin.khanbabadryfruits.com") {
-      base = "https://api.khanbabadryfruits.com";
-    }
+
+function readEnvApiBase(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const candidates = [
+    env.VITE_API_BASE_URL,
+    env.VITE_API_URL,
+    env.VITE_NEXT_PUBLIC_API_URL,
+    env.API_BASE_URL,
+  ];
+  for (const v of candidates) {
+    if (v && String(v).trim()) return String(v).trim();
   }
-  return base;
+  return "";
 }
 
-/** Convenience constant — use `API_BASE` in components. */
+export function getApiBase(): string {
+  let raw = readEnvApiBase();
+  let base = raw.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+
+  if (base) {
+    try {
+      const url = new URL(base.startsWith("http") ? base : `https://${base}`);
+      const host = url.hostname.toLowerCase();
+      if (host.startsWith("admin.")) {
+        base = "";
+      }
+    } catch {
+      base = "";
+    }
+  }
+
+  if (!base && typeof window !== "undefined") {
+    const h = window.location.hostname.toLowerCase();
+    if (h.startsWith("admin.")) {
+      const rest = h.slice("admin.".length);
+      base = `${window.location.protocol}//api.${rest}`.replace(/\/+$/, "");
+    }
+    const map: Record<string, string> = {
+      "www.khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
+      "khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
+    };
+    if (!base && map[h]) base = map[h];
+  }
+
+  return base.replace(/\/+$/, "");
+}
+
+/**
+ * Absolute URL for `/api/...` paths. Use for `EventSource` (fetch patch does not apply).
+ */
+export function apiPublicUrl(pathWithQuery: string): string {
+  const p = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  const base = getApiBase().replace(/\/+$/, "");
+  if (!base) return p;
+  return `${base}${p}`;
+}
+
+/** Convenience — same as `getApiBase()`. */
 export const API_BASE = getApiBase();

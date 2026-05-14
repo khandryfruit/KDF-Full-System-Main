@@ -33,6 +33,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { getApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════ API HELPERS ═════════════════════════ */
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
@@ -1425,7 +1426,7 @@ function ApiConfigTab() {
     liveMerchantId:    "",
     returnUrl:         "https://www.khanbabadryfruits.com/payment/success",
     failUrl:           "https://www.khanbabadryfruits.com/payment/failed",
-    callbackUrl:       "https://admin.khanbabadryfruits.com/api/payment/meezan/callback",
+    callbackUrl:       `${(getApiBase() || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "")}/api/payment/meezan/callback`,
     isActive:          false,
   });
 
