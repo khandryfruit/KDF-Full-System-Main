@@ -36,7 +36,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 <title>KDF NUTS Chat</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;height:100dvh;height:-webkit-fill-available;display:flex;flex-direction:column;overflow:hidden;}
+  html{height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100dvh;min-height:-webkit-fill-available;height:100%;display:flex;flex-direction:column;overflow:hidden;-webkit-overflow-scrolling:touch;}
 
   /* ── Header ─────────────────────────────────── */
   #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;}
@@ -97,6 +98,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
   #msg-input{flex:1;border:1.5px solid #e5e7eb;border-radius:22px;padding:9px 14px;font-size:13.5px;outline:none;resize:none;max-height:90px;overflow-y:auto;transition:border-color .2s;font-family:inherit;background:#fafafa;}
   #msg-input:focus{border-color:#2ecc71;background:#fff;}
+  #msg-input,#btn-send,#btn-mic,.chip,.hdr-btn,.lf-input,#btn-lead,#lead-skip,.pv-btn,.prod-btn-view,.prod-btn-add,#cart-checkout-btn,#cart-bar-left{touch-action:manipulation;-webkit-user-select:text;user-select:text;}
   #btn-send{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2ecc71,#128C7E);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .2s;}
   #btn-send:hover{opacity:.88;}
   #btn-send:disabled{background:#ddd;cursor:not-allowed;}
@@ -784,18 +786,21 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   /* ── Auto-show chat if lead already captured ── */
   if (leadSaved) { showChatInterface(); }
 
-  /* ── Keyboard / visualViewport fix (iOS + Android) ── */
-  function fixViewportHeight() {
-    var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    document.body.style.height = h + 'px';
-    /* Scroll messages to bottom when keyboard appears */
-    setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 80);
+  /* ── Viewport / keyboard (Shopify iframe-safe) ───────────────────────────
+     Never assign body.style.height from visualViewport inside a cross-origin
+     iframe: values are often wrong vs the iframe layout box, which clips the
+     flex column and makes inputs/buttons feel "frozen" or unclickable. */
+  function scrollMsgsToEnd() {
+    setTimeout(function(){ try { msgs.scrollTop = msgs.scrollHeight; } catch(e) {} }, 60);
+  }
+  function onViewportChange() {
+    scrollMsgsToEnd();
   }
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', fixViewportHeight);
-    window.visualViewport.addEventListener('scroll', fixViewportHeight);
+    window.visualViewport.addEventListener('resize', onViewportChange);
+    window.visualViewport.addEventListener('scroll', onViewportChange);
   }
-  window.addEventListener('resize', fixViewportHeight);
+  window.addEventListener('resize', onViewportChange);
   input.addEventListener('focus', function() {
     setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 350);
   });
@@ -935,7 +940,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.2 — Floating Action Stack + Order Tracking */
+  const js = `/* KDF NUTS Chat Widget v3.3 — Shopify-safe stacking + pointer-events */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -949,23 +954,26 @@ router.get("/widget.js", (req: Request, res: Response) => {
   /* ── Styles ─────────────────────────────────────────── */
   var s = document.createElement('style');
   s.textContent = \`
+    /* Full-viewport root: clicks pass through empty space; controls stay interactive (Shopify theme overlays). */
+    #kdf-chat-root{position:fixed;inset:0;z-index:2147483647;pointer-events:none;}
+    #kdf-w,#kdf-popup{pointer-events:auto;}
     #kdf-w *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483640;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
-    #kdf-fab{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5FA800,#4a8500);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(95,168,0,0.48);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;}
+    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+    #kdf-fab{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5FA800,#4a8500);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(95,168,0,0.48);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;touch-action:manipulation;}
     #kdf-fab:hover{transform:scale(1.08);box-shadow:0 6px 30px rgba(95,168,0,0.6);}
     #kdf-fab:active{transform:scale(0.95);}
     #kdf-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff;}
-    .kdf-ab{display:flex;align-items:center;gap:9px;background:#fff;border:none;border-radius:28px;padding:9px 18px 9px 9px;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.18);white-space:nowrap;font-size:13.5px;font-weight:600;color:#1a1a2e;transition:transform .18s,box-shadow .18s;-webkit-tap-highlight-color:transparent;}
+    .kdf-ab{display:flex;align-items:center;gap:9px;background:#fff;border:none;border-radius:28px;padding:9px 18px 9px 9px;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.18);white-space:nowrap;font-size:13.5px;font-weight:600;color:#1a1a2e;transition:transform .18s,box-shadow .18s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
     .kdf-ab:hover{transform:translateX(-4px);box-shadow:0 6px 24px rgba(0,0,0,0.22);}
     .kdf-ab:active{transform:scale(0.97);}
     .kdf-ai{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
     #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .22s,transform .22s;opacity:0;transform:translateY(10px) scale(0.94);pointer-events:none;}
     #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
-    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:580px;border:none;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483641;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;}
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:none;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:3;background:#fff;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;}
     #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
     @media(max-width:480px){
       #kdf-w{bottom:16px;right:16px;}
-      #kdf-popup{bottom:0;right:0;width:100%;height:90svh;height:90vh;border-radius:22px 22px 0 0;}
+      #kdf-popup{bottom:0;right:0;width:100%;height:min(90svh,90vh);max-height:90svh;max-height:90vh;border-radius:22px 22px 0 0;}
     }
     @keyframes kdfP{0%,100%{box-shadow:0 4px 24px rgba(95,168,0,0.48)}50%{box-shadow:0 4px 40px rgba(95,168,0,0.78)}}
     #kdf-fab:not([data-open]).kdf-pulse{animation:kdfP 2.2s ease-in-out 3}
@@ -996,9 +1004,14 @@ router.get("/widget.js", (req: Request, res: Response) => {
 
   var popup = document.createElement('iframe'); popup.id = 'kdf-popup'; popup.allow = 'microphone';
   popup.setAttribute('aria-label','KDF NUTS Chat');
+  popup.setAttribute('title','KDF NUTS Chat');
+  popup.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
 
+  var root = document.createElement('div'); root.id = 'kdf-chat-root';
   wrap.appendChild(stack); wrap.appendChild(fab);
-  document.body.appendChild(popup); document.body.appendChild(wrap);
+  root.appendChild(wrap);
+  root.appendChild(popup);
+  document.body.appendChild(root);
 
   /* ── State ──────────────────────────────────────────── */
   var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null;
@@ -1055,6 +1068,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   });
 
   document.addEventListener('click', function(e) {
+    if (chatOpen) return;
     if (stackOpen && !wrap.contains(e.target) && !popup.contains(e.target)) closeStack();
   });
 
@@ -1101,31 +1115,30 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat Widget v3.1 — paste before </body> {%- endcomment -%}
-
-{%- if customer -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.3 — paste before </body>. Always set KDFChatConfig so the widget never reads undefined config. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
-    customer: {
+    store: "shopify"
+{%- if customer -%}
+    , customer: {
       id:    "{{ customer.id }}",
       name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
       email: "{{ customer.email | escape }}",
       phone: "{{ customer.phone | escape }}"
     },
-    cart: {{ cart | json }},
-    store: "shopify"
+    cart: {{ cart | json }}
+{%- endif -%}
   };
 </script>
-{%- endif -%}
 <script src="${widgetUrl}" defer></script>`,
 
     steps: [
       "1. Shopify Admin → Online Store → Themes → Edit Code",
       "2. Open layout/theme.liquid",
-      "3. Paste the Liquid Snippet just before the </body> tag",
+      "3. Paste the Liquid Snippet just before the </body> tag (config script must run before widget.js)",
       "4. Save → Preview your store",
-      "5. Green chat button appears bottom-right (no storefront inside widget)",
-      "6. 'Chat with Us' opens a clean, compact chat popup",
+      "5. Green chat button appears bottom-right; 'Chat with Us' opens the chat iframe (fully clickable)",
+      "6. If the chat ever feels frozen after a theme change, hard-refresh (Cmd+Shift+R) once",
       "7. 'WhatsApp' opens wa.me/923049996000 directly",
     ],
   });

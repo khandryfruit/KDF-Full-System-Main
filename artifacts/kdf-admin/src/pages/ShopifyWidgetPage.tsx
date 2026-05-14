@@ -192,6 +192,25 @@ export default function ShopifyWidgetPage() {
         </Button>
       </div>
 
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+        <p className="text-sm font-semibold text-gray-900">Shopify: chat opens but clicks do nothing</p>
+        <ul className="text-xs text-gray-700 mt-2 space-y-1.5 list-disc list-inside leading-relaxed">
+          <li>
+            Re-copy the Liquid snippet from step 2 after deploy — it must set{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">window.KDFChatConfig</code>{" "}
+            <strong>before</strong> loading <code className="text-[11px] bg-white px-1 rounded border">widget.js</code> (guests get <code className="text-[11px] bg-white px-1 rounded border">store: &quot;shopify&quot;</code>; logged-in customers also get cart + profile).
+          </li>
+          <li>
+            Widget <strong>v3.3</strong> mounts inside a top-level <code className="text-[11px] bg-white px-1 rounded border">#kdf-chat-root</code> with correct{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">pointer-events</code> so theme overlays are less likely to swallow the iframe.
+          </li>
+          <li>
+            The chat embed no longer forces <code className="text-[11px] bg-white px-1 rounded border">document.body.style.height</code> from{" "}
+            <code className="text-[11px] bg-white px-1 rounded border">visualViewport</code> inside the iframe (that could clip the flex layout on Shopify).
+          </li>
+        </ul>
+      </div>
+
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">
         {[
