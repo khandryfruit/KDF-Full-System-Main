@@ -7,7 +7,8 @@
 #
 # Config: /railway.kdf-plus.json or RAILWAY_DOCKERFILE_PATH=Dockerfile.kdf-plus
 #
-# Runtime: static server over dist/public (no vite preview).
+# Runtime: copy ONLY dist/public + static server — no pnpm, no full repo in the final
+# image (fewer Railway 502s from boot-time workspace resolution or wrong CWD).
 
 FROM node:22-bookworm AS builder
 WORKDIR /app
@@ -19,15 +20,13 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-plus run railway:build
 
-FROM node:22-bookworm AS runner
-WORKDIR /app
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app/artifacts/kdf-plus
 ENV NODE_ENV=production
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+ENV NODE_OPTIONS=--max-http-header-size=65536
 
-COPY --from=builder /app /app
+COPY --from=builder /app/artifacts/kdf-plus/dist/public ./dist/public
+COPY --from=builder /app/artifacts/kdf-plus/scripts/railway-static-server.mjs ./scripts/railway-static-server.mjs
 
-WORKDIR /app
 EXPOSE 8080
-# Direct node start — no pnpm workspace resolution at boot (faster, fewer Railway 502s).
-CMD ["node", "artifacts/kdf-plus/scripts/railway-static-server.mjs"]
+CMD ["node", "scripts/railway-static-server.mjs"]
