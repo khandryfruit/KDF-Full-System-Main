@@ -29,4 +29,5 @@ COPY --from=builder /app /app
 
 WORKDIR /app
 EXPOSE 8080
-CMD ["pnpm", "--filter", "@workspace/kdf-plus", "run", "railway:start"]
+# Direct node start — no pnpm workspace resolution at boot (faster, fewer Railway 502s).
+CMD ["node", "artifacts/kdf-plus/scripts/railway-static-server.mjs"]

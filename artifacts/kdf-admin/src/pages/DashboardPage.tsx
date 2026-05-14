@@ -368,7 +368,7 @@ export default function DashboardPage() {
     catch { return WIDGET_DEFAULTS; }
   });
 
-  const { data: rawStats, isLoading, refetch } = useQuery<DashStats>({
+  const { data: rawStats, isLoading, isError, error, refetch } = useQuery<DashStats>({
     queryKey: ["dashboard-v2"],
     queryFn: () => api("/admin/dashboard"),
     staleTime: 30_000,
@@ -398,6 +398,23 @@ export default function DashboardPage() {
   }, [widgets]);
 
   const toggleWidget = (k: WidgetKey) => setWidgets(prev => ({ ...prev, [k]: !prev[k] }));
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-4 max-w-lg mx-auto">
+        <AlertTriangle className="w-10 h-10 text-destructive" />
+        <p className="text-destructive text-sm font-medium">Could not load dashboard</p>
+        <p className="text-muted-foreground text-xs">{(error as Error)?.message ?? "Check API and VITE_API_BASE_URL on Railway."}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="text-xs border border-border rounded-xl px-4 py-2 hover:bg-muted transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading || !rawStats) {
     return (

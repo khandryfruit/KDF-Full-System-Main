@@ -48,4 +48,4 @@ COPY --from=builder /app /app
 WORKDIR /app
 EXPOSE 8080
 
-CMD ["/bin/sh", "-c", "set -e; t=\"${KDF_RAILWAY_TARGET:-admin}\"; case \"$t\" in admin) exec pnpm --filter @workspace/kdf-admin run railway:start;; plus) exec pnpm --filter @workspace/kdf-plus run railway:start;; admin-app) exec pnpm --filter @workspace/kdf-admin-app run railway:start;; api) exec pnpm --filter @workspace/api-server run start;; *) echo \"Invalid KDF_RAILWAY_TARGET=$t\" >&2; exit 1;; esac"]
+CMD ["/bin/sh", "-c", "set -e; t=\"${KDF_RAILWAY_TARGET:-admin}\"; case \"$t\" in admin) exec pnpm --filter @workspace/kdf-admin run railway:start;; plus) exec node artifacts/kdf-plus/scripts/railway-static-server.mjs;; admin-app) exec pnpm --filter @workspace/kdf-admin-app run railway:start;; api) exec pnpm --filter @workspace/api-server run start;; *) echo \"Invalid KDF_RAILWAY_TARGET=$t\" >&2; exit 1;; esac"]
