@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import {
   Search, MapPin, ChevronDown, User, LogOut, Package, Heart,
@@ -156,19 +157,114 @@ function AnnouncementBar({ items }: { items: any[] }) {
   );
 }
 
-/* ─── Mega Menu Dropdown (desktop only — wide horizontal panel; mobile uses drawer) ─── */
-function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void; alignEnd?: boolean }) {
+/* ─── Mega Menu — panel portaled to body (avoids overflow clipping + wrong anchor width on Shopify-like layouts) ─── */
+function MegaMenuDropdown({ item, onNavigate, panelTopPx }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void; panelTopPx: number }) {
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const enter = () => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setOpen(true), 40);
+    timerRef.current = setTimeout(() => setOpen(true), 32);
   };
   const leave = () => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setOpen(false), 220);
+    timerRef.current = setTimeout(() => setOpen(false), 200);
   };
+
+  const panel = open && typeof document !== "undefined" ? createPortal(
+    <div
+      className="pointer-events-auto fixed z-[560] hidden w-[min(96vw,72rem)] max-w-[72rem] sm:block"
+      style={{ left: "50%", top: panelTopPx, transform: "translateX(-50%)" }}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+    >
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 shadow-[0_24px_64px_-20px_rgba(15,23,42,0.22)] backdrop-blur-xl ring-1 ring-slate-900/[0.04]">
+        <div className="grid max-h-[min(72vh,520px)] min-w-[min(100%,20rem)] grid-cols-1 divide-y divide-slate-100 md:grid-cols-12 md:divide-x md:divide-y-0">
+          <div className="p-4 sm:p-5 md:col-span-5 md:max-h-[min(72vh,520px)] md:overflow-y-auto">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {item.sub.map(sub => (
+                <button
+                  key={sub.slug}
+                  type="button"
+                  onClick={() => { onNavigate(`/products?category=${sub.slug}`); setOpen(false); }}
+                  className="group flex min-h-[42px] w-full min-w-0 flex-row items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[#5FA800]/10"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-base leading-none ring-1 ring-slate-200/60 transition-colors group-hover:bg-white group-hover:ring-[#5FA800]/25" aria-hidden>
+                    {sub.emoji}
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+                    <span className="block leading-snug">{sub.label}</span>
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 opacity-80 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#5FA800]" strokeWidth={2.5} />
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#5FA800]/25 bg-[#5FA800]/6 py-2.5 text-sm font-bold text-[#3d7000] transition-colors hover:bg-[#5FA800]/12"
+            >
+              View all {item.label}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-col justify-between bg-gradient-to-br from-[#f8fdf4] via-white to-slate-50/90 p-4 sm:p-5 md:col-span-4 md:max-h-[min(72vh,520px)] md:overflow-y-auto">
+            <div>
+              <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Featured</p>
+              <div
+                className="rounded-xl border p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-md"
+                style={{ background: `${item.featured.color}12`, borderColor: `${item.featured.color}35` }}
+              >
+                <span
+                  className="mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm"
+                  style={{ background: item.featured.color }}
+                >
+                  {item.featured.badge}
+                </span>
+                <p className="text-[15px] font-bold leading-snug text-slate-900 sm:text-base">{item.featured.label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">Premium quality — natural & pure.</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2 border-t border-slate-200/70 pt-3 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <Shield className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                <span>Quality guaranteed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Truck className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                <span>Free delivery Rs.1500+</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5 md:col-span-3 md:max-h-[min(72vh,520px)] md:overflow-y-auto md:bg-slate-50/40">
+            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Popular & offers</p>
+            <div className="flex flex-col gap-1">
+              {[
+                { label: "Hot deals", href: "/products?featured=true", Icon: Flame, c: ORANGE },
+                { label: "New arrivals", href: "/products?sortBy=newest", Icon: Sparkles, c: "#7c3aed" },
+                { label: "Best sellers", href: "/products?sortBy=rating", Icon: Star, c: "#b45309" },
+                { label: "All " + item.label, href: `/products?category=${item.slug}`, Icon: LayoutGrid, c: GREEN },
+              ].map(row => (
+                <button
+                  key={row.href}
+                  type="button"
+                  onClick={() => { onNavigate(row.href); setOpen(false); }}
+                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-white hover:shadow-sm"
+                >
+                  <row.Icon className="h-3.5 w-3.5 shrink-0" style={{ color: row.c }} strokeWidth={2.25} />
+                  <span className="min-w-0 truncate">{row.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   return (
     <div className="relative z-[360]" onMouseEnter={enter} onMouseLeave={leave}>
@@ -181,106 +277,7 @@ function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_IT
         <span className="whitespace-nowrap">{item.label}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 md:h-4 md:w-4 ${open ? "rotate-180" : ""}`} style={{ color: open ? GREEN : "#94a3b8" }} />
       </button>
-
-      {open && (
-        <div
-          className={`absolute top-full z-[360] hidden pt-2 sm:block ${alignEnd ? "right-0 left-auto" : "left-0"}`}
-          style={{ width: "min(calc(100vw - 1.25rem), 56rem)" }}
-          onMouseEnter={enter}
-          onMouseLeave={leave}
-        >
-          <div
-            className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_18px_50px_-16px_rgba(15,23,42,0.14)] backdrop-blur-md ring-1 ring-slate-900/[0.03]"
-          >
-            {/* md+ = horizontal mega (was lg-only, caused narrow stacked panels on laptops) */}
-            <div className="grid max-h-[min(70vh,420px)] grid-cols-1 divide-y divide-slate-100 md:grid-cols-12 md:divide-x md:divide-y-0">
-              {/* Categories — two columns of links on wide mega */}
-              <div className="p-4 sm:p-4 md:col-span-5 md:max-h-[min(70vh,420px)] md:overflow-y-auto">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                  {item.sub.map(sub => (
-                    <button
-                      key={sub.slug}
-                      type="button"
-                      onClick={() => { onNavigate(`/products?category=${sub.slug}`); setOpen(false); }}
-                      className="group flex min-h-[40px] w-full min-w-0 flex-row items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[#5FA800]/10"
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-base leading-none ring-1 ring-slate-200/60 transition-colors group-hover:bg-white group-hover:ring-[#5FA800]/25" aria-hidden>
-                        {sub.emoji}
-                      </span>
-                      <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
-                        <span className="block truncate">{sub.label}</span>
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 opacity-80 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#5FA800]" strokeWidth={2.5} />
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-[#5FA800]/25 bg-[#5FA800]/6 py-2.5 text-sm font-bold text-[#3d7000] transition-colors hover:bg-[#5FA800]/12"
-                >
-                  View all {item.label}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Featured spotlight */}
-              <div className="flex flex-col justify-between bg-gradient-to-br from-[#f8fdf4] via-white to-slate-50/90 p-4 sm:p-4 md:col-span-4 md:max-h-[min(70vh,420px)] md:overflow-y-auto">
-                <div>
-                  <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Featured</p>
-                  <div
-                    className="rounded-xl border p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-md"
-                    style={{ background: `${item.featured.color}12`, borderColor: `${item.featured.color}35` }}
-                  >
-                    <span
-                      className="mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm"
-                      style={{ background: item.featured.color }}
-                    >
-                      {item.featured.badge}
-                    </span>
-                    <p className="text-[15px] font-bold leading-snug text-slate-900 sm:text-base">{item.featured.label}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-600">Premium quality — natural & pure.</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 border-t border-slate-200/70 pt-3 text-xs text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
-                    <span>Quality guaranteed</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Truck className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
-                    <span>Free delivery Rs.1500+</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick links — offers / discovery */}
-              <div className="p-4 sm:p-4 md:col-span-3 md:max-h-[min(70vh,420px)] md:overflow-y-auto md:bg-slate-50/40">
-                <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Popular & offers</p>
-                <div className="flex flex-col gap-1">
-                  {[
-                    { label: "Hot deals", href: "/products?featured=true", Icon: Flame, c: ORANGE },
-                    { label: "New arrivals", href: "/products?sortBy=newest", Icon: Sparkles, c: "#7c3aed" },
-                    { label: "Best sellers", href: "/products?sortBy=rating", Icon: Star, c: "#b45309" },
-                    { label: "All " + item.label, href: `/products?category=${item.slug}`, Icon: LayoutGrid, c: GREEN },
-                  ].map(row => (
-                    <button
-                      key={row.href}
-                      type="button"
-                      onClick={() => { onNavigate(row.href); setOpen(false); }}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-white hover:shadow-sm"
-                    >
-                      <row.Icon className="h-3.5 w-3.5 shrink-0" style={{ color: row.c }} strokeWidth={2.25} />
-                      <span className="min-w-0 truncate">{row.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {panel}
     </div>
   );
 }
@@ -685,6 +682,32 @@ export function Header() {
   const headerRecRef    = useRef<any>(null);
   const [headerListening, setHeaderListening]   = useState(false);
   const [headerCamLoad, setHeaderCamLoad]       = useState(false);
+  const desktopNavBandRef = useRef<HTMLDivElement>(null);
+  const [megaMenuTopPx, setMegaMenuTopPx]       = useState(118);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const el = desktopNavBandRef.current;
+      if (!el || el.offsetParent === null) return;
+      const r = el.getBoundingClientRect();
+      if (r.height < 2) return;
+      setMegaMenuTopPx(Math.round(r.bottom) + 4);
+    };
+    update();
+    const el = desktopNavBandRef.current;
+    let ro: ResizeObserver | null = null;
+    if (el && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [shrunk, scrolled]);
 
   const startHeaderVoice = () => {
     if (headerListening) { headerRecRef.current?.stop(); setHeaderListening(false); return; }
@@ -1120,6 +1143,7 @@ export function Header() {
 
             {/* ── Desktop Nav + Trust strip ── */}
             <div
+              ref={desktopNavBandRef}
               className={`hidden sm:flex items-center justify-between gap-2 overflow-visible border-t border-slate-200/80 bg-gradient-to-r from-white via-slate-50/40 to-white transition-all duration-300 ${shrunk ? "py-1.5" : "py-2.5"} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8`}
             >
               <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible md:gap-1.5">
@@ -1137,8 +1161,8 @@ export function Header() {
                 </Link>
 
                 {/* Mega menus */}
-                {MEGA_ITEMS.map((item, idx) => (
-                  <MegaMenuDropdown key={item.slug} item={item} onNavigate={navigate} alignEnd={idx >= MEGA_ITEMS.length - 2} />
+                {MEGA_ITEMS.map((item) => (
+                  <MegaMenuDropdown key={item.slug} item={item} onNavigate={navigate} panelTopPx={megaMenuTopPx} />
                 ))}
 
                 <Link href="/products?featured=true">

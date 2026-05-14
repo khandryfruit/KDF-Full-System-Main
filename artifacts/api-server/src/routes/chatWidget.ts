@@ -40,7 +40,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100dvh;min-height:-webkit-fill-available;height:100%;display:flex;flex-direction:column;overflow:hidden;-webkit-overflow-scrolling:touch;}
 
   /* ── Header ─────────────────────────────────── */
-  #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;}
+  #hdr{background:linear-gradient(135deg,#2ecc71,#128C7E);padding:11px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.18);flex-shrink:0;position:relative;z-index:20;}
   #hdr-avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.22);border:2px solid rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:0;}
   #hdr-info{flex:1;min-width:0;}
   #hdr-name{font-size:15px;font-weight:700;color:#fff;line-height:1.2;}
@@ -51,7 +51,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .hdr-btn svg{pointer-events:none;}
 
   /* ── Messages ────────────────────────────────── */
-  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;overscroll-behavior:contain;}
+  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;overscroll-behavior:contain;position:relative;z-index:1;}
   #msgs::-webkit-scrollbar{width:3px;}
   #msgs::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
 
@@ -65,7 +65,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .bubble-time{font-size:10px;opacity:0.55;margin-top:3px;text-align:right;}
 
   /* ── Typing ──────────────────────────────────── */
-  #typing{display:none;align-items:flex-end;gap:6px;padding:2px 0;}
+  #typing{display:none;align-items:flex-end;gap:6px;padding:2px 0;position:relative;z-index:4;flex-shrink:0;background:#f0f2f5;}
   #typing .bubble{background:#fff;padding:10px 15px;}
   .dot{width:7px;height:7px;border-radius:50%;background:#aaa;animation:bounce 1.4s infinite;}
   .dot:nth-child(2){animation-delay:.2s;}
@@ -74,7 +74,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Lead form — flex-shrink:0 (NOT position:fixed) iOS Safari iframe bug fix ── */
   /* position:fixed inside cross-origin iframe breaks touch hit-area on iOS — use normal flow */
-  #lead-form{flex-shrink:0;background:#fff;border-top:1px solid #f0f0f0;padding:20px 18px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -2px 16px rgba(0,0,0,0.08);}
+  #lead-form{flex-shrink:0;background:#fff;border-top:1px solid #f0f0f0;padding:20px 18px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -2px 16px rgba(0,0,0,0.08);position:relative;z-index:10;}
+  #lead-err{display:none;font-size:12px;color:#ef4444;margin:-4px 0 10px;font-weight:600;}
   #lead-form h3{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
   #lead-form p{font-size:12px;color:#666;margin-bottom:14px;line-height:1.5;}
   .lf-input{width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 13px;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:9px;font-family:inherit;}
@@ -86,19 +87,20 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   #lead-skip{display:block;text-align:center;font-size:12px;color:#aaa;margin-top:10px;cursor:pointer;text-decoration:underline;touch-action:manipulation;}
 
   /* ── Chips ───────────────────────────────────── */
-  #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;}
+  #chips{display:flex;gap:6px;padding:4px 10px 8px;overflow-x:auto;flex-shrink:0;position:relative;z-index:10;background:#fff;}
   #chips::-webkit-scrollbar{display:none;}
   .chip{background:#fff;border:1px solid #e0e0e0;border-radius:18px;padding:5px 12px;font-size:12px;color:#444;cursor:pointer;white-space:nowrap;transition:all .2s;flex-shrink:0;}
   .chip:hover,.chip:active{background:linear-gradient(135deg,#2ecc71,#128C7E);color:#fff;border-color:transparent;}
 
   /* ── Input area ──────────────────────────────── */
-  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;position:sticky;bottom:0;}
+  #input-area{background:#fff;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:7px;border-top:1px solid #efefef;flex-shrink:0;position:relative;z-index:10;}
   #btn-mic{width:36px;height:36px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:color .2s,background .2s;}
   #btn-mic:hover{background:#f5f5f5;color:#2ecc71;}
   #btn-mic.listening{background:#fee2e2;color:#ef4444;animation:micPulse 1s ease-in-out infinite;}
   #msg-input{flex:1;border:1.5px solid #e5e7eb;border-radius:22px;padding:9px 14px;font-size:13.5px;outline:none;resize:none;max-height:90px;overflow-y:auto;transition:border-color .2s;font-family:inherit;background:#fafafa;}
   #msg-input:focus{border-color:#2ecc71;background:#fff;}
-  #msg-input,#btn-send,#btn-mic,.chip,.hdr-btn,.lf-input,#btn-lead,#lead-skip,.pv-btn,.prod-btn-view,.prod-btn-add,#cart-checkout-btn,#cart-bar-left{touch-action:manipulation;-webkit-user-select:text;user-select:text;}
+  #msg-input,.lf-input{touch-action:manipulation;-webkit-user-select:text;user-select:text;}
+  #btn-send,#btn-mic,.chip,.hdr-btn,#btn-lead,#lead-skip,.pv-btn,.prod-btn-view,.prod-btn-add,#cart-checkout-btn,#cart-bar-left{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
   #btn-send{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2ecc71,#128C7E);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .2s;}
   #btn-send:hover{opacity:.88;}
   #btn-send:disabled{background:#ddd;cursor:not-allowed;}
@@ -137,7 +139,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .prod-btn-add:active{opacity:.85;}
 
   /* ── Sticky Cart Bar ─────────────────────────── */
-  #cart-bar{background:#fff;border-top:1.5px solid #e8f5e9;display:none;flex-direction:column;flex-shrink:0;}
+  #cart-bar{background:#fff;border-top:1.5px solid #e8f5e9;display:none;flex-direction:column;flex-shrink:0;position:relative;z-index:10;}
   #cart-bar-row{display:flex;align-items:center;gap:8px;padding:9px 12px;}
   #cart-bar-left{display:flex;align-items:center;gap:7px;flex:1;min-width:0;cursor:pointer;-webkit-tap-highlight-color:transparent;}
   #cart-bar-icon{color:#2ecc71;flex-shrink:0;display:flex;}
@@ -238,12 +240,15 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
 <!-- Lead capture form -->
 <div id="lead-form">
-  <h3>👋 Welcome to KDF NUTS!</h3>
-  <p>Share your name & number to start chatting with our support team.</p>
-  <input class="lf-input" id="lf-name" type="text" placeholder="Your name *" autocomplete="name">
-  <input class="lf-input" id="lf-phone" type="tel" placeholder="Phone number * (03xx-xxxxxxx)" autocomplete="tel">
-  <input class="lf-input" id="lf-email" type="email" placeholder="Email (optional)" autocomplete="email">
-  <button type="button" id="btn-lead">Start Chat →</button>
+  <form id="lead-form-el" autocomplete="on" novalidate>
+    <h3>👋 Welcome to KDF NUTS!</h3>
+    <p>Share your name & number to start chatting with our support team.</p>
+    <div id="lead-err" role="alert" aria-live="polite"></div>
+    <input class="lf-input" id="lf-name" type="text" placeholder="Your name *" autocomplete="name" name="name" enterkeyhint="next">
+    <input class="lf-input" id="lf-phone" type="tel" placeholder="Phone * (03xx… or +92…)" autocomplete="tel" name="phone" enterkeyhint="done">
+    <input class="lf-input" id="lf-email" type="email" placeholder="Email (optional)" autocomplete="email" name="email" enterkeyhint="done">
+    <button type="submit" id="btn-lead">Start Chat →</button>
+  </form>
   <span id="lead-skip">Skip for now</span>
 </div>
 
@@ -755,29 +760,62 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
 
   function submitLead() {
-    var name  = document.getElementById('lf-name').value.trim();
-    var phone = document.getElementById('lf-phone').value.trim();
+    var btnLead = document.getElementById('btn-lead');
+    var errEl   = document.getElementById('lead-err');
+    var nameEl  = document.getElementById('lf-name');
+    var phoneEl = document.getElementById('lf-phone');
+    var name  = nameEl.value.trim();
+    var phone = phoneEl.value.trim();
     var email = document.getElementById('lf-email').value.trim();
+    function showLeadErr(msg) {
+      if (!errEl) return;
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+    function clearLeadErr() {
+      if (!errEl) return;
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+    }
+    clearLeadErr();
     if (!name || !phone) {
-      document.getElementById('lf-name').style.borderColor = name ? '#e5e7eb' : '#ef4444';
-      document.getElementById('lf-phone').style.borderColor = phone ? '#e5e7eb' : '#ef4444';
+      nameEl.style.borderColor = name ? '#e5e7eb' : '#ef4444';
+      phoneEl.style.borderColor = phone ? '#e5e7eb' : '#ef4444';
+      showLeadErr('Please fill in your name and phone number.');
       return;
     }
-    var btnLead = document.getElementById('btn-lead');
-    btnLead.disabled = true;
-    btnLead.textContent = 'Starting…';
-    localStorage.setItem('kdf_embed_lead', '1');
-    fetch(API + '/chat/lead', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
-    }).catch(function(){});
-    /* Transition immediately — lead save is fire-and-forget */
-    showChatInterface();
+    var phoneDigits = phone.replace(/\\D/g, '');
+    if (phoneDigits.length < 10) {
+      phoneEl.style.borderColor = '#ef4444';
+      nameEl.style.borderColor = '#e5e7eb';
+      showLeadErr('Enter a valid phone number (at least 10 digits).');
+      return;
+    }
+    nameEl.style.borderColor = '#e5e7eb';
+    phoneEl.style.borderColor = '#e5e7eb';
+    try {
+      btnLead.disabled = true;
+      btnLead.textContent = 'Starting…';
+      localStorage.setItem('kdf_embed_lead', '1');
+      fetch(API + '/chat/lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
+      }).catch(function(){});
+      showChatInterface();
+    } catch (err) {
+      try {
+        btnLead.disabled = false;
+        btnLead.textContent = 'Start Chat →';
+      } catch (e2) {}
+      showLeadErr('Could not open chat. Try again or tap Skip for now.');
+    }
   }
 
-  document.getElementById('btn-lead').addEventListener('click', submitLead);
-  document.getElementById('lf-phone').addEventListener('keydown', function(e){ if(e.key==='Enter') submitLead(); });
+  document.getElementById('lead-form-el').addEventListener('submit', function(e) {
+    e.preventDefault();
+    submitLead();
+  });
   document.getElementById('lead-skip').addEventListener('click', function() {
     localStorage.setItem('kdf_embed_lead', '1');
     showChatInterface();
@@ -1125,9 +1163,9 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
       name:  "{{ customer.first_name | escape }} {{ customer.last_name | escape }}",
       email: "{{ customer.email | escape }}",
       phone: "{{ customer.phone | escape }}"
-    },
-    cart: {{ cart | json }}
+    }
 {%- endif -%}
+    , cart: {{ cart | json }}
   };
 </script>
 <script src="${widgetUrl}" defer></script>`,
@@ -1140,6 +1178,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
       "5. Green chat button appears bottom-right; 'Chat with Us' opens the chat iframe (fully clickable)",
       "6. If the chat ever feels frozen after a theme change, hard-refresh (Cmd+Shift+R) once",
       "7. 'WhatsApp' opens wa.me/923049996000 directly",
+      "8. After deploy: lead form uses a higher z-index + native <form> submit so 'Start Chat' works reliably in the Shopify iframe (re-copy snippet if you still had cart only for logged-in customers).",
     ],
   });
 });

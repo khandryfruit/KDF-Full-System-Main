@@ -104,8 +104,43 @@ const BANNER_AI_SLIDES = [
   { label: '✨ NEW ARRIVALS', headline: "Fresh Premium\nNuts Just Landed", sub: '100% authentic · Sourced directly from farms', cta: 'See New', g1: '#051830', g2: '#0a3870', g3: '#0e5aaa', orb1: '#38bdf8', orb2: '#7dd3fc', orb3: '#0369a1', icon: '✨' },
 ];
 
+const HERO_FRAME_CLASS =
+  "relative overflow-hidden min-h-[260px] h-[min(72vw,320px)] sm:min-h-[300px] sm:h-[min(36vh,400px)] md:h-[min(34vh,420px)] lg:min-h-[340px] lg:h-[min(42vh,500px)] lg:max-h-[500px] rounded-2xl sm:rounded-2xl ring-1 ring-black/[0.04]";
+
+function buildSyntheticHeroBanners(products: Product[]): Banner[] {
+  const seen = new Set<number>();
+  const out: Banner[] = [];
+  for (const p of products) {
+    if (!p?.id || seen.has(p.id)) continue;
+    seen.add(p.id);
+    const img = p.images?.[0];
+    const orig = p.originalPrice ? Number.parseFloat(String(p.originalPrice)) : 0;
+    const price = Number.parseFloat(String(p.price || "0"));
+    let pct = 0;
+    if (orig > 0 && price > 0 && orig > price) pct = Math.round((1 - price / orig) * 100);
+    const label = pct > 0 ? `Save ${pct}% today` : p.featured ? "Editor's pick" : "Trending now";
+    const sub = (p.description && p.description.trim().length > 0)
+      ? p.description.trim().slice(0, 150)
+      : `Premium ${p.name} — fast delivery across Pakistan.`;
+    out.push({
+      id: -9000 - p.id,
+      title: p.name,
+      subtitle: sub,
+      imageUrl: img,
+      label,
+      cta: "Shop now",
+      targetType: "product",
+      targetId: p.id,
+      sortOrder: out.length,
+      active: true,
+    } as unknown as Banner);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 /* ─── Hero Banner ────────────────────────────────────────────── */
-function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean }) {
+function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]; loading: boolean; smartCatalog?: Product[] }) {
   const [idx, setIdx]             = useState(0);
   const [fallbackIdx, setFallbackIdx] = useState(0);
   const [paused, setPaused]       = useState(false);
@@ -113,31 +148,57 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   const [, setLocation]           = useLocation();
   const touchStartX               = useRef<number | null>(null);
 
+  const syntheticBanners = useMemo(() => buildSyntheticHeroBanners(smartCatalog), [smartCatalog]);
+  const heroSlides = useMemo(() => {
+    if (banners.length > 0) return banners;
+    if (syntheticBanners.length > 0) return syntheticBanners;
+    return [];
+  }, [banners, syntheticBanners]);
+
+  const slugByProductId = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of smartCatalog) m.set(p.id, p.slug);
+    return m;
+  }, [smartCatalog]);
+
+  const nSlides = heroSlides.length;
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const prev = useCallback(() => setIdx(i => (i - 1 + banners.length) % banners.length), [banners.length]);
-  const next = useCallback(() => setIdx(i => (i + 1) % banners.length), [banners.length]);
+  const prev = useCallback(() => {
+    setIdx(i => (nSlides <= 0 ? 0 : (i - 1 + nSlides) % nSlides));
+  }, [nSlides]);
+  const next = useCallback(() => {
+    setIdx(i => (nSlides <= 0 ? 0 : (i + 1) % nSlides));
+  }, [nSlides]);
 
   useEffect(() => {
-    if (banners.length <= 1 || paused) return;
+    if (nSlides <= 1 || paused) return;
     const t = setInterval(next, 5600);
     return () => clearInterval(t);
-  }, [banners.length, paused, next]);
+  }, [nSlides, paused, next]);
 
-  /* fallback auto-rotate — only active when no DB banners */
   useEffect(() => {
-    if (banners.length > 0) return;
+    if (nSlides > 0) return;
     const t = setInterval(() => setFallbackIdx(p => (p + 1) % BANNER_AI_SLIDES.length), 5600);
     return () => clearInterval(t);
-  }, [banners.length]);
+  }, [nSlides]);
+
+  useEffect(() => {
+    if (nSlides > 0 && idx >= nSlides) setIdx(0);
+  }, [nSlides, idx]);
 
   const handleBannerClick = (banner: Banner) => {
-    if (banner.targetType === "product" && banner.targetId) setLocation(`/products/${banner.targetId}`);
-    else if (banner.targetType === "category" && banner.targetId) setLocation(`/products?category=${banner.targetId}`);
+    if (banner.targetType === "product" && banner.targetId) {
+      const slug = slugByProductId.get(banner.targetId);
+      setLocation(`/products/${slug || banner.targetId}`);
+      return;
+    }
+    if (banner.targetType === "category" && banner.targetId) setLocation(`/products?category=${banner.targetId}`);
     else if (banner.linkUrl) setLocation(banner.linkUrl);
     else setLocation("/products");
   };
@@ -145,18 +206,18 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
-        <Skeleton className="w-full min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] rounded-2xl sm:rounded-2xl" />
+        <Skeleton className={`w-full ${HERO_FRAME_CLASS}`} />
       </div>
     );
   }
 
-  /* ── fallback (no banners from DB) — Premium AI Banners ── */
-  if (!banners.length) {
+  /* ── Static gradient fallback when no DB banners and no catalog-driven slides ── */
+  if (!heroSlides.length) {
     const s = BANNER_AI_SLIDES[fallbackIdx];
     return (
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div
-          className="relative flex flex-col justify-end overflow-hidden min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] sm:justify-center rounded-2xl sm:rounded-2xl cursor-pointer ring-1 ring-black/[0.04] transition-opacity active:opacity-95"
+          className={`${HERO_FRAME_CLASS} relative flex cursor-pointer flex-col justify-end overflow-hidden transition-opacity active:opacity-95 sm:justify-center`}
           style={{
             background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`,
             boxShadow: `0 16px 40px ${s.g3}40, 0 8px 24px rgba(0,0,0,0.22)`,
@@ -222,6 +283,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
     { o1: '#38bdf8', o2: '#7dd3fc', o3: '#0369a1' },
   ];
 
+  const slideFlexPct = nSlides > 0 ? 100 / nSlides : 100;
+
   return (
     <div
       className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4"
@@ -229,7 +292,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
       onMouseLeave={() => setPaused(false)}
     >
       <div
-        className="relative overflow-hidden min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] rounded-2xl sm:rounded-2xl ring-1 ring-black/[0.04]"
+        className={HERO_FRAME_CLASS}
         style={{
           boxShadow:
             "0 14px 40px rgba(13,43,0,0.12), 0 6px 18px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.14)",
@@ -238,7 +301,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           touchStartX.current = e.touches[0]?.clientX ?? null;
         }}
         onTouchEnd={(e) => {
-          if (touchStartX.current == null || banners.length <= 1) return;
+          if (touchStartX.current == null || nSlides <= 1) return;
           const end = e.changedTouches[0]?.clientX ?? touchStartX.current;
           const d = end - touchStartX.current;
           touchStartX.current = null;
@@ -246,8 +309,15 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           else if (d > 52) prev();
         }}
       >
-        {/* Slides */}
-        {banners.map((banner, i) => {
+        <div
+          className="flex h-full ease-[cubic-bezier(0.22,1,0.36,1)] transition-transform duration-700 motion-reduce:transition-none motion-reduce:duration-0"
+          style={{
+            width: `${nSlides * 100}%`,
+            transform: `translate3d(-${(idx * 100) / nSlides}%,0,0)`,
+            willChange: "transform",
+          }}
+        >
+        {heroSlides.map((banner, i) => {
           const desktopImg = banner.imageUrl
             ? getProductImageSrc(banner.imageUrl, { maxWidth: isMobile ? 960 : 1600 })
             : null;
@@ -265,10 +335,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           return (
             <div
               key={banner.id}
-              className={`absolute inset-0 cursor-pointer transition-opacity duration-500 ease-out motion-reduce:transition-none ${
-                i === idx ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
-              }`}
-              style={{ willChange: i === idx || i === (idx + 1) % banners.length ? "opacity" : undefined }}
+              className="relative h-full min-h-0 flex-shrink-0 cursor-pointer overflow-hidden"
+              style={{ flex: `0 0 ${slideFlexPct}%` }}
               onClick={() => handleBannerClick(banner)}
             >
               {/* Video background (takes priority over image) */}
@@ -341,7 +409,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                     </div>
                   )}
                   {banner.label && (
-                    <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/95 px-3 py-1.5 rounded-full mb-2 sm:mb-3 border border-white/25 bg-white/10 backdrop-blur-md shadow-sm">
+                    <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/95 px-3 py-1.5 rounded-full mb-2 sm:mb-3 border border-amber-200/35 bg-white/12 backdrop-blur-md shadow-sm ring-1 ring-amber-300/25 motion-safe:animate-[pulse_3s_ease-in-out_infinite] sm:motion-safe:animate-[pulse_4s_ease-in-out_infinite]">
                       {banner.label}
                     </span>
                   )}
@@ -349,7 +417,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                     className="mb-1.5 max-w-[20rem] text-[1.45rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg sm:mb-2.5 sm:max-w-2xl sm:text-3xl md:text-4xl lg:max-w-3xl lg:text-[2.35rem] lg:leading-[1.08]"
                     style={{ textShadow: "0 3px 22px rgba(0,0,0,0.45)" }}
                   >
-                    {banner.title}
+                    {(banner.title || "").replace(/\boofer\b/gi, "offer")}
                   </h2>
                   {banner.subtitle && (
                     <p className="mb-2.5 max-w-[19rem] text-sm font-medium leading-snug text-white/90 sm:mb-4 sm:max-w-xl sm:text-base lg:text-lg">
@@ -363,7 +431,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                   )}
                   <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <button
-                      className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white ring-1 ring-white/20 transition-opacity duration-200 hover:opacity-95 active:opacity-100 sm:px-7 sm:py-3 sm:text-[15px]"
+                      className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white ring-1 ring-white/20 transition-transform duration-200 ease-out hover:opacity-95 active:scale-[0.97] sm:hover:scale-[1.02] sm:px-7 sm:py-3 sm:text-[15px]"
                       style={{ backgroundColor: GREEN, boxShadow: `0 8px 24px ${GREEN}45` }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -385,41 +453,14 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                   </div>
                 </div>
 
-                {/* ── Right: inner floating card (desktop image in card) ── */}
-                {desktopImg && !isMobile && (
-                  <div className="hidden sm:flex flex-shrink-0 items-center justify-center">
-                    <div
-                      className="relative overflow-hidden rounded-2xl border border-white/25 bg-white/10 shadow-lg backdrop-blur-sm transition-shadow duration-200 hover:shadow-xl"
-                      style={{ width: 200, height: 186 }}
-                    >
-                      <img
-                        src={desktopImg}
-                        alt={banner.title}
-                        className="h-full w-full object-cover object-center"
-                      />
-                      {/* Card inner label */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-4 py-3">
-                        <p className="text-white font-bold text-sm leading-tight drop-shadow">{banner.title}</p>
-                        {banner.subtitle && (
-                          <p className="text-white/75 text-xs mt-0.5 line-clamp-1">{banner.subtitle}</p>
-                        )}
-                        <button
-                          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-white bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleBannerClick(banner); }}
-                        >
-                          {banner.cta || "Shop Now"} <ArrowRight className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           );
         })}
+        </div>
 
         {/* Nav arrows */}
-        {banners.length > 1 && (
+        {nSlides > 1 && (
           <>
             <button
               onClick={(e) => { e.stopPropagation(); prev(); }}
@@ -436,7 +477,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               <ChevronRight className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
             </button>
             <div className="absolute bottom-2.5 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 sm:bottom-3">
-              {banners.map((_, i) => (
+              {heroSlides.map((_, i) => (
                 <button
                   key={i}
                   onClick={(e) => { e.stopPropagation(); setIdx(i); }}
@@ -1126,6 +1167,21 @@ export default function HomePage() {
     [dealsData],
   );
 
+  const heroSmartCatalog = useMemo(() => {
+    const byId = new Map<number, Product>();
+    for (const p of dealProducts) if (p?.id != null) byId.set(p.id, p);
+    for (const p of featuredProducts) if (p?.id != null) byId.set(p.id, p);
+    for (const p of allProducts) if (p?.id != null) byId.set(p.id, p);
+    return [...byId.values()];
+  }, [dealProducts, featuredProducts, allProducts]);
+
+  const noBanners = banners.length === 0;
+  const hasAnyCatalog =
+    dealProducts.length > 0 || featuredProducts.length > 0 || allProducts.length > 0;
+  const catalogStillLoading = dealsLoading || featuredLoading || allLoading;
+  const heroLoading =
+    bannersLoading || (noBanners && !hasAnyCatalog && catalogStillLoading);
+
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["announcements"],
     queryFn: () => fetch("/api/announcements").then(r => r.ok ? r.json() : []),
@@ -1167,7 +1223,7 @@ export default function HomePage() {
         {playableVideoBanners.length > 0 ? (
           <VideoBannerHero banners={playableVideoBanners} />
         ) : (
-          <HeroBanner banners={banners} loading={bannersLoading} />
+          <HeroBanner banners={banners} loading={heroLoading} smartCatalog={heroSmartCatalog} />
         )}
 
         {/* Trust strip */}
