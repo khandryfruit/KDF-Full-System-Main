@@ -51,6 +51,27 @@ type DashStats = {
   recentOrders: any[];
 };
 
+const EMPTY_WHATSAPP: DashStats["whatsapp"] = {
+  total: 0, sent: 0, received: 0, failed: 0, delivered: 0, read: 0,
+};
+const EMPTY_CAMPAIGNS: DashStats["campaigns"] = {
+  total: 0, sent: 0, delivered: 0, read: 0, failed: 0, recipients: 0,
+};
+const EMPTY_EMAIL_CAMPAIGNS: DashStats["emailCampaigns"] = {
+  total: 0, sent: 0, draft: 0,
+};
+
+/** API may omit nested marketing objects; dashboard UI always expects them. */
+function normalizeDashboardStats(raw: DashStats): DashStats {
+  return {
+    ...raw,
+    whatsapp: { ...EMPTY_WHATSAPP, ...raw.whatsapp },
+    campaigns: { ...EMPTY_CAMPAIGNS, ...raw.campaigns },
+    emailCampaigns: { ...EMPTY_EMAIL_CAMPAIGNS, ...raw.emailCampaigns },
+    recentOrders: Array.isArray(raw.recentOrders) ? raw.recentOrders : [],
+  };
+}
+
 type AnalyticsForChart = {
   dailyRevenue: { date: string; revenue: number; orders: number }[];
 };
@@ -347,7 +368,7 @@ export default function DashboardPage() {
     catch { return WIDGET_DEFAULTS; }
   });
 
-  const { data: stats, isLoading, refetch } = useQuery<DashStats>({
+  const { data: rawStats, isLoading, refetch } = useQuery<DashStats>({
     queryKey: ["dashboard-v2"],
     queryFn: () => api("/admin/dashboard"),
     staleTime: 30_000,
@@ -378,7 +399,7 @@ export default function DashboardPage() {
 
   const toggleWidget = (k: WidgetKey) => setWidgets(prev => ({ ...prev, [k]: !prev[k] }));
 
-  if (isLoading || !stats) {
+  if (isLoading || !rawStats) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -386,6 +407,8 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const stats = normalizeDashboardStats(rawStats);
 
   const deliveredPct = stats.totalOrders > 0
     ? ((stats.deliveredOrders / stats.totalOrders) * 100).toFixed(1) : "0";
