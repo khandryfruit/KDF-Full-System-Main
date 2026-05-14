@@ -555,7 +555,7 @@ export default function ProductDetailPage() {
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
           <span>/</span>
           <button onClick={() => setLocation("/products")} className="hover:text-primary transition-colors" data-testid="breadcrumb-products">Products</button>
-          {(product as any).category && (<><span>/</span><button onClick={() => setLocation(`/products?category=${(product as any).category?.id}`)} className="hover:text-primary transition-colors">{(product as any).category.name}</button></>)}
+          {(product as any).category && (<><span>/</span><button onClick={() => setLocation(`/products?categoryId=${(product as any).category?.id}`)} className="hover:text-primary transition-colors">{(product as any).category.name}</button></>)}
           <span>/</span>
           <span className="text-foreground font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
