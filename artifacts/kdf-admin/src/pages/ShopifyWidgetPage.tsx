@@ -111,6 +111,7 @@ export default function ShopifyWidgetPage() {
   const advancedConfig = `<script>
   window.KDFChatConfig = {
     color: '#5FA800',       // Widget button color
+    // debug: true,        // Console: [KDF-Chat] mount, iframe load, postMessage
     // embedUrl: 'https://your-custom-domain.com/kdf-nuts/home?embed=1',
     customer: {             // Optional: pre-fill customer info
       id: '{{ customer.id }}',

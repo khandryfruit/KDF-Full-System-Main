@@ -991,6 +991,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   res.setHeader("Pragma", "no-cache");
   res.setHeader("X-Frame-Options", "ALLOWALL");
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-KDF-Served-By", "@workspace/api-server");
+  res.setHeader("X-KDF-Route", "chat-embed");
   res.send(html);
 });
 
@@ -1006,23 +1008,33 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.4 — no full-viewport wrapper (fixes dead clicks / frozen Shopify page behind iframe) */
+  const js = `/* KDF NUTS Chat Widget v3.5 — no #kdf-chat-root wrapper; iframe z-index above FAB; optional KDFChatConfig.debug */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
   window._KDFChatLoaded = true;
 
   var cfg       = window.KDFChatConfig || {};
-  var EMBED_URL = cfg.embedUrl  || ${JSON.stringify(embedUrl)};
+  var DBG       = !!cfg.debug;
+  function log() {
+    if (!DBG || !window.console) return;
+    try { console.log.apply(console, ['[KDF-Chat]'].concat([].slice.call(arguments))); } catch (e) {}
+  }
+  var EMBED_DEFAULT = ${JSON.stringify(embedUrl)};
+  var EMBED_URL = cfg.embedUrl || EMBED_DEFAULT;
+  if (typeof EMBED_URL === 'string' && /\\/\\/admin\\./i.test(EMBED_URL)) {
+    log('embedUrl points at admin.* — using API default', EMBED_DEFAULT);
+    EMBED_URL = EMBED_DEFAULT;
+  }
   var WA_HREF   = cfg.whatsapp  || ${JSON.stringify(WA_URL)};
   var REOPEN_DELAY = cfg.reopenDelay || 90000; /* 90s auto-reopen after close */
 
   /* ── Styles ─────────────────────────────────────────── */
   var s = document.createElement('style');
   s.textContent = \`
-    /* v3.4: FAB + iframe are appended directly to <body> — never a full-screen transparent layer over the storefront. */
+    /* v3.5: NO full-viewport root — only #kdf-w + #kdf-popup on <body>. Shopify clicks stay alive. */
     #kdf-w *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483647;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:auto;}
+    #kdf-w{position:fixed;bottom:20px;right:20px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:auto;touch-action:manipulation;isolation:isolate;}
     #kdf-fab{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#5FA800,#4a8500);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(95,168,0,0.48);transition:transform .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent;position:relative;touch-action:manipulation;}
     #kdf-fab:hover{transform:scale(1.08);box-shadow:0 6px 30px rgba(95,168,0,0.6);}
     #kdf-fab:active{transform:scale(0.95);}
@@ -1033,7 +1045,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
     .kdf-ai{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
     #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .22s,transform .22s;opacity:0;transform:translateY(10px) scale(0.94);pointer-events:none;}
     #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
-    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:none;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:3;background:#fff;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;}
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:0;outline:0;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483647;background:#fff;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;pointer-events:auto;touch-action:manipulation;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;}
     #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
     @media(max-width:480px){
       #kdf-w{bottom:16px;right:16px;}
@@ -1066,16 +1078,18 @@ router.get("/widget.js", (req: Request, res: Response) => {
   fab.innerHTML = I_CHAT;
   var badge = document.createElement('span'); badge.id = 'kdf-badge'; fab.appendChild(badge);
 
-  var popup = document.createElement('iframe'); popup.id = 'kdf-popup'; popup.allow = 'microphone';
+  var popup = document.createElement('iframe'); popup.id = 'kdf-popup';
+  popup.setAttribute('allow', 'microphone');
   popup.setAttribute('aria-label','KDF NUTS Chat');
   popup.setAttribute('title','KDF NUTS Chat');
   popup.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+  popup.addEventListener('load', function() { log('iframe load', EMBED_URL); });
+  popup.addEventListener('error', function() { log('iframe error', EMBED_URL); });
 
-  var root = document.createElement('div'); root.id = 'kdf-chat-root';
   wrap.appendChild(stack); wrap.appendChild(fab);
-  root.appendChild(wrap);
-  root.appendChild(popup);
-  document.body.appendChild(root);
+  document.body.appendChild(wrap);
+  document.body.appendChild(popup);
+  log('mounted v3.5 (no kdf-chat-root), embed=', EMBED_URL);
 
   /* ── State ──────────────────────────────────────────── */
   var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null;
@@ -1095,6 +1109,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   }
   function openChat() {
     if (!iframeLoaded) {
+      log('assign iframe src', EMBED_URL);
       popup.src = EMBED_URL;
       iframeLoaded = true;
     }
@@ -1139,6 +1154,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   /* Close from iframe message */
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
+    if (DBG) log('postMessage', e.origin, e.data.type || e.data);
     if (e.data.type === 'KDF_CLOSE') { closeChat(); closeStack(); fab.innerHTML = I_CHAT; fab.appendChild(badge); fab.removeAttribute('data-open'); }
     if (e.data.type === 'KDF_UNREAD') {
       var c = parseInt(e.data.count, 10) || 0;
@@ -1155,7 +1171,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
     open: openStack,
     openChat: function() { openStack(); openChat(); },
     close: function() { closeStack(); closeChat(); },
-    init: function(c) { cfg = Object.assign({}, cfg, c); },
+    init: function(c) { cfg = Object.assign({}, cfg, c); DBG = !!cfg.debug; },
   };
 
 })();
@@ -1165,6 +1181,8 @@ router.get("/widget.js", (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-KDF-Served-By", "@workspace/api-server");
+  res.setHeader("X-KDF-Route", "widget.js");
   res.send(js);
 });
 
@@ -1179,7 +1197,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.4 — script src must be api.* (never admin.*). Set PUBLIC_API_ORIGIN on api-server if needed. {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.5 — no fullscreen #kdf-chat-root; set KDFChatConfig.debug true for console logs. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
     store: "shopify"
