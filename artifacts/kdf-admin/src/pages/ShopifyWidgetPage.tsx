@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Code2, Copy, CheckCheck, ExternalLink, Zap, Globe, Settings,
-  ChevronDown, ChevronUp, Info, MessageSquare, ShoppingBag, BarChart3
+  ChevronDown, ChevronUp, Info, MessageSquare, ShoppingBag, BarChart3, RefreshCw, AlertTriangle, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +84,12 @@ export default function ShopifyWidgetPage() {
     staleTime: 60000,
   });
 
+  const { data: aiHealth, isFetching: healthFetching, refetch: refetchHealth } = useQuery({
+    queryKey: ["/api/admin/chat/ai-health"],
+    queryFn: () => apiFetch("/api/admin/chat/ai-health"),
+    staleTime: 20000,
+  });
+
   const widgetJsUrl =
     installData?.widgetUrl ??
     `${(getApiBase() || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "")}/api/widget.js`;
@@ -135,6 +141,55 @@ export default function ShopifyWidgetPage() {
             Preview widget.js
           </a>
         </div>
+      </div>
+
+      {/* AI / OpenAI pipeline health */}
+      <div
+        className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 ${
+          aiHealth?.credentialsResolveOk && aiHealth?.chatbotEnabled
+            ? "bg-emerald-50/80 border-emerald-200"
+            : "bg-amber-50/90 border-amber-200"
+        }`}
+      >
+        <div className="flex gap-3 min-w-0">
+          {aiHealth?.credentialsResolveOk && aiHealth?.chatbotEnabled ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          ) : (
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          )}
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-semibold text-gray-900">AI chat pipeline</p>
+            {healthFetching && !aiHealth ? (
+              <p className="text-xs text-gray-600">Checking configuration…</p>
+            ) : aiHealth ? (
+              <ul className="text-xs text-gray-700 space-y-0.5 list-disc list-inside">
+                <li>Chatbot enabled: <strong>{aiHealth.chatbotEnabled ? "yes" : "no"}</strong> (WhatsApp → Chatbot settings)</li>
+                <li>AI enabled in DB: <strong>{aiHealth.aiEnabledInDb ? "yes" : "no"}</strong></li>
+                <li>OpenAI key in database: <strong>{aiHealth.hasOpenAiKeyInDb ? "yes" : "no"}</strong></li>
+                <li><code className="text-[11px] bg-white/60 px-1 rounded">OPENAI_API_KEY</code> on server: <strong>{aiHealth.hasOpenAiKeyInEnv ? "yes" : "no"}</strong></li>
+                <li>Credentials resolve: <strong>{aiHealth.credentialsResolveOk ? "ok" : "failed"}</strong>
+                  {aiHealth.keyFromEnv ? " (using env fallback)" : ""}
+                </li>
+                {!aiHealth.credentialsResolveOk && aiHealth.credentialError && (
+                  <li className="text-amber-900 font-medium break-words">{aiHealth.credentialError}</li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-600">Could not load health.</p>
+            )}
+            <p className="text-[11px] text-gray-500 pt-1">
+              Fix: <a className="text-blue-600 underline font-medium" href="/ai-content">AI Content</a>
+              {" · "}
+              <a className="text-blue-600 underline font-medium" href="/whatsapp">WhatsApp / Chatbot</a>
+              {" · "}
+              Set <code className="bg-white/60 px-1 rounded">OPENAI_API_KEY</code> on Railway if the DB key is empty.
+            </p>
+          </div>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => refetchHealth()}>
+          <RefreshCw className={`w-3.5 h-3.5 ${healthFetching ? "animate-spin" : ""}`} />
+          Refresh check
+        </Button>
       </div>
 
       {/* Stats row */}

@@ -19,7 +19,8 @@ import { eq, ilike, or, and, desc, sql, asc, inArray } from "drizzle-orm";
 import { expandQuery } from "./search";
 import { adminMiddleware } from "../lib/auth";
 import { trackWithCourierApiForShopify } from "./couriers";
-import OpenAI from "openai";
+import { resolveOpenAIClient } from "../lib/resolveOpenAI";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -63,17 +64,6 @@ function stripMarkdown(text: string): string {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [link text](url)
     .replace(/\n{3,}/g, "\n\n")            // collapse excess blank lines
     .trim();
-}
-
-async function getOpenAIClient() {
-  const [s] = await db.select().from(aiSettingsTable).limit(1);
-  if (!s?.openaiApiKey || !s.aiEnabled) {
-    throw Object.assign(
-      new Error("AI is not configured or disabled. Please configure OpenAI in admin settings."),
-      { status: 503 }
-    );
-  }
-  return new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined });
 }
 
 async function getSameDayInfo(): Promise<string> {
@@ -294,7 +284,10 @@ router.post("/chat/message", async (req, res) => {
       ...updatedHistory.map(m => ({ role: m.role === "admin" ? "assistant" : m.role, content: m.content })),
     ];
 
-    const aiClient = await getOpenAIClient();
+    const { client: aiClient, keyFromEnv } = await resolveOpenAIClient();
+    if (keyFromEnv) {
+      logger.info({ chat: "widget", keySource: "env" }, "OpenAI: using OPENAI_API_KEY (DB key empty)");
+    }
     let currentMessages = [...openaiMessages];
     let foundProducts: any[] = [];
     let foundCategories: any[] = [];
@@ -335,15 +328,32 @@ router.post("/chat/message", async (req, res) => {
 
     for (let i = 0; i < 6; i++) {
       const toolChoice = i === 0 ? firstToolChoice : (tools.length > 0 ? "auto" : undefined);
-      const completion = await aiClient.chat.completions.create({
-        model: chatbot.aiModel ?? "gpt-4o-mini",
-        messages: currentMessages,
-        tools: tools.length > 0 ? tools : undefined,
-        tool_choice: toolChoice,
-        max_completion_tokens: 600,
-      });
+      let completion;
+      try {
+        completion = await aiClient.chat.completions.create({
+          model: chatbot.aiModel ?? "gpt-4o-mini",
+          messages: currentMessages,
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: toolChoice,
+          max_completion_tokens: 600,
+        });
+      } catch (apiErr: any) {
+        logger.error(
+          { err: apiErr?.message, code: apiErr?.code, status: apiErr?.status, iteration: i },
+          "chat/message OpenAI completions.create failed"
+        );
+        throw Object.assign(
+          new Error(apiErr?.message || "OpenAI request failed. Check billing and API key."),
+          { status: 502, code: "OPENAI_UPSTREAM" }
+        );
+      }
 
-      const choice = completion.choices[0];
+      const choice = completion?.choices?.[0];
+      if (!choice?.message) {
+        logger.warn({ choicesLen: completion?.choices?.length, iteration: i }, "chat/message empty OpenAI choice");
+        throw Object.assign(new Error("The AI returned an empty response. Please try again."), { status: 502, code: "OPENAI_EMPTY_CHOICE" });
+      }
+
       currentMessages.push(choice.message as any);
 
       if (!choice.message.tool_calls?.length) {
@@ -369,13 +379,25 @@ router.post("/chat/message", async (req, res) => {
         });
       }
 
-      for (const toolCall of choice.message.tool_calls!) {
-        const fn = toolCall.function.name;
-        const args = JSON.parse(toolCall.function.arguments);
+      for (const rawTool of choice.message.tool_calls!) {
+        const toolCall = rawTool as { id: string; function: { name: string; arguments?: string } };
+        const fn = toolCall.function?.name ?? "";
+        let args: any;
+        try {
+          args = JSON.parse(toolCall.function?.arguments || "{}");
+        } catch {
+          logger.warn({ fn, iteration: i }, "chat/message invalid tool JSON from model");
+          currentMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: "Invalid tool arguments. Ask the customer to rephrase briefly.",
+          } as any);
+          continue;
+        }
         let toolResult: string;
 
         if (fn === "search_products") {
-          const query = args.query ?? "";
+          const query = String(args.query ?? "");
           const terms = expandQuery(query);
           const sellers = await getBestSellers();
           const rows = await db
@@ -841,7 +863,14 @@ router.post("/chat/message", async (req, res) => {
     }
     return res.status(500).json({ error: "AI loop exceeded. Please try again." });
   } catch (e: any) {
-    return res.status(e.status ?? 500).json({ error: e.message ?? "Chat error" });
+    logger.error(
+      { err: e?.message, code: e?.code, status: e?.status ?? e?.statusCode },
+      "chat/message handler error"
+    );
+    return res.status(e.status ?? 500).json({
+      error: e.message ?? "Chat error",
+      ...(e.code && { code: e.code }),
+    });
   }
 });
 
@@ -913,6 +942,38 @@ router.get("/chat/session/:sessionId", async (req, res) => {
     const [session] = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.sessionId, req.params.sessionId)).limit(1);
     if (!session) return res.status(404).json({ error: "Session not found" });
     return res.json(session);
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ── GET /api/admin/chat/ai-health — widget / OpenAI diagnostics (no secrets) ── */
+router.get("/admin/chat/ai-health", adminMiddleware as any, async (_req, res) => {
+  try {
+    const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1);
+    const [ai] = await db.select().from(aiSettingsTable).limit(1);
+    const hasEnvKey = !!(process.env.OPENAI_API_KEY ?? "").trim();
+    const hasDbKey = !!(ai?.openaiApiKey ?? "").trim();
+    let credentialsResolveOk = false;
+    let credentialError: string | null = null;
+    let keyFromEnv = false;
+    try {
+      const r = await resolveOpenAIClient();
+      credentialsResolveOk = true;
+      keyFromEnv = r.keyFromEnv;
+    } catch (e: any) {
+      credentialError = e.message ?? String(e);
+    }
+    return res.json({
+      chatbotEnabled: chatbot?.isEnabled === true,
+      aiEnabledInDb: ai?.aiEnabled === true,
+      hasOpenAiKeyInDb: hasDbKey,
+      hasOpenAiKeyInEnv: hasEnvKey,
+      credentialsResolveOk,
+      keyFromEnv,
+      credentialError,
+      widgetModel: chatbot?.aiModel ?? "gpt-4o-mini",
+    });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }
@@ -1267,7 +1328,7 @@ router.post("/chat/image-search", async (req, res) => {
     const { image } = req.body ?? {};
     if (!image || typeof image !== "string") return res.status(400).json({ error: "image required" });
 
-    const openai = await getOpenAIClient();
+    const { client: openai } = await resolveOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{

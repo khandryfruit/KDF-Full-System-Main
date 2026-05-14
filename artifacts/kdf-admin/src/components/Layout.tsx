@@ -80,6 +80,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
+import { AdminCommandPalette, openAdminCommandPalette } from "./AdminCommandPalette";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { NavNewBadge } from "@/components/admin/NavNewBadge";
@@ -839,7 +840,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setIsCollapsed(true);
     setIsHovered(false);
     if (location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings")) setInvoiceOpen(true);
-    if (location.startsWith("/shopify"))         setShopifyOpen(true);
+    if (location.startsWith("/shopify") || location.startsWith("/admin/shopify"))         setShopifyOpen(true);
     if (location.startsWith("/payment-gateway")) setPgOpen(true);
     if (location.startsWith("/logistics"))       setLogisticsOpen(true);
     if (location.startsWith("/branches"))        setBranchesOpen(true);
@@ -851,17 +852,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p)) setSettingsOpen(true);
     if (location.startsWith("/admin/")) setAdminIamOpen(true);
   }, [location]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setLocation("/orders");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setLocation]);
 
   const handleLogout = () => {
     localStorage.removeItem("kdf_admin_token");
@@ -960,11 +950,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               type="button"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              onClick={() => setLocation("/orders")}
+              onClick={() => openAdminCommandPalette()}
               className="relative flex w-full max-w-xl items-center gap-3 rounded-2xl border border-border/50 bg-muted/25 px-4 py-3 text-left text-sm text-muted-foreground shadow-inner transition-all hover:border-primary/30 hover:bg-muted/40 hover:text-foreground hover:shadow-[0_0_40px_-12px_hsl(var(--primary)/0.4)]"
             >
               <Search className="h-4 w-4 shrink-0 opacity-70" strokeWidth={2} />
-              <span className="truncate font-medium">Search orders, SKUs, customers…</span>
+              <span className="truncate font-medium">Search pages, settings, Shopify…</span>
               <kbd className="ml-auto hidden h-6 items-center rounded-lg border border-border/60 bg-background/80 px-2 font-mono text-[10px] font-semibold text-muted-foreground sm:inline-flex">
                 ⌘K
               </kbd>
@@ -1022,6 +1012,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <MobileBottomNav location={location} onOpenMenu={() => setMobileOpen(true)} />
         )}
       </div>
+      <AdminCommandPalette />
     </div>
   );
 }

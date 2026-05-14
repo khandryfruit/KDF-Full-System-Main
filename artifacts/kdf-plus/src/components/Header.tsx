@@ -156,75 +156,118 @@ function AnnouncementBar({ items }: { items: any[] }) {
   );
 }
 
-/* ─── Mega Menu Dropdown ─────────────────────────────────────── */
+/* ─── Mega Menu Dropdown (desktop only — wide horizontal panel; mobile uses drawer) ─── */
 function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const enter = () => { clearTimeout(timerRef.current); setOpen(true); };
-  const leave = () => { timerRef.current = setTimeout(() => setOpen(false), 120); };
+  const leave = () => { timerRef.current = setTimeout(() => setOpen(false), 200); };
 
   return (
-    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+    <div className="relative z-[350]" onMouseEnter={enter} onMouseLeave={leave}>
       <button
-        className="group flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-semibold tracking-tight transition-all duration-200 whitespace-nowrap hover:bg-slate-100/90 md:px-4 md:py-2.5"
+        type="button"
+        className="group flex items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold tracking-tight text-slate-700 transition-all duration-200 hover:bg-slate-100/90 md:px-3.5 md:py-2"
         style={{ color: open ? GREEN : "#334155" }}
         onClick={() => onNavigate(`/products?category=${item.slug}`)}
       >
-        {item.label}
-        <ChevronDown className={`h-4 w-4 transition-transform duration-200 md:h-[1.125rem] md:w-[1.125rem] ${open ? "rotate-180" : ""}`} style={{ color: open ? GREEN : "#94a3b8" }} />
+        <span className="whitespace-nowrap">{item.label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 md:h-4 md:w-4 ${open ? "rotate-180" : ""}`} style={{ color: open ? GREEN : "#94a3b8" }} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 pt-2 z-[300]" style={{ minWidth: "min(100vw-2rem, 440px)" }}
-          onMouseEnter={enter} onMouseLeave={leave}>
-          <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/95 shadow-2xl backdrop-blur-xl"
-            style={{ boxShadow: "0 24px 80px rgba(15,23,42,0.14), 0 0 0 1px rgba(95,168,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
-            <div className="grid grid-cols-2 gap-0">
-              {/* Sub-categories */}
-              <div className="p-5">
-                <p className="mb-3.5 px-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
-                <div className="space-y-1">
+        <div
+          className="absolute left-0 top-full z-[350] hidden pt-2 sm:block"
+          style={{ width: "min(calc(100vw - 1.5rem), 72rem)" }}
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+        >
+          <div
+            className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 shadow-[0_28px_90px_-20px_rgba(15,23,42,0.22)] backdrop-blur-xl ring-1 ring-slate-900/[0.04]"
+          >
+            <div className="grid max-h-[min(72vh,540px)] grid-cols-1 divide-y divide-slate-100 lg:grid-cols-12 lg:divide-x lg:divide-y-0">
+              {/* Categories — two columns of links on wide mega */}
+              <div className="p-4 sm:p-5 lg:col-span-5 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
+                <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 sm:gap-x-2">
                   {item.sub.map(sub => (
-                    <button key={sub.slug} type="button"
+                    <button
+                      key={sub.slug}
+                      type="button"
                       onClick={() => { onNavigate(`/products?category=${sub.slug}`); setOpen(false); }}
-                      className="group flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-[15px] font-medium text-slate-700 transition-all hover:bg-gradient-to-r hover:from-[#5FA800]/8 hover:to-transparent hover:shadow-sm">
-                      <span className="text-lg leading-none">{sub.emoji}</span>
-                      <span className="group-hover:text-slate-900">{sub.label}</span>
-                      <ChevronRight className="ml-auto h-4 w-4 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" style={{ color: GREEN }} />
+                      className="group flex min-h-[40px] w-full min-w-0 flex-row items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[#5FA800]/10"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-base leading-none ring-1 ring-slate-200/60 transition-colors group-hover:bg-white group-hover:ring-[#5FA800]/25" aria-hidden>
+                        {sub.emoji}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800 sm:text-[15px]">
+                        <span className="block truncate">{sub.label}</span>
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800]" strokeWidth={2.5} />
                     </button>
                   ))}
-                  <button type="button"
-                    onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
-                    className="mt-2 flex w-full items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold transition-colors hover:bg-slate-50"
-                    style={{ color: GREEN }}>
-                    View all {item.label} <ArrowRight className="h-4 w-4" />
-                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#5FA800]/25 bg-[#5FA800]/6 py-2.5 text-sm font-bold text-[#3d7000] transition-all hover:bg-[#5FA800]/12"
+                >
+                  View all {item.label}
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Featured spotlight */}
+              <div className="flex flex-col justify-between bg-gradient-to-br from-[#f8fdf4] via-white to-slate-50/90 p-4 sm:p-5 lg:col-span-4 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto">
+                <div>
+                  <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Featured</p>
+                  <div
+                    className="rounded-xl border p-3.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    style={{ background: `${item.featured.color}12`, borderColor: `${item.featured.color}35` }}
+                  >
+                    <span
+                      className="mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm"
+                      style={{ background: item.featured.color }}
+                    >
+                      {item.featured.badge}
+                    </span>
+                    <p className="text-[15px] font-bold leading-snug text-slate-900 sm:text-base">{item.featured.label}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-600">Premium quality — natural & pure.</p>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2 border-t border-slate-200/70 pt-3 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                    <span>Quality guaranteed</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Truck className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                    <span>Free delivery Rs.1500+</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Featured */}
-              <div className="flex flex-col justify-between border-l border-slate-100/90 bg-gradient-to-br from-[#f6fdf0] via-white to-slate-50/80 p-5"
-                style={{ background: "linear-gradient(145deg, #f8fdf4 0%, #ffffff 45%, #f1f5f9 100%)" }}>
-                <div>
-                  <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Featured</p>
-                  <div className="mb-3 rounded-2xl border p-4 shadow-sm transition-transform duration-300 hover:-translate-y-0.5"
-                    style={{ background: `${item.featured.color}10`, borderColor: `${item.featured.color}28` }}>
-                    <span className="mb-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-bold text-white shadow"
-                      style={{ background: item.featured.color }}>{item.featured.badge}</span>
-                    <p className="mt-2 text-base font-bold text-slate-900">{item.featured.label}</p>
-                    <p className="mt-1 text-sm text-slate-500">100% Natural & Pure</p>
-                  </div>
-                </div>
-                <div className="space-y-2.5 border-t border-slate-100/80 pt-4">
-                  <div className="flex items-center gap-2.5 text-sm text-slate-600">
-                    <Shield className="h-4 w-4 shrink-0" style={{ color: GREEN }} />
-                    <span>Quality guaranteed</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-sm text-slate-600">
-                    <Truck className="h-4 w-4 shrink-0" style={{ color: GREEN }} />
-                    <span>Free delivery Rs.1500+</span>
-                  </div>
+              {/* Quick links — offers / discovery */}
+              <div className="p-4 sm:p-5 lg:col-span-3 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto lg:bg-slate-50/40">
+                <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Popular & offers</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { label: "Hot deals", href: "/products?featured=true", Icon: Flame, c: ORANGE },
+                    { label: "New arrivals", href: "/products?sortBy=newest", Icon: Sparkles, c: "#7c3aed" },
+                    { label: "Best sellers", href: "/products?sortBy=rating", Icon: Star, c: "#b45309" },
+                    { label: "All " + item.label, href: `/products?category=${item.slug}`, Icon: LayoutGrid, c: GREEN },
+                  ].map(row => (
+                    <button
+                      key={row.href}
+                      type="button"
+                      onClick={() => { onNavigate(row.href); setOpen(false); }}
+                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-white hover:shadow-sm"
+                    >
+                      <row.Icon className="h-3.5 w-3.5 shrink-0" style={{ color: row.c }} strokeWidth={2.25} />
+                      <span className="min-w-0 truncate">{row.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -776,13 +819,13 @@ export function Header() {
 
   return (
     <>
-      <div className={`sticky z-40 transition-[padding] duration-300 ease-out ${scrolled ? "top-2 sm:top-3" : "top-0"}`}>
+      <div className={`sticky z-40 overflow-visible transition-[padding] duration-300 ease-out ${scrolled ? "top-2 sm:top-3" : "top-0"}`}>
         {/* ── Announcement Bar ── */}
         <AnnouncementBar items={announcements} />
 
-        {/* ── Main Header (floating glass bar when scrolled) ── */}
+        {/* ── Main Header (floating glass bar when scrolled) — overflow-visible so mega menus are not clipped */}
         <header
-          className={`transition-all duration-300 ease-out ${scrolled ? "mx-1.5 overflow-hidden rounded-2xl ring-1 ring-slate-900/[0.06] sm:mx-3" : ""}`}
+          className={`transition-all duration-300 ease-out overflow-visible ${scrolled ? "mx-1.5 rounded-2xl ring-1 ring-slate-900/[0.06] sm:mx-3" : ""}`}
           style={{
             background: scrolled ? "rgba(255,255,255,0.88)" : "#fff",
             backdropFilter: scrolled ? "blur(20px) saturate(1.35)" : "none",
@@ -792,7 +835,7 @@ export function Header() {
               : "0 1px 0 rgba(0,0,0,0.06)",
           }}
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-visible">
             {/* Top row */}
             <div className={`flex items-center gap-3 lg:gap-5 transition-all duration-300 ${shrunk ? "h-[56px] lg:h-[60px]" : "h-[64px] lg:h-[76px]"}`}>
 
@@ -1071,13 +1114,13 @@ export function Header() {
 
             {/* ── Desktop Nav + Trust strip ── */}
             <div
-              className={`hidden sm:flex items-center justify-between border-t border-slate-200/80 bg-gradient-to-r from-white via-slate-50/40 to-white transition-all duration-300 ${shrunk ? "py-1.5" : "py-2.5"} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8`}
+              className={`hidden sm:flex items-center justify-between gap-2 overflow-visible border-t border-slate-200/80 bg-gradient-to-r from-white via-slate-50/40 to-white transition-all duration-300 ${shrunk ? "py-1.5" : "py-2.5"} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8`}
             >
-              <nav className="flex flex-wrap items-center gap-1 md:gap-1.5">
+              <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible md:gap-1.5">
                 <Link href="/products">
                   <button
                     type="button"
-                    className={`whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold tracking-tight transition-all md:px-4 md:py-2.5 md:text-[15px] ${
+                    className={`whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold tracking-tight transition-all md:px-3.5 md:py-2 md:text-[15px] ${
                       allProductsActive
                         ? "bg-slate-900 text-white shadow-md shadow-slate-900/15 ring-1 ring-slate-900/10"
                         : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
@@ -1095,28 +1138,28 @@ export function Header() {
                 <Link href="/products?featured=true">
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-bold transition-all hover:brightness-105 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold transition-all hover:brightness-105 md:gap-1.5 md:px-3.5 md:py-2 md:text-[15px]"
                     style={{ color: ORANGE, background: `${ORANGE}14`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.5)` }}
                   >
-                    <Flame className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.25} />
+                    <Flame className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={2.25} />
                     Deals
                   </button>
                 </Link>
                 <Link href="/products?sortBy=newest">
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-violet-50 hover:text-violet-800 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-violet-50 hover:text-violet-800 md:gap-1.5 md:px-3.5 md:py-2 md:text-[15px]"
                   >
-                    <Sparkles className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" />
+                    <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     New Arrivals
                   </button>
                 </Link>
                 <Link href="/products?sortBy=rating">
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-amber-50 hover:text-amber-900 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-amber-50 hover:text-amber-900 md:gap-1.5 md:px-3.5 md:py-2 md:text-[15px]"
                   >
-                    <Star className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.25} />
+                    <Star className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={2.25} />
                     Best Sellers
                   </button>
                 </Link>

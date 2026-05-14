@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 
 const router = Router();
 
@@ -98,8 +99,9 @@ async function callProvider(
   }
 
   /* default: OpenAI */
-  if (!s.openaiApiKey) throw new Error("OpenAI API key not configured");
-  const client = new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined });
+  const openaiKey = (s.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
+  if (!openaiKey) throw new Error("OpenAI API key not configured");
+  const client = new OpenAI({ apiKey: openaiKey, organization: s.openaiOrgId || undefined });
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
@@ -110,16 +112,14 @@ async function callProvider(
   return r.choices[0]?.message?.content ?? "{}";
 }
 
-/* backward compat — used by chat.ts */
+/* backward compat — admin AI routes expect { client, settings } */
 export async function getOpenAIClient() {
+  const { client } = await resolveOpenAIClient();
   const [s] = await db.select().from(aiSettingsTable).limit(1);
-  if (!s?.openaiApiKey || !s.aiEnabled) {
-    throw Object.assign(new Error("AI is not configured or disabled."), { status: 503 });
+  if (!s) {
+    throw Object.assign(new Error("AI settings row missing. Open Admin → AI Content once to initialize."), { status: 503 });
   }
-  return {
-    client: new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined }),
-    settings: s,
-  };
+  return { client, settings: s };
 }
 
 /* ═══════════════════════════════════════════════

@@ -6,8 +6,8 @@ import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
 import { broadcastSSE } from "../lib/sse";
-import OpenAI from "openai";
-import { aiSettingsTable } from "@workspace/db";
+import type OpenAI from "openai";
+import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 
@@ -16,13 +16,10 @@ const router = Router();
 /* ─── In-memory webhook payload log (last 50) ────────── */
 const recentWebhookPayloads: Array<{ ts: string; body: unknown }> = [];
 
-/* ─── Helper: get OpenAI from stored settings ────────── */
+/* ─── Helper: get OpenAI client (DB key or OPENAI_API_KEY env) ────────── */
 async function getOpenAIClient() {
-  const [s] = await db.select().from(aiSettingsTable).limit(1);
-  if (!s?.openaiApiKey || !s.aiEnabled) {
-    throw Object.assign(new Error("AI not configured"), { status: 503 });
-  }
-  return new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined });
+  const { client } = await resolveOpenAIClient();
+  return client;
 }
 
 /* ─── Public: Chat Button Config ────────────────────── */

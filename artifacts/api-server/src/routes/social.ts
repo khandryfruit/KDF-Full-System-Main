@@ -3,8 +3,7 @@ import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTab
 import { eq, desc, sql, and, asc } from "drizzle-orm";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import { logger } from "../lib/logger";
-import OpenAI from "openai";
-import { aiSettingsTable } from "@workspace/db";
+import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
@@ -33,11 +32,8 @@ function verifyOAuthState(state: string): { adminId: number } {
 
 /* ─── Helper: get OpenAI client ─────────────────────── */
 async function getOpenAIClient() {
-  const [s] = await db.select().from(aiSettingsTable).limit(1);
-  if (!s?.openaiApiKey || !s.aiEnabled) {
-    throw Object.assign(new Error("AI not configured"), { status: 503 });
-  }
-  return new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined });
+  const { client } = await resolveOpenAIClient();
+  return client;
 }
 
 /* ─── Helper: get social settings ───────────────────── */

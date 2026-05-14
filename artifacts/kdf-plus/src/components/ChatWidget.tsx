@@ -1077,8 +1077,9 @@ export function ChatWidget() {
         autoCartAdded: data.autoCart?.length > 0 ? data.autoCart : undefined,
       }]);
       if (data.showOrderForm && !data.escalateToHuman) { setDefaultOrderProduct(""); setShowOrderForm(true); }
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "Sorry about that! Please try again in a moment.", timestamp: new Date() }]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Sorry about that! Please try again in a moment.";
+      setMessages(prev => [...prev, { role: "assistant", content: msg, timestamp: new Date() }]);
     } finally { setIsLoading(false); }
   }, [input, isLoading, sessionId, messages.length]);
 

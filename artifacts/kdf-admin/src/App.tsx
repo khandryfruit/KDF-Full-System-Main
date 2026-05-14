@@ -157,6 +157,15 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   );
 }
 
+/** Canonical path is `/shopify/widget`; this alias matches docs / bookmarks. */
+function RedirectToShopifyWidget() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/shopify/widget");
+  }, [setLocation]);
+  return null;
+}
+
 function Router() {
   return (
     <Suspense fallback={<AdminRouteSpinner />}>
@@ -235,6 +244,7 @@ function Router() {
       <Route path="/shopify/campaigns"><ProtectedRoute component={ShopifyCampaignsPage} /></Route>
       <Route path="/shopify/email-campaigns"><ProtectedRoute component={ShopifyEmailCampaignsPage} /></Route>
       <Route path="/shopify/marketing"><ProtectedRoute component={ShopifyMarketingPage} /></Route>
+      <Route path="/admin/shopify/widget"><ProtectedRoute component={RedirectToShopifyWidget} /></Route>
       <Route path="/shopify/widget"><ProtectedRoute component={ShopifyWidgetPage} /></Route>
       <Route path="/shopify/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
       <Route path="/wa-inbox"><ProtectedRoute component={WaInboxPage} /></Route>
