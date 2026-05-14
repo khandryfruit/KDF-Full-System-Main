@@ -161,7 +161,7 @@ function handler(req, res) {
         JSON.stringify({
           error: "api_not_served_here",
           message:
-            "This host serves static files only. In Railway → Networking, attach api.<your-domain> to the @workspace/api-server service and remove it from kdf-admin.",
+            "This response is from the kdf-admin STATIC server (Node), not Express @workspace/api-server. Fix Railway: (1) Remove custom domain api.* from the kdf-admin service; attach api.* only to the api-server service. (2) If the api-server service still shows this message, it is running the wrong image—set Dockerfile Path to Dockerfile.api-server, or use root Dockerfile with KDF_RAILWAY_TARGET=api at build and runtime (see repo Dockerfile header). Deploy logs should show \"Server listening\" (api), not \"[kdf-admin] static\".",
           service: "kdf-admin",
         }),
       );
