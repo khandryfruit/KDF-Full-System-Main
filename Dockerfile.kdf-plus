@@ -19,14 +19,21 @@ COPY . .
 
 RUN pnpm install --no-frozen-lockfile
 RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-plus run railway:build
+RUN test -f /app/artifacts/kdf-plus/dist/public/index.html \
+  || (echo "kdf-plus: dist/public/index.html missing after vite build" >&2; ls -la /app/artifacts/kdf-plus/dist 2>&1 || true; exit 1)
 
-FROM node:22-bookworm-slim AS runner
+# Full bookworm (not slim) — avoids rare libc/runtime issues on Railway; image is still tiny (no monorepo in runner).
+FROM node:22-bookworm AS runner
 WORKDIR /app/artifacts/kdf-plus
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-http-header-size=65536
 
-COPY --from=builder /app/artifacts/kdf-plus/dist/public ./dist/public
-COPY --from=builder /app/artifacts/kdf-plus/scripts/railway-static-server.mjs ./scripts/railway-static-server.mjs
+COPY --from=builder /app/artifacts/kdf-plus/dist/public /app/artifacts/kdf-plus/dist/public
+COPY --from=builder /app/artifacts/kdf-plus/scripts/railway-static-server.mjs /app/artifacts/kdf-plus/scripts/railway-static-server.mjs
+
+RUN test -f /app/artifacts/kdf-plus/dist/public/index.html \
+  && test -f /app/artifacts/kdf-plus/scripts/railway-static-server.mjs
 
 EXPOSE 8080
-CMD ["node", "scripts/railway-static-server.mjs"]
+# Absolute path so a custom Railway WORKDIR cannot break the static server.
+CMD ["node", "/app/artifacts/kdf-plus/scripts/railway-static-server.mjs"]

@@ -57,4 +57,4 @@ WORKDIR /app
 ENV NODE_OPTIONS=--max-http-header-size=65536
 EXPOSE 8080
 
-CMD ["/bin/sh", "-c", "set -e; t=\"${KDF_RAILWAY_TARGET:-admin}\"; case \"$t\" in admin) exec node artifacts/kdf-admin/scripts/railway-static-server.mjs;; plus) exec node artifacts/kdf-plus/scripts/railway-static-server.mjs;; admin-app) exec node artifacts/kdf-admin-app/scripts/railway-static-server.mjs;; api) exec pnpm --filter @workspace/api-server run start;; *) echo \"Invalid KDF_RAILWAY_TARGET=$t\" >&2; exit 1;; esac"]
+CMD ["/bin/sh", "-c", "set -e; t=\"${KDF_RAILWAY_TARGET:-admin}\"; case \"$t\" in admin) exec node /app/artifacts/kdf-admin/scripts/railway-static-server.mjs;; plus) exec node /app/artifacts/kdf-plus/scripts/railway-static-server.mjs;; admin-app) exec node /app/artifacts/kdf-admin-app/scripts/railway-static-server.mjs;; api) exec pnpm --filter @workspace/api-server run start;; *) echo \"Invalid KDF_RAILWAY_TARGET=$t\" >&2; exit 1;; esac"]
