@@ -149,7 +149,20 @@ function handler(req, res) {
 }
 
 if (!fs.existsSync(root)) {
-  console.error(`[kdf-plus] missing build output: ${root}\nRun: pnpm --filter @workspace/kdf-plus run railway:build`);
+  console.error(
+    [
+      `[kdf-plus] missing build output: ${root}`,
+      "",
+      "Fix (pick one):",
+      "  A) Railway → Builder = Dockerfile, Dockerfile path = Dockerfile.kdf-plus, Root directory = repo root (not artifacts/kdf-plus). Redeploy.",
+      "  B) No Docker: Root directory = repo root. Build command:",
+      "       pnpm install --no-frozen-lockfile && pnpm --filter @workspace/kdf-plus run railway:build",
+      "     Start command:",
+      "       pnpm --filter @workspace/kdf-plus run railway:start",
+      "",
+      "Do not start this server without a prior Vite build — dist/public is gitignored.",
+    ].join("\n"),
+  );
   process.exit(1);
 }
 
