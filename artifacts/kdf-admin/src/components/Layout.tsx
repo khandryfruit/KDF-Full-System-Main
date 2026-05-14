@@ -74,13 +74,27 @@ import {
   Crown,
   Database,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ElementType } from "react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAdminAuth } from "@/context/AdminAuthContext";
+import { NavNewBadge } from "@/components/admin/NavNewBadge";
+
+/** Sidebar leaf — add `isNew` / `badgeColor` / `notifyDot` when shipping new modules. */
+export interface SidebarNavLeaf {
+  href: string;
+  label: string;
+  icon: ElementType;
+  isNew?: boolean;
+  badgeColor?: string;
+  notifyDot?: boolean;
+}
+
+export type SidebarNavBlockEntry = SidebarNavLeaf | { divider: true; label: string };
 
 /* ═══════════════════════════════════════════════
    NAV DATA
@@ -110,7 +124,7 @@ const INVOICE_NAV_ITEMS = [
   { href: "/erp-settings/mobile",        label: "Mobile / App",       icon: Smartphone     },
 ] as const satisfies ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
 
-const COMMERCE_NAV = [
+const COMMERCE_NAV: SidebarNavLeaf[] = [
   { href: "/orders",     label: "Orders",        icon: ShoppingCart },
   { href: "/products",   label: "Products",      icon: Package      },
   { href: "/categories", label: "Categories",    icon: Tags         },
@@ -119,17 +133,17 @@ const COMMERCE_NAV = [
   { href: "/analytics",  label: "Analytics",     icon: BarChart2    },
 ];
 
-const STORE_NAV = [
+const STORE_NAV: SidebarNavLeaf[] = [
   { href: "/banners",       label: "Image Banners",  icon: ImageIcon   },
-  { href: "/video-banners", label: "Video Banners",  icon: Video       },
-  { href: "/mobile-reels",  label: "Mobile Reels",   icon: Smartphone  },
+  { href: "/video-banners", label: "Video Banners",  icon: Video,       isNew: true, badgeColor: "#8b5cf6" },
+  { href: "/mobile-reels",  label: "Mobile Reels",   icon: Smartphone, isNew: true, badgeColor: "#06b6d4" },
   { href: "/coupons",       label: "Coupons",        icon: Ticket      },
   { href: "/wallet",        label: "Wallet",         icon: Wallet      },
   { href: "/loyalty",       label: "Loyalty",        icon: Award       },
   { href: "/announcements", label: "Announcements",  icon: Megaphone   },
 ];
 
-const MARKETING_NAV = [
+const MARKETING_NAV: SidebarNavLeaf[] = [
   { href: "/abandoned-checkouts", label: "Abandoned Carts",    icon: ShoppingBag },
   { href: "/ai-content",          label: "AI Content",         icon: Sparkles    },
   { href: "/blog",                label: "Blog / Posts",       icon: BookOpen    },
@@ -146,7 +160,7 @@ const MARKETING_NAV = [
   { href: "/seo/ai-writer",       label: "AI SEO Writer",      icon: Sparkles    },
 ];
 
-const OPERATIONS_NAV = [
+const OPERATIONS_NAV: SidebarNavLeaf[] = [
   { href: "/couriers",           label: "Couriers",          icon: Truck          },
   { href: "/shipping-rules",     label: "Shipping Rules",    icon: Truck          },
   { href: "/same-day-delivery",  label: "Same Day Delivery", icon: Zap            },
@@ -157,7 +171,7 @@ const OPERATIONS_NAV = [
   { href: "/sync-jobs",          label: "Sync Jobs",         icon: RefreshCw      },
 ];
 
-const SETTINGS_NAV = [
+const SETTINGS_NAV: SidebarNavLeaf[] = [
   { href: "/integrations",       label: "Integrations",      icon: Plug           },
   { href: "/location",           label: "Location",          icon: MapPin         },
   { href: "/cities",             label: "Cities",            icon: MapPin         },
@@ -182,32 +196,32 @@ const WA_CHAT_NAV_ITEMS = [
   { href: "/wa-chat/settings",     label: "Payment Links",      icon: CreditCard     },
 ] as const satisfies ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
 
-const PG_NAV_ITEMS = [
+const PG_NAV_ITEMS: SidebarNavLeaf[] = [
   { href: "/payment-gateway",              label: "Overview",      icon: LayoutDashboard },
   { href: "/payment-gateway/transactions", label: "Transactions",  icon: Activity        },
   { href: "/payment-gateway/merchants",    label: "Merchant APIs", icon: Key             },
   { href: "/payment-gateway/disputes",     label: "Disputes",      icon: AlertTriangle   },
 ];
 
-const SHOPIFY_NAV_ITEMS = [
+const SHOPIFY_NAV_ITEMS: SidebarNavLeaf[] = [
   { href: "/shopify",                  label: "Dashboard",        icon: LayoutDashboard },
   { href: "/shopify/orders",           label: "Orders",           icon: ShoppingCart    },
   { href: "/shopify/customers",        label: "Customers",        icon: Users           },
   { href: "/shopify/products",         label: "Products",         icon: Package         },
   { href: "/shopify/wa-inbox",         label: "WA Inbox",         icon: MessageCircle   },
-  { href: "/shopify/marketing",        label: "Marketing Hub",    icon: Zap             },
+  { href: "/shopify/marketing",        label: "Marketing Hub",    icon: Zap,             isNew: true, badgeColor: "#96BF48" },
   { href: "/shopify/campaigns",        label: "WA Campaigns",     icon: Megaphone       },
   { href: "/shopify/email-campaigns",  label: "Email Campaigns",  icon: Mail            },
   { href: "/shopify/widget",           label: "Chat Widget",      icon: MessageCircle   },
   { href: "/whatsapp?tab=templates",   label: "WA Templates",     icon: FileText        },
 ];
 
-const BRANCHES_NAV_ITEMS = [
+const BRANCHES_NAV_ITEMS: SidebarNavLeaf[] = [
   { href: "/branches",      label: "Dashboard",       icon: BarChart2   },
   { href: "/branches/list", label: "All Branches",    icon: Building2   },
 ];
 
-const ADMIN_IAM_NAV_ITEMS = [
+const ADMIN_IAM_NAV_ITEMS: SidebarNavLeaf[] = [
   { href: "/admin/users",         label: "Admin Users",     icon: UserCog      },
   { href: "/admin/roles",         label: "Roles & Perms",   icon: ShieldCheck  },
   { href: "/admin/activity-logs", label: "Activity Logs",   icon: ListChecks   },
@@ -279,7 +293,7 @@ function WebsitePreviewButton() {
 interface NavItemProps {
   href: string;
   label: string;
-  icon: React.ElementType;
+  icon: ElementType;
   isActive: boolean;
   expanded: boolean;
   onClick?: () => void;
@@ -287,33 +301,44 @@ interface NavItemProps {
 function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavItemProps) {
   return (
     <Link href={href} onClick={onClick} className="block">
-      <div
+      <motion.div
+        layout
         title={!expanded ? label : undefined}
+        whileHover={{ scale: expanded ? 1.01 : 1.04 }}
+        whileTap={{ scale: 0.99 }}
+        transition={{ type: "spring", stiffness: 420, damping: 28 }}
         className={`
-          relative flex items-center rounded-lg transition-all duration-200 cursor-pointer group
-          ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
+          relative flex items-center rounded-xl transition-colors duration-200 cursor-pointer group overflow-hidden
+          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center py-2.5 mx-auto w-11 h-11"}
           ${isActive
-            ? "bg-primary/12 text-primary ring-1 ring-primary/25 dark:shadow-[0_0_28px_-8px_hsla(93,100%,33%,0.45)]"
-            : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+            ? "text-primary bg-gradient-to-r from-primary/[0.14] via-primary/[0.08] to-transparent shadow-[0_0_0_1px_hsl(var(--primary)/0.35),inset_0_1px_0_0_hsl(var(--primary)/0.12),0_8px_32px_-12px_hsl(var(--primary)/0.45)]"
+            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.06] hover:shadow-[0_0_24px_-10px_hsl(var(--primary)/0.25)]"
           }
         `}
       >
-        {/* Left active accent bar */}
         {isActive && expanded && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary" />
+          <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-gradient-to-b from-primary via-primary to-primary/40 shadow-[0_0_12px_hsl(var(--primary))]" />
         )}
-        <Icon
-          size={15}
-          className={`shrink-0 transition-colors ${isActive ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"}`}
-        />
         <span
-          className={`text-[13px] font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${
-            expanded ? "opacity-100 max-w-[180px] w-auto" : "opacity-0 max-w-0 w-0"
+          className={`
+            flex shrink-0 items-center justify-center rounded-lg transition-all duration-200
+            ${expanded ? "h-9 w-9" : "h-8 w-8"}
+            ${isActive
+              ? "bg-primary/20 text-primary shadow-[0_0_20px_-6px_hsl(var(--primary)/0.65)]"
+              : "bg-muted/40 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+            }
+          `}
+        >
+          <Icon strokeWidth={2} className={expanded ? "h-[1.15rem] w-[1.15rem]" : "h-4 w-4"} />
+        </span>
+        <span
+          className={`text-[13px] font-semibold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${
+            expanded ? "opacity-100 max-w-[200px] w-auto" : "opacity-0 max-w-0 w-0"
           }`}
         >
           {label}
         </span>
-      </div>
+      </motion.div>
     </Link>
   );
 }
@@ -323,7 +348,7 @@ function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavIt
 ═══════════════════════════════════════════════ */
 interface SidebarSectionProps {
   label: string;
-  icon: React.ElementType;
+  icon: ElementType;
   accentColor: string;
   activeBg: string;
   activeText: string;
@@ -332,7 +357,7 @@ interface SidebarSectionProps {
   expanded: boolean;
   open: boolean;
   onToggle: () => void;
-  items: ({ href: string; label: string; icon: React.ElementType; divider?: false } | { divider: true; label: string })[];
+  items: readonly SidebarNavBlockEntry[];
   location: string;
   onNavClick?: () => void;
 }
@@ -343,74 +368,101 @@ function SidebarSection({
   return (
     <div>
       {/* Section header trigger */}
-      <button
+      <motion.button
+        type="button"
+        layout
         onClick={onToggle}
         title={!expanded ? label : undefined}
+        whileHover={{ scale: expanded ? 1.01 : 1.05 }}
+        whileTap={{ scale: 0.99 }}
+        transition={{ type: "spring", stiffness: 400, damping: 26 }}
         className={`
-          w-full flex items-center rounded-lg transition-all duration-150 group
-          ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
+          w-full flex items-center rounded-xl transition-colors duration-200 group
+          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center py-2.5 mx-auto w-11 h-11"}
           ${isActive
-            ? "text-foreground"
-            : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+            ? "text-foreground bg-white/[0.04] dark:bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.05]"
           }
         `}
       >
         {/* Icon with colored bg when active */}
         <div
-          className={`w-[26px] h-[26px] rounded-md flex items-center justify-center shrink-0 transition-all duration-150 ${
-            isActive ? "shadow-sm" : "group-hover:bg-accent"
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200 ${
+            isActive ? "shadow-[0_0_20px_-6px_currentColor]" : "group-hover:bg-muted/50"
           }`}
-          style={isActive ? { backgroundColor: `${accentColor}1A` } : {}}
+          style={isActive ? { backgroundColor: `${accentColor}22`, color: accentColor } : {}}
         >
-          <Icon size={14} className="shrink-0" style={{ color: isActive ? accentColor : undefined }} />
+          <Icon strokeWidth={2} className="h-[1.05rem] w-[1.05rem] shrink-0" style={isActive ? { color: accentColor } : undefined} />
         </div>
 
-        <span className={`flex-1 text-[13px] font-medium text-left whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[130px]" : "opacity-0 max-w-0"}`}>
+        <span className={`flex-1 text-left text-[13px] font-semibold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[150px]" : "opacity-0 max-w-0"}`}>
           {label}
         </span>
 
-        <ChevronRight
-          size={12}
-          className={`shrink-0 transition-all duration-200 text-muted-foreground/50 ${open ? "rotate-90" : ""} ${expanded ? "opacity-100" : "opacity-0 w-0"}`}
-        />
-      </button>
+        <motion.span
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className={`shrink-0 text-muted-foreground/50 ${expanded ? "opacity-100" : "opacity-0 w-0"}`}
+        >
+          <ChevronRight strokeWidth={2} className="h-3.5 w-3.5" />
+        </motion.span>
+      </motion.button>
 
       {/* Sub-items panel */}
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${open && expanded ? "max-h-[1200px] mt-0.5" : "max-h-0"}`}>
-        <div className="ml-[13px] pl-3 border-l space-y-px" style={{ borderColor: `${accentColor}30` }}>
+      <motion.div
+        initial={false}
+        animate={{ height: open && expanded ? "auto" : 0, opacity: open && expanded ? 1 : 0 }}
+        transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+        className="overflow-hidden"
+      >
+        <div className="ml-[11px] mt-1 border-l pl-3 space-y-0.5" style={{ borderColor: `${accentColor}35` }}>
           {items.map((item, idx) => {
-            if (item.divider) {
+            if ("divider" in item && item.divider) {
               return (
                 <div key={`divider-${idx}`} className="px-2 pt-3 pb-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/45">
                     {item.label}
                   </span>
                 </div>
               );
             }
-            const SubIcon = item.icon;
-            const subActive = location === item.href;
+            const leaf = item as SidebarNavLeaf;
+            const SubIcon = leaf.icon;
+            const rawPath = leaf.href.split("?")[0];
+            const locPath = location.split("?")[0];
+            const subActive = locPath === rawPath || locPath.startsWith(`${rawPath}/`);
             return (
-              <Link key={item.href} href={item.href} onClick={onNavClick} className="block">
-                <div
-                  className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-all duration-150 text-[12.5px] ${
+              <Link key={leaf.href} href={leaf.href} onClick={onNavClick} className="block">
+                <motion.div
+                  whileHover={{ x: 2 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                  className={`relative flex min-h-[2rem] items-center gap-2 rounded-lg px-2.5 py-2 text-[12.5px] transition-colors ${
                     subActive
-                      ? "font-semibold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                      ? "font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.06]"
                   }`}
-                  style={subActive ? { color: accentColor, backgroundColor: `${accentColor}12` } : {}}
+                  style={subActive ? { color: accentColor, backgroundColor: `${accentColor}14` } : {}}
                 >
                   {subActive && (
-                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full" style={{ backgroundColor: accentColor }} />
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full" style={{ backgroundColor: accentColor }} />
                   )}
-                  <SubIcon size={12} className="shrink-0" style={subActive ? { color: accentColor } : {}} />
-                  <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
-                </div>
+                  <span
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/35 dark:bg-muted/25"
+                    style={subActive ? { backgroundColor: `${accentColor}22` } : {}}
+                  >
+                    <SubIcon strokeWidth={2} className="h-3.5 w-3.5 shrink-0" style={subActive ? { color: accentColor } : {}} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{leaf.label}</span>
+                  {leaf.notifyDot && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_2px_rgba(56,189,248,0.55)]" title="Updates" />
+                  )}
+                  {leaf.isNew && <NavNewBadge accent={leaf.badgeColor} />}
+                </motion.div>
               </Link>
             );
           })}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -475,7 +527,7 @@ function SidebarContent({
   const { waUnread } = useNotifications();
 
   return (
-    <div className="flex flex-col h-full border-r border-sidebar-border/70 bg-sidebar/95 backdrop-blur-xl dark:bg-sidebar/88 dark:border-sidebar-border/50 overflow-hidden shadow-[4px_0_32px_-12px_rgba(0,0,0,0.35)]">
+    <div className="flex h-full flex-col overflow-hidden border-r border-white/[0.06] bg-sidebar/75 shadow-[8px_0_48px_-24px_rgba(0,0,0,0.55)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-[hsl(var(--sidebar)/0.72)]">
 
       {/* Logo area */}
       <div className={`h-[52px] flex items-center border-b border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "px-4 gap-3 justify-between" : "px-0 justify-center"}`}>
@@ -539,7 +591,7 @@ function SidebarContent({
           <SidebarSection label="Logistics" icon={Truck}
             accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
             isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
-            items={LOGISTICS_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+            items={LOGISTICS_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
         )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
@@ -550,7 +602,7 @@ function SidebarContent({
             <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
               accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
               isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
-              items={WA_CHAT_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+              items={WA_CHAT_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
             {waUnread > 0 && !waChatOpen && (
               <span className={`absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pointer-events-none leading-none ${expanded ? "right-1.5" : "-right-1 -top-0.5"}`}>
                 {waUnread > 99 ? "99+" : waUnread}
@@ -564,7 +616,7 @@ function SidebarContent({
           <SidebarSection label="Invoice & Billing" icon={Receipt}
             accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
             isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
-            items={INVOICE_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+            items={INVOICE_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
         )}
 
         <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
@@ -873,7 +925,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className={`
           hidden md:block h-screen sticky top-0 shrink-0 z-20
           transition-[width] duration-300 ease-in-out
-          ${sidebarExpanded ? "w-64" : "w-[60px]"}
+          ${sidebarExpanded ? "w-[288px]" : "w-[60px]"}
         `}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -890,31 +942,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
 
         {/* Desktop topbar */}
-        <div className="hidden md:flex h-12 border-b border-border/70 bg-card/80 backdrop-blur-md items-center justify-between px-5 gap-3 shrink-0">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
-            <button
+        <div className="hidden md:flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-card/55 px-5 shadow-[0_8px_40px_-28px_rgba(0,0,0,0.45)] backdrop-blur-2xl dark:bg-card/40">
+          <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.96 }}
               onClick={handleToggleCollapse}
-              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-accent text-muted-foreground transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {isCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-            </button>
+              {isCollapsed ? <PanelLeftOpen className="h-[15px] w-[15px]" strokeWidth={2} /> : <PanelLeftClose className="h-[15px] w-[15px]" strokeWidth={2} />}
+            </motion.button>
           </div>
-          <div className="hidden lg:flex flex-1 justify-center min-w-0 px-6">
-            <button
+          <div className="hidden min-w-0 flex-1 justify-center px-6 lg:flex">
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               onClick={() => setLocation("/orders")}
-              className="relative flex w-full max-w-md items-center gap-2 rounded-xl border border-border/50 bg-muted/25 px-3 py-2 text-left text-sm text-muted-foreground transition-all hover:bg-muted/45 hover:border-border hover:text-foreground"
+              className="relative flex w-full max-w-lg items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-muted/20 px-3.5 py-2.5 text-left text-sm text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] transition-colors hover:border-primary/25 hover:bg-muted/35 hover:text-foreground hover:shadow-[0_0_32px_-12px_hsl(var(--primary)/0.35)]"
             >
-              <Search size={14} className="shrink-0 opacity-70" />
+              <Search className="h-4 w-4 shrink-0 opacity-70" strokeWidth={2} />
               <span className="truncate">Search orders, SKUs, customers…</span>
-              <kbd className="ml-auto hidden sm:inline-flex h-5 items-center rounded-md border border-border/60 bg-background/70 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <kbd className="ml-auto hidden h-5 items-center rounded-md border border-border/60 bg-background/60 px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
                 ⌘K
               </kbd>
-            </button>
+            </motion.button>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
             <WebsitePreviewButton />
             <ThemeToggle />
             <NotificationBell />

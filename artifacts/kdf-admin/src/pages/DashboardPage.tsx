@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { motion } from "framer-motion";
 import {
   ShoppingCart, Users, Package, TrendingUp, TrendingDown,
   MessageCircle, Mail, AlertTriangle, CheckCircle, Clock,
@@ -134,7 +135,7 @@ const WIDGET_LABELS: Record<WidgetKey, string> = {
 };
 
 const CARD_SHELL =
-  "rounded-2xl border border-border/50 bg-card/85 dark:bg-card/55 backdrop-blur-sm shadow-sm transition-all duration-300 dark:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.55)]";
+  "rounded-2xl border border-white/[0.08] bg-card/70 shadow-[0_16px_48px_-28px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl transition-all duration-300 dark:bg-card/45 dark:shadow-[0_20px_56px_-32px_rgba(0,0,0,0.65)]";
 
 /* ── Rider / Logistics Stats type ── */
 type RiderStats = {
@@ -323,25 +324,32 @@ function StatCard({ label, value, sub, icon: Icon, color, href, trend }: {
 }) {
   const [, nav] = useLocation();
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 380, damping: 28 }}
+      whileHover={href ? { y: -3, scale: 1.01 } : undefined}
+      whileTap={href ? { scale: 0.995 } : undefined}
       onClick={() => href && nav(href)}
-      className={`${CARD_SHELL} p-5 flex items-start gap-4 ${href ? "cursor-pointer hover:border-primary/30 hover:-translate-y-0.5" : ""}`}>
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
-        <Icon className="w-5 h-5" />
+      className={`${CARD_SHELL} flex cursor-default items-start gap-4 p-5 ${href ? "cursor-pointer hover:border-primary/35 hover:shadow-[0_20px_48px_-28px_hsl(var(--primary)/0.35)]" : ""}`}
+    >
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-[0_8px_24px_-12px_rgba(0,0,0,0.35)] ${color}`}>
+        <Icon className="h-5 w-5" strokeWidth={2} />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
-        <p className="text-2xl font-bold mt-0.5 truncate">{value}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-0.5 truncate text-2xl font-bold tabular-nums">{value}</p>
         {sub && (
-          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-            {trend === "up" && <TrendingUp className="w-3 h-3 text-green-500" />}
-            {trend === "down" && <TrendingDown className="w-3 h-3 text-red-500" />}
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+            {trend === "up" && <TrendingUp className="h-3 w-3 text-emerald-500" />}
+            {trend === "down" && <TrendingDown className="h-3 w-3 text-red-500" />}
             {sub}
           </p>
         )}
       </div>
-      {href && <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />}
-    </div>
+      {href && <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />}
+    </motion.div>
   );
 }
 
@@ -443,9 +451,28 @@ export default function DashboardPage() {
 
   if (isLoading || !rawStats) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-muted-foreground text-sm">Loading dashboard…</p>
+      <div className="space-y-5 pb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-64 animate-pulse rounded-lg bg-muted/60" />
+            <div className="h-4 w-48 animate-pulse rounded bg-muted/40" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-9 w-24 animate-pulse rounded-xl bg-muted/50" />
+            <div className="h-9 w-28 animate-pulse rounded-xl bg-muted/50" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted/40" />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-2xl bg-muted/35" />
+          ))}
+        </div>
+        <div className="h-48 animate-pulse rounded-2xl bg-muted/30" />
       </div>
     );
   }
@@ -520,33 +547,28 @@ export default function DashboardPage() {
 
       {/* ── Today's Snapshot ── */}
       {widgets.snapshots && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-2xl bg-gradient-to-br from-primary to-primary/75 text-primary-foreground p-4 shadow-lg shadow-primary/25">
-            <p className="text-xs font-medium opacity-80">Today's Revenue</p>
-            <p className="text-2xl font-bold mt-1">PKR {fmt(stats.todayRevenue)}</p>
-            <p className="text-xs opacity-70 mt-1">{stats.todayOrders} orders today</p>
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 shadow-lg shadow-blue-500/20">
-            <p className="text-xs font-medium opacity-80">This Month</p>
-            <p className="text-2xl font-bold mt-1">PKR {fmt(stats.monthRevenue)}</p>
-            <p className="text-xs opacity-70 mt-1">{stats.monthOrders} orders</p>
-          </div>
-          <div
-            className="rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white p-4 cursor-pointer shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all"
-            onClick={() => nav("/orders")}
-          >
-            <p className="text-xs font-medium opacity-80">Pending Action</p>
-            <p className="text-2xl font-bold mt-1">{stats.pendingOrders + stats.confirmedOrders + stats.processingOrders}</p>
-            <p className="text-xs opacity-70 mt-1">orders need attention</p>
-          </div>
-          <div
-            className="rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 cursor-pointer shadow-lg shadow-purple-500/25 hover:brightness-110 transition-all"
-            onClick={() => nav("/wa-chat")}
-          >
-            <p className="text-xs font-medium opacity-80">WA Messages</p>
-            <p className="text-2xl font-bold mt-1">{stats.whatsapp.received}</p>
-            <p className="text-xs opacity-70 mt-1">tap → Unified Inbox</p>
-          </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { key: "today", className: "bg-gradient-to-br from-primary to-primary/75 text-primary-foreground shadow-lg shadow-primary/30", title: "Today's Revenue", value: `PKR ${fmt(stats.todayRevenue)}`, sub: `${stats.todayOrders} orders today` },
+            { key: "month", className: "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25", title: "This Month", value: `PKR ${fmt(stats.monthRevenue)}`, sub: `${stats.monthOrders} orders` },
+            { key: "pending", className: "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/25 cursor-pointer", title: "Pending Action", value: String(stats.pendingOrders + stats.confirmedOrders + stats.processingOrders), sub: "orders need attention", onClick: () => nav("/orders") },
+            { key: "wa", className: "bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg shadow-purple-500/30 cursor-pointer", title: "WA Messages", value: String(stats.whatsapp.received), sub: "tap → Unified Inbox", onClick: () => nav("/wa-chat") },
+          ].map((c, i) => (
+            <motion.div
+              key={c.key}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, type: "spring", stiffness: 400, damping: 28 }}
+              whileHover={{ scale: c.onClick ? 1.02 : 1.01, y: -2 }}
+              whileTap={c.onClick ? { scale: 0.99 } : undefined}
+              onClick={c.onClick}
+              className={`rounded-2xl p-4 ${c.className} ${c.onClick ? "transition-[filter] hover:brightness-110" : ""}`}
+            >
+              <p className="text-xs font-medium opacity-80">{c.title}</p>
+              <p className="mt-1 text-2xl font-bold">{c.value}</p>
+              <p className="mt-1 text-xs opacity-70">{c.sub}</p>
+            </motion.div>
+          ))}
         </div>
       )}
 
