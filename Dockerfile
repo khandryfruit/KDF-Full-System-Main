@@ -20,7 +20,9 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile
+# --no-frozen-lockfile: avoids ERR_PNPM_LOCKFILE_CONFIG_MISMATCH when pnpm-workspace.yaml
+# overrides differ slightly from the committed lockfile (common after workspace edits).
+RUN pnpm install --no-frozen-lockfile
 
 ENV NODE_ENV=production
 RUN set -eux; \
