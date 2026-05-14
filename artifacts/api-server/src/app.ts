@@ -118,11 +118,12 @@ app.set("trust proxy", 1);
 /* gzip/brotli-compatible compression for JSON + API payloads (Railway-friendly). */
 app.use(compression({ threshold: 1024 }));
 app.use(express.json({
+  limit: "12mb",
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   },
 }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 /**
  * ── /admin/api/* → /api/* rewrite ──────────────────────────────────────────

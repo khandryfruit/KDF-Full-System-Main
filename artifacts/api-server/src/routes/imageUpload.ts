@@ -171,93 +171,100 @@ router.post(
 );
 
 /**
- * POST /storage/uploads/image
+ * POST /storage/uploads/image (+ legacy aliases below)
  * Multipart upload with processing: WebP conversion, compression, resize.
- * Requires admin auth.
+ * Requires admin auth. Field name: `file`.
  */
-router.post(
-  "/storage/uploads/image",
-  adminMiddleware as any,
-  upload.single("file"),
-  async (req: Request, res: Response) => {
-    if (!req.file) {
-      res.status(400).json({ error: "No file provided" });
-      return;
-    }
-
-    if (!ALLOWED_IMAGE_MIME_TYPES.has(req.file.mimetype)) {
-      res.status(400).json({ error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed." });
-      return;
-    }
-
-    if (!hasImageMagicBytes(req.file.buffer)) {
-      res.status(400).json({ error: "File content does not match an allowed image format." });
-      return;
-    }
-
-    const settings = await getImageOptSettings();
-    let objectPath: string;
-    let processedSize = 0;
-    let originalSize = req.file.size;
-    let contentType = req.file.mimetype;
-
-    try {
-      const processed = await processImage(
-        req.file.buffer,
-        req.file.mimetype,
-        settings
-      );
-      objectPath = await uploadBufferToGcs(
-        processed.buffer,
-        processed.contentType,
-        processed.extension,
-        "public"
-      );
-      processedSize = processed.processedSize;
-      originalSize = processed.originalSize;
-      contentType = processed.contentType;
-    } catch (err: any) {
-      req.log.warn({ err }, "Image processing or upload failed, falling back to original");
-      // Only fall back to raw upload if Cloudinary is NOT configured.
-      // If Cloudinary is configured but failed, surface the real error.
-      if (isCloudinaryConfigured() && !isRunningOnReplit()) {
-        req.log.error({ err }, "Cloudinary upload failed");
-        res.status(500).json({
-          error: "Upload failed",
-          detail: err?.message ?? String(err),
-        });
-        return;
-      }
-      try {
-        const ext = req.file.mimetype.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-        objectPath = await uploadBufferToGcs(
-          req.file.buffer,
-          req.file.mimetype,
-          ext,
-          "public"
-        );
-        processedSize = req.file.size;
-      } catch (fallbackErr: any) {
-        req.log.error({ err: fallbackErr }, "Fallback upload also failed");
-        res.status(500).json({ error: "Upload failed", detail: fallbackErr?.message ?? String(fallbackErr) });
-        return;
-      }
-    }
-
-    const savedBytes = originalSize - processedSize;
-    const savedPct =
-      originalSize > 0 ? Math.round((savedBytes / originalSize) * 100) : 0;
-
-    res.json({
-      objectPath,
-      originalSize,
-      processedSize,
-      savedBytes,
-      savedPct,
-      contentType,
-    });
+async function handleAdminImageUpload(req: Request, res: Response): Promise<void> {
+  if (!req.file) {
+    res.status(400).json({ error: "No file provided" });
+    return;
   }
-);
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(req.file.mimetype)) {
+    res.status(400).json({ error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed." });
+    return;
+  }
+
+  if (!hasImageMagicBytes(req.file.buffer)) {
+    res.status(400).json({ error: "File content does not match an allowed image format." });
+    return;
+  }
+
+  const settings = await getImageOptSettings();
+  let objectPath: string;
+  let processedSize = 0;
+  let originalSize = req.file.size;
+  let contentType = req.file.mimetype;
+
+  try {
+    const processed = await processImage(req.file.buffer, req.file.mimetype, settings);
+    objectPath = await uploadBufferToGcs(
+      processed.buffer,
+      processed.contentType,
+      processed.extension,
+      "public"
+    );
+    processedSize = processed.processedSize;
+    originalSize = processed.originalSize;
+    contentType = processed.contentType;
+  } catch (err: any) {
+    req.log.warn({ err }, "Image processing or upload failed, falling back to original");
+    if (isCloudinaryConfigured() && !isRunningOnReplit()) {
+      req.log.error({ err }, "Cloudinary upload failed");
+      res.status(500).json({
+        error: "Upload failed",
+        detail: err?.message ?? String(err),
+      });
+      return;
+    }
+    try {
+      const ext = req.file.mimetype.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+      objectPath = await uploadBufferToGcs(req.file.buffer, req.file.mimetype, ext, "public");
+      processedSize = req.file.size;
+    } catch (fallbackErr: any) {
+      req.log.error({ err: fallbackErr }, "Fallback upload also failed");
+      res.status(500).json({ error: "Upload failed", detail: fallbackErr?.message ?? String(fallbackErr) });
+      return;
+    }
+  }
+
+  const savedBytes = originalSize - processedSize;
+  const savedPct = originalSize > 0 ? Math.round((savedBytes / originalSize) * 100) : 0;
+
+  res.json({
+    objectPath,
+    originalSize,
+    processedSize,
+    savedBytes,
+    savedPct,
+    contentType,
+  });
+}
+
+/** GET /image — no auth; proves api-server is answering (not static 503). */
+router.get("/image", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    method: "POST",
+    field: "file",
+    auth: "Authorization: Bearer <admin JWT>",
+    endpoints: [
+      "/api/storage/uploads/image",
+      "/api/image",
+      "/api/upload",
+      "/api/admin/upload",
+    ],
+    railway: "If you see 503 + api_not_served_here, api.* is still routed to kdf-admin static — fix Railway/Cloudflare DNS.",
+  });
+});
+
+const adminImageUploadMiddleware = [adminMiddleware as any, upload.single("file"), handleAdminImageUpload] as const;
+
+router.post("/storage/uploads/image", ...adminImageUploadMiddleware);
+router.post("/image", ...adminImageUploadMiddleware);
+router.post("/upload", ...adminImageUploadMiddleware);
+router.post("/admin/upload", ...adminImageUploadMiddleware);
 
 /**
  * POST /storage/uploads/video
