@@ -11,7 +11,15 @@
  */
 export function getApiBase(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
-  return raw.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  let base = raw.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  // Production fallback when Railway build forgot VITE_* (same idea as kdf-plus apiOrigin map).
+  if (!base && typeof window !== "undefined") {
+    const h = window.location.hostname.toLowerCase();
+    if (h === "admin.khanbabadryfruits.com") {
+      base = "https://api.khanbabadryfruits.com";
+    }
+  }
+  return base;
 }
 
 /** Convenience constant — use `API_BASE` in components. */

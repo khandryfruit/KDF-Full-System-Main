@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { getApiBase } from "@/lib/apiBase";
 
 export default function LoginPage() {
   const [, setLocation]    = useLocation();
@@ -18,13 +19,7 @@ export default function LoginPage() {
   const [showPwd, setShow] = useState(false);
   const [error, setError]  = useState("");
 
-  // On Railway each service gets its own domain. Set VITE_API_BASE_URL to the
-  // full API service URL (e.g. https://kdf-api.up.railway.app) so login works
-  // across separate Railway services. Defaults to "" (relative) on Replit.
-  const API = (() => {
-    const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
-    return raw.replace(/\/api\/?$/, "").replace(/\/$/, "");
-  })();
+  const API = getApiBase();
 
   /** Fetch JSON safely — 15 s timeout, shows readable error on non-JSON response. */
   const fetchJson = async (url: string, init: RequestInit) => {
