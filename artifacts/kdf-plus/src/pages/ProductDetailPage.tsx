@@ -17,6 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import {
+  ProductConversionRail,
+  StickyPurchaseConfidenceLg,
+  useCtaInView,
+  type PairProduct,
+} from "@/components/product-detail/ProductConversionRail";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
@@ -346,6 +352,28 @@ export default function ProductDetailPage() {
   });
 
   const productId: number = (product as any)?.id ?? 0;
+
+  const { data: relatedPool } = useListProducts(
+    { limit: 7 },
+    { query: { queryKey: ["products", "related-pool"], staleTime: 60_000 } },
+  );
+  const pairItems: PairProduct[] = useMemo(() => {
+    if (!productId || !relatedPool) return [];
+    return normalizeProductsListResponse(relatedPool)
+      .items.filter((p: any) => p.id !== productId)
+      .slice(0, 4)
+      .map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: Number(p.price),
+        originalPrice: p.originalPrice,
+        images: p.images,
+        gradient: p.gradient,
+      }));
+  }, [relatedPool, productId]);
+
+  const { ref: desktopCtaRef, inView: desktopCtaInView } = useCtaInView<HTMLDivElement>();
 
   /* ── SEO: silently update address bar to canonical slug (no reload) ── */
   useEffect(() => {
@@ -683,8 +711,8 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* CTA — desktop */}
-            <div className="hidden gap-3 lg:flex">
+            {/* CTA — desktop (intersection anchor for sticky repurchase bar) */}
+            <div ref={desktopCtaRef} className="hidden gap-3 lg:flex">
               <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={handleAddToCart} disabled={product.stock === 0} data-testid="button-add-to-cart">
                 <ShoppingCart className="mr-2 h-4 w-4" /> Add to Cart
               </Button>
@@ -722,21 +750,13 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Trust Badges */}
-            <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-              {[
-                { icon: Truck, label: "Free Delivery", sub: "Orders > Rs. 1,500" },
-                { icon: RotateCcw, label: "Easy Returns", sub: "7-day hassle-free" },
-                { icon: Shield, label: "Secure Payment", sub: "100% safe & secure" },
-                { icon: Package, label: "100% Original", sub: "Quality guaranteed" },
-              ].map(({ icon: Icon, label, sub }) => (
-                <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl border border-gray-100/80 bg-white/60 p-3 text-center shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md md:p-3.5">
-                  <Icon className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold">{label}</span>
-                  <span className="text-[10px] text-muted-foreground leading-tight">{sub}</span>
-                </div>
-              ))}
-            </div>
+            <ProductConversionRail
+              productId={productId}
+              stock={product.stock}
+              pairs={pairItems}
+              getImageSrc={getProductImageSrc}
+              onPairClick={(p) => setLocation(`/products/${p.slug || p.id}`)}
+            />
           </div>
         </div>
 
@@ -811,6 +831,16 @@ export default function ProductDetailPage() {
         {/* Related Products */}
         <RelatedProducts currentId={productId} />
       </main>
+
+      <StickyPurchaseConfidenceLg
+        visible={!!product && product.stock > 0 && !bidData?.isLive && !desktopCtaInView}
+        price={price}
+        qty={qty}
+        name={product.name}
+        onAdd={handleAddToCart}
+        onBuy={handleBuyNow}
+        disabled={product.stock === 0}
+      />
 
       {/* Sticky mobile CTA — compact premium */}
       <div className="fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
