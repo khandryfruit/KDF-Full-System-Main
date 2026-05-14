@@ -383,7 +383,7 @@ export default function ProductDetailPage() {
   });
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [param]);
 
   useEffect(() => {
@@ -404,10 +404,10 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-          <Skeleton className="aspect-square rounded-2xl" />
-          <div className="space-y-4"><Skeleton className="h-8 w-3/4" /><Skeleton className="h-6 w-1/4" /><Skeleton className="h-24 w-full" /><Skeleton className="h-12 w-full" /></div>
+      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-x-10 lg:gap-y-8 xl:gap-x-12">
+          <Skeleton className="mx-auto aspect-square w-full max-w-[min(100%,28rem)] rounded-2xl lg:mx-0" />
+          <div className="min-w-0 space-y-4"><Skeleton className="h-8 w-3/4" /><Skeleton className="h-6 w-1/4" /><Skeleton className="h-24 w-full" /><Skeleton className="h-12 w-full" /></div>
         </div>
       </main>
     );
@@ -480,9 +480,9 @@ export default function ProductDetailPage() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-36 sm:pb-28 lg:pb-10">
+      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-4 py-8 pb-36 sm:px-6 sm:py-10 sm:pb-28 lg:px-8 lg:pb-12">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6 flex-wrap">
+        <nav className="mb-8 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:mb-9">
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
           <span>/</span>
           <button onClick={() => setLocation("/products")} className="hover:text-primary transition-colors" data-testid="breadcrumb-products">Products</button>
@@ -491,17 +491,30 @@ export default function ProductDetailPage() {
           <span className="text-foreground font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
 
-        {/* 2-column grid */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-12 xl:gap-14">
+        {/* 2-column grid — min-w-0 prevents flex/grid overflow at high zoom; gallery width capped for stable aspect-square */}
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-x-10 lg:gap-y-8 xl:gap-x-12 2xl:gap-x-14">
           {/* Left: Images */}
-          <div className="mx-auto w-full max-w-[500px] space-y-3 lg:mx-0 lg:max-w-[560px]">
-            <div ref={imgRef} className="relative aspect-square cursor-zoom-in overflow-hidden rounded-2xl border border-gray-100/90 bg-muted/20 shadow-md ring-1 ring-black/[0.04] lg:rounded-[1.75rem] lg:shadow-xl"
-              onMouseEnter={() => setImgZoomed(true)} onMouseLeave={() => setImgZoomed(false)} onMouseMove={handleMouseMove}>
-              <img src={getProductImageSrc(images[selectedImage])} alt={(product as any).altText || product.name}
-                className="w-full h-full object-contain transition-transform duration-200"
-                style={imgZoomed ? { transform: "scale(1.6)", transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : {}}
+          <div className="min-w-0">
+            <div className="mx-auto w-full max-w-[min(100%,26rem)] space-y-3 sm:max-w-[min(100%,28rem)] lg:mx-0 lg:max-w-[min(100%,32rem)] xl:max-w-[min(100%,36rem)]">
+            <div
+              ref={imgRef}
+              className="relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-2xl border border-gray-100/90 bg-muted/20 shadow-md ring-1 ring-black/[0.04] lg:rounded-[1.75rem] lg:shadow-xl"
+              onMouseEnter={() => setImgZoomed(true)}
+              onMouseLeave={() => setImgZoomed(false)}
+              onMouseMove={handleMouseMove}
+            >
+              <img
+                src={getProductImageSrc(images[selectedImage])}
+                alt={(product as any).altText || product.name}
+                className="h-full w-full max-h-full object-contain object-center transition-transform duration-200 ease-out will-change-transform"
+                style={
+                  imgZoomed
+                    ? { transform: "scale(1.18)", transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` }
+                    : { transform: "scale(1)", transformOrigin: "center center" }
+                }
                 data-testid="img-product-main"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
               {discount && <div className="absolute top-3 left-3 bg-[#F58300] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">{discount}% OFF</div>}
               {product.featured && <div className="absolute top-3 right-3"><Badge className="bg-secondary text-secondary-foreground text-xs">Featured</Badge></div>}
               {images.length > 1 && (<>
@@ -515,21 +528,22 @@ export default function ProductDetailPage() {
                   <button
                     key={i}
                     onClick={() => setSelectedImage(i)}
-                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 hover:scale-105 md:h-[72px] md:w-[72px] md:rounded-2xl md:hover:-translate-y-1 md:hover:shadow-lg ${
+                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 sm:h-16 sm:w-16 md:h-[4.25rem] md:w-[4.25rem] md:rounded-2xl md:hover:-translate-y-0.5 md:hover:shadow-md motion-reduce:transition-none ${
                       i === selectedImage ? "border-primary shadow-md ring-[#5FA800]/20" : "border-border hover:border-[#5FA800]/40"
                     }`}
                     data-testid={`button-image-thumb-${i}`}
                   >
-                    <img src={getProductImageSrc(img)} alt={`${product.name} view ${i + 1}`} className="w-full h-full object-cover"
+                    <img src={getProductImageSrc(img)} alt={`${product.name} view ${i + 1}`} className="h-full w-full object-cover"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   </button>
                 ))}
               </div>
             )}
+            </div>
           </div>
 
-          {/* Right: Info — sticky glass buy column on large screens */}
-          <div className="flex flex-col gap-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:gap-5 lg:overflow-y-auto lg:overscroll-contain lg:self-start lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-[#5FA800]/10 lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl">
+          {/* Right: Info — sticky glass buy column (no vh max-height: avoids zoom / OS scaling layout jumps) */}
+          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:z-10 lg:self-start lg:gap-5 lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-slate-900/[0.06] lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl xl:p-7">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-wrap gap-2">
                 {product.tags?.map((tag) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
@@ -542,7 +556,13 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            <h1 className="text-2xl font-black leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl" data-testid="text-product-name">{product.name}</h1>
+            <h1
+              className="font-black leading-[1.15] tracking-tight text-foreground [text-wrap:balance] sm:leading-tight"
+              style={{ fontSize: "clamp(1.375rem, 0.35rem + 2.8vw, 2.25rem)" }}
+              data-testid="text-product-name"
+            >
+              {product.name}
+            </h1>
 
             {product.rating && Number(product.rating) > 0 && (
               <div className="flex items-center gap-2">
@@ -553,8 +573,14 @@ export default function ProductDetailPage() {
             )}
 
             <div className="flex flex-wrap items-end gap-3">
-              <span className="text-3xl font-black tracking-tight text-foreground lg:text-4xl" data-testid="text-price">Rs. {price.toLocaleString()}</span>
-              {originalPrice && originalPrice > price && <span className="text-lg text-muted-foreground line-through">Rs. {originalPrice.toLocaleString()}</span>}
+              <span
+                className="font-black tracking-tight text-foreground"
+                style={{ fontSize: "clamp(1.5rem, 0.9rem + 2vw, 2.25rem)" }}
+                data-testid="text-price"
+              >
+                Rs. {price.toLocaleString()}
+              </span>
+              {originalPrice && originalPrice > price && <span className="text-base text-muted-foreground line-through sm:text-lg">Rs. {originalPrice.toLocaleString()}</span>}
               {discount && <Badge className="bg-[#5FA800]/10 text-[#5FA800] border border-[#5FA800]/30 font-bold">{discount}% OFF</Badge>}
             </div>
 
@@ -585,7 +611,7 @@ export default function ProductDetailPage() {
                           const isSelected = selectedVariant === v.id; const outOfStock = v.stock === 0;
                           return (
                             <button key={v.id} onClick={() => !outOfStock && setSelectedVariant(v.id)} disabled={outOfStock}
-                              className={`relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all hover:scale-105 active:scale-95 ${isSelected ? "text-white border-transparent shadow-md" : outOfStock ? "text-gray-300 border-gray-200 cursor-not-allowed" : "text-gray-700 border-gray-200 hover:border-[#5FA800]/60 hover:text-[#5FA800]"}`}
+                              className={`relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all hover:scale-[1.02] active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:scale-100 ${isSelected ? "text-white border-transparent shadow-md" : outOfStock ? "text-gray-300 border-gray-200 cursor-not-allowed" : "text-gray-700 border-gray-200 hover:border-[#5FA800]/60 hover:text-[#5FA800]"}`}
                               style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : {}} data-testid={`button-variant-${v.id}`}>
                               {type === "Color" && v.hex && <span className="inline-block w-3.5 h-3.5 rounded-full mr-1.5 border border-gray-300 align-middle" style={{ backgroundColor: v.hex }} />}
                               {v.value}{outOfStock && <span className="ml-1.5 text-[10px] font-normal opacity-60">Out</span>}
