@@ -5,11 +5,44 @@ import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
-export const BASE_URL: string =
-  process.env.EXPO_PUBLIC_API_URL ??
-  (process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "");
+const PROD_API_FALLBACK = "https://api.khanbabadryfruits.com";
+
+/**
+ * Rider app must call @workspace/api-server only. Storefront/admin hosts return
+ * `api_not_served_here` for `/api/*` when traffic hits static servers.
+ */
+function resolveRiderApiOrigin(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, "") ?? "";
+  const fromDomain = process.env.EXPO_PUBLIC_DOMAIN?.trim();
+
+  let candidate = fromEnv;
+  if (!candidate && fromDomain) {
+    candidate = `https://${fromDomain.replace(/^\/+/, "")}`.replace(/\/+$/, "");
+  }
+  if (!candidate) return PROD_API_FALLBACK;
+
+  if (!/^https?:\/\//i.test(candidate)) {
+    candidate = `https://${candidate}`;
+  }
+
+  try {
+    const { hostname } = new URL(candidate);
+    const h = hostname.toLowerCase();
+    /* Main site / www → always use dedicated API host */
+    if (h === "khanbabadryfruits.com" || h === "www.khanbabadryfruits.com") {
+      return PROD_API_FALLBACK;
+    }
+    if (h.startsWith("admin.")) {
+      return PROD_API_FALLBACK;
+    }
+  } catch {
+    return PROD_API_FALLBACK;
+  }
+
+  return candidate;
+}
+
+export const BASE_URL: string = resolveRiderApiOrigin();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

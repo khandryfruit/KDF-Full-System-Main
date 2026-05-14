@@ -12,7 +12,7 @@
         "gradleCommand": ":app:assembleDebug"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://khanbabadryfruits.com"
+        "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
       }
     },
     "preview": {
@@ -21,7 +21,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://khanbabadryfruits.com"
+        "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
       }
     },
     "production": {
@@ -30,7 +30,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://khanbabadryfruits.com"
+        "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
       }
     },
     "production-apk": {
@@ -40,7 +40,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://khanbabadryfruits.com"
+        "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
       }
     }
   },
