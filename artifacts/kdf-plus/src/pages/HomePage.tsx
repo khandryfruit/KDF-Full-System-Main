@@ -105,11 +105,22 @@ const BANNER_AI_SLIDES = [
 ];
 
 const HERO_FRAME_CLASS =
-  "relative overflow-hidden min-h-[260px] h-[min(72vw,320px)] sm:min-h-[300px] sm:h-[min(36vh,400px)] md:h-[min(34vh,420px)] lg:min-h-[340px] lg:h-[min(42vh,500px)] lg:max-h-[500px] rounded-2xl sm:rounded-2xl ring-1 ring-black/[0.04]";
+  "relative overflow-hidden min-h-[280px] h-[min(76vw,340px)] sm:min-h-[320px] sm:h-[min(38vh,440px)] md:h-[min(36vh,460px)] lg:min-h-[380px] lg:h-[min(46vh,540px)] lg:max-h-[540px] rounded-2xl sm:rounded-2xl ring-1 ring-black/[0.04]";
 
 function buildSyntheticHeroBanners(products: Product[]): Banner[] {
   const seen = new Set<number>();
   const out: Banner[] = [];
+  const titleHooks: ((name: string, pct: number, featured: boolean) => string)[] = [
+    (name, pct) => (pct > 0 ? `Flat ${pct}% off · ${name}` : `Today's premium deal · ${name}`),
+    (name, pct, featured) => (featured ? `Editor's pick · ${name}` : `Fresh delivered · ${name}`),
+    (name, pct) => (pct > 0 ? `Save ${pct}% on ${name}` : `Shop ${name} now`),
+    (name) => `Customer favourite · ${name}`,
+  ];
+  const subHooks: ((name: string, desc: string) => string)[] = [
+    (name, desc) => (desc.length > 20 ? desc : `Premium ${name} — sourced with care, delivered across Pakistan.`),
+    (name, desc) => (desc.length > 20 ? desc : `Limited-time value on ${name}. Order Rs. 1,500+ for free delivery.`),
+    (name, desc) => (desc.length > 20 ? desc : `${name}: natural quality, hygienically packed.`),
+  ];
   for (const p of products) {
     if (!p?.id || seen.has(p.id)) continue;
     seen.add(p.id);
@@ -118,14 +129,20 @@ function buildSyntheticHeroBanners(products: Product[]): Banner[] {
     const price = Number.parseFloat(String(p.price || "0"));
     let pct = 0;
     if (orig > 0 && price > 0 && orig > price) pct = Math.round((1 - price / orig) * 100);
-    const label = pct > 0 ? `Save ${pct}% today` : p.featured ? "Editor's pick" : "Trending now";
-    const sub = (p.description && p.description.trim().length > 0)
-      ? p.description.trim().slice(0, 150)
-      : `Premium ${p.name} — fast delivery across Pakistan.`;
+    const rawDesc = (p.description && p.description.trim().length > 0) ? p.description.trim().slice(0, 150) : "";
+    const label =
+      pct > 0
+        ? `Save ${pct}% today`
+        : p.featured
+          ? "Editor's pick"
+          : (Number((p as any).stockQuantity ?? (p as any).stock ?? 99) < 15 ? "Almost gone" : "Trending now");
+    const hookIdx = out.length % titleHooks.length;
+    const title = titleHooks[hookIdx](p.name, pct, !!p.featured);
+    const subtitle = subHooks[hookIdx % subHooks.length](p.name, rawDesc);
     out.push({
       id: -9000 - p.id,
-      title: p.name,
-      subtitle: sub,
+      title,
+      subtitle,
       imageUrl: img,
       label,
       cta: "Shop now",
@@ -421,7 +438,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                   </h2>
                   {banner.subtitle && (
                     <p className="mb-2.5 max-w-[19rem] text-sm font-medium leading-snug text-white/90 sm:mb-4 sm:max-w-xl sm:text-base lg:text-lg">
-                      {banner.subtitle}
+                      {(banner.subtitle || "").replace(/\boofer\b/gi, "offer")}
                     </p>
                   )}
                   {(banner as any).countdownEndAt && (

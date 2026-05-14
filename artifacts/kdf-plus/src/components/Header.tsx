@@ -164,22 +164,38 @@ function MegaMenuDropdown({ item, onNavigate, panelTopPx }: { item: typeof MEGA_
 
   const enter = () => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setOpen(true), 32);
+    timerRef.current = setTimeout(() => setOpen(true), 48);
   };
   const leave = () => {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setOpen(false), 200);
+    timerRef.current = setTimeout(() => setOpen(false), 220);
   };
+
+  /* Close mega panel on scroll (reduces “stuck” overlay + layout glitches on long pages). */
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [open]);
 
   const panel = open && typeof document !== "undefined" ? createPortal(
     <div
-      className="pointer-events-auto fixed z-[560] hidden w-[min(96vw,72rem)] max-w-[72rem] sm:block"
-      style={{ left: "50%", top: panelTopPx, transform: "translateX(-50%)" }}
+      className="pointer-events-auto fixed z-[580] max-sm:hidden animate-in fade-in slide-in-from-top-2 duration-200"
+      style={{
+        left: "50%",
+        top: panelTopPx,
+        transform: "translateX(-50%) translateZ(0)",
+        width: "min(96vw, 72rem)",
+        maxWidth: "72rem",
+        minWidth: "min(96vw, 22rem)",
+        willChange: "transform, opacity",
+      }}
       onMouseEnter={enter}
       onMouseLeave={leave}
     >
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 shadow-[0_24px_64px_-20px_rgba(15,23,42,0.22)] backdrop-blur-xl ring-1 ring-slate-900/[0.04]">
-        <div className="grid max-h-[min(72vh,520px)] min-w-[min(100%,20rem)] grid-cols-1 divide-y divide-slate-100 md:grid-cols-12 md:divide-x md:divide-y-0">
+        <div className="grid max-h-[min(72vh,560px)] grid-cols-1 divide-y divide-slate-100 md:min-h-[280px] md:grid-cols-12 md:divide-x md:divide-y-0">
           <div className="p-4 sm:p-5 md:col-span-5 md:max-h-[min(72vh,520px)] md:overflow-y-auto">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
