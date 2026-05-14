@@ -13,12 +13,30 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { getApiBase, adminApiUrl } from "@/lib/apiBase";
 
-function api(path: string, opts?: RequestInit) {
+async function api(path: string, opts?: RequestInit): Promise<Response> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  return fetch(adminApiUrl(path), {
+  const r = await fetch(adminApiUrl(path), {
     ...opts,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) },
   });
+  if (!r.ok) {
+    let msg = `Request failed (${r.status})`;
+    try {
+      const text = await r.text();
+      if (text) {
+        try {
+          const j = JSON.parse(text) as { error?: string; message?: string; detail?: string };
+          msg = j.detail ?? j.message ?? j.error ?? text.slice(0, 200);
+        } catch {
+          msg = text.slice(0, 200);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return r;
 }
 
 function StatCard({ icon: Icon, label, value, sub, color, href }: { icon: any; label: string; value: number | string; sub?: string; color: string; href?: string }) {
@@ -59,7 +77,7 @@ export default function ShopifyDashboardPage() {
   const saveMutation = useMutation({
     mutationFn: (data: typeof form) => api("/admin/shopify/store", { method: "PUT", body: JSON.stringify(data) }).then(r => r.json()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["shopify-store"] }); qc.invalidateQueries({ queryKey: ["shopify-analytics"] }); setEditMode(false); toast({ title: "Store settings saved" }); },
-    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Failed to save", description: e.message, variant: "destructive" }),
   });
 
   const testMutation = useMutation({
@@ -68,11 +86,13 @@ export default function ShopifyDashboardPage() {
       if (data.success) { qc.invalidateQueries({ queryKey: ["shopify-store"] }); qc.invalidateQueries({ queryKey: ["shopify-analytics"] }); toast({ title: `Connected to ${data.shop?.name ?? "Shopify store"}` }); }
       else toast({ title: `Connection failed: ${data.error}`, variant: "destructive" });
     },
+    onError: (e: Error) => toast({ title: "Connection failed", description: e.message, variant: "destructive" }),
   });
 
   const disconnectMutation = useMutation({
     mutationFn: () => api("/admin/shopify/store/disconnect", { method: "POST" }).then(r => r.json()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["shopify-store"] }); setEditMode(false); toast({ title: "Store disconnected" }); },
+    onError: (e: Error) => toast({ title: "Disconnect failed", description: e.message, variant: "destructive" }),
   });
 
   const [fullSyncJobId, setFullSyncJobId] = useState<number | null>(null);
@@ -80,7 +100,7 @@ export default function ShopifyDashboardPage() {
   const syncMutation = useMutation({
     mutationFn: (type: "orders" | "customers" | "products") => api(`/admin/shopify/sync/${type}`, { method: "POST" }).then(r => r.json()),
     onSuccess: (data, type) => { qc.invalidateQueries({ queryKey: ["shopify-analytics"] }); toast({ title: `${data.synced} ${type} synced` }); },
-    onError: (_, type) => toast({ title: `Failed to sync ${type}`, variant: "destructive" }),
+    onError: (e: Error, type) => toast({ title: `Failed to sync ${type}`, description: e.message, variant: "destructive" }),
   });
 
   const fullSyncMutation = useMutation({
@@ -89,7 +109,7 @@ export default function ShopifyDashboardPage() {
       setFullSyncJobId(data.jobId);
       toast({ title: "Full sync started", description: "Processing all historical records in the background." });
     },
-    onError: () => toast({ title: "Failed to start full sync", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Failed to start full sync", description: e.message, variant: "destructive" }),
   });
 
   const { data: fullSyncJob } = useQuery({

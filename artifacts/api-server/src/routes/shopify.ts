@@ -289,25 +289,65 @@ router.get("/admin/shopify/store", adminMiddleware, async (req, res) => {
 
 router.put("/admin/shopify/store", adminMiddleware, async (req, res) => {
   try {
-    const { shopDomain, accessToken, apiKey, apiSecret, webhookSecret, storeName, syncOrders, syncCustomers, syncProducts } = req.body;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const {
+      shopDomain,
+      accessToken,
+      apiKey,
+      apiSecret,
+      webhookSecret,
+      storeName,
+      syncOrders,
+      syncCustomers,
+      syncProducts,
+    } = body;
+
     const [existing] = await db.select().from(shopifyStoresTable).limit(1);
+
+    const trimStr = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+
+    /* Empty secret fields from the SPA must NOT wipe DB — user often saves without re-pasting the token. */
+    const nextAccess =
+      trimStr(accessToken) !== "" ? trimStr(accessToken) : (existing?.accessToken ?? null);
+    const nextApiKey =
+      trimStr(apiKey) !== "" ? trimStr(apiKey) : (existing?.apiKey ?? null);
+    const nextApiSecret =
+      trimStr(apiSecret) !== "" ? trimStr(apiSecret) : (existing?.apiSecret ?? null);
+    const nextWebhookSecret =
+      trimStr(webhookSecret) !== "" ? trimStr(webhookSecret) : (existing?.webhookSecret ?? null);
+
+    const normalizedDomain = trimStr(shopDomain).replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const finalDomain = normalizedDomain || existing?.shopDomain || "";
+
+    if (!finalDomain) {
+      return res.status(400).json({ error: "shopDomain is required" });
+    }
+
+    const hasLiveCreds = Boolean(finalDomain && nextAccess);
+
     const data = {
-      shopDomain: (shopDomain as string || "").replace(/https?:\/\//, "").replace(/\/$/, ""),
-      accessToken: accessToken as string || null,
-      apiKey: apiKey as string || null,
-      apiSecret: apiSecret as string || null,
-      webhookSecret: webhookSecret as string || null,
-      storeName: storeName as string || null,
+      shopDomain: finalDomain,
+      accessToken: nextAccess,
+      apiKey: nextApiKey,
+      apiSecret: nextApiSecret,
+      webhookSecret: nextWebhookSecret,
+      storeName: trimStr(storeName) || null,
       syncOrders: syncOrders !== false,
       syncCustomers: syncCustomers !== false,
       syncProducts: syncProducts !== false,
+      /* Show as connected once credentials are stored; POST /store/test still validates against Shopify. */
+      isConnected: hasLiveCreds ? true : false,
       updatedAt: new Date(),
     };
+
     let store;
     if (existing) {
       [store] = await db.update(shopifyStoresTable).set(data).where(eq(shopifyStoresTable.id, existing.id)).returning();
     } else {
-      [store] = await db.insert(shopifyStoresTable).values({ ...data, isConnected: false }).returning();
+      if (!trimStr(accessToken)) {
+        return res.status(400).json({ error: "accessToken is required for new store configuration" });
+      }
+      [store] = await db.insert(shopifyStoresTable).values({ ...data }).returning();
     }
     res.json(store);
   } catch (err) {
