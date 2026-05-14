@@ -17,10 +17,24 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { getApiBase } from "@/lib/apiBase";
 
-function api(path: string) {
+async function api(path: string) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  return fetch(`/api${path}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
+  const base = getApiBase().replace(/\/$/, "");
+  const url = `${base}/api${path}`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const ct = r.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    const text = await r.text();
+    if (text.trimStart().startsWith("<!") || text.trimStart().startsWith("<html")) {
+      throw new Error(
+        "API returned HTML instead of JSON — set VITE_API_BASE_URL on the admin Railway service and redeploy.",
+      );
+    }
+    throw new Error(text.replace(/<[^>]+>/g, " ").trim().slice(0, 120) || `HTTP ${r.status}`);
+  }
+  return r.json();
 }
 
 function fmt(n: number | undefined | null, decimals = 0): string {
