@@ -25,6 +25,7 @@ import {
   triggerImmediateSync,
   pushFulfillmentToShopify,
 } from "../lib/shopifyAutoSync";
+import { syncAbandonedCheckoutsFromShopifyRest } from "../lib/shopifyAbandonedCheckoutSync";
 
 const router = Router();
 const SHOPIFY_API_VERSION = "2024-01";
@@ -473,6 +474,19 @@ router.post("/admin/shopify/sync/products", adminMiddleware, async (req, res) =>
     }
     await db.update(shopifyStoresTable).set({ lastProductSync: new Date(), totalProductsSynced: synced, updatedAt: new Date() }).where(eq(shopifyStoresTable.id, store.id));
     res.json({ success: true, synced });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/** Pull abandoned checkouts from Shopify REST (Marketing Hub backfill + reconciliation). */
+router.post("/admin/shopify/sync/abandoned-checkouts", adminMiddleware, async (req, res) => {
+  try {
+    const store = await getActiveStore();
+    if (!store) return res.status(400).json({ error: "No connected store" });
+    const out = await syncAbandonedCheckoutsFromShopifyRest(store);
+    res.json({ success: !out.error, ...out });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: String(err) });

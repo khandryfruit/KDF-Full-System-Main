@@ -103,8 +103,8 @@ export default function ShopifyMarketingPage() {
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ["marketing-summary"],
     queryFn: () => api("/admin/shopify/marketing/summary").then(r => r.json()),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: tab === "carts" ? 15_000 : 60_000,
   });
 
   const { data: queueStats, isLoading: queueLoading, refetch: refetchQueue } = useQuery({
@@ -119,6 +119,8 @@ export default function ShopifyMarketingPage() {
     queryKey: ["abandoned-carts", cartPage],
     queryFn: () => api(`/abandoned-checkouts?status=active&page=${cartPage}&limit=15`).then(r => r.json()),
     enabled: tab === "carts",
+    staleTime: 10_000,
+    refetchInterval: tab === "carts" ? 15_000 : false,
   });
 
   /* ── Mutations ── */
@@ -182,6 +184,24 @@ export default function ShopifyMarketingPage() {
   });
 
   const queryClient = useQueryClient();
+
+  const shopifyAbandonedSyncMutation = useMutation({
+    mutationFn: () =>
+      api("/admin/shopify/sync/abandoned-checkouts", { method: "POST" }).then(async r => {
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? r.statusText);
+        return j as { upserted?: number; pages?: number; error?: string };
+      }),
+    onSuccess: d => {
+      toast({
+        title: "Shopify abandoned carts synced",
+        description: `Upserted ${d.upserted ?? 0} row(s) across ${d.pages ?? 0} API page(s)${d.error ? `. Note: ${d.error}` : ""}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["abandoned-carts"] });
+      queryClient.invalidateQueries({ queryKey: ["marketing-summary"] });
+    },
+    onError: (e: Error) => toast({ title: "Shopify sync failed", description: e.message, variant: "destructive" }),
+  });
 
   const cartNotifyWaMutation = useMutation({
     mutationFn: ({ id, discountPercent, discountCode: dc, customMessage }: { id: number; discountPercent?: number; discountCode?: string; customMessage?: string }) =>
@@ -427,6 +447,21 @@ export default function ShopifyMarketingPage() {
       {/* ══ ABANDONED CARTS ══ */}
       {tab === "carts" && (
         <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground max-w-xl">
+              This tab auto-refreshes every 15 seconds. Use sync to pull the latest abandoned checkouts from Shopify immediately (REST backfill).
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 shrink-0"
+              disabled={shopifyAbandonedSyncMutation.isPending}
+              onClick={() => shopifyAbandonedSyncMutation.mutate()}
+            >
+              {shopifyAbandonedSyncMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Sync from Shopify
+            </Button>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: "Active Carts", value: carts.active ?? 0, sub: `PKR ${((carts.activeValue ?? 0) as number).toLocaleString()} at risk`, color: "text-red-600" },

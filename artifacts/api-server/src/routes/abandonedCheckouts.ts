@@ -12,9 +12,18 @@ const router: IRouter = Router();
 const ABANDON_THRESHOLD_MS = 45 * 60 * 1000;
 const EXPIRE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
+const STORE_SITE_FALLBACK = "https://kdfnuts.com";
+
+function checkoutResumeUrl(checkout: { checkoutUrl?: string | null }): string {
+  const u = checkout.checkoutUrl?.trim();
+  if (u && /^https?:\/\//i.test(u)) return u;
+  return STORE_SITE_FALLBACK;
+}
+
 /* ─── Helpers ─────────────────────────────────────── */
 
 function buildCartItemsList(cartItems: any[]): string {
+  if (!cartItems?.length) return "• (Cart line items syncing — open link below to resume checkout)";
   return cartItems.map((i: any) => {
     const lineTotal = (parseFloat(i.price ?? "0") * (i.qty ?? 1)).toLocaleString();
     const label = i.variantLabel ? ` (${i.variantLabel})` : "";
@@ -27,6 +36,7 @@ function buildWaMessage(checkout: any, discountLine = "", isFollowUp = false): s
   const items = checkout.cartItems ?? [];
   const itemList = buildCartItemsList(items);
   const total = parseFloat(checkout.subtotal ?? "0").toLocaleString();
+  const resume = checkoutResumeUrl(checkout);
   const addressLine = checkout.customerAddress ? `\n📍 Delivery: ${checkout.customerAddress}` : "";
   const followUpIntro = isFollowUp
     ? `⏰ This is a reminder — your cart is still waiting!\n\n`
@@ -40,17 +50,19 @@ function buildWaMessage(checkout: any, discountLine = "", isFollowUp = false): s
     `💰 *Cart Total: PKR ${total}*` +
     `${addressLine}` +
     `${discountLine ? "\n\n" + discountLine : ""}` +
-    `\n\n✅ Complete your order now before it sells out!\n👉 https://kdfnuts.com`
+    `\n\n✅ Complete your order now before it sells out!\n👉 ${resume}`
   );
 }
 
 function buildHtmlEmail(checkout: any, discountLine = "", discountPercent = 0, isFollowUp = false): string {
   const name = checkout.customerName ? checkout.customerName.split(" ")[0] : "there";
   const items: any[] = checkout.cartItems ?? [];
+  const resumeUrl = checkoutResumeUrl(checkout);
   const subtotal = parseFloat(checkout.subtotal ?? "0");
   const finalTotal = discountPercent > 0 ? subtotal * (1 - discountPercent / 100) : subtotal;
 
-  const rows = items.map((i: any) => {
+  const rows = items.length
+    ? items.map((i: any) => {
     const lineTotal = parseFloat(i.price ?? "0") * (i.qty ?? 1);
     const label = i.variantLabel ? `<br><small style="color:#888">${i.variantLabel}</small>` : "";
     const imgTag = i.image
@@ -67,7 +79,8 @@ function buildHtmlEmail(checkout: any, discountLine = "", discountPercent = 0, i
           PKR ${lineTotal.toLocaleString()}
         </td>
       </tr>`;
-  }).join("");
+  }).join("")
+    : `<tr><td colspan="4" style="padding:16px;text-align:center;color:#666;font-size:14px">Your saved checkout — tap below to see items and complete your order.</td></tr>`;
 
   const discountRow = discountPercent > 0
     ? `<tr>
@@ -133,7 +146,7 @@ function buildHtmlEmail(checkout: any, discountLine = "", discountPercent = 0, i
 
       <!-- CTA -->
       <div style="text-align:center;margin:28px 0">
-        <a href="https://kdfnuts.com" style="display:inline-block;background:#5FA800;color:#fff;text-decoration:none;padding:16px 40px;border-radius:50px;font-size:16px;font-weight:700;letter-spacing:0.5px">
+        <a href="${resumeUrl}" style="display:inline-block;background:#5FA800;color:#fff;text-decoration:none;padding:16px 40px;border-radius:50px;font-size:16px;font-weight:700;letter-spacing:0.5px">
           Complete Your Order →
         </a>
       </div>

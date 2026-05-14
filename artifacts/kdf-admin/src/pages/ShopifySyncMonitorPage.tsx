@@ -209,7 +209,9 @@ export default function ShopifySyncMonitorPage() {
             icon: TrendingUp,
             label: "Last Sync",
             value: lastResult ? `${(lastResult.orders ?? 0) + (lastResult.customers ?? 0) + (lastResult.products ?? 0)}` : "—",
-            sub: lastResult ? `${lastResult.orders ?? 0} orders · ${lastResult.products ?? 0} products` : "No sync yet",
+            sub: lastResult
+              ? `${lastResult.orders ?? 0} orders · ${lastResult.products ?? 0} products${(lastResult as any).abandonedCheckouts?.upserted != null ? ` · ${(lastResult as any).abandonedCheckouts.upserted} abandoned upserted` : ""}`
+              : "No sync yet",
             color: "bg-purple-500",
           },
           {
