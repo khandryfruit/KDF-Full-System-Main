@@ -113,6 +113,7 @@ function corsHeadersForApiMisroute(req) {
   const origin = req.headers.origin;
   const requestHdrs = req.headers["access-control-request-headers"];
   const headers = {
+    "X-KDF-Backend": "kdf-plus-static",
     "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Access-Control-Allow-Headers":
@@ -139,7 +140,7 @@ function handler(req, res) {
 
   if (isApiPath(pathname)) {
     if (req.method === "OPTIONS") {
-      res.writeHead(204, corsHeadersForApiMisroute(req)).end();
+      res.writeHead(200, { ...corsHeadersForApiMisroute(req), "Content-Length": "0" }).end();
       return;
     }
     res

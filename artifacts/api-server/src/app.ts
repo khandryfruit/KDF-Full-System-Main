@@ -102,10 +102,16 @@ app.use(
       "Traceparent",
       "Tracestate",
     ],
-    optionsSuccessStatus: 204,
+    /* 200 avoids a few legacy stacks that mishandle 204 on preflight */
+    optionsSuccessStatus: 200,
     maxAge: 86400, // preflight cache 24 h
   })
 );
+/** Confirms in DevTools / curl that this response came from Express api-server, not a static host. */
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-KDF-Backend", "api-server");
+  next();
+});
 // Tell Express it sits behind Railway's TLS-terminating proxy so that
 // req.secure / req.ip / X-Forwarded-* work correctly.
 app.set("trust proxy", 1);
