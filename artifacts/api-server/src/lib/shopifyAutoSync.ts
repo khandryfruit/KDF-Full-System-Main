@@ -17,10 +17,13 @@ import {
   shopifyCustomersTable,
   shopifyProductsTable,
   shopifyWebhookLogsTable,
-  abandonedCheckoutsTable,
 } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  upsertAbandonedCheckoutFromShopifyPayload,
+  markAbandonedRecoveredFromShopifyOrder,
+} from "./shopifyAbandonedCheckoutSync.js";
 
 const SHOPIFY_API_VERSION = "2024-01";
 
@@ -36,7 +39,12 @@ interface AutoSyncState {
   lastError: string | null;
   intervalMinutes: number;
   totalSyncsRun: number;
-  lastSyncResult: { orders: number; customers: number; products: number } | null;
+  lastSyncResult: {
+    orders: number;
+    customers: number;
+    products: number;
+    abandonedCheckouts?: { upserted: number; pages: number; error?: string };
+  } | null;
   webhookEventsProcessed: number;
   startedAt: Date | null;
 }
@@ -386,15 +394,28 @@ async function runAutoSync() {
 
     const result = await runIncrementalSync(store);
 
+    let abandonedCheckouts: { upserted: number; pages: number; error?: string } = {
+      upserted: 0,
+      pages: 0,
+    };
+    try {
+      const { syncAbandonedCheckoutsFromShopifyRest } = await import("./shopifyAbandonedCheckoutSync.js");
+      abandonedCheckouts = await syncAbandonedCheckoutsFromShopifyRest(store);
+    } catch (abErr: any) {
+      logger.warn({ err: abErr?.message }, "Shopify abandoned_checkouts REST sync failed (non-fatal)");
+      abandonedCheckouts = { upserted: 0, pages: 0, error: abErr?.message };
+    }
+
     state.lastSyncAt = new Date();
-    state.lastSyncResult = result;
+    state.lastSyncResult = { ...result, abandonedCheckouts };
     state.status = "success";
     state.lastError = null;
     state.totalSyncsRun++;
 
     const total = result.orders + result.customers + result.products;
-    if (total > 0) {
-      logger.info({ ...result, total }, "Shopify auto-sync: completed with new/updated records");
+    const ab = abandonedCheckouts.upserted ?? 0;
+    if (total > 0 || ab > 0) {
+      logger.info({ ...result, abandonedCheckouts, total: total + ab }, "Shopify auto-sync: completed with new/updated records");
     } else {
       logger.debug("Shopify auto-sync: completed (no new/updated records)");
     }
@@ -444,6 +465,12 @@ export async function processShopifyWebhookPayload(
     switch (topic) {
       case "orders/create": {
         await upsertOrder(store, payload);
+        try {
+          const n = await markAbandonedRecoveredFromShopifyOrder(payload);
+          if (n > 0) logger.info({ n, orderId: payload.id }, "Abandoned checkouts marked recovered (orders/create)");
+        } catch (e: any) {
+          logger.warn({ err: e?.message, orderId: payload.id }, "markAbandonedRecoveredFromShopifyOrder failed");
+        }
         /* ── REAL AUTOMATION: smart-route to rider or WA confirmation ── */
         const [savedOrder] = await db
           .select()
@@ -570,6 +597,12 @@ export async function processShopifyWebhookPayload(
 
       case "orders/paid": {
         await upsertOrder(store, payload);
+        try {
+          const n = await markAbandonedRecoveredFromShopifyOrder(payload);
+          if (n > 0) logger.info({ n, orderId: payload.id }, "Abandoned checkouts marked recovered (orders/paid)");
+        } catch (e: any) {
+          logger.warn({ err: e?.message, orderId: payload.id }, "markAbandonedRecoveredFromShopifyOrder failed");
+        }
         /* ── WhatsApp payment confirmation ── */
         setImmediate(async () => {
           try {
@@ -621,66 +654,27 @@ export async function processShopifyWebhookPayload(
       case "orders/fulfilled":
       case "orders/cancelled":
         await upsertOrder(store, payload);
+        if (topic === "orders/updated" && String(payload.financial_status ?? "").toLowerCase() === "paid") {
+          try {
+            const n = await markAbandonedRecoveredFromShopifyOrder(payload);
+            if (n > 0) logger.info({ n, orderId: payload.id }, "Abandoned checkouts marked recovered (orders/updated paid)");
+          } catch (e: any) {
+            logger.warn({ err: e?.message, orderId: payload.id }, "markAbandonedRecoveredFromShopifyOrder failed");
+          }
+        }
         break;
 
       case "checkouts/create":
       case "checkouts/update": {
-        /* Save/update abandoned checkout record for recovery scheduler */
-        const checkoutId = String(payload.id ?? payload.token ?? "");
-        if (!checkoutId) break;
-
-        const phone = payload.phone ??
-          payload.shipping_address?.phone ??
-          payload.billing_address?.phone ?? null;
-        const email = payload.email ?? null;
-        const customerName = [
-          payload.shipping_address?.first_name ?? payload.customer?.first_name,
-          payload.shipping_address?.last_name  ?? payload.customer?.last_name,
-        ].filter(Boolean).join(" ") || null;
-
-        const lineItems: any[] = payload.line_items ?? [];
-        const cartItems = lineItems.map((li: any) => ({
-          productId: li.product_id ?? 0,
-          name:      li.title ?? li.name ?? "Product",
-          price:     String(li.price ?? "0"),
-          qty:       li.quantity ?? 1,
-          variant:   li.variant_id ? String(li.variant_id) : undefined,
-          variantLabel: li.variant_title ?? undefined,
-        }));
-
-        const subtotal = lineItems.reduce((sum: number, li: any) =>
-          sum + (parseFloat(li.price ?? "0") * (li.quantity ?? 1)), 0);
-
-        /* Only track if there are items */
-        if (!cartItems.length) break;
-
-        await db
-          .insert(abandonedCheckoutsTable)
-          .values({
-            sessionId:    checkoutId,
-            customerName: customerName ?? undefined,
-            phone:        phone ?? undefined,
-            email:        email ?? undefined,
-            cartItems,
-            subtotal:     String(subtotal.toFixed(2)),
-            checkoutStep: "cart",
-            status:       "active",
-            lastActivity: new Date(),
-          } as any)
-          .onConflictDoUpdate({
-            target: abandonedCheckoutsTable.sessionId,
-            set: {
-              customerName: customerName ?? undefined,
-              phone:        phone ?? undefined,
-              email:        email ?? undefined,
-              cartItems,
-              subtotal:     String(subtotal.toFixed(2)),
-              lastActivity: new Date(),
-            },
-          })
-          .catch(() => {});
-
-        logger.info({ checkoutId, phone, items: cartItems.length }, "Shopify checkout saved for abandoned recovery");
+        const r = await upsertAbandonedCheckoutFromShopifyPayload(store, payload, "shopify_webhook");
+        if (r.ok) {
+          logger.info(
+            { token: payload?.token, id: payload?.id, items: (payload?.line_items ?? []).length },
+            "Shopify checkout upserted for abandoned recovery",
+          );
+        } else {
+          logger.warn({ reason: r.reason, token: payload?.token, id: payload?.id }, "Shopify checkout abandoned upsert skipped");
+        }
         break;
       }
 

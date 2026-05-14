@@ -32,6 +32,16 @@ export const abandonedCheckoutsTable = pgTable("abandoned_checkouts", {
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   checkoutStep: text("checkout_step").notNull().default("cart"),
   status: abandonedCheckoutStatusEnum("status").notNull().default("active"),
+  /** Customer-facing resume URL (Shopify checkout / abandoned recovery) */
+  checkoutUrl: text("checkout_url"),
+  /** Shopify checkout.token — matches Order.checkout_token for recovery */
+  shopifyCheckoutToken: text("shopify_checkout_token"),
+  /** Shopify checkout.id (numeric as string) */
+  shopifyCheckoutId: text("shopify_checkout_id"),
+  totalDiscounts: numeric("total_discounts", { precision: 12, scale: 2 }),
+  currency: text("currency"),
+  /** native | shopify_webhook | shopify_rest */
+  syncSource: text("sync_source").default("native"),
   customerAddress: text("customer_address"),
   whatsappSent: boolean("whatsapp_sent").notNull().default(false),
   emailSent: boolean("email_sent").notNull().default(false),
