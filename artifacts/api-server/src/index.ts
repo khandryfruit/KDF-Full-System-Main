@@ -68,17 +68,13 @@ warmUpDb()
     logger.warn({ err }, "runMigrations() threw unexpectedly — continuing startup");
   })
   .then(() => {
-    app.listen(port, (err) => {
-      if (err) {
-        logger.error({ err }, "Error listening on port");
-        process.exit(1);
-      }
-
+    const server = app.listen(port, "0.0.0.0", () => {
       const onReplit = !!process.env.REPL_ID;
       const cloudinaryOk = isCloudinaryConfigured();
       logger.info(
         {
           port,
+          host: "0.0.0.0",
           platform: onReplit ? "replit" : "railway/vps",
           storageBackend: onReplit ? "replit-object-storage" : cloudinaryOk ? "cloudinary" : "NONE-CONFIGURED",
           cloudinaryConfigured: cloudinaryOk,
@@ -96,5 +92,9 @@ warmUpDb()
       autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
       startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
+    });
+    server.on("error", (err) => {
+      logger.error({ err }, "HTTP server listen error");
+      process.exit(1);
     });
   });
