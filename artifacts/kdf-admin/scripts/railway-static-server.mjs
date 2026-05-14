@@ -27,15 +27,68 @@ function viteBasePrefix() {
 
 const rootIndexPath = path.join(root, "index.html");
 
+/**
+ * Railway / spreadsheet copy-paste often produces values like:
+ *   "Value: https://api.khanbabadryfruits.com"
+ *   "https://Value: https://api...." (double scheme)
+ * Extract a single valid origin (scheme + host [+ port], no path).
+ */
+function sanitizePublicApiOrigin(input) {
+  let s = String(input ?? "").trim();
+  if (!s) return "";
+  /* Strip leading labels (case-insensitive) */
+  s = s.replace(/^\s*(value|variable|url|api\s*url|env)\s*:\s*/i, "").trim();
+  /* Remove embedded "Value:" / "Variable:" labels */
+  s = s.replace(/\b(value|variable)\s*:\s*/gi, " ").replace(/\s+/g, " ").trim();
+  /* Strip wrapping quotes */
+  s = s.replace(/^["']+|["']+$/g, "").trim();
+
+  const tokenRe = /https?:\/\/[^\s"'<>]+/gi;
+  const tokens = [];
+  let m;
+  while ((m = tokenRe.exec(s)) !== null) {
+    let t = m[0].replace(/["')]+$/g, "").trim();
+    try {
+      const u = new URL(t);
+      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+      const host = u.hostname.toLowerCase();
+      if (!host || host === "value") continue;
+      tokens.push(`${u.protocol}//${u.host}`);
+    } catch {
+      /* skip malformed */
+    }
+  }
+  let pick = "";
+  const apiTok = tokens.find((x) => /\/\/api\./i.test(x));
+  if (apiTok) pick = apiTok;
+  else if (tokens.length) pick = tokens[tokens.length - 1];
+  if (pick) {
+    return pick.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
+  }
+  /* Bare hostname, no scheme */
+  const oneWord = s.replace(/\s+/g, "").replace(/^["']+|["']+$/g, "");
+  if (oneWord && !/\s/.test(oneWord) && !/^https?:\/\//i.test(oneWord)) {
+    const hostOnly = oneWord.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+    if (hostOnly) return `https://${hostOnly}`;
+  }
+  return "";
+}
+
 /** Public API origin for split deploys — override on kdf-admin service via Railway env. */
 function runtimePublicApiOrigin() {
-  const raw = (
+  const merged = (
     process.env.PUBLIC_API_ORIGIN ||
     process.env.VITE_API_BASE_URL ||
+    process.env.VITE_API_URL ||
     process.env.API_PUBLIC_ORIGIN ||
+    process.env.API_BASE_URL ||
+    ""
+  ).trim();
+  const cleaned = sanitizePublicApiOrigin(merged);
+  const raw = (
+    cleaned ||
     "https://api.khanbabadryfruits.com"
   )
-    .trim()
     .replace(/\/+$/, "")
     .replace(/\/api\/?$/i, "");
   if (!raw) return "https://api.khanbabadryfruits.com";

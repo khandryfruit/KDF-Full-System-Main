@@ -8,6 +8,41 @@
  * Strips accidental trailing `/api` or `/` so `API_BASE + "/api/..."` never doubles `/api`.
  */
 
+/** Fixes copy-paste like `Value: https://api...` or `https://Value: https://api...`. */
+function sanitizeMessyApiOriginString(raw: string): string {
+  let s = String(raw ?? "").trim();
+  if (!s) return "";
+  s = s.replace(/^\s*(value|variable|url|api\s*url|env)\s*:\s*/i, "").trim();
+  s = s.replace(/\b(value|variable)\s*:\s*/gi, " ").replace(/\s+/g, " ").trim();
+  s = s.replace(/^["']+|["']+$/g, "").trim();
+
+  const tokenRe = /https?:\/\/[^\s"'<>]+/gi;
+  const tokens: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(s)) !== null) {
+    const t = m[0].replace(/["')]+$/g, "").trim();
+    try {
+      const u = new URL(t);
+      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+      const host = u.hostname.toLowerCase();
+      if (!host || host === "value") continue;
+      tokens.push(`${u.protocol}//${u.host}`);
+    } catch {
+      /* skip */
+    }
+  }
+  let pick = "";
+  const apiTok = tokens.find((x) => /\/\/api\./i.test(x));
+  if (apiTok) pick = apiTok;
+  else if (tokens.length) pick = tokens[tokens.length - 1] ?? "";
+  if (pick) return pick.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
+  const oneWord = s.replace(/\s+/g, "").replace(/^["']+|["']+$/g, "");
+  if (oneWord && !/\s/.test(oneWord) && !/^https?:\/\//i.test(oneWord)) {
+    return `https://${oneWord.replace(/\/api\/?$/i, "").replace(/\/+$/, "")}`;
+  }
+  return "";
+}
+
 function readEnvApiBase(): string {
   const env = import.meta.env as Record<string, string | undefined>;
   const candidates = [
@@ -15,9 +50,13 @@ function readEnvApiBase(): string {
     env.VITE_API_URL,
     env.VITE_NEXT_PUBLIC_API_URL,
     env.API_BASE_URL,
+    env.PUBLIC_API_ORIGIN,
   ];
   for (const v of candidates) {
-    if (v && String(v).trim()) return String(v).trim();
+    if (v && String(v).trim()) {
+      const cleaned = sanitizeMessyApiOriginString(String(v).trim());
+      if (cleaned) return cleaned;
+    }
   }
   return "";
 }
@@ -31,10 +70,12 @@ function readRuntimeInjectedApiOrigin(): string {
   try {
     const w = (window as Window & { __KDF_API_PUBLIC_ORIGIN__?: string }).__KDF_API_PUBLIC_ORIGIN__;
     if (typeof w !== "string" || !w.trim()) return "";
-    let raw = w.trim().replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+    const cleaned = sanitizeMessyApiOriginString(w.trim());
+    if (!cleaned) return "";
+    let raw = cleaned.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
     if (!raw.startsWith("http")) raw = `https://${raw}`;
     const host = new URL(raw).hostname.toLowerCase();
-    if (host.startsWith("admin.")) return "";
+    if (host.startsWith("admin.") || host === "value") return "";
     return raw.replace(/\/+$/, "");
   } catch {
     return "";
