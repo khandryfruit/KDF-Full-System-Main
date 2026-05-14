@@ -2,6 +2,7 @@
  * Normalised API base URL for browser → api-server (scheme + host, no path, no trailing slash).
  *
  * Railway: set `VITE_API_BASE_URL=https://api.khanbabadryfruits.com` (also accepts `VITE_API_URL`).
+ * Dockerfiles default this at build time so login and `/api` calls never hit the static host when unset.
  * Never set it to `https://admin.*` — that breaks uploads, SSE, and Shopify webhooks.
  *
  * Strips accidental trailing `/api` or `/` so `API_BASE + "/api/..."` never doubles `/api`.

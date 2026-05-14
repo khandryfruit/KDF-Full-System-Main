@@ -9,9 +9,18 @@ function apiOriginPrefix(): string {
   return getApiBase().replace(/\/$/, "");
 }
 
+/** Map same-origin paths to `/api/...` so they can be sent to the API host (Vite base may be `/admin/`). */
+function sameOriginApiPath(pathname: string): string | null {
+  if (pathname === "/api" || pathname.startsWith("/api/")) return pathname;
+  if (pathname === "/admin/api" || pathname.startsWith("/admin/api/")) {
+    return pathname.slice("/admin".length) || "/api";
+  }
+  return null;
+}
+
 function shouldRewriteApiUrl(u: URL): boolean {
-  if (!u.pathname.startsWith("/api")) return false;
   if (typeof window === "undefined") return false;
+  if (sameOriginApiPath(u.pathname) == null) return false;
   if (u.origin === window.location.origin) return true;
   const h = u.hostname.toLowerCase();
   if (h.startsWith("admin.")) return true;
@@ -23,10 +32,27 @@ function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
   if (!prefix || typeof window === "undefined") return input;
 
   if (typeof input === "string") {
-    if (input.startsWith("/api")) return `${prefix}${input}`;
+    let pathPart = input;
+    let suffix = "";
+    const q = input.indexOf("?");
+    const h = input.indexOf("#");
+    if (q >= 0) {
+      pathPart = input.slice(0, q);
+      suffix = input.slice(q);
+    } else if (h >= 0) {
+      pathPart = input.slice(0, h);
+      suffix = input.slice(h);
+    }
+    const mapped = sameOriginApiPath(pathPart);
+    if (mapped != null) {
+      return `${prefix}${mapped}${suffix}`;
+    }
     try {
       const u = new URL(input, window.location.href);
-      if (shouldRewriteApiUrl(u)) return `${prefix}${u.pathname}${u.search}${u.hash}`;
+      const p = sameOriginApiPath(u.pathname);
+      if (p != null && shouldRewriteApiUrl(u)) {
+        return `${prefix}${p}${u.search}${u.hash}`;
+      }
     } catch {
       /* ignore */
     }
@@ -34,8 +60,9 @@ function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
   }
 
   if (input instanceof URL) {
-    if (shouldRewriteApiUrl(input)) {
-      return `${prefix}${input.pathname}${input.search}${input.hash}`;
+    const p = sameOriginApiPath(input.pathname);
+    if (p != null && shouldRewriteApiUrl(input)) {
+      return `${prefix}${p}${input.search}${input.hash}`;
     }
     return input;
   }
@@ -48,8 +75,9 @@ function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
       return input;
     }
     const u = new URL(reqUrl);
-    if (shouldRewriteApiUrl(u)) {
-      const href = `${prefix}${u.pathname}${u.search}${u.hash}`;
+    const p = sameOriginApiPath(u.pathname);
+    if (p != null && shouldRewriteApiUrl(u)) {
+      const href = `${prefix}${p}${u.search}${u.hash}`;
       return new Request(href, input);
     }
     return input;

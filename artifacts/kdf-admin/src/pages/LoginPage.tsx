@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import { ShieldCheck, Eye, EyeOff } from "lucide-react";
-import { getApiBase } from "@/lib/apiBase";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 export default function LoginPage() {
   const [, setLocation]    = useLocation();
@@ -19,15 +19,14 @@ export default function LoginPage() {
   const [showPwd, setShow] = useState(false);
   const [error, setError]  = useState("");
 
-  const API = getApiBase();
-
-  /** Fetch JSON safely — 15 s timeout, shows readable error on non-JSON response. */
-  const fetchJson = async (url: string, init: RequestInit) => {
+  /** Fetch JSON safely — 15 s timeout; always targets api-server (apiPublicUrl), never bare /api on the static host. */
+  const fetchJson = async (apiPath: string, init: RequestInit) => {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 15_000);
+    const url = apiPublicUrl(apiPath.startsWith("/") ? apiPath : `/${apiPath}`);
     let res: Response;
     try {
-      res = await fetch(API + url, { ...init, signal: controller.signal });
+      res = await fetch(url, { ...init, signal: controller.signal });
     } catch (e: any) {
       clearTimeout(tid);
       if (e?.name === "AbortError") throw new Error("Request timed out — please try again.");

@@ -18,6 +18,9 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 COPY . .
 
+ARG VITE_API_BASE_URL=https://api.khanbabadryfruits.com
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 RUN pnpm install --no-frozen-lockfile
 # Large Vite admin bundle — avoid OOM on Railway builders
 RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-admin run railway:build

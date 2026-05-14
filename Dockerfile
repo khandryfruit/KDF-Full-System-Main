@@ -24,6 +24,11 @@ COPY . .
 # overrides differ slightly from the committed lockfile (common after workspace edits).
 RUN pnpm install --no-frozen-lockfile
 
+# Split admin + API on Railway: bake public API origin into Vite bundles unless overridden
+# (Railway → Docker build args / service variables: VITE_API_BASE_URL).
+ARG VITE_API_BASE_URL=https://api.khanbabadryfruits.com
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 ENV NODE_ENV=production
 RUN set -eux; \
   target="${KDF_RAILWAY_TARGET:-admin}"; \

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 export interface AdminUser {
   id:          number;
@@ -61,7 +62,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem("kdf_admin_token");
     if (!token) return;
     try {
-      const res  = await fetch("/api/admin-auth/me", { headers: { Authorization: `Bearer ${token}` } });
+      const res  = await fetch(apiPublicUrl("/api/admin-auth/me"), { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (data.ok && data.user) {
         setUser(data.user);
