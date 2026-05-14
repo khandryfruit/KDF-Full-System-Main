@@ -1,7 +1,7 @@
 /**
- * When the admin SPA is on a different origin than api-server (Railway: admin.* vs api.*),
- * relative `fetch("/api/...")` must be rewritten to `VITE_API_BASE_URL + "/api/..."`.
- * Also rewrites absolute `https://admin.*/api/...` mistakes to the API origin.
+ * When the admin SPA is on a different origin than api-server (Railway: admin host vs api host),
+ * relative fetch URLs that start with /api must be rewritten to the API origin (VITE_API_BASE_URL).
+ * Also rewrites mistaken absolute URLs on the admin origin under /api to the API origin.
  */
 import { getApiBase } from "./lib/apiBase";
 
