@@ -6,6 +6,11 @@
 #   KDF_RAILWAY_TARGET = admin | plus | admin-app | api
 # If unset, defaults to `admin` (main admin static site).
 #
+# IMPORTANT for @workspace/api-server: if you use THIS Dockerfile for the API service,
+# you MUST set KDF_RAILWAY_TARGET=api (build + runtime). Otherwise the builder skips
+# `api-server run build` and the container crashes with MODULE_NOT_FOUND dist/index.mjs.
+# Safer: set Railway Dockerfile Path to Dockerfile.api-server for the API service only.
+#
 # To use a dedicated Dockerfile instead, set RAILWAY_DOCKERFILE_PATH (e.g. Dockerfile.api-server).
 
 FROM node:22-bookworm AS builder
@@ -31,7 +36,8 @@ RUN set -eux; \
       NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-plus run railway:build && \
       NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-admin run railway:build && \
       NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/kdf-admin-app run railway:build && \
-      NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/api-server run build ;; \
+      NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @workspace/api-server run build && \
+      test -f /app/artifacts/api-server/dist/index.mjs ;; \
     *) \
       echo "Invalid KDF_RAILWAY_TARGET=$target (use admin|plus|admin-app|api)" >&2; \
       exit 1 ;; \
