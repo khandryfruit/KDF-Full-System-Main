@@ -1,14 +1,20 @@
-.replit
-attached_assets
-pnpm-lock.yaml
-node_modules
-.git
+# Extra ignores for the Rider app directory (merged with repo-root .easignore).
+# Never list pnpm-lock.yaml — the workspace lockfile at the repo root must stay in the archive.
+
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
 *.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
 .replit
-.replit
-pnpm-lock.yaml
-node_modules
-.git
-*.log
-attached_assets
-attached_assets
+.replit-artifact/
+server/

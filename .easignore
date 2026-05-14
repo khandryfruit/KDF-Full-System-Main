@@ -1,0 +1,38 @@
+# Shrinks the Git archive EAS uploads for monorepo builds (e.g. Rider from artifacts/kdf-mobile).
+# https://docs.expo.dev/build-reference/easignore/
+#
+# Keep: pnpm-lock.yaml, root package.json, pnpm-workspace.yaml, and workspace package.json trees
+# so `pnpm install` can resolve the graph. Do not list whole sibling apps here unless install is changed.
+
+# Large tracked media / dumps not used by the mobile app (~100MB+)
+attached_assets/
+
+# Editor / agent metadata
+.cursor/
+.agents/
+
+# Reinstalled on EAS builders
+**/node_modules/
+
+# Caches and generated bundles
+**/.expo/
+**/.turbo/
+**/.cache/
+**/coverage/
+**/dist/
+**/web-build/
+**/.next/
+**/*.tsbuildinfo
+
+# Test artifacts
+**/playwright-report/
+**/test-results/
+**/e2e-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+**/.DS_Store

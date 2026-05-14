@@ -161,14 +161,20 @@ function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_IT
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const enter = () => { clearTimeout(timerRef.current); setOpen(true); };
-  const leave = () => { timerRef.current = setTimeout(() => setOpen(false), 200); };
+  const enter = () => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setOpen(true), 40);
+  };
+  const leave = () => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setOpen(false), 220);
+  };
 
   return (
-    <div className="relative z-[350]" onMouseEnter={enter} onMouseLeave={leave}>
+    <div className="relative z-[360]" onMouseEnter={enter} onMouseLeave={leave}>
       <button
         type="button"
-        className="group flex items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold tracking-tight text-slate-700 transition-all duration-200 hover:bg-slate-100/90 md:px-3.5 md:py-2"
+        className="group flex items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold tracking-tight text-slate-700 transition-colors duration-200 hover:bg-slate-100/90 md:px-3.5 md:py-2"
         style={{ color: open ? GREEN : "#334155" }}
         onClick={() => onNavigate(`/products?category=${item.slug}`)}
       >
@@ -178,40 +184,41 @@ function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_IT
 
       {open && (
         <div
-          className={`absolute top-full z-[350] hidden pt-2 sm:block ${alignEnd ? "right-0 left-auto" : "left-0"}`}
-          style={{ width: "min(calc(100vw - 1.5rem), 72rem)" }}
+          className={`absolute top-full z-[360] hidden pt-2 sm:block ${alignEnd ? "right-0 left-auto" : "left-0"}`}
+          style={{ width: "min(calc(100vw - 1.25rem), 56rem)" }}
           onMouseEnter={enter}
           onMouseLeave={leave}
         >
           <div
-            className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 shadow-[0_28px_90px_-20px_rgba(15,23,42,0.22)] backdrop-blur-xl ring-1 ring-slate-900/[0.04]"
+            className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_18px_50px_-16px_rgba(15,23,42,0.14)] backdrop-blur-md ring-1 ring-slate-900/[0.03]"
           >
-            <div className="grid max-h-[min(72vh,540px)] grid-cols-1 divide-y divide-slate-100 lg:grid-cols-12 lg:divide-x lg:divide-y-0">
+            {/* md+ = horizontal mega (was lg-only, caused narrow stacked panels on laptops) */}
+            <div className="grid max-h-[min(70vh,420px)] grid-cols-1 divide-y divide-slate-100 md:grid-cols-12 md:divide-x md:divide-y-0">
               {/* Categories — two columns of links on wide mega */}
-              <div className="p-4 sm:p-5 lg:col-span-5 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto">
+              <div className="p-4 sm:p-4 md:col-span-5 md:max-h-[min(70vh,420px)] md:overflow-y-auto">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
-                <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 sm:gap-x-2">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
                   {item.sub.map(sub => (
                     <button
                       key={sub.slug}
                       type="button"
                       onClick={() => { onNavigate(`/products?category=${sub.slug}`); setOpen(false); }}
-                      className="group flex min-h-[40px] w-full min-w-0 flex-row items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-[#5FA800]/10"
+                      className="group flex min-h-[40px] w-full min-w-0 flex-row items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[#5FA800]/10"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-base leading-none ring-1 ring-slate-200/60 transition-colors group-hover:bg-white group-hover:ring-[#5FA800]/25" aria-hidden>
                         {sub.emoji}
                       </span>
-                      <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800 sm:text-[15px]">
+                      <span className="min-w-0 flex-1 text-sm font-semibold text-slate-800">
                         <span className="block truncate">{sub.label}</span>
                       </span>
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800]" strokeWidth={2.5} />
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 opacity-80 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#5FA800]" strokeWidth={2.5} />
                     </button>
                   ))}
                 </div>
                 <button
                   type="button"
                   onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#5FA800]/25 bg-[#5FA800]/6 py-2.5 text-sm font-bold text-[#3d7000] transition-all hover:bg-[#5FA800]/12"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-[#5FA800]/25 bg-[#5FA800]/6 py-2.5 text-sm font-bold text-[#3d7000] transition-colors hover:bg-[#5FA800]/12"
                 >
                   View all {item.label}
                   <ArrowRight className="h-4 w-4" />
@@ -219,11 +226,11 @@ function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_IT
               </div>
 
               {/* Featured spotlight */}
-              <div className="flex flex-col justify-between bg-gradient-to-br from-[#f8fdf4] via-white to-slate-50/90 p-4 sm:p-5 lg:col-span-4 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto">
+              <div className="flex flex-col justify-between bg-gradient-to-br from-[#f8fdf4] via-white to-slate-50/90 p-4 sm:p-4 md:col-span-4 md:max-h-[min(70vh,420px)] md:overflow-y-auto">
                 <div>
                   <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Featured</p>
                   <div
-                    className="rounded-xl border p-3.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    className="rounded-xl border p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-md"
                     style={{ background: `${item.featured.color}12`, borderColor: `${item.featured.color}35` }}
                   >
                     <span
@@ -249,7 +256,7 @@ function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_IT
               </div>
 
               {/* Quick links — offers / discovery */}
-              <div className="p-4 sm:p-5 lg:col-span-3 lg:max-h-[min(72vh,540px)] lg:overflow-y-auto lg:bg-slate-50/40">
+              <div className="p-4 sm:p-4 md:col-span-3 md:max-h-[min(70vh,420px)] md:overflow-y-auto md:bg-slate-50/40">
                 <p className="mb-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Popular & offers</p>
                 <div className="flex flex-col gap-1">
                   {[
@@ -879,11 +886,11 @@ export function Header() {
               </Link>
 
               {/* Search — desktop */}
-              <div ref={searchRef} className="relative mx-auto hidden max-w-3xl flex-1 sm:flex lg:max-w-[52rem]">
+              <div ref={searchRef} className="relative mx-auto hidden w-full max-w-md flex-1 sm:flex lg:max-w-lg xl:max-w-xl">
                 <form onSubmit={handleSearch} className="w-full">
                   <div className="group relative">
                     <Search
-                      className={`pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors md:left-5 md:h-[1.35rem] md:w-[1.35rem] ${hintLoading ? "animate-pulse" : "text-slate-400 group-focus-within:text-[#5FA800]"}`}
+                      className={`pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 transition-colors md:left-4 md:h-[1.05rem] md:w-[1.05rem] ${hintLoading ? "animate-pulse" : "text-slate-400 group-focus-within:text-[#5FA800]"}`}
                       style={hintLoading ? { color: GREEN } : {}}
                     />
                     <input
@@ -896,46 +903,46 @@ export function Header() {
                       }}
                       onFocus={() => searchQuery.length > 0 && setShowHints(true)}
                       className={[
-                        "h-12 w-full rounded-full pl-12 pr-[7.25rem] text-[15px] font-medium text-slate-800 placeholder:text-slate-400 outline-none transition-[box-shadow,transform,border-color,background] duration-300 md:h-14 md:pl-14 md:pr-[7.75rem] md:text-base",
-                        "group-focus-within:shadow-[0_0_0_4px_rgba(95,168,0,0.12),0_20px_50px_rgba(15,23,42,0.08)]",
-                        scrolled ? "bg-white/85 shadow-inner backdrop-blur-xl" : "",
+                        "h-11 w-full rounded-full border border-slate-300/80 bg-white pl-10 pr-[5.5rem] text-[14px] font-medium text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none transition-[box-shadow,border-color,background-color] duration-200 md:h-11 md:pl-11 md:pr-[5.75rem] md:text-[15px]",
+                        "group-focus-within:border-[#5FA800]/50 group-focus-within:shadow-[0_0_0_3px_rgba(95,168,0,0.1),0_8px_24px_rgba(15,23,42,0.06)]",
+                        scrolled ? "bg-white/90 backdrop-blur-sm" : "",
                       ].join(" ")}
                       style={{
                         background:
                           showHints || searchQuery
                             ? "#ffffff"
                             : scrolled
-                              ? "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.95) 100%)"
-                              : "linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%)",
-                        border:
-                          showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid rgba(148,163,184,0.35)",
+                              ? "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.98) 100%)"
+                              : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+                        borderColor:
+                          showHints || searchQuery ? GREEN : undefined,
                         boxShadow:
                           showHints || searchQuery
-                            ? `0 0 0 1px rgba(95,168,0,0.2), 0 16px 48px rgba(95,168,0,0.12)`
+                            ? "0 0 0 1px rgba(95,168,0,0.12), 0 10px 28px rgba(15,23,42,0.07)"
                             : scrolled
-                              ? "0 10px 40px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)"
-                              : "0 8px 32px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.85)",
+                              ? "0 4px 18px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)"
+                              : "0 4px 16px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.88)",
                       }}
                       data-testid="input-search"
                     />
-                    <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 md:right-2">
+                    <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 md:right-1.5">
                       <button
                         type="button"
                         onClick={() => headerCameraRef.current?.click()}
-                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 md:h-11 md:w-11 ${headerCamLoad ? "text-green-600" : ""}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-opacity duration-200 hover:opacity-90 active:opacity-100 md:h-9 md:w-9 ${headerCamLoad ? "text-green-600" : ""}`}
                         style={{ background: `${GREEN}14`, color: headerCamLoad ? "#16a34a" : GREEN }}
                         aria-label="Search by image"
                       >
-                        {headerCamLoad ? <Loader2 className="h-4 w-4 animate-spin md:h-[1.15rem] md:w-[1.15rem]" /> : <Camera className="h-4 w-4 md:h-[1.15rem] md:w-[1.15rem]" />}
+                        {headerCamLoad ? <Loader2 className="h-3.5 w-3.5 animate-spin md:h-4 md:w-4" /> : <Camera className="h-3.5 w-3.5 md:h-4 md:w-4" />}
                       </button>
                       <button
                         type="button"
                         onClick={startHeaderVoice}
-                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 md:h-11 md:w-11 ${headerListening ? "animate-pulse" : ""}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-opacity duration-200 hover:opacity-90 active:opacity-100 md:h-9 md:w-9 ${headerListening ? "animate-pulse" : ""}`}
                         style={{ background: headerListening ? "#ef4444" : `${GREEN}14`, color: headerListening ? "#fff" : GREEN }}
                         aria-label="Voice search"
                       >
-                        <Mic className="h-4 w-4 md:h-[1.15rem] md:w-[1.15rem]" />
+                        <Mic className="h-3.5 w-3.5 md:h-4 md:w-4" />
                       </button>
                     </div>
                     <input ref={headerCameraRef} type="file" accept="image/*" className="hidden" onChange={handleHeaderCamImg} />
@@ -945,8 +952,7 @@ export function Header() {
                 {/* Search dropdown */}
                 {showHints && searchQuery.length > 0 && (searchHints.products.length > 0 || searchHints.categories.length > 0) && (
                   <div
-                    className="absolute left-0 right-0 top-[calc(100%+10px)] z-[300] overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur-2xl md:rounded-3xl"
-                    style={{ boxShadow: "0 28px 80px rgba(15,23,42,0.16), 0 0 0 1px rgba(95,168,0,0.06)" }}
+                    className="absolute left-0 right-0 top-[calc(100%+8px)] z-[300] overflow-hidden rounded-xl border border-slate-200/80 bg-white/98 shadow-[0_16px_40px_-8px_rgba(15,23,42,0.12)] backdrop-blur-md"
                   >
                     {searchHints.products.length > 0 && (
                       <>

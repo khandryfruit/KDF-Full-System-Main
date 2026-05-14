@@ -12,6 +12,21 @@ All Rider work and builds start from:
 
 `artifacts/kdf-mobile`
 
+Run EAS **only** from that directory (or pass the equivalent project path). A separate `eas.json` exists at the monorepo root for other tooling; Rider builds use `artifacts/kdf-mobile/eas.json` and `app.json` there.
+
+### Expo dashboard label `@workspace/kdf-mobile`
+
+That string is the **npm package name** from `artifacts/kdf-mobile/package.json`. It does **not** mean the whole monorepo is the “Expo project”; the linked `extra.eas.projectId` in `app.json` is the Expo project identity.
+
+### Queue vs wrong upload
+
+**Queued — Free Tier Queue** means the job has not started on a builder yet (Expo capacity). It is normal for free tier to wait a long time; it does **not** by itself prove the archive was wrong. Smaller uploads still help (faster upload step and less to unpack).
+
+### Smaller Git archives
+
+- Repo root **`.easignore`** trims the **Git** archive (high impact: excludes `attached_assets/`, all `node_modules/`, caches, build outputs).
+- **`artifacts/kdf-mobile/.easignore`** adds app-local junk only. **Do not** ignore `pnpm-lock.yaml` here — that was incorrectly listed before and would drop the monorepo lockfile from the upload.
+
 ## Production API (non-negotiable)
 
 - **Always** bake: `EXPO_PUBLIC_API_URL=https://api.khanbabadryfruits.com`

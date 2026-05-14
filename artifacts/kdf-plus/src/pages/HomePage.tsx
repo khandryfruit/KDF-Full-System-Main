@@ -111,6 +111,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   const [paused, setPaused]       = useState(false);
   const [isMobile, setIsMobile]   = useState(() => window.innerWidth < 768);
   const [, setLocation]           = useLocation();
+  const touchStartX               = useRef<number | null>(null);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -123,14 +124,14 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 
   useEffect(() => {
     if (banners.length <= 1 || paused) return;
-    const t = setInterval(next, 5000);
+    const t = setInterval(next, 5600);
     return () => clearInterval(t);
   }, [banners.length, paused, next]);
 
   /* fallback auto-rotate — only active when no DB banners */
   useEffect(() => {
     if (banners.length > 0) return;
-    const t = setInterval(() => setFallbackIdx(p => (p + 1) % BANNER_AI_SLIDES.length), 5000);
+    const t = setInterval(() => setFallbackIdx(p => (p + 1) % BANNER_AI_SLIDES.length), 5600);
     return () => clearInterval(t);
   }, [banners.length]);
 
@@ -143,8 +144,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 
   if (loading) {
     return (
-      <div className="px-3 sm:px-6 py-3 sm:py-4">
-        <Skeleton className="w-full min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] rounded-[28px] sm:rounded-3xl" />
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+        <Skeleton className="w-full min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] rounded-2xl sm:rounded-2xl" />
       </div>
     );
   }
@@ -153,12 +154,12 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   if (!banners.length) {
     const s = BANNER_AI_SLIDES[fallbackIdx];
     return (
-      <div className="px-3 sm:px-6 py-3 sm:py-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div
-          className="relative flex flex-col justify-end overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] sm:justify-center rounded-[28px] sm:rounded-3xl cursor-pointer active:scale-[0.995] transition-transform ring-1 ring-black/[0.04]"
+          className="relative flex flex-col justify-end overflow-hidden min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] sm:justify-center rounded-2xl sm:rounded-2xl cursor-pointer ring-1 ring-black/[0.04] transition-opacity active:opacity-95"
           style={{
             background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`,
-            boxShadow: `0 28px 72px ${s.g3}55, 0 12px 36px rgba(0,0,0,0.35)`,
+            boxShadow: `0 16px 40px ${s.g3}40, 0 8px 24px rgba(0,0,0,0.22)`,
           }}
           onClick={() => setLocation('/products')}
         >
@@ -183,7 +184,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)' }}>
               {s.label}
             </span>
-            <h1 className="mb-2 text-2xl font-black leading-tight text-white sm:mb-3 sm:text-5xl lg:text-6xl"
+            <h1 className="mb-2 text-2xl font-black leading-tight text-white sm:mb-3 sm:text-4xl lg:text-5xl"
               style={{ textShadow: '0 2px 20px rgba(0,0,0,0.45)' }}>
               {s.headline.split('\n').map((line, i) => (
                 <Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</Fragment>
@@ -223,15 +224,26 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
 
   return (
     <div
-      className="px-3 sm:px-6 py-3 sm:py-4"
+      className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
       <div
-        className="relative overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] sm:max-h-none rounded-[28px] sm:rounded-3xl ring-1 ring-black/[0.04]"
+        className="relative overflow-hidden min-h-[232px] h-[min(68vw,300px)] sm:min-h-[248px] sm:h-[min(30vh,340px)] md:h-[min(28vh,360px)] lg:min-h-[272px] lg:h-[min(32vh,380px)] lg:max-h-[400px] rounded-2xl sm:rounded-2xl ring-1 ring-black/[0.04]"
         style={{
           boxShadow:
-            "0 28px 72px rgba(13,43,0,0.2), 0 12px 32px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.18)",
+            "0 14px 40px rgba(13,43,0,0.12), 0 6px 18px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.14)",
+        }}
+        onTouchStart={(e) => {
+          touchStartX.current = e.touches[0]?.clientX ?? null;
+        }}
+        onTouchEnd={(e) => {
+          if (touchStartX.current == null || banners.length <= 1) return;
+          const end = e.changedTouches[0]?.clientX ?? touchStartX.current;
+          const d = end - touchStartX.current;
+          touchStartX.current = null;
+          if (d < -52) next();
+          else if (d > 52) prev();
         }}
       >
         {/* Slides */}
@@ -253,9 +265,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           return (
             <div
               key={banner.id}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out cursor-pointer ${
-                i === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+              className={`absolute inset-0 cursor-pointer transition-opacity duration-500 ease-out motion-reduce:transition-none ${
+                i === idx ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
               }`}
+              style={{ willChange: i === idx || i === (idx + 1) % banners.length ? "opacity" : undefined }}
               onClick={() => handleBannerClick(banner)}
             >
               {/* Video background (takes priority over image) */}
@@ -274,7 +287,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                 <img
                   src={bgImg}
                   alt={banner.title}
-                  className="absolute inset-0 w-full h-full object-cover object-center"
+                  className="absolute inset-0 h-full w-full object-cover object-center lg:object-[center_22%]"
                   loading={i === 0 ? "eager" : "lazy"}
                   decoding="async"
                   fetchPriority={i === 0 ? "high" : "low"}
@@ -333,13 +346,13 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                     </span>
                   )}
                   <h2
-                    className="mb-1.5 max-w-[22rem] text-[1.65rem] font-black leading-[1.1] tracking-tight text-white drop-shadow-lg sm:mb-3 sm:max-w-3xl sm:text-4xl lg:text-6xl lg:leading-[1.05]"
-                    style={{ textShadow: "0 4px 28px rgba(0,0,0,0.5)" }}
+                    className="mb-1.5 max-w-[20rem] text-[1.45rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg sm:mb-2.5 sm:max-w-2xl sm:text-3xl md:text-4xl lg:max-w-3xl lg:text-[2.35rem] lg:leading-[1.08]"
+                    style={{ textShadow: "0 3px 22px rgba(0,0,0,0.45)" }}
                   >
                     {banner.title}
                   </h2>
                   {banner.subtitle && (
-                    <p className="mb-3 max-w-[20rem] text-sm font-medium leading-snug text-white/90 sm:mb-5 sm:max-w-xl sm:text-lg lg:text-xl">
+                    <p className="mb-2.5 max-w-[19rem] text-sm font-medium leading-snug text-white/90 sm:mb-4 sm:max-w-xl sm:text-base lg:text-lg">
                       {banner.subtitle}
                     </p>
                   )}
@@ -348,10 +361,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                       <CountdownTimer endAt={(banner as any).countdownEndAt} />
                     </div>
                   )}
-                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <button
-                      className="inline-flex items-center gap-2 rounded-full px-7 py-3 text-sm font-bold text-white shadow-[0_14px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/25 transition-all hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] sm:px-9 sm:py-3.5 sm:text-base"
-                      style={{ backgroundColor: GREEN, boxShadow: `0 12px 36px ${GREEN}50` }}
+                      className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white ring-1 ring-white/20 transition-opacity duration-200 hover:opacity-95 active:opacity-100 sm:px-7 sm:py-3 sm:text-[15px]"
+                      style={{ backgroundColor: GREEN, boxShadow: `0 8px 24px ${GREEN}45` }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleBannerClick(banner);
@@ -361,7 +374,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/15 px-6 py-3 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all hover:bg-white/25 active:scale-[0.98] sm:px-8 sm:py-3.5 sm:text-base"
+                      className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/12 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-opacity duration-200 hover:bg-white/20 active:opacity-95 sm:px-7 sm:py-3 sm:text-[15px]"
                       onClick={(e) => {
                         e.stopPropagation();
                         setLocation("/products");
@@ -376,13 +389,13 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                 {desktopImg && !isMobile && (
                   <div className="hidden sm:flex flex-shrink-0 items-center justify-center">
                     <div
-                      className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/10 shadow-2xl backdrop-blur-md transition-transform duration-500 hover:scale-[1.03] hover:shadow-[0_32px_80px_rgba(0,0,0,0.35)]"
-                      style={{ width: 260, height: 240 }}
+                      className="relative overflow-hidden rounded-2xl border border-white/25 bg-white/10 shadow-lg backdrop-blur-sm transition-shadow duration-200 hover:shadow-xl"
+                      style={{ width: 200, height: 186 }}
                     >
                       <img
                         src={desktopImg}
                         alt={banner.title}
-                        className="w-full h-full object-cover"
+                        className="h-full w-full object-cover object-center"
                       />
                       {/* Card inner label */}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-4 py-3">
@@ -410,25 +423,25 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
           <>
             <button
               onClick={(e) => { e.stopPropagation(); prev(); }}
-              className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all"
+              className="absolute left-2.5 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-gray-700 shadow-md transition-opacity duration-200 hover:opacity-100 sm:left-3 sm:h-9 sm:w-9 opacity-90"
               data-testid="button-banner-prev"
             >
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+              <ChevronLeft className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); next(); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all"
+              className="absolute right-2.5 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/92 text-gray-700 shadow-md transition-opacity duration-200 hover:opacity-100 sm:right-3 sm:h-9 sm:w-9 opacity-90"
               data-testid="button-banner-next"
             >
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+              <ChevronRight className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
             </button>
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+            <div className="absolute bottom-2.5 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 sm:bottom-3">
               {banners.map((_, i) => (
                 <button
                   key={i}
                   onClick={(e) => { e.stopPropagation(); setIdx(i); }}
-                  className={`rounded-full transition-all duration-300 ${i === idx ? "w-5 h-2" : "w-2 h-2"}`}
-                  style={{ backgroundColor: i === idx ? GREEN : "rgba(255,255,255,0.6)" }}
+                  className={`h-1.5 rounded-full transition-[width,opacity,background-color] duration-300 ease-out ${i === idx ? "w-5 sm:w-6" : "w-1.5 sm:w-2"}`}
+                  style={{ backgroundColor: i === idx ? GREEN : "rgba(255,255,255,0.55)" }}
                   data-testid={`button-banner-dot-${i}`}
                 />
               ))}
@@ -513,7 +526,7 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
   return (
     <div
       className="relative overflow-hidden bg-black"
-      style={{ height: isMobile ? 480 : 560 }}
+      style={{ height: isMobile ? 380 : 420 }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -528,7 +541,7 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
 
         return (
           <div key={banner.id}
-            className={`absolute inset-0 transition-opacity duration-700 ${i === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"}`}>
+            className={`absolute inset-0 transition-opacity duration-500 ease-out motion-reduce:transition-none ${i === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"}`}>
 
             {/* Video Layer: Cloudflare (iframe) */}
             {cfSrc ? (
@@ -582,7 +595,7 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
             {(b as any).label}
           </span>
         )}
-        <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-tight drop-shadow-2xl">
+        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white leading-tight drop-shadow-lg max-w-4xl">
           {b.title}
         </h2>
         {b.subtitle && (
@@ -595,7 +608,7 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
             {b.ctaButtons.map((cta, ci) => (
               <button key={ci}
                 onClick={() => setLocation(cta.url)}
-                className={`px-6 py-2.5 rounded-full font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-xl ${
+                className={`px-5 py-2.5 rounded-full font-bold text-sm transition-opacity duration-200 hover:opacity-95 active:opacity-100 shadow-lg ${
                   cta.style === "outline"
                     ? "border-2 border-white text-white hover:bg-white/20"
                     : cta.style === "secondary"
@@ -626,18 +639,18 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
       {banners.length > 1 && (
         <>
           <button onClick={prev}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all">
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+            className="absolute left-2.5 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 opacity-90 shadow-md transition-opacity duration-200 hover:opacity-100 sm:left-3 sm:h-9 sm:w-9">
+            <ChevronLeft className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
           </button>
           <button onClick={next}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all">
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+            className="absolute right-2.5 top-1/2 z-30 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 opacity-90 shadow-md transition-opacity duration-200 hover:opacity-100 sm:right-3 sm:h-9 sm:w-9">
+            <ChevronRight className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
           </button>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-30">
+          <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
             {banners.map((_, i) => (
               <button key={i} onClick={() => setIdx(i)}
-                className={`rounded-full transition-all duration-300 ${i === idx ? "w-6 h-2.5" : "w-2.5 h-2.5"}`}
-                style={{ backgroundColor: i === idx ? GREEN : "rgba(255,255,255,0.6)" }} />
+                className={`h-1.5 rounded-full transition-[width,opacity] duration-300 ease-out ${i === idx ? "w-5 sm:w-6" : "w-1.5 sm:w-2"}`}
+                style={{ backgroundColor: i === idx ? GREEN : "rgba(255,255,255,0.55)" }} />
             ))}
           </div>
         </>
