@@ -118,6 +118,13 @@ function handler(req, res) {
     return;
   }
 
+  if (pathname === "/healthz" || pathname === "/ready") {
+    res
+      .writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" })
+      .end(JSON.stringify({ status: "ok", service: "kdf-plus" }));
+    return;
+  }
+
   const filePath = resolveFile(pathname);
   if (!isUnderRoot(filePath) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
@@ -146,10 +153,15 @@ if (!fs.existsSync(root)) {
   process.exit(1);
 }
 
-http
-  .createServer(handler)
-  .listen(port, "0.0.0.0", () => {
-    console.log(
-      `[kdf-plus] static ${listenKey}=${port} root=${root} base=${basePrefix || "/"}`,
-    );
-  });
+console.log(`[kdf-plus] boot cwd=${process.cwd()} pkgRoot=${pkgRoot} distExists=${fs.existsSync(root)}`);
+
+const server = http.createServer(handler);
+server.on("error", (err) => {
+  console.error("[kdf-plus] listen error:", err);
+  process.exit(1);
+});
+server.listen(port, "0.0.0.0", () => {
+  console.log(
+    `[kdf-plus] static ${listenKey}=${port} root=${root} base=${basePrefix || "/"}`,
+  );
+});

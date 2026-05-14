@@ -1,7 +1,11 @@
 # Optional Railway build for @workspace/kdf-plus — official Node image avoids Railpack
 # steps that flake (mise node/pnpm, apt libatomic1) and BuildKit "secret …" errors.
 #
-# Railway: root = repo root. Config: /railway.kdf-plus.json or RAILWAY_DOCKERFILE_PATH=Dockerfile.kdf-plus
+# Railway: Service "Root Directory" MUST be the monorepo root (folder that contains
+# `artifacts/` and this Dockerfile). If Root Directory is `artifacts/kdf-plus`, the
+# image will not build and the app will 502 — there is no Dockerfile inside that folder.
+#
+# Config: /railway.kdf-plus.json or RAILWAY_DOCKERFILE_PATH=Dockerfile.kdf-plus
 #
 # Runtime: static server over dist/public (no vite preview).
 
