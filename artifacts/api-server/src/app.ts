@@ -96,6 +96,11 @@ app.use(
       "X-Request-Id",
       "If-None-Match",
       "If-Modified-Since",
+      /* DevTools / tracing (preflight fails if browser sends these but list is fixed) */
+      "Baggage",
+      "Sentry-Trace",
+      "Traceparent",
+      "Tracestate",
     ],
     optionsSuccessStatus: 204,
     maxAge: 86400, // preflight cache 24 h
@@ -441,6 +446,24 @@ if (process.env.NODE_ENV === "production") {
  * instead of an empty 500 that shows up as "Server returned 500".
  */
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  /* Multer (multipart) — otherwise Express default / empty body confuses the admin UI */
+  if (err && err.name === "MulterError" && typeof err.code === "string") {
+    if (!res.headersSent) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          error: "File too large",
+          detail: err.message ?? "Reduce file size or raise the server limit.",
+        });
+        return;
+      }
+      res.status(400).json({
+        error: "Upload rejected",
+        detail: err.message ?? String(err),
+      });
+    }
+    return;
+  }
+
   const status = typeof err?.status === "number" ? err.status :
                  typeof err?.statusCode === "number" ? err.statusCode : 500;
   const message = err?.message ?? "Internal server error";

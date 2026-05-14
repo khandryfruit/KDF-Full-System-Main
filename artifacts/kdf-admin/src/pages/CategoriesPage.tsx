@@ -40,7 +40,7 @@ function useCategoryImageUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const upload = useCallback(async (file: File): Promise<string | null> => {
+  const upload = useCallback(async (file: File): Promise<string> => {
     setIsUploading(true);
     setProgress(10);
     try {
@@ -55,14 +55,19 @@ function useCategoryImageUpload() {
       });
       setProgress(80);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error || "Upload failed");
+        const err = (await res.json().catch(() => ({}))) as { error?: string; detail?: string; message?: string };
+        const msg = err.detail ?? err.message ?? err.error ?? `Upload failed (HTTP ${res.status})`;
+        throw new Error(msg);
       }
       const data = await res.json();
       setProgress(100);
-      return (data as any).objectPath ?? null;
-    } catch { return null; }
-    finally { setIsUploading(false); setTimeout(() => setProgress(0), 600); }
+      const objectPath = (data as { objectPath?: string }).objectPath;
+      if (!objectPath) throw new Error("Upload succeeded but server returned no image path");
+      return objectPath;
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setProgress(0), 600);
+    }
   }, []);
 
   return { upload, isUploading, progress };
@@ -90,9 +95,17 @@ function CategoryImageUploader({ value, altText, onImageChange, onAltChange }: {
     if (file.size > MAX_MB * 1024 * 1024) {
       toast({ variant: "destructive", title: `Image exceeds ${MAX_MB} MB`, description: "Please compress the image first" }); return;
     }
-    const path = await upload(file);
-    if (path) { onImageChange(path); toast({ title: "Image uploaded", description: "Converted to WebP and saved" }); }
-    else toast({ variant: "destructive", title: "Upload failed", description: "Please try again" });
+    try {
+      const path = await upload(file);
+      onImageChange(path);
+      toast({ title: "Image uploaded", description: "Converted to WebP and saved" });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: e instanceof Error ? e.message : "Please try again",
+      });
+    }
   };
 
   const onDrop = (e: React.DragEvent) => {
