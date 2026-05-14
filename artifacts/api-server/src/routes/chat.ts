@@ -1119,6 +1119,20 @@ router.post("/chat/lead", async (req, res) => {
       visitSource: visitSource || null,
       deviceInfo: deviceInfo || null,
     }).returning();
+
+    /* Ensure admin /api/admin/chat/sessions shows this visitor immediately (Shopify embed + web chat). */
+    const sid = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (sid) {
+      try {
+        const [ex] = await db.select({ id: chatSessionsTable.id }).from(chatSessionsTable).where(eq(chatSessionsTable.sessionId, sid)).limit(1);
+        if (!ex) {
+          await db.insert(chatSessionsTable).values({ sessionId: sid, userId: null, messages: [] });
+        }
+      } catch (e3: any) {
+        logger.warn({ err: e3?.message, sid }, "chat/lead: optional chat_sessions insert skipped");
+      }
+    }
+
     return res.status(201).json(lead);
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
