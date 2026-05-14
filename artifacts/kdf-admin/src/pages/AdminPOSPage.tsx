@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, HelpCircle, Printer, Search, ShoppingCart, Trash2, User } from "lucide-react";
+import { ArrowLeft, HelpCircle, Moon, Printer, Scale, Search, ShoppingCart, Sun, Trash2, User } from "lucide-react";
 import { apiPublicUrl } from "@/lib/apiBase";
 import { toast } from "@/hooks/use-toast";
+import { WALKING_CUSTOMER, isWalkingCustomer } from "@/features/pos/constants";
+import { readRecentCustomers, touchRecentCustomer } from "@/features/pos/recentCustomers";
 import type { CartRow, Customer, PosDraftV1, PosHoldV1, Product } from "@/features/pos/types";
+import { isWeightLikeUnit } from "@/features/pos/weightMoney";
 import { adminFetch } from "@/features/pos/adminFetch";
 import { calcRow, fmtRs, uid } from "@/features/pos/calc";
 import { printBill } from "@/features/pos/printBill";
@@ -19,10 +22,13 @@ import {
   QtyModal,
   RemarksModal,
   SaveBillModal,
+  SellByRsModal,
   UnitModal,
 } from "@/features/pos/PosModals";
 
-type PosModal = null | "qty" | "itemDisc" | "billDisc" | "charges" | "remarks" | "unit" | "save" | "holds";
+type PosModal = null | "qty" | "itemDisc" | "billDisc" | "charges" | "remarks" | "unit" | "save" | "holds" | "sellRs";
+
+type SellRsCtx = { kind: "cart"; rowId: string } | { kind: "product"; product: Product };
 
 function buildDraft(
   cart: CartRow[],
@@ -79,6 +85,9 @@ export default function AdminPOSPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [holds, setHolds] = useState<PosHoldV1[]>(() => listHolds());
   const [mobileSheet, setMobileSheet] = useState<null | "customer">(null);
+  const [sellRsCtx, setSellRsCtx] = useState<SellRsCtx | null>(null);
+  const [recentCust, setRecentCust] = useState<Customer[]>(() => readRecentCustomers());
+  const [posNight, setPosNight] = useState(false);
 
   const draftRestored = useRef(false);
 
@@ -215,6 +224,32 @@ export default function AdminPOSPage() {
     });
   }, []);
 
+  const goSellRsCart = useCallback((explicitRowId?: string | null) => {
+    const rid = explicitRowId ?? selectedRow;
+    const row = cart.find((r) => r.rowId === rid) ?? null;
+    if (!row || !isWeightLikeUnit(row.unit)) {
+      toast({
+        title: "Sell by Rs (weight)",
+        description: "Select a cart line in kg / g / litre, or use Rs on a product in search.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (explicitRowId) setSelected(explicitRowId);
+    setSellRsCtx({ kind: "cart", rowId: row.rowId });
+    setModal("sellRs");
+  }, [cart, selectedRow]);
+
+  const openSellRsProduct = useCallback((p: Product) => {
+    const u = p.unit ?? "kg";
+    if (!isWeightLikeUnit(u)) {
+      toast({ title: "Not weight-priced", description: "Set product unit to kg, g, or litre for Rs-based weight sell.", variant: "destructive" });
+      return;
+    }
+    setSellRsCtx({ kind: "product", product: p });
+    setModal("sellRs");
+  }, []);
+
   const newBillNumber = () => `POS-${Date.now()}`;
 
   const resetSaleState = useCallback(() => {
@@ -277,7 +312,7 @@ export default function AdminPOSPage() {
     writeDraft(buildDraft(cart, selectedRow, billDisc, extraCharges, remarks, customer, billNo));
   }, [billDisc, billNo, cart, customer, extraCharges, remarks, selectedRow]);
 
-  const saveBill = async (payMethod: string, received: number) => {
+  const saveBill = async (payMethod: string, received: number, splitNote?: string | null) => {
     if (cart.length === 0) return;
     setSaving(true);
     try {
@@ -290,14 +325,17 @@ export default function AdminPOSPage() {
         discount: r.discount,
         lineTotal: r.total,
       }));
+      const noteParts = [remarks?.trim(), splitNote?.trim()].filter(Boolean);
+      const fullNotes = noteParts.length ? noteParts.join("\n---\n") : remarks;
+      if (customer && !isWalkingCustomer(customer)) touchRecentCustomer(customer);
       await adminFetch("/api/admin/branch-invoices", {
         method: "POST",
         body: JSON.stringify({
           invoiceNo: billNo,
           type: "pos",
           status: "completed",
-          customerName: customer?.name,
-          customerPhone: customer?.phone,
+          customerName: customer?.name ?? undefined,
+          customerPhone: isWalkingCustomer(customer) ? undefined : customer?.phone,
           items,
           subtotal,
           discountAmt: discAmt,
@@ -305,11 +343,12 @@ export default function AdminPOSPage() {
           paymentMethod: payMethod.toLowerCase().replace(/ /g, "_"),
           paymentStatus: received >= grandTotal ? "paid" : "partial",
           paidAmount: received,
-          notes: remarks,
+          notes: fullNotes || undefined,
           branchId: 1,
         }),
       });
-      printBill(cart, subtotal, billDisc, grandTotal, customer, payMethod, received, billNo, remarks);
+      printBill(cart, subtotal, billDisc, grandTotal, customer, payMethod, received, billNo, fullNotes ?? remarks);
+      setRecentCust(readRecentCustomers());
       clearDraft();
       resetSaleState();
       searchRef.current?.focus();
@@ -341,6 +380,8 @@ export default function AdminPOSPage() {
   addProductRef.current = addProduct;
   const removeRowRef = useRef(removeRow);
   removeRowRef.current = removeRow;
+  const goSellRsCartRef = useRef(goSellRsCart);
+  goSellRsCartRef.current = goSellRsCart;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -357,6 +398,7 @@ export default function AdminPOSPage() {
         }
         if (modalRef.current) {
           e.preventDefault();
+          setSellRsCtx(null);
           setModal(null);
           return;
         }
@@ -372,8 +414,6 @@ export default function AdminPOSPage() {
         return;
       }
 
-      if (modalRef.current) return;
-
       const isHelpChord =
         e.key === "?" ||
         (e.shiftKey && e.key === "/") ||
@@ -388,6 +428,8 @@ export default function AdminPOSPage() {
         }
       }
 
+      if (modalRef.current) return;
+
       if (e.key === "F1") {
         e.preventDefault();
         searchRef.current?.focus();
@@ -397,6 +439,11 @@ export default function AdminPOSPage() {
       if (e.key === "F2") {
         e.preventDefault();
         if (selectedCartRowRef.current) setModal("qty");
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        goSellRsCartRef.current();
         return;
       }
       if (e.key === "F3" && !e.shiftKey) {
@@ -522,7 +569,7 @@ export default function AdminPOSPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [clearAll, persistDraftNow, saveCurrentHold]);
+  }, [clearAll, persistDraftNow, saveCurrentHold, goSellRsCart]);
 
   const openSaveIfCart = () => {
     if (cart.length > 0) setModal("save");
@@ -536,6 +583,15 @@ export default function AdminPOSPage() {
         <span className="hidden truncate text-[11px] text-white/60 sm:inline">{billNo}</span>
       </div>
       <div className="flex-1" />
+      <button
+        type="button"
+        className="rounded-lg border border-white/20 bg-white/10 p-2 text-white/90 backdrop-blur-sm transition hover:bg-white/20"
+        title={posNight ? "Day mode" : "Night mode"}
+        onClick={() => setPosNight((n) => !n)}
+        aria-label="Toggle POS night mode"
+      >
+        {posNight ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
       <button
         type="button"
         className="rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 text-[11px] font-semibold backdrop-blur-sm transition hover:bg-white/20 sm:px-3"
@@ -566,14 +622,16 @@ export default function AdminPOSPage() {
   );
 
   const searchBar = (
-    <div className="relative flex shrink-0 items-center gap-2 border-b-2 border-indigo-800 bg-white px-3 py-2 sm:px-4">
+    <div
+      className={`relative flex shrink-0 items-center gap-2 border-b-2 border-indigo-800 px-3 py-2 sm:px-4 ${posNight ? "border-slate-600 bg-slate-900" : "bg-white"}`}
+    >
       <Search className="h-5 w-5 shrink-0 text-indigo-700" />
       <input
         ref={searchRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search name, SKU, barcode… [F1]"
-        className="min-h-[44px] flex-1 rounded-lg border border-neutral-300 px-3 text-base outline-none ring-indigo-900/15 focus:border-indigo-800 focus:ring-2 sm:min-h-0 sm:py-2 sm:text-sm"
+        className={`min-h-[44px] flex-1 rounded-lg border px-3 text-base outline-none ring-indigo-900/15 focus:border-indigo-800 focus:ring-2 sm:min-h-0 sm:py-2 sm:text-sm ${posNight ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" : "border-neutral-300"}`}
         autoFocus
         onFocus={() => {
           if (products.length > 0) setSearchOpen(true);
@@ -584,13 +642,16 @@ export default function AdminPOSPage() {
       <span className="hidden text-[10px] text-neutral-500 xl:inline">F5 Pay · F7 Hold · ? Help</span>
 
       {searchOpen && products.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-30 max-h-72 overflow-y-auto rounded-b-lg border border-neutral-300 border-t-0 bg-white shadow-lg">
+        <div
+          className={`absolute left-0 right-0 top-full z-30 max-h-72 overflow-y-auto rounded-b-lg border border-t-0 shadow-lg ${posNight ? "border-slate-600 bg-slate-900" : "border-neutral-300 bg-white"}`}
+        >
           {products.map((p, i) => {
             const img = p.images?.[0];
+            const canRs = p.unit != null && String(p.unit).trim() !== "" && isWeightLikeUnit(p.unit);
             return (
               <div
                 key={p.id}
-                className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 ${i === searchIdx ? "bg-indigo-50" : "hover:bg-indigo-50/60"}`}
+                className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 ${i === searchIdx ? (posNight ? "bg-indigo-950/80" : "bg-indigo-50") : posNight ? "hover:bg-slate-800" : "hover:bg-indigo-50/60"}`}
                 onMouseDown={() => addProduct(p)}
               >
                 {img ? (
@@ -599,12 +660,28 @@ export default function AdminPOSPage() {
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-lg">🌰</div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-indigo-950">{p.name}</div>
-                  <div className="truncate text-[11px] text-neutral-600">
+                  <div className={`truncate font-semibold ${posNight ? "text-slate-100" : "text-indigo-950"}`}>{p.name}</div>
+                  <div className={`truncate text-[11px] ${posNight ? "text-slate-400" : "text-neutral-600"}`}>
                     {p.sku ? `SKU ${p.sku}` : `ID ${p.id}`} · {p.stock} {p.unit ?? "pc"}
                   </div>
                 </div>
-                <div className="shrink-0 font-bold text-indigo-900">{fmtRs(parseFloat(p.price))}</div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {canRs && (
+                    <button
+                      type="button"
+                      className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase ${posNight ? "border-amber-500/40 bg-amber-950/50 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-900"}`}
+                      title="Sell by Rs amount (weight)"
+                      onMouseDown={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        openSellRsProduct(p);
+                      }}
+                    >
+                      <Scale className="mx-auto h-3 w-3" /> Rs
+                    </button>
+                  )}
+                  <div className={`shrink-0 font-bold ${posNight ? "text-amber-200" : "text-indigo-900"}`}>{fmtRs(parseFloat(p.price))}</div>
+                </div>
               </div>
             );
           })}
@@ -619,13 +696,81 @@ export default function AdminPOSPage() {
   );
 
   const customerBlock = (
-    <section className="space-y-2 border-b border-neutral-200 bg-neutral-50/80 p-3 sm:p-4">
-      <div className="text-[10px] font-extrabold uppercase tracking-wider text-neutral-500">Customer [F3]</div>
+    <section
+      className={`space-y-2 border-b p-3 sm:p-4 ${posNight ? "border-slate-600 bg-slate-900/80" : "border-neutral-200 bg-neutral-50/80"}`}
+    >
+      <div className={`text-[10px] font-extrabold uppercase tracking-wider ${posNight ? "text-slate-400" : "text-neutral-500"}`}>
+        Customer [F3]
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${isWalkingCustomer(customer) ? "border-amber-500 bg-amber-500/15 text-amber-900" : posNight ? "border-slate-600 bg-slate-800 text-slate-200" : "border-neutral-300 bg-white text-neutral-800"}`}
+          onClick={() => {
+            setCustomer(WALKING_CUSTOMER);
+            setCustQuery("");
+            setCustResults([]);
+          }}
+        >
+          Walking
+        </button>
+        <button
+          type="button"
+          className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${posNight ? "border-slate-600 bg-slate-800 text-slate-200" : "border-neutral-300 bg-white text-neutral-800"}`}
+          onClick={() => {
+            if (isWalkingCustomer(customer)) setCustomer(null);
+            setTimeout(() => custRef.current?.focus(), 0);
+          }}
+        >
+          Saved customer…
+        </button>
+      </div>
+      {recentCust.length > 0 && !customer && (
+        <div className="flex flex-wrap gap-1.5">
+          <span className={`w-full text-[10px] font-bold uppercase ${posNight ? "text-slate-500" : "text-neutral-400"}`}>Recent</span>
+          {recentCust.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`max-w-[140px] truncate rounded-full border px-2.5 py-1 text-[11px] font-semibold ${posNight ? "border-slate-600 bg-slate-800 text-slate-200" : "border-indigo-200 bg-indigo-50 text-indigo-900"}`}
+              onClick={() => {
+                setCustomer(c);
+                touchRecentCustomer(c);
+                setRecentCust(readRecentCustomers());
+              }}
+              title={c.phone ?? c.name}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
       {customer ? (
-        <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-3 py-2">
+        <div
+          className={`flex items-center justify-between rounded-lg border px-3 py-2 ${posNight ? "border-slate-600 bg-slate-800" : "border-neutral-200 bg-white"}`}
+        >
           <div>
-            <div className="font-bold text-indigo-950">{customer.name}</div>
-            {customer.phone && <div className="text-xs text-neutral-600">{customer.phone}</div>}
+            <div className={`font-bold ${posNight ? "text-slate-100" : "text-indigo-950"}`}>
+              {customer.name}
+              {isWalkingCustomer(customer) && (
+                <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">Walk-in</span>
+              )}
+            </div>
+            {!isWalkingCustomer(customer) && customer.phone && (
+              <div className={`text-xs ${posNight ? "text-slate-400" : "text-neutral-600"}`}>{customer.phone}</div>
+            )}
+            {isWalkingCustomer(customer) && (
+              <button
+                type="button"
+                className="mt-2 text-left text-xs font-semibold text-indigo-600 hover:underline"
+                onClick={() => {
+                  setCustomer(null);
+                  setTimeout(() => custRef.current?.focus(), 0);
+                }}
+              >
+                Use saved customer instead →
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -639,25 +784,29 @@ export default function AdminPOSPage() {
           </button>
         </div>
       ) : (
-        <div className="relative rounded-lg border border-neutral-200 bg-white px-3 py-2">
+        <div className={`relative rounded-lg border px-3 py-2 ${posNight ? "border-slate-600 bg-slate-800" : "border-neutral-200 bg-white"}`}>
           <input
             ref={custRef}
             value={custQuery}
             onChange={(e) => setCustQuery(e.target.value)}
             placeholder="Name / phone…"
-            className="w-full border-0 bg-transparent text-sm outline-none"
+            className={`w-full border-0 bg-transparent text-sm outline-none ${posNight ? "text-slate-100 placeholder:text-slate-500" : ""}`}
           />
           {custResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-md">
+            <div
+              className={`absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border shadow-md ${posNight ? "border-slate-600 bg-slate-900" : "border-neutral-200 bg-white"}`}
+            >
               {custResults.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  className="block w-full border-b border-neutral-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-indigo-50"
+                  className={`block w-full border-b px-3 py-2 text-left text-sm last:border-0 ${posNight ? "border-slate-700 hover:bg-slate-800" : "border-neutral-100 hover:bg-indigo-50"}`}
                   onMouseDown={() => {
                     setCustomer(c);
                     setCustQuery("");
                     setCustResults([]);
+                    touchRecentCustomer(c);
+                    setRecentCust(readRecentCustomers());
                   }}
                 >
                   <strong>{c.name}</strong>
@@ -666,7 +815,9 @@ export default function AdminPOSPage() {
               ))}
             </div>
           )}
-          {custSearching && <div className="mt-1 text-[10px] text-neutral-500">Searching…</div>}
+          {custSearching && (
+            <div className={`mt-1 text-[10px] ${posNight ? "text-slate-500" : "text-neutral-500"}`}>Searching…</div>
+          )}
         </div>
       )}
     </section>
@@ -757,6 +908,18 @@ export default function AdminPOSPage() {
                 <td className="px-2 py-2">
                   <div className="font-semibold text-indigo-950">{row.name}</div>
                   {row.discount > 0 && <div className="text-[10px] text-orange-700">-{row.discount}%</div>}
+                  {isWeightLikeUnit(row.unit) && (
+                    <button
+                      type="button"
+                      className="mt-1 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-900"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        goSellRsCart(row.rowId);
+                      }}
+                    >
+                      Rs → weight
+                    </button>
+                  )}
                 </td>
                 <td className="px-1 py-1 text-center" onClick={(ev) => ev.stopPropagation()}>
                   <input
@@ -827,6 +990,18 @@ export default function AdminPOSPage() {
                 />
               </label>
               <span className="text-sm text-neutral-600">{row.unit}</span>
+              {isWeightLikeUnit(row.unit) && (
+                <button
+                  type="button"
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goSellRsCart(row.rowId);
+                  }}
+                >
+                  Rs → weight
+                </button>
+              )}
               <button
                 type="button"
                 className="ml-auto rounded-lg bg-red-50 px-4 py-2 text-sm font-bold text-red-600"
@@ -849,6 +1024,7 @@ export default function AdminPOSPage() {
       {[
         { k: "F1", l: "Search", fn: () => searchRef.current?.focus() },
         { k: "F2", l: "Qty", fn: () => selectedCartRow && setModal("qty"), dis: !selectedCartRow },
+        { k: "⌃⇧R", l: "Rs→kg", fn: () => goSellRsCart(), dis: !selectedCartRow || !isWeightLikeUnit(selectedCartRow.unit) },
         { k: "F3", l: "Customer", fn: () => custRef.current?.focus() },
         { k: "⇧F3", l: "Line %", fn: () => selectedCartRow && setModal("itemDisc"), dis: !selectedCartRow },
         { k: "F4", l: "Remove", fn: () => selectedRow && removeRow(selectedRow), dis: !selectedRow },
@@ -888,7 +1064,10 @@ export default function AdminPOSPage() {
   );
 
   return (
-    <div className="pos-root flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-b from-neutral-100 to-neutral-200 font-sans">
+    <div
+      className={`pos-root flex h-[100dvh] flex-col overflow-hidden font-sans ${posNight ? "bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100" : "bg-gradient-to-b from-neutral-100 to-neutral-200"}`}
+      data-pos-night={posNight ? "true" : "false"}
+    >
       <style>{`
         .pos-root .pos-modal { background: white; border-radius: 16px; box-shadow: 0 24px 48px rgba(0,0,0,0.2); width: 420px; max-width: 92vw; overflow: hidden; }
         .pos-modal-title { background: #1a237e; color: white; padding: 14px 20px; font-weight: 800; font-size: 15px; }
@@ -914,8 +1093,8 @@ export default function AdminPOSPage() {
 
       {!isMobile ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-r border-neutral-200 bg-white">
-            <div className="flex items-center justify-between gap-2 border-b border-neutral-100 bg-white px-3 py-2">
+          <div className={`flex min-w-0 flex-1 flex-col overflow-hidden border-r border-neutral-200 ${posNight ? "border-slate-700 bg-slate-900" : "bg-white"}`}>
+            <div className={`flex items-center justify-between gap-2 border-b px-3 py-2 ${posNight ? "border-slate-700 bg-slate-900" : "border-neutral-100 bg-white"}`}>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
@@ -928,13 +1107,13 @@ export default function AdminPOSPage() {
             {searchBar}
             {cartTable}
           </div>
-          <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-neutral-50 lg:w-[320px]">
-            <div className="border-b border-neutral-200 px-3 py-2 text-xs text-neutral-600">
+          <aside className={`flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-neutral-200 lg:w-[320px] ${posNight ? "border-slate-700 bg-slate-900" : "bg-neutral-50"}`}>
+            <div className={`border-b px-3 py-2 text-xs ${posNight ? "border-slate-700 text-slate-400" : "border-neutral-200 text-neutral-600"}`}>
               {new Date().toLocaleDateString("en-PK", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
             </div>
             {customerBlock}
             {billSummary}
-            <div className="border-t-2 border-indigo-900 bg-white p-3">
+            <div className={`border-t-2 border-indigo-900 p-3 ${posNight ? "border-indigo-500 bg-slate-800" : "bg-white"}`}>
               <button
                 type="button"
                 disabled={cart.length === 0}
@@ -1038,9 +1217,53 @@ export default function AdminPOSPage() {
           grandTotal={grandTotal}
           saving={saving}
           onClose={() => setModal(null)}
-          onSave={saveBill}
+          onSave={(method, received, splitNote) => saveBill(method, received, splitNote)}
         />
       )}
+      {modal === "sellRs" && sellRsCtx && (() => {
+        const row = sellRsCtx.kind === "cart" ? cart.find((r) => r.rowId === sellRsCtx.rowId) ?? null : null;
+        const title = sellRsCtx.kind === "cart" ? row?.name ?? "" : sellRsCtx.product.name;
+        const price = sellRsCtx.kind === "cart" ? row?.pricePerUnit ?? 0 : parseFloat(sellRsCtx.product.price ?? "0");
+        const unit = sellRsCtx.kind === "cart" ? row?.unit ?? "kg" : sellRsCtx.product.unit ?? "kg";
+        if (!title) return null;
+        return (
+          <SellByRsModal
+            title={title}
+            pricePerUnit={price}
+            unit={unit}
+            onClose={() => {
+              setModal(null);
+              setSellRsCtx(null);
+            }}
+            onApply={(rs, qtyKg) => {
+              if (sellRsCtx.kind === "cart") {
+                updateRow(sellRsCtx.rowId, { qty: qtyKg, unit: "kg" });
+              } else if (sellRsCtx.kind === "product") {
+                const p = sellRsCtx.product;
+                const nu = calcRow({
+                  rowId: uid(),
+                  productId: p.id,
+                  sku: p.sku ?? `P${p.id}`,
+                  name: p.name,
+                  qty: qtyKg,
+                  unit: "kg",
+                  pricePerUnit: parseFloat(p.price ?? "0"),
+                  discount: 0,
+                  total: 0,
+                });
+                setCart((prev) => [...prev, nu]);
+                setSelected(nu.rowId);
+              }
+              setQuery("");
+              setProducts([]);
+              setSearchOpen(false);
+              setModal(null);
+              setSellRsCtx(null);
+              searchRef.current?.focus();
+            }}
+          />
+        );
+      })()}
       {modal === "holds" && <HoldsModal holds={holds} onClose={() => setModal(null)} onResume={resumeHold} />}
 
       <PosShortcutsOverlay open={showHelp} onClose={() => setShowHelp(false)} />

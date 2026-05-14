@@ -8,8 +8,8 @@
     "android": "expo run:android",
     "build": "echo 'Mobile app — no web build required for deployment'",
     "build:preview": "eas build -p android --profile preview",
-    "build:apk": "eas build -p android --profile production-apk",
-    "build:aab": "eas build -p android --profile production",
+    "build:apk": "eas build -p android --profile production --non-interactive",
+    "build:play-store": "eas build -p android --profile play-store --non-interactive",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { CartRow, PosHoldV1 } from "./types";
 import { fmtRs } from "./calc";
+import { formatWeightFromKg, pricePerKgFromRow, qtyKgFromRupees } from "./weightMoney";
 
 export function Overlay({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   return (
@@ -302,6 +303,78 @@ export function UnitModal({
   );
 }
 
+export function SellByRsModal({
+  title,
+  pricePerUnit,
+  unit,
+  onClose,
+  onApply,
+}: {
+  title: string;
+  pricePerUnit: number;
+  unit: string;
+  onClose: () => void;
+  onApply: (rs: number, qtyKg: number) => void;
+}) {
+  const [rs, setRs] = useState("");
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    ref.current?.select();
+  }, []);
+  const amount = Math.max(0, parseFloat(rs) || 0);
+  const qtyKg = qtyKgFromRupees(pricePerUnit, unit, amount);
+  const ppk = pricePerKgFromRow(pricePerUnit, unit);
+  const preview = formatWeightFromKg(qtyKg);
+  return (
+    <Overlay onClose={onClose}>
+      <div className="pos-modal max-w-[440px]">
+        <h3 className="pos-modal-title">Sell by amount (Rs) — {title}</h3>
+        <div className="pos-modal-body space-y-3">
+          <p className="text-muted text-center text-xs">
+            Rate ≈ {fmtRs(ppk)} per kg · row unit: <strong>{unit}</strong>
+          </p>
+          <label className="pos-label">Customer pays (Rs)</label>
+          <input
+            ref={ref}
+            type="number"
+            min="0"
+            step="any"
+            value={rs}
+            onChange={(e) => setRs(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && amount > 0 && qtyKg > 0) onApply(amount, qtyKg);
+              if (e.key === "Escape") onClose();
+            }}
+            className="pos-input w-full text-center text-2xl font-bold"
+            placeholder="e.g. 300"
+          />
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 p-4 text-center">
+            <div className="text-xs font-bold uppercase tracking-wide text-indigo-800">Live weight</div>
+            <div className="mt-1 text-2xl font-black text-indigo-950">{amount > 0 ? preview : "—"}</div>
+            <div className="mt-2 text-sm text-indigo-900/90">
+              Qty (kg): <strong>{qtyKg > 0 ? qtyKg.toFixed(4).replace(/\.?0+$/, "") : "—"}</strong>
+            </div>
+            <div className="mt-1 text-xs text-indigo-800/80">Sale value (entered): {fmtRs(amount)}</div>
+          </div>
+        </div>
+        <div className="pos-modal-footer">
+          <button type="button" className="pos-btn-ghost" onClick={onClose}>
+            Cancel [Esc]
+          </button>
+          <button
+            type="button"
+            className="pos-btn-primary"
+            disabled={amount <= 0 || qtyKg <= 0}
+            onClick={() => onApply(amount, qtyKg)}
+          >
+            Add to bill [Enter]
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
 export function SaveBillModal({
   subtotal,
   billDisc,
@@ -317,15 +390,23 @@ export function SaveBillModal({
   grandTotal: number;
   onClose: () => void;
   saving: boolean;
-  onSave: (method: string, received: number) => void;
+  onSave: (method: string, received: number, splitNote?: string | null) => void;
 }) {
   const [method, setMethod] = useState("Cash");
   const [received, setReceived] = useState(String(Math.ceil(grandTotal)));
+  const [split, setSplit] = useState(false);
+  const [methodB, setMethodB] = useState("Card");
+  const [amountA, setAmountA] = useState("");
+  const [amountB, setAmountB] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.select();
   }, []);
   const change = Math.max(0, parseFloat(received) - grandTotal);
+  const a = split ? parseFloat(amountA) || 0 : parseFloat(received) || 0;
+  const b = split ? parseFloat(amountB) || 0 : 0;
+  const splitSum = split ? a + b : parseFloat(received) || 0;
+  const splitOk = !split || splitSum + 1e-6 >= grandTotal;
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal max-w-[440px]">
@@ -370,27 +451,106 @@ export function SaveBillModal({
               ))}
             </div>
           </div>
-          <div>
-            <label className="pos-label">Amount Received (Rs.)</label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
             <input
-              ref={ref}
-              type="number"
-              min="0"
-              value={received}
-              onChange={(e) => setReceived(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onSave(method, parseFloat(received) || grandTotal);
-                if (e.key === "Escape") onClose();
+              type="checkbox"
+              checked={split}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setSplit(on);
+                if (on) {
+                  const a = Math.ceil(grandTotal / 2);
+                  setAmountA(String(a));
+                  setAmountB(String(Math.max(0, Math.round((grandTotal - a) * 100) / 100)));
+                }
               }}
-              className="pos-input w-full text-center text-2xl font-bold"
+              className="h-4 w-4 rounded"
             />
-          </div>
+            Split payment (two methods)
+          </label>
+          {!split ? (
+            <div>
+              <label className="pos-label">Amount Received (Rs.)</label>
+              <input
+                ref={ref}
+                type="number"
+                min="0"
+                value={received}
+                onChange={(e) => setReceived(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && splitOk) onSave(method, parseFloat(received) || grandTotal, null);
+                  if (e.key === "Escape") onClose();
+                }}
+                className="pos-input w-full text-center text-2xl font-bold"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="pos-label">Method A</label>
+                  <select
+                    value={method}
+                    onChange={(e) => setMethod(e.target.value)}
+                    className="pos-input w-full py-2 text-sm font-semibold"
+                  >
+                    {["Cash", "Card", "Transfer", "EasyPaisa", "JazzCash", "Credit"].map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="pos-label">Method B</label>
+                  <select
+                    value={methodB}
+                    onChange={(e) => setMethodB(e.target.value)}
+                    className="pos-input w-full py-2 text-sm font-semibold"
+                  >
+                    {["Cash", "Card", "Transfer", "EasyPaisa", "JazzCash", "Credit"].map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="pos-label">Amount A (Rs)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={amountA}
+                    onChange={(e) => setAmountA(e.target.value)}
+                    className="pos-input w-full text-center text-xl font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="pos-label">Amount B (Rs)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={amountB}
+                    onChange={(e) => setAmountB(e.target.value)}
+                    className="pos-input w-full text-center text-xl font-bold"
+                  />
+                </div>
+              </div>
+              <p className={`text-center text-sm font-semibold ${splitOk ? "text-green-700" : "text-red-600"}`}>
+                Total tendered: {fmtRs(splitSum)} {splitOk ? "" : `(need ≥ ${fmtRs(grandTotal)})`}
+              </p>
+            </div>
+          )}
           <div
             className={`rounded-xl p-3 text-center text-lg font-black ${
-              change > 0 ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-500"
+              !split && change > 0 ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-500"
             }`}
           >
-            Change to Return: {fmtRs(change)}
+            {!split ? <>Change to Return: {fmtRs(change)}</> : <>Split mode — change applies to cash leg only in store policy</>}
           </div>
         </div>
         <div className="pos-modal-footer">
@@ -400,8 +560,15 @@ export function SaveBillModal({
           <button
             type="button"
             className="pos-btn-primary"
-            disabled={saving}
-            onClick={() => onSave(method, parseFloat(received) || grandTotal)}
+            disabled={saving || !splitOk}
+            onClick={() => {
+              if (!split) {
+                onSave(method, parseFloat(received) || grandTotal, null);
+                return;
+              }
+              const note = `Split: ${method} ${fmtRs(a)} · ${methodB} ${fmtRs(b)}`;
+              onSave(`${method}+${methodB}`, splitSum, note);
+            }}
           >
             {saving ? "Saving…" : "🖨 Save & Print [Enter]"}
           </button>

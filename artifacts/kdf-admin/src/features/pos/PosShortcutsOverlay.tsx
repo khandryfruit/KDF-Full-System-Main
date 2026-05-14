@@ -3,7 +3,7 @@ import { Keyboard } from "lucide-react";
 
 const ROWS: { keys: string; action: string }[] = [
   { keys: "F1", action: "Focus product search" },
-  { keys: "F2", action: "Change quantity (selected row)" },
+  { keys: "Ctrl + Shift + R / ⌘⇧R", action: "Sell by Rs amount → weight (selected weight line)" },
   { keys: "F3", action: "Focus customer search / attach" },
   { keys: "Shift + F3", action: "Item discount (when a row is selected)" },
   { keys: "F4", action: "Remove selected line" },

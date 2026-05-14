@@ -1,0 +1,55 @@
+---
+description: KDF Rider (Expo) EAS Android builds — API host, paths, and commands
+globs: artifacts/kdf-mobile/**/*
+alwaysApply: false
+---
+
+# KDF Rider app — permanent EAS / API rules
+
+## Project path
+
+All Rider work and builds start from:
+
+`artifacts/kdf-mobile`
+
+## Production API (non-negotiable)
+
+- **Always** bake: `EXPO_PUBLIC_API_URL=https://api.khanbabadryfruits.com`
+- **Never** use `https://khanbabadryfruits.com` (or `www`) as the Rider **API** base — that is the storefront/static host; Rider auth and `/api/*` must hit **Express api-server** only.
+- `eas.json` must keep that env on **every** build profile that ships to real riders (`development` / `preview` / `production` / `play-store`).
+- `context/AuthContext.tsx` already remaps storefront/admin hosts to `https://api.khanbabadryfruits.com`; do not remove that guard.
+
+`app.json` `expo-router` **origin** may stay `https://khanbabadryfruits.com/` for deep links — that is not the API URL.
+
+## Standard production APK build (Expo cloud)
+
+From `artifacts/kdf-mobile`:
+
+```bash
+npx eas-cli@latest build -p android --profile production --non-interactive
+```
+
+- **`production`** profile = **internal distribution + release APK** + production API URL (see `eas.json`).
+- For **Google Play AAB**, use profile **`play-store`** (or `pnpm run build:play-store`).
+
+## Before building
+
+Confirm API is up:
+
+```bash
+curl -sS "https://api.khanbabadryfruits.com/api/healthz"
+```
+
+Expected body includes: `"status":"ok"` and `"service":"@workspace/api-server"`.
+
+## Expo auth (local / CI)
+
+- Set `EXPO_TOKEN` in the environment when running non-interactive builds (EAS account token).
+- Builds upload to Expo; download the APK from the Expo build page (or EAS CLI artifacts).
+
+## Goal workflow after code changes
+
+1. Update code under `artifacts/kdf-mobile`
+2. Run the EAS command above (or `pnpm run build:apk`)
+3. Download APK from Expo
+4. Install on devices

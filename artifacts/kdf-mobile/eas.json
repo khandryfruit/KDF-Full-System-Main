@@ -25,19 +25,19 @@
       }
     },
     "production": {
-      "distribution": "store",
+      "distribution": "internal",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
       }
     },
-    "production-apk": {
-      "distribution": "internal",
+    "play-store": {
+      "distribution": "store",
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.khanbabadryfruits.com"
