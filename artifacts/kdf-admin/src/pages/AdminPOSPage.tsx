@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, HelpCircle, Moon, Printer, Scale, Search, ShoppingCart, Sun, Trash2, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  HelpCircle,
+  Mic,
+  Moon,
+  Printer,
+  Scale,
+  Search,
+  ShoppingCart,
+  Sun,
+  Trash2,
+  User,
+} from "lucide-react";
 import { apiPublicUrl } from "@/lib/apiBase";
 import { toast } from "@/hooks/use-toast";
 import { WALKING_CUSTOMER, isWalkingCustomer } from "@/features/pos/constants";
@@ -10,6 +23,7 @@ import { isWeightLikeUnit } from "@/features/pos/weightMoney";
 import { adminFetch } from "@/features/pos/adminFetch";
 import { calcRow, fmtRs, uid } from "@/features/pos/calc";
 import { printBill } from "@/features/pos/printBill";
+import { getCachedProductSearch, setCachedProductSearch } from "@/features/pos/productSearchCache";
 import { clearDraft, readDraft, writeDraft } from "@/features/pos/draftStorage";
 import { listHolds, pushHold, removeHoldById } from "@/features/pos/holdsStorage";
 import { PosShortcutsOverlay } from "@/features/pos/PosShortcutsOverlay";
@@ -34,8 +48,11 @@ function buildDraft(
   cart: CartRow[],
   selectedRow: string | null,
   billDisc: number,
-  extraCharges: number,
+  billDiscFixedRs: number,
+  packingCharge: number,
+  shippingCharge: number,
   remarks: string,
+  internalNotes: string,
   customer: Customer | null,
   billNo: string,
 ): PosDraftV1 {
@@ -44,8 +61,12 @@ function buildDraft(
     cart,
     selectedRow,
     billDisc,
-    extraCharges,
+    billDiscFixedRs,
+    packingCharge,
+    shippingCharge,
+    extraCharges: packingCharge + shippingCharge,
     remarks,
+    internalNotes,
     customer,
     billNo,
   };
@@ -63,8 +84,11 @@ export default function AdminPOSPage() {
   const [cart, setCart] = useState<CartRow[]>([]);
   const [selectedRow, setSelected] = useState<string | null>(null);
   const [billDisc, setBillDisc] = useState(0);
-  const [extraCharges, setExtra] = useState(0);
+  const [billDiscFixedRs, setBillDiscFixedRs] = useState(0);
+  const [packingCharge, setPackingCharge] = useState(0);
+  const [shippingCharge, setShippingCharge] = useState(0);
   const [remarks, setRemarks] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
   const [billNo, setBillNo] = useState(() => `POS-${Date.now()}`);
 
   const [query, setQuery] = useState("");
@@ -73,6 +97,7 @@ export default function AdminPOSPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIdx, setSearchIdx] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [custQuery, setCustQuery] = useState("");
@@ -100,8 +125,11 @@ export default function AdminPOSPage() {
     setCart(d.cart);
     setSelected(d.selectedRow);
     setBillDisc(d.billDisc);
-    setExtra(d.extraCharges);
+    setBillDiscFixedRs(typeof d.billDiscFixedRs === "number" ? d.billDiscFixedRs : 0);
+    setPackingCharge(typeof d.packingCharge === "number" ? d.packingCharge : 0);
+    setShippingCharge(typeof d.shippingCharge === "number" ? d.shippingCharge : 0);
     setRemarks(d.remarks);
+    setInternalNotes(typeof d.internalNotes === "string" ? d.internalNotes : "");
     setCustomer(d.customer);
     setBillNo(d.billNo);
   }, [token]);
@@ -110,12 +138,25 @@ export default function AdminPOSPage() {
   useEffect(() => {
     if (!token) return;
     const t = window.setTimeout(() => {
-      writeDraft(buildDraft(cart, selectedRow, billDisc, extraCharges, remarks, customer, billNo));
+      writeDraft(
+        buildDraft(
+          cart,
+          selectedRow,
+          billDisc,
+          billDiscFixedRs,
+          packingCharge,
+          shippingCharge,
+          remarks,
+          internalNotes,
+          customer,
+          billNo,
+        ),
+      );
     }, 200);
     return () => clearTimeout(t);
-  }, [token, cart, selectedRow, billDisc, extraCharges, remarks, customer, billNo]);
+  }, [token, cart, selectedRow, billDisc, billDiscFixedRs, packingCharge, shippingCharge, remarks, internalNotes, customer, billNo]);
 
-  /* Product search — 100ms debounce, limit 40 */
+  /* Product search — 50ms debounce, limit 40, memory cache fallback */
   useEffect(() => {
     if (!query.trim()) {
       setProducts([]);
@@ -125,21 +166,29 @@ export default function AdminPOSPage() {
     setSearching(true);
     const ac = new AbortController();
     const timer = window.setTimeout(async () => {
+      const q = query.trim();
       try {
-        const url = apiPublicUrl(`/api/products?search=${encodeURIComponent(query)}&limit=40`);
+        const url = apiPublicUrl(`/api/products?search=${encodeURIComponent(q)}&limit=40`);
         const r = await fetch(url, { signal: ac.signal });
         const d = (await r.json()) as { items?: Product[] };
         if (!ac.signal.aborted) {
-          setProducts(d.items ?? []);
+          const items = d.items ?? [];
+          setProducts(items);
+          setCachedProductSearch(q, items);
           setSearchOpen(true);
           setSearchIdx(0);
         }
       } catch {
-        if (!ac.signal.aborted) setProducts([]);
+        if (!ac.signal.aborted) {
+          const cached = getCachedProductSearch(q);
+          setProducts(cached ?? []);
+          setSearchOpen(Boolean(cached?.length));
+          setSearchIdx(0);
+        }
       } finally {
         if (!ac.signal.aborted) setSearching(false);
       }
-    }, 100);
+    }, 50);
     return () => {
       clearTimeout(timer);
       ac.abort();
@@ -177,9 +226,66 @@ export default function AdminPOSPage() {
   }, [custQuery]);
 
   const subtotal = cart.reduce((s, r) => s + r.total, 0);
-  const discAmt = (subtotal * billDisc) / 100;
+  const extraCharges = packingCharge + shippingCharge;
+  const discAmt =
+    billDiscFixedRs > 0 ? Math.min(subtotal, billDiscFixedRs) : (subtotal * billDisc) / 100;
   const grandTotal = subtotal - discAmt + extraCharges;
+  const billDiscountLabel =
+    billDiscFixedRs > 0 ? `Fixed ${fmtRs(billDiscFixedRs)}` : billDisc > 0 ? `${billDisc}%` : "";
   const selectedCartRow = cart.find((r) => r.rowId === selectedRow) ?? null;
+
+  const startVoiceSearch = useCallback(() => {
+    type WithSpeech = Window & { webkitSpeechRecognition?: new () => { lang: string; interimResults: boolean; maxAlternatives: number; start: () => void; onresult: ((e: Event) => void) | null; onerror: (() => void) | null }; SpeechRecognition?: new () => { lang: string; interimResults: boolean; maxAlternatives: number; start: () => void; onresult: ((e: Event) => void) | null; onerror: (() => void) | null } };
+    const w = window as WithSpeech;
+    const SR = w.webkitSpeechRecognition ?? w.SpeechRecognition;
+    if (!SR) {
+      toast({
+        title: "Voice search unavailable",
+        description: "Try Chrome/Edge over HTTPS.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-PK";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e: Event) => {
+      const ev = e as unknown as { results: { 0: { 0: { transcript: string } } } };
+      const t = ev.results[0]?.[0]?.transcript?.trim();
+      if (t) setQuery(t);
+    };
+    rec.onerror = () => toast({ title: "Voice error", variant: "destructive" });
+    rec.start();
+  }, []);
+
+  const decodeBarcodeFromFile = useCallback(async (file: File) => {
+    type BDType = new (opts: { formats: string[] }) => { detect: (src: ImageBitmapSource) => Promise<{ rawValue?: string }[]> };
+    const BD = (window as unknown as { BarcodeDetector?: BDType }).BarcodeDetector;
+    if (!BD) {
+      toast({
+        title: "Camera scan unavailable",
+        description: "Use a supported browser or type SKU / barcode.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const bmp = await createImageBitmap(file);
+      const det = new BD({ formats: ["code_128", "ean_13", "ean_8", "qr_code", "upc_a", "upc_e", "itf"] });
+      const codes = await det.detect(bmp);
+      bmp.close?.();
+      const raw = codes[0]?.rawValue?.trim();
+      if (raw) {
+        setQuery(raw);
+        setSearchOpen(true);
+        searchRef.current?.focus();
+        toast({ title: "Code captured", description: raw });
+      } else toast({ title: "No barcode found", variant: "destructive" });
+    } catch {
+      toast({ title: "Scan failed", variant: "destructive" });
+    }
+  }, []);
 
   const refreshHolds = useCallback(() => setHolds(listHolds()), []);
 
@@ -256,8 +362,11 @@ export default function AdminPOSPage() {
     setCart([]);
     setSelected(null);
     setBillDisc(0);
-    setExtra(0);
+    setBillDiscFixedRs(0);
+    setPackingCharge(0);
+    setShippingCharge(0);
     setRemarks("");
+    setInternalNotes("");
     setCustomer(null);
     setCustQuery("");
     setCustResults([]);
@@ -280,8 +389,12 @@ export default function AdminPOSPage() {
       cart: cart.map((r) => ({ ...r })),
       selectedRow,
       billDisc,
-      extraCharges,
+      billDiscFixedRs,
+      packingCharge,
+      shippingCharge,
+      extraCharges: packingCharge + shippingCharge,
       remarks,
+      internalNotes,
       customer,
     };
     pushHold(hold);
@@ -289,7 +402,7 @@ export default function AdminPOSPage() {
     resetSaleState();
     toast({ title: "Sale held", description: "Cart cleared. Open Holds to resume." });
     searchRef.current?.focus();
-  }, [billNo, billDisc, cart, customer, extraCharges, refreshHolds, remarks, resetSaleState, selectedRow]);
+  }, [billNo, billDisc, billDiscFixedRs, packingCharge, shippingCharge, cart, customer, refreshHolds, remarks, internalNotes, resetSaleState, selectedRow]);
 
   const resumeHold = useCallback((id: string) => {
     const h = listHolds().find((x) => x.id === id);
@@ -299,8 +412,11 @@ export default function AdminPOSPage() {
     setCart(h.cart.map((r) => ({ ...r })));
     setSelected(h.selectedRow && h.cart.some((r) => r.rowId === h.selectedRow) ? h.selectedRow : (h.cart[0]?.rowId ?? null));
     setBillDisc(h.billDisc);
-    setExtra(h.extraCharges);
+    setBillDiscFixedRs(typeof h.billDiscFixedRs === "number" ? h.billDiscFixedRs : 0);
+    setPackingCharge(typeof h.packingCharge === "number" ? h.packingCharge : 0);
+    setShippingCharge(typeof h.shippingCharge === "number" ? h.shippingCharge : 0);
     setRemarks(h.remarks);
+    setInternalNotes(typeof h.internalNotes === "string" ? h.internalNotes : "");
     setCustomer(h.customer);
     setBillNo(h.billNo);
     setModal(null);
@@ -309,8 +425,21 @@ export default function AdminPOSPage() {
   }, [refreshHolds]);
 
   const persistDraftNow = useCallback(() => {
-    writeDraft(buildDraft(cart, selectedRow, billDisc, extraCharges, remarks, customer, billNo));
-  }, [billDisc, billNo, cart, customer, extraCharges, remarks, selectedRow]);
+    writeDraft(
+      buildDraft(
+        cart,
+        selectedRow,
+        billDisc,
+        billDiscFixedRs,
+        packingCharge,
+        shippingCharge,
+        remarks,
+        internalNotes,
+        customer,
+        billNo,
+      ),
+    );
+  }, [billDisc, billDiscFixedRs, billNo, cart, customer, internalNotes, packingCharge, remarks, selectedRow, shippingCharge]);
 
   const saveBill = async (payMethod: string, received: number, splitNote?: string | null) => {
     if (cart.length === 0) return;
@@ -326,8 +455,11 @@ export default function AdminPOSPage() {
         lineTotal: r.total,
       }));
       const noteParts = [remarks?.trim(), splitNote?.trim()].filter(Boolean);
+      if (packingCharge > 0) noteParts.unshift(`Packing: Rs ${packingCharge.toFixed(0)}`);
+      if (internalNotes?.trim()) noteParts.push(`[Internal] ${internalNotes.trim()}`);
       const fullNotes = noteParts.length ? noteParts.join("\n---\n") : remarks;
       if (customer && !isWalkingCustomer(customer)) touchRecentCustomer(customer);
+      const discountPctReport = subtotal > 0 ? Math.round((discAmt / subtotal) * 10000) / 100 : 0;
       await adminFetch("/api/admin/branch-invoices", {
         method: "POST",
         body: JSON.stringify({
@@ -338,7 +470,9 @@ export default function AdminPOSPage() {
           customerPhone: isWalkingCustomer(customer) ? undefined : customer?.phone,
           items,
           subtotal,
+          discountPct: discountPctReport,
           discountAmt: discAmt,
+          shipping: shippingCharge,
           grandTotal,
           paymentMethod: payMethod.toLowerCase().replace(/ /g, "_"),
           paymentStatus: received >= grandTotal ? "paid" : "partial",
@@ -347,7 +481,14 @@ export default function AdminPOSPage() {
           branchId: 1,
         }),
       });
-      printBill(cart, subtotal, billDisc, grandTotal, customer, payMethod, received, billNo, fullNotes ?? remarks);
+      printBill(cart, subtotal, grandTotal, customer, payMethod, received, billNo, fullNotes ?? remarks, {
+        billDiscPct: billDisc,
+        billDiscFixedRs,
+        discAmt,
+        packingRs: packingCharge,
+        shippingRs: shippingCharge,
+        internalNotes,
+      });
       setRecentCust(readRecentCustomers());
       clearDraft();
       resetSaleState();
@@ -623,15 +764,27 @@ export default function AdminPOSPage() {
 
   const searchBar = (
     <div
-      className={`relative flex shrink-0 items-center gap-2 border-b-2 border-indigo-800 px-3 py-2 sm:px-4 ${posNight ? "border-slate-600 bg-slate-900" : "bg-white"}`}
+      className={`relative flex shrink-0 items-center gap-2 border-b-2 border-indigo-800 px-3 py-2.5 sm:px-4 ${posNight ? "border-slate-600 bg-slate-900" : "bg-white"}`}
     >
+      <input
+        ref={barcodeInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (f) await decodeBarcodeFromFile(f);
+          e.target.value = "";
+        }}
+      />
       <Search className="h-5 w-5 shrink-0 text-indigo-700" />
       <input
         ref={searchRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search name, SKU, barcode… [F1]"
-        className={`min-h-[44px] flex-1 rounded-lg border px-3 text-base outline-none ring-indigo-900/15 focus:border-indigo-800 focus:ring-2 sm:min-h-0 sm:py-2 sm:text-sm ${posNight ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" : "border-neutral-300"}`}
+        className={`min-h-[48px] flex-1 rounded-xl border px-3 text-base outline-none ring-indigo-900/15 focus:border-indigo-800 focus:ring-2 sm:min-h-0 sm:py-2 sm:text-sm ${posNight ? "border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" : "border-neutral-300"}`}
         autoFocus
         onFocus={() => {
           if (products.length > 0) setSearchOpen(true);
@@ -639,6 +792,26 @@ export default function AdminPOSPage() {
         onBlur={() => setTimeout(() => setSearchOpen(false), 180)}
       />
       {searching && <span className="text-[11px] text-neutral-500">…</span>}
+      <button
+        type="button"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-800 active:scale-95 sm:h-9 sm:w-9"
+        title="Voice search"
+        aria-label="Voice search"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={startVoiceSearch}
+      >
+        <Mic className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 active:scale-95 sm:h-9 sm:w-9"
+        title="Scan barcode (camera)"
+        aria-label="Scan barcode"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => barcodeInputRef.current?.click()}
+      >
+        <Camera className="h-5 w-5" />
+      </button>
       <span className="hidden text-[10px] text-neutral-500 xl:inline">F5 Pay · F7 Hold · ? Help</span>
 
       {searchOpen && products.length > 0 && (
@@ -836,16 +1009,29 @@ export default function AdminPOSPage() {
         <span className="text-neutral-600">Subtotal</span>
         <span className="font-semibold">{fmtRs(subtotal)}</span>
       </div>
-      {billDisc > 0 && (
+      {billDiscFixedRs > 0 ? (
         <div className="flex justify-between text-sm text-orange-700">
-          <span>Bill disc ({billDisc}%)</span>
-          <span>− {fmtRs(subtotal * (billDisc / 100))}</span>
+          <span>Bill disc (fixed)</span>
+          <span>− {fmtRs(Math.min(subtotal, billDiscFixedRs))}</span>
+        </div>
+      ) : (
+        billDisc > 0 && (
+          <div className="flex justify-between text-sm text-orange-700">
+            <span>Bill disc ({billDisc}%)</span>
+            <span>− {fmtRs((subtotal * billDisc) / 100)}</span>
+          </div>
+        )
+      )}
+      {packingCharge > 0 && (
+        <div className="flex justify-between text-sm">
+          <span className="text-neutral-600">Packing</span>
+          <span className="font-semibold">+ {fmtRs(packingCharge)}</span>
         </div>
       )}
-      {extraCharges > 0 && (
+      {shippingCharge > 0 && (
         <div className="flex justify-between text-sm">
-          <span className="text-neutral-600">Charges</span>
-          <span className="font-semibold">+ {fmtRs(extraCharges)}</span>
+          <span className="text-neutral-600">Delivery</span>
+          <span className="font-semibold">+ {fmtRs(shippingCharge)}</span>
         </div>
       )}
       {remarks && <div className="border-t border-dashed border-neutral-200 pt-2 text-xs text-neutral-600">📝 {remarks}</div>}
@@ -859,7 +1045,7 @@ export default function AdminPOSPage() {
           className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-orange-800"
           onClick={() => setModal("billDisc")}
         >
-          % Disc [F9]
+          Bill disc [F9]
         </button>
         <button
           type="button"
@@ -907,7 +1093,11 @@ export default function AdminPOSPage() {
                 <td className="px-2 py-2 text-xs text-neutral-500">{row.sku}</td>
                 <td className="px-2 py-2">
                   <div className="font-semibold text-indigo-950">{row.name}</div>
-                  {row.discount > 0 && <div className="text-[10px] text-orange-700">-{row.discount}%</div>}
+                  {row.discount > 0 && (
+                    <div className="text-[10px] text-orange-700">
+                      −{row.discountMode === "fixed" ? `${fmtRs(row.discount)}` : `${row.discount}%`}
+                    </div>
+                  )}
                   {isWeightLikeUnit(row.unit) && (
                     <button
                       type="button"
@@ -934,7 +1124,13 @@ export default function AdminPOSPage() {
                 </td>
                 <td className="px-2 py-2 text-center text-xs text-neutral-600">{row.unit}</td>
                 <td className="px-2 py-2 text-right text-xs">{fmtRs(row.pricePerUnit)}</td>
-                <td className="px-2 py-2 text-right text-xs">{row.discount > 0 ? `${row.discount}%` : "—"}</td>
+                <td className="px-2 py-2 text-right text-xs">
+                  {row.discount > 0
+                    ? row.discountMode === "fixed"
+                      ? fmtRs(row.discount)
+                      : `${row.discount}%`
+                    : "—"}
+                </td>
                 <td className="px-2 py-2 text-right text-sm font-bold text-green-800">{fmtRs(row.total)}</td>
                 <td className="px-1 py-1 text-center" onClick={(ev) => ev.stopPropagation()}>
                   <button type="button" className="text-red-500 hover:bg-red-50 rounded px-1" onClick={() => removeRow(row.rowId)}>
@@ -955,65 +1151,132 @@ export default function AdminPOSPage() {
     </div>
   );
 
+  const mobileQuickStrip = (
+    <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-3 py-2.5">
+      {(
+        [
+          { label: "Customer", on: () => setMobileSheet("customer"), dis: false },
+          { label: "Discount", on: () => setModal("billDisc"), dis: false },
+          { label: "Packing", on: () => setModal("charges"), dis: false },
+          { label: "Notes", on: () => setModal("remarks"), dis: false },
+          { label: "Hold", on: saveCurrentHold, dis: cart.length === 0 },
+          { label: "Holds", on: () => { setHolds(listHolds()); setModal("holds"); }, dis: false },
+          { label: "Line disc", on: () => selectedCartRow && setModal("itemDisc"), dis: !selectedCartRow },
+          { label: "Qty", on: () => selectedCartRow && setModal("qty"), dis: !selectedCartRow },
+        ] as const
+      ).map((x) => (
+        <button
+          key={x.label}
+          type="button"
+          disabled={x.dis}
+          onClick={x.on}
+          className={`shrink-0 rounded-full px-4 py-2.5 text-xs font-bold shadow-sm transition active:scale-[0.97] ${
+            x.dis ? "cursor-not-allowed opacity-40" : "bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/20"
+          }`}
+        >
+          {x.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const mobileCartCards = (
-    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-24 pt-2">
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-40 pt-3 sm:pb-36">
       {cart.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-neutral-400">
-          <ShoppingCart className="h-12 w-12 opacity-40" />
-          <p className="mt-2 font-medium">No lines yet</p>
+        <div
+          className={`mx-auto mt-6 flex max-w-sm flex-col items-center rounded-3xl border px-6 py-14 text-center shadow-inner ${
+            posNight ? "border-slate-700 bg-slate-800/50 text-slate-400" : "border-neutral-200/80 bg-white/80 text-neutral-500"
+          }`}
+        >
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700">
+            <ShoppingCart className="h-8 w-8" />
+          </div>
+          <p className={`mt-4 text-lg font-bold ${posNight ? "text-slate-100" : "text-indigo-950"}`}>Start a sale</p>
+          <p className="mt-1 text-sm">Search products, scan a barcode, or use voice.</p>
         </div>
       ) : (
         cart.map((row, i) => (
-          <button
+          <div
             key={row.rowId}
-            type="button"
-            className={`flex w-full flex-col gap-2 rounded-xl border-2 p-4 text-left transition ${row.rowId === selectedRow ? "border-indigo-600 bg-indigo-50/80" : "border-neutral-200 bg-white active:scale-[0.99]"}`}
+            role="button"
+            tabIndex={0}
             onClick={() => setSelected(row.rowId)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelected(row.rowId);
+              }
+            }}
+            className={`relative overflow-hidden rounded-2xl border text-left shadow-md transition-all active:scale-[0.99] ${
+              row.rowId === selectedRow
+                ? "border-indigo-500 bg-gradient-to-br from-indigo-50 to-white ring-2 ring-indigo-400/40"
+                : posNight
+                  ? "border-slate-600 bg-slate-800/90"
+                  : "border-neutral-200/90 bg-white"
+            }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <span className="text-xs text-neutral-500">#{i + 1}</span>
-                <div className="text-base font-bold text-indigo-950">{row.name}</div>
-                <div className="text-xs text-neutral-500">{row.sku}</div>
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-500 opacity-90" />
+            <div className="p-4 pt-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-neutral-400">Line {i + 1}</span>
+                  <div className={`truncate text-lg font-bold ${posNight ? "text-slate-50" : "text-indigo-950"}`}>{row.name}</div>
+                  <div className="mt-0.5 text-xs text-neutral-500">{row.sku}</div>
+                  {row.discount > 0 && (
+                    <span className="mt-2 inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
+                      Disc{" "}
+                      {row.discountMode === "fixed" ? fmtRs(row.discount) : `${row.discount}%`}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase text-emerald-700">Line total</div>
+                  <div className="text-xl font-black text-emerald-800">{fmtRs(row.total)}</div>
+                  <div className="text-[11px] text-neutral-500">{fmtRs(row.pricePerUnit)} / {row.unit}</div>
+                </div>
               </div>
-              <div className="text-right text-lg font-black text-green-800">{fmtRs(row.total)}</div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                Qty
-                <input
-                  type="number"
-                  className="w-20 rounded-lg border px-2 py-2 text-center text-lg font-bold"
-                  value={row.qty}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => updateRow(row.rowId, { qty: parseFloat(e.target.value) || 0 })}
-                />
-              </label>
-              <span className="text-sm text-neutral-600">{row.unit}</span>
-              {isWeightLikeUnit(row.unit) && (
+              <div className="mt-4 flex flex-wrap items-stretch gap-2">
+                <div
+                  className={`flex min-h-[48px] flex-1 items-center gap-2 rounded-xl border px-3 ${
+                    posNight ? "border-slate-600 bg-slate-900/60" : "border-neutral-200 bg-neutral-50/80"
+                  }`}
+                >
+                  <span className="text-xs font-bold text-neutral-500">Qty</span>
+                  <input
+                    type="number"
+                    className="min-w-0 flex-1 bg-transparent text-center text-xl font-black outline-none"
+                    value={row.qty}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => updateRow(row.rowId, { qty: parseFloat(e.target.value) || 0 })}
+                  />
+                  <span className="text-xs font-bold text-neutral-600">{row.unit}</span>
+                </div>
+                {isWeightLikeUnit(row.unit) && (
+                  <button
+                    type="button"
+                    className="flex min-h-[48px] items-center justify-center rounded-xl bg-amber-500 px-4 text-xs font-black uppercase tracking-wide text-white shadow-md shadow-amber-500/25 active:scale-95"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goSellRsCart(row.rowId);
+                    }}
+                  >
+                    Rs → kg
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900"
+                  className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 active:scale-95"
+                  title="Remove line"
                   onClick={(e) => {
                     e.stopPropagation();
-                    goSellRsCart(row.rowId);
+                    removeRow(row.rowId);
                   }}
                 >
-                  Rs → weight
+                  <Trash2 className="h-5 w-5" />
                 </button>
-              )}
-              <button
-                type="button"
-                className="ml-auto rounded-lg bg-red-50 px-4 py-2 text-sm font-bold text-red-600"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeRow(row.rowId);
-                }}
-              >
-                Remove
-              </button>
+              </div>
             </div>
-          </button>
+          </div>
         ))
       )}
     </div>
@@ -1032,7 +1295,7 @@ export default function AdminPOSPage() {
         { k: "F6", l: "Unit", fn: () => selectedCartRow && setModal("unit"), dis: !selectedCartRow },
         { k: "F7", l: "Hold", fn: saveCurrentHold, dis: cart.length === 0 },
         { k: "F8", l: "Charges", fn: () => setModal("charges") },
-        { k: "F9", l: "Bill %", fn: () => setModal("billDisc") },
+        { k: "F9", l: "Bill disc", fn: () => setModal("billDisc") },
         { k: "F10", l: "Hold", fn: saveCurrentHold, dis: cart.length === 0 },
         { k: "F12", l: "Notes", fn: () => setModal("remarks") },
       ].map((b) => (
@@ -1126,46 +1389,62 @@ export default function AdminPOSPage() {
           </aside>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden ${posNight ? "bg-gradient-to-b from-slate-950 to-slate-900" : "bg-gradient-to-b from-slate-50 via-white to-slate-100"}`}
+        >
+          {mobileQuickStrip}
           {searchBar}
           {mobileCartCards}
-          <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center gap-3 border-t border-neutral-200 bg-white/95 px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
-            <button
-              type="button"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-900"
-              onClick={() => setMobileSheet("customer")}
-            >
-              <User className="h-6 w-6" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-bold uppercase text-neutral-500">Total</div>
-              <div className="truncate text-xl font-black text-indigo-950">{fmtRs(grandTotal)}</div>
+          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+            <div className="pointer-events-auto flex w-full max-w-lg items-stretch gap-2 rounded-2xl border border-white/20 bg-slate-900/92 p-2.5 shadow-[0_-8px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl ring-1 ring-white/10">
+              <button
+                type="button"
+                className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 transition active:scale-95"
+                onClick={() => setMobileSheet("customer")}
+              >
+                <User className="h-6 w-6" />
+                <span className="mt-0.5 text-[9px] font-bold uppercase text-white/70">Cust</span>
+              </button>
+              <div className="min-w-0 flex-1 rounded-xl bg-gradient-to-br from-indigo-600/90 to-violet-700/90 px-3 py-2 text-white shadow-inner">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-white/70">Total payable</div>
+                <div className="truncate text-2xl font-black leading-tight tracking-tight">{fmtRs(grandTotal)}</div>
+                {cart.length > 0 && (
+                  <div className="truncate text-[10px] font-semibold text-white/60">
+                    {cart.length} lines · sub {fmtRs(subtotal)}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={cart.length === 0}
+                onClick={() => setModal("save")}
+                className="flex min-w-[108px] shrink-0 flex-col items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-600/30 transition enabled:active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:shadow-none"
+              >
+                <Printer className="mb-0.5 h-5 w-5" />
+                Pay
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={cart.length === 0}
-              className="shrink-0 rounded-xl bg-indigo-900 px-5 py-3 text-sm font-black text-white shadow disabled:bg-neutral-300"
-              onClick={() => setModal("save")}
-            >
-              Checkout
-            </button>
           </div>
         </div>
       )}
 
       {!isMobile && fKeyBar}
       {isMobile && (
-        <div className="flex shrink-0 gap-1 border-t border-slate-700 bg-slate-800 p-2">
-          <button type="button" className="flex-1 rounded-md bg-slate-600 py-2 text-xs font-bold text-white" onClick={() => setShowHelp(true)}>
+        <div className="flex shrink-0 gap-2 border-t border-slate-800 bg-slate-950 px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            className="flex-1 rounded-xl bg-slate-800 py-3 text-xs font-bold text-white ring-1 ring-white/10 active:scale-[0.98]"
+            onClick={() => setShowHelp(true)}
+          >
             Shortcuts
           </button>
           <button
             type="button"
-            className="flex-1 rounded-md bg-amber-700 py-2 text-xs font-bold text-white disabled:opacity-40"
+            className="flex-1 rounded-xl bg-amber-600 py-3 text-xs font-black text-white shadow-md shadow-amber-900/20 disabled:opacity-40"
             disabled={cart.length === 0}
             onClick={saveCurrentHold}
           >
-            Hold
+            Hold sale
           </button>
         </div>
       )}
@@ -1173,11 +1452,12 @@ export default function AdminPOSPage() {
       {/* Mobile slide-up customer / summary */}
       {isMobile && mobileSheet && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && setMobileSheet(null)}>
-          <div className="max-h-[85vh] overflow-hidden rounded-t-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <span className="font-bold text-indigo-950">Customer &amp; bill</span>
-              <button type="button" className="text-sm font-semibold text-indigo-700" onClick={() => setMobileSheet(null)}>
-                Close
+          <div className="max-h-[85vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl ring-1 ring-black/5" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-neutral-200" />
+            <div className="flex items-center justify-between px-4 pb-2 pt-3">
+              <span className="text-base font-black text-indigo-950">Customer &amp; bill</span>
+              <button type="button" className="rounded-full bg-neutral-100 px-3 py-1.5 text-sm font-bold text-indigo-800" onClick={() => setMobileSheet(null)}>
+                Done
               </button>
             </div>
             <div className="max-h-[calc(85vh-52px)] overflow-y-auto">
@@ -1201,19 +1481,62 @@ export default function AdminPOSPage() {
         <QtyModal row={selectedCartRow} onClose={() => setModal(null)} onSave={(v) => { updateRow(selectedCartRow.rowId, { qty: v }); setModal(null); }} />
       )}
       {modal === "itemDisc" && selectedCartRow && (
-        <ItemDiscModal row={selectedCartRow} onClose={() => setModal(null)} onSave={(v) => { updateRow(selectedCartRow.rowId, { discount: v }); setModal(null); }} />
+        <ItemDiscModal
+          row={selectedCartRow}
+          onClose={() => setModal(null)}
+          onSave={(v, mode) => {
+            updateRow(selectedCartRow.rowId, { discount: v, discountMode: mode });
+            setModal(null);
+          }}
+        />
       )}
-      {modal === "billDisc" && <BillDiscModal value={billDisc} subtotal={subtotal} onClose={() => setModal(null)} onSave={(v) => { setBillDisc(v); setModal(null); }} />}
-      {modal === "charges" && <ChargesModal value={extraCharges} onClose={() => setModal(null)} onSave={(v) => { setExtra(v); setModal(null); }} />}
-      {modal === "remarks" && <RemarksModal value={remarks} onClose={() => setModal(null)} onSave={(v) => { setRemarks(v); setModal(null); }} />}
+      {modal === "billDisc" && (
+        <BillDiscModal
+          billDiscPct={billDisc}
+          billDiscFixedRs={billDiscFixedRs}
+          subtotal={subtotal}
+          onClose={() => setModal(null)}
+          onSave={(pct, fixed) => {
+            setBillDisc(pct);
+            setBillDiscFixedRs(fixed);
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "charges" && (
+        <ChargesModal
+          packingCharge={packingCharge}
+          shippingCharge={shippingCharge}
+          onClose={() => setModal(null)}
+          onSave={(p, s) => {
+            setPackingCharge(p);
+            setShippingCharge(s);
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "remarks" && (
+        <RemarksModal
+          orderRemarks={remarks}
+          internalNotes={internalNotes}
+          onClose={() => setModal(null)}
+          onSave={(order, internal) => {
+            setRemarks(order);
+            setInternalNotes(internal);
+            setModal(null);
+          }}
+        />
+      )}
       {modal === "unit" && selectedCartRow && (
         <UnitModal row={selectedCartRow} onClose={() => setModal(null)} onSave={(u) => { updateRow(selectedCartRow.rowId, { unit: u }); setModal(null); }} />
       )}
       {modal === "save" && (
         <SaveBillModal
           subtotal={subtotal}
-          billDisc={billDisc}
-          extraCharges={extraCharges}
+          billDiscountAmt={discAmt}
+          billDiscountLabel={billDiscountLabel}
+          packingCharge={packingCharge}
+          shippingCharge={shippingCharge}
           grandTotal={grandTotal}
           saving={saving}
           onClose={() => setModal(null)}

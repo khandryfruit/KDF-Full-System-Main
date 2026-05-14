@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { CartRow, PosHoldV1 } from "./types";
+import type { CartRow, LineDiscountMode, PosHoldV1 } from "./types";
 import { fmtRs } from "./calc";
 import { formatWeightFromKg, pricePerKgFromRow, qtyKgFromRupees } from "./weightMoney";
 
@@ -70,44 +70,78 @@ export function ItemDiscModal({
   onClose,
 }: {
   row: CartRow;
-  onSave: (disc: number) => void;
+  onSave: (disc: number, mode: LineDiscountMode) => void;
   onClose: () => void;
 }) {
-  const [disc, setDisc] = useState(String(row.discount));
+  const mode = row.discountMode ?? "percent";
+  const [tab, setTab] = useState<LineDiscountMode>(mode);
+  const [disc, setDisc] = useState(String(mode === "fixed" ? row.discount : row.discount));
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    const m = row.discountMode ?? "percent";
+    setTab(m);
+    setDisc(String(row.discount));
     ref.current?.select();
-  }, []);
+  }, [row.rowId, row.discount, row.discountMode]);
+  const raw = row.qty * row.pricePerUnit;
+  const val = parseFloat(disc) || 0;
+  const lineOff = tab === "fixed" ? Math.min(raw, Math.max(0, val)) : (raw * Math.max(0, val)) / 100;
+  const after = Math.max(0, raw - lineOff);
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal">
-        <h3 className="pos-modal-title">Item Discount — {row.name}</h3>
+        <h3 className="pos-modal-title">Item discount — {row.name}</h3>
         <div className="pos-modal-body">
-          <label className="pos-label">Discount %</label>
+          <div className="mb-3 flex gap-2">
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "percent" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => {
+                setTab("percent");
+                setDisc(String(row.discountMode === "fixed" ? 0 : row.discount));
+              }}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "fixed" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => {
+                setTab("fixed");
+                setDisc(String(row.discountMode === "fixed" ? row.discount : 0));
+              }}
+            >
+              Fixed Rs
+            </button>
+          </div>
+          <label className="pos-label">{tab === "percent" ? "Discount %" : "Discount (Rs.)"}</label>
           <input
             ref={ref}
             type="number"
             min="0"
-            max="100"
+            max={tab === "percent" ? "100" : undefined}
             value={disc}
             onChange={(e) => setDisc(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") onSave(parseFloat(disc) || 0);
+              if (e.key === "Enter") onSave(parseFloat(disc) || 0, tab);
               if (e.key === "Escape") onClose();
             }}
             className="pos-input w-full text-center text-2xl font-bold"
           />
-          {row.pricePerUnit > 0 && parseFloat(disc) > 0 && (
+          {tab === "percent" && row.pricePerUnit > 0 && val > 0 && (
             <p className="mt-2 text-center text-sm font-semibold text-green-600">
-              Discounted price: {fmtRs(row.pricePerUnit * (1 - parseFloat(disc) / 100))}
+              Effective rate: {fmtRs(row.pricePerUnit * (1 - val / 100))} / {row.unit}
             </p>
+          )}
+          {tab === "fixed" && val > 0 && (
+            <p className="mt-2 text-center text-sm font-semibold text-green-600">Line after disc: {fmtRs(after)}</p>
           )}
         </div>
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
             Cancel [Esc]
           </button>
-          <button type="button" className="pos-btn-primary" onClick={() => onSave(parseFloat(disc) || 0)}>
+          <button type="button" className="pos-btn-primary" onClick={() => onSave(parseFloat(disc) || 0, tab)}>
             Apply [Enter]
           </button>
         </div>
@@ -117,51 +151,100 @@ export function ItemDiscModal({
 }
 
 export function BillDiscModal({
-  value,
+  billDiscPct,
+  billDiscFixedRs,
   subtotal,
   onSave,
   onClose,
 }: {
-  value: number;
+  billDiscPct: number;
+  billDiscFixedRs: number;
   subtotal: number;
-  onSave: (d: number) => void;
+  onSave: (pct: number, fixedRs: number) => void;
   onClose: () => void;
 }) {
-  const [disc, setDisc] = useState(String(value));
+  const [tab, setTab] = useState<"percent" | "fixed">(billDiscFixedRs > 0 ? "fixed" : "percent");
+  const [pct, setPct] = useState(String(billDiscPct));
+  const [fx, setFx] = useState(String(billDiscFixedRs));
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.select();
-  }, []);
-  const discAmt = (subtotal * (parseFloat(disc) || 0)) / 100;
+  }, [tab]);
+  const p = parseFloat(pct) || 0;
+  const f = parseFloat(fx) || 0;
+  const discAmtPct = (subtotal * p) / 100;
+  const discAmtFx = Math.min(subtotal, Math.max(0, f));
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal">
-        <h3 className="pos-modal-title">Bill Discount</h3>
+        <h3 className="pos-modal-title">Bill discount</h3>
         <div className="pos-modal-body space-y-3">
-          <div>
-            <label className="pos-label">Discount %</label>
-            <input
-              ref={ref}
-              type="number"
-              min="0"
-              max="100"
-              value={disc}
-              onChange={(e) => setDisc(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onSave(parseFloat(disc) || 0);
-                if (e.key === "Escape") onClose();
-              }}
-              className="pos-input w-full text-center text-2xl font-bold"
-            />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "percent" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => setTab("percent")}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "fixed" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => setTab("fixed")}
+            >
+              Fixed Rs
+            </button>
           </div>
-          {discAmt > 0 && <p className="text-center font-semibold text-green-600">Saving: {fmtRs(discAmt)}</p>}
-          <p className="text-muted text-center text-sm">After discount: {fmtRs(subtotal - discAmt)}</p>
+          {tab === "percent" ? (
+            <div>
+              <label className="pos-label">Discount %</label>
+              <input
+                ref={ref}
+                type="number"
+                min="0"
+                max="100"
+                value={pct}
+                onChange={(e) => setPct(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSave(parseFloat(pct) || 0, 0);
+                  if (e.key === "Escape") onClose();
+                }}
+                className="pos-input w-full text-center text-2xl font-bold"
+              />
+              {discAmtPct > 0 && <p className="text-center font-semibold text-green-600">Saving: {fmtRs(discAmtPct)}</p>}
+            </div>
+          ) : (
+            <div>
+              <label className="pos-label">Discount (Rs.)</label>
+              <input
+                ref={ref}
+                type="number"
+                min="0"
+                value={fx}
+                onChange={(e) => setFx(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSave(0, parseFloat(fx) || 0);
+                  if (e.key === "Escape") onClose();
+                }}
+                className="pos-input w-full text-center text-2xl font-bold"
+              />
+              {discAmtFx > 0 && <p className="text-center font-semibold text-green-600">Saving: {fmtRs(discAmtFx)}</p>}
+            </div>
+          )}
+          <p className="text-muted text-center text-sm">
+            After discount:{" "}
+            {fmtRs(subtotal - (tab === "percent" ? discAmtPct : discAmtFx))}
+          </p>
         </div>
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
             Cancel [Esc]
           </button>
-          <button type="button" className="pos-btn-primary" onClick={() => onSave(parseFloat(disc) || 0)}>
+          <button
+            type="button"
+            className="pos-btn-primary"
+            onClick={() => (tab === "percent" ? onSave(parseFloat(pct) || 0, 0) : onSave(0, parseFloat(fx) || 0))}
+          >
             Apply [Enter]
           </button>
         </div>
@@ -171,45 +254,69 @@ export function BillDiscModal({
 }
 
 export function ChargesModal({
-  value,
+  packingCharge,
+  shippingCharge,
   onSave,
   onClose,
 }: {
-  value: number;
-  onSave: (v: number) => void;
+  packingCharge: number;
+  shippingCharge: number;
+  onSave: (packing: number, shipping: number) => void;
   onClose: () => void;
 }) {
-  const [amt, setAmt] = useState(String(value));
+  const [pack, setPack] = useState(String(packingCharge));
+  const [ship, setShip] = useState(String(shippingCharge));
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.select();
   }, []);
+  const p = Math.max(0, parseFloat(pack) || 0);
+  const s = Math.max(0, parseFloat(ship) || 0);
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal">
-        <h3 className="pos-modal-title">Additional Charges</h3>
-        <div className="pos-modal-body">
-          <label className="pos-label">Amount (Rs.)</label>
-          <input
-            ref={ref}
-            type="number"
-            min="0"
-            value={amt}
-            onChange={(e) => setAmt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSave(parseFloat(amt) || 0);
-              if (e.key === "Escape") onClose();
-            }}
-            className="pos-input w-full text-center text-2xl font-bold"
-            placeholder="e.g. 50"
-          />
-          <p className="text-muted mt-2 text-center text-xs">e.g. delivery charges, packing, etc.</p>
+        <h3 className="pos-modal-title">Packing &amp; delivery</h3>
+        <div className="pos-modal-body space-y-4">
+          <div>
+            <label className="pos-label">Packing (Rs.)</label>
+            <input
+              ref={ref}
+              type="number"
+              min="0"
+              value={pack}
+              onChange={(e) => setPack(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onSave(Math.max(0, parseFloat(pack) || 0), Math.max(0, parseFloat(ship) || 0));
+                if (e.key === "Escape") onClose();
+              }}
+              className="pos-input w-full text-center text-xl font-bold"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="pos-label">Shipping / delivery (Rs.)</label>
+            <input
+              type="number"
+              min="0"
+              value={ship}
+              onChange={(e) => setShip(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onSave(Math.max(0, parseFloat(pack) || 0), Math.max(0, parseFloat(ship) || 0));
+                if (e.key === "Escape") onClose();
+              }}
+              className="pos-input w-full text-center text-xl font-bold"
+              placeholder="0"
+            />
+          </div>
+          <p className="text-center text-sm font-bold text-indigo-900">
+            Total extras: {fmtRs(p + s)}
+          </p>
         </div>
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
             Cancel [Esc]
           </button>
-          <button type="button" className="pos-btn-primary" onClick={() => onSave(parseFloat(amt) || 0)}>
+          <button type="button" className="pos-btn-primary" onClick={() => onSave(p, s)}>
             Apply [Enter]
           </button>
         </div>
@@ -219,15 +326,18 @@ export function ChargesModal({
 }
 
 export function RemarksModal({
-  value,
+  orderRemarks,
+  internalNotes,
   onSave,
   onClose,
 }: {
-  value: string;
-  onSave: (v: string) => void;
+  orderRemarks: string;
+  internalNotes: string;
+  onSave: (order: string, internal: string) => void;
   onClose: () => void;
 }) {
-  const [txt, setTxt] = useState(value);
+  const [order, setOrder] = useState(orderRemarks);
+  const [internal, setInternal] = useState(internalNotes);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     ref.current?.focus();
@@ -235,25 +345,41 @@ export function RemarksModal({
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal">
-        <h3 className="pos-modal-title">Remarks / Notes</h3>
-        <div className="pos-modal-body">
-          <textarea
-            ref={ref}
-            value={txt}
-            onChange={(e) => setTxt(e.target.value)}
-            rows={4}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onClose();
-            }}
-            className="pos-input w-full resize-none"
-            placeholder="Add remarks for this bill..."
-          />
+        <h3 className="pos-modal-title">Notes</h3>
+        <div className="pos-modal-body space-y-3">
+          <div>
+            <label className="pos-label">Order notes (print / customer)</label>
+            <textarea
+              ref={ref}
+              value={order}
+              onChange={(e) => setOrder(e.target.value)}
+              rows={3}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onClose();
+              }}
+              className="pos-input w-full resize-none"
+              placeholder="Shown on receipt…"
+            />
+          </div>
+          <div>
+            <label className="pos-label">Internal notes (staff only)</label>
+            <textarea
+              value={internal}
+              onChange={(e) => setInternal(e.target.value)}
+              rows={2}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onClose();
+              }}
+              className="pos-input w-full resize-none"
+              placeholder="Not printed on customer copy…"
+            />
+          </div>
         </div>
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
             Cancel [Esc]
           </button>
-          <button type="button" className="pos-btn-primary" onClick={() => onSave(txt)}>
+          <button type="button" className="pos-btn-primary" onClick={() => onSave(order, internal)}>
             Save
           </button>
         </div>
@@ -316,46 +442,95 @@ export function SellByRsModal({
   onClose: () => void;
   onApply: (rs: number, qtyKg: number) => void;
 }) {
+  const [tab, setTab] = useState<"rs" | "kg">("rs");
   const [rs, setRs] = useState("");
+  const [kgIn, setKgIn] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.select();
-  }, []);
+  }, [tab]);
   const amount = Math.max(0, parseFloat(rs) || 0);
   const qtyKg = qtyKgFromRupees(pricePerUnit, unit, amount);
   const ppk = pricePerKgFromRow(pricePerUnit, unit);
-  const preview = formatWeightFromKg(qtyKg);
+  const kgVal = Math.max(0, parseFloat(kgIn) || 0);
+  const rsFromKg = ppk * kgVal;
+  const previewRs = formatWeightFromKg(qtyKg);
+  const previewKg = kgVal > 0 ? fmtRs(rsFromKg) : "—";
+  const canApplyRs = tab === "rs" && amount > 0 && qtyKg > 0;
+  const canApplyKg = tab === "kg" && kgVal > 0 && rsFromKg > 0;
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal max-w-[440px]">
-        <h3 className="pos-modal-title">Sell by amount (Rs) — {title}</h3>
+        <h3 className="pos-modal-title">Smart sell — {title}</h3>
         <div className="pos-modal-body space-y-3">
           <p className="text-muted text-center text-xs">
             Rate ≈ {fmtRs(ppk)} per kg · row unit: <strong>{unit}</strong>
           </p>
-          <label className="pos-label">Customer pays (Rs)</label>
-          <input
-            ref={ref}
-            type="number"
-            min="0"
-            step="any"
-            value={rs}
-            onChange={(e) => setRs(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && amount > 0 && qtyKg > 0) onApply(amount, qtyKg);
-              if (e.key === "Escape") onClose();
-            }}
-            className="pos-input w-full text-center text-2xl font-bold"
-            placeholder="e.g. 300"
-          />
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 p-4 text-center">
-            <div className="text-xs font-bold uppercase tracking-wide text-indigo-800">Live weight</div>
-            <div className="mt-1 text-2xl font-black text-indigo-950">{amount > 0 ? preview : "—"}</div>
-            <div className="mt-2 text-sm text-indigo-900/90">
-              Qty (kg): <strong>{qtyKg > 0 ? qtyKg.toFixed(4).replace(/\.?0+$/, "") : "—"}</strong>
-            </div>
-            <div className="mt-1 text-xs text-indigo-800/80">Sale value (entered): {fmtRs(amount)}</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "rs" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => setTab("rs")}
+            >
+              By Rs
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-lg border py-2 text-sm font-bold ${tab === "kg" ? "border-blue-600 bg-blue-600 text-white" : "border-border"}`}
+              onClick={() => setTab("kg")}
+            >
+              By weight
+            </button>
           </div>
+          {tab === "rs" ? (
+            <>
+              <label className="pos-label">Customer pays (Rs)</label>
+              <input
+                ref={ref}
+                type="number"
+                min="0"
+                step="any"
+                value={rs}
+                onChange={(e) => setRs(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canApplyRs) onApply(amount, qtyKg);
+                  if (e.key === "Escape") onClose();
+                }}
+                className="pos-input w-full text-center text-2xl font-bold"
+                placeholder="e.g. 300"
+              />
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 p-4 text-center">
+                <div className="text-xs font-bold uppercase tracking-wide text-indigo-800">Live weight</div>
+                <div className="mt-1 text-2xl font-black text-indigo-950">{amount > 0 ? previewRs : "—"}</div>
+                <div className="mt-2 text-sm text-indigo-900/90">
+                  Qty (kg): <strong>{qtyKg > 0 ? qtyKg.toFixed(4).replace(/\.?0+$/, "") : "—"}</strong>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="pos-label">Weight (kg)</label>
+              <input
+                ref={ref}
+                type="number"
+                min="0"
+                step="any"
+                value={kgIn}
+                onChange={(e) => setKgIn(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canApplyKg) onApply(rsFromKg, kgVal);
+                  if (e.key === "Escape") onClose();
+                }}
+                className="pos-input w-full text-center text-2xl font-bold"
+                placeholder="e.g. 0.25"
+              />
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/80 p-4 text-center">
+                <div className="text-xs font-bold uppercase tracking-wide text-emerald-800">Line value</div>
+                <div className="mt-1 text-2xl font-black text-emerald-950">{kgVal > 0 ? previewKg : "—"}</div>
+                <div className="mt-2 text-sm text-emerald-900/90">Weight: {kgVal > 0 ? `${kgVal} kg` : "—"}</div>
+              </div>
+            </>
+          )}
         </div>
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
@@ -364,8 +539,11 @@ export function SellByRsModal({
           <button
             type="button"
             className="pos-btn-primary"
-            disabled={amount <= 0 || qtyKg <= 0}
-            onClick={() => onApply(amount, qtyKg)}
+            disabled={!canApplyRs && !canApplyKg}
+            onClick={() => {
+              if (tab === "rs" && canApplyRs) onApply(amount, qtyKg);
+              else if (tab === "kg" && canApplyKg) onApply(rsFromKg, kgVal);
+            }}
           >
             Add to bill [Enter]
           </button>
@@ -377,16 +555,20 @@ export function SellByRsModal({
 
 export function SaveBillModal({
   subtotal,
-  billDisc,
-  extraCharges,
+  billDiscountAmt,
+  billDiscountLabel,
+  packingCharge,
+  shippingCharge,
   grandTotal,
   onClose,
   onSave,
   saving,
 }: {
   subtotal: number;
-  billDisc: number;
-  extraCharges: number;
+  billDiscountAmt: number;
+  billDiscountLabel: string;
+  packingCharge: number;
+  shippingCharge: number;
   grandTotal: number;
   onClose: () => void;
   saving: boolean;
@@ -417,16 +599,22 @@ export function SaveBillModal({
               <span>Subtotal</span>
               <span>{fmtRs(subtotal)}</span>
             </div>
-            {billDisc > 0 && (
+            {billDiscountAmt > 0 && (
               <div className="flex justify-between text-green-600">
-                <span>Bill Discount ({billDisc}%)</span>
-                <span>− {fmtRs((subtotal * billDisc) / 100)}</span>
+                <span>Bill discount {billDiscountLabel ? `(${billDiscountLabel})` : ""}</span>
+                <span>− {fmtRs(billDiscountAmt)}</span>
               </div>
             )}
-            {extraCharges > 0 && (
+            {packingCharge > 0 && (
               <div className="flex justify-between">
-                <span>Additional Charges</span>
-                <span>+ {fmtRs(extraCharges)}</span>
+                <span>Packing</span>
+                <span>+ {fmtRs(packingCharge)}</span>
+              </div>
+            )}
+            {shippingCharge > 0 && (
+              <div className="flex justify-between">
+                <span>Delivery / shipping</span>
+                <span>+ {fmtRs(shippingCharge)}</span>
               </div>
             )}
             <div className="mt-1 flex justify-between border-t border-dashed pt-1 text-base font-black">

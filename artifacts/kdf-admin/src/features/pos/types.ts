@@ -11,6 +11,8 @@ export interface Product {
   variants?: unknown[];
 }
 
+export type LineDiscountMode = "percent" | "fixed";
+
 export interface CartRow {
   rowId: string;
   productId: number;
@@ -19,7 +21,9 @@ export interface CartRow {
   qty: number;
   unit: string;
   pricePerUnit: number;
+  /** Percent 0–100, or fixed Rs off line (see discountMode). */
   discount: number;
+  discountMode?: LineDiscountMode;
   total: number;
 }
 
@@ -37,8 +41,12 @@ export interface PosHoldV1 {
   cart: CartRow[];
   selectedRow: string | null;
   billDisc: number;
+  billDiscFixedRs?: number;
+  packingCharge?: number;
+  shippingCharge?: number;
   extraCharges: number;
   remarks: string;
+  internalNotes?: string;
   customer: Customer | null;
 }
 
@@ -47,8 +55,12 @@ export interface PosDraftV1 {
   cart: CartRow[];
   selectedRow: string | null;
   billDisc: number;
+  billDiscFixedRs?: number;
+  packingCharge?: number;
+  shippingCharge?: number;
   extraCharges: number;
   remarks: string;
+  internalNotes?: string;
   customer: Customer | null;
   billNo: string;
 }

@@ -74,8 +74,8 @@ export default function RegisterPage() {
         <link rel="canonical" href="/kdf-plus/register" />
       </Helmet>
 
-      <main className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-background">
-        <div className="w-full max-w-md">
+      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-slate-50/90 via-background to-background px-4 py-12 md:py-16 lg:px-8">
+        <div className="w-full max-w-md md:max-w-lg">
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center mb-3">
@@ -91,7 +91,7 @@ export default function RegisterPage() {
             <p className="text-muted-foreground text-sm mt-1">Join {siteName} for premium nuts &amp; dry fruits</p>
           </div>
 
-          <div className="bg-white border border-border rounded-2xl p-6 sm:p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-6 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl sm:p-8 md:rounded-[1.75rem] md:p-9">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -101,7 +101,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Full Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="Your full name" autoComplete="name" data-testid="input-name" {...field} />
+                        <Input placeholder="Your full name" autoComplete="name" data-testid="input-name" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -114,7 +114,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Phone Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="03XX XXXXXXX" type="tel" autoComplete="tel" data-testid="input-phone" {...field} />
+                        <Input placeholder="03XX XXXXXXX" type="tel" autoComplete="tel" data-testid="input-phone" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -127,7 +127,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Email (optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="you@example.com" type="email" autoComplete="email" data-testid="input-email" {...field} />
+                        <Input placeholder="you@example.com" type="email" autoComplete="email" data-testid="input-email" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -140,7 +140,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>City (optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Karachi" data-testid="input-city" {...field} />
+                        <Input placeholder="Karachi" data-testid="input-city" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -153,7 +153,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Min. 6 characters" autoComplete="new-password" data-testid="input-password" {...field} />
+                        <Input type="password" placeholder="Min. 6 characters" autoComplete="new-password" data-testid="input-password" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -166,7 +166,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Confirm Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Repeat password" autoComplete="new-password" data-testid="input-confirm-password" {...field} />
+                        <Input type="password" placeholder="Repeat password" autoComplete="new-password" data-testid="input-confirm-password" className="md:h-11 md:rounded-xl" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -175,8 +175,9 @@ export default function RegisterPage() {
 
                 <Button
                   type="submit"
-                  className="w-full font-semibold"
+                  className="w-full rounded-xl font-semibold shadow-md shadow-[#5FA800]/20 transition-[transform,box-shadow] hover:scale-[1.01] active:scale-[0.99] md:h-12"
                   size="lg"
+                  style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
                   disabled={registerMutation.isPending}
                   data-testid="button-register"
                 >

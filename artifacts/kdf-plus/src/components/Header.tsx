@@ -167,62 +167,62 @@ function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; on
   return (
     <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
       <button
-        className="flex items-center gap-0.5 text-[13px] font-medium px-3 py-2 rounded-full transition-all duration-150 whitespace-nowrap group"
-        style={{ color: open ? GREEN : "#374151" }}
+        className="group flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-semibold tracking-tight transition-all duration-200 whitespace-nowrap hover:bg-slate-100/90 md:px-4 md:py-2.5"
+        style={{ color: open ? GREEN : "#334155" }}
         onClick={() => onNavigate(`/products?category=${item.slug}`)}
       >
         {item.label}
-        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`} style={{ color: open ? GREEN : "#9ca3af" }} />
+        <ChevronDown className={`h-4 w-4 transition-transform duration-200 md:h-[1.125rem] md:w-[1.125rem] ${open ? "rotate-180" : ""}`} style={{ color: open ? GREEN : "#94a3b8" }} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 pt-2 z-[300]" style={{ minWidth: "340px" }}
+        <div className="absolute top-full left-0 pt-2 z-[300]" style={{ minWidth: "min(100vw-2rem, 440px)" }}
           onMouseEnter={enter} onMouseLeave={leave}>
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
-            style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)" }}>
+          <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/95 shadow-2xl backdrop-blur-xl"
+            style={{ boxShadow: "0 24px 80px rgba(15,23,42,0.14), 0 0 0 1px rgba(95,168,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
             <div className="grid grid-cols-2 gap-0">
               {/* Sub-categories */}
-              <div className="p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 px-1">{item.label}</p>
-                <div className="space-y-0.5">
+              <div className="p-5">
+                <p className="mb-3.5 px-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
+                <div className="space-y-1">
                   {item.sub.map(sub => (
                     <button key={sub.slug} type="button"
                       onClick={() => { onNavigate(`/products?category=${sub.slug}`); setOpen(false); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-all group text-left">
-                      <span className="text-base leading-none">{sub.emoji}</span>
-                      <span className="group-hover:text-gray-900 font-medium">{sub.label}</span>
-                      <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: GREEN }} />
+                      className="group flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-[15px] font-medium text-slate-700 transition-all hover:bg-gradient-to-r hover:from-[#5FA800]/8 hover:to-transparent hover:shadow-sm">
+                      <span className="text-lg leading-none">{sub.emoji}</span>
+                      <span className="group-hover:text-slate-900">{sub.label}</span>
+                      <ChevronRight className="ml-auto h-4 w-4 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" style={{ color: GREEN }} />
                     </button>
                   ))}
                   <button type="button"
                     onClick={() => { onNavigate(`/products?category=${item.slug}`); setOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all mt-1"
+                    className="mt-2 flex w-full items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold transition-colors hover:bg-slate-50"
                     style={{ color: GREEN }}>
-                    View all {item.label} <ArrowRight className="w-3.5 h-3.5" />
+                    View all {item.label} <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
               {/* Featured */}
-              <div className="p-4 border-l border-gray-50 flex flex-col justify-between"
-                style={{ background: "linear-gradient(135deg, #f8fdf4 0%, #fff 100%)" }}>
+              <div className="flex flex-col justify-between border-l border-slate-100/90 bg-gradient-to-br from-[#f6fdf0] via-white to-slate-50/80 p-5"
+                style={{ background: "linear-gradient(145deg, #f8fdf4 0%, #ffffff 45%, #f1f5f9 100%)" }}>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Featured</p>
-                  <div className="rounded-xl p-3 mb-3"
-                    style={{ background: `${item.featured.color}12`, border: `1px solid ${item.featured.color}20` }}>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white mb-2 inline-block"
+                  <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Featured</p>
+                  <div className="mb-3 rounded-2xl border p-4 shadow-sm transition-transform duration-300 hover:-translate-y-0.5"
+                    style={{ background: `${item.featured.color}10`, borderColor: `${item.featured.color}28` }}>
+                    <span className="mb-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-bold text-white shadow"
                       style={{ background: item.featured.color }}>{item.featured.badge}</span>
-                    <p className="font-bold text-sm text-gray-900 mt-1">{item.featured.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">100% Natural & Pure</p>
+                    <p className="mt-2 text-base font-bold text-slate-900">{item.featured.label}</p>
+                    <p className="mt-1 text-sm text-slate-500">100% Natural & Pure</p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Shield className="w-3.5 h-3.5" style={{ color: GREEN }} />
-                    <span>Quality Guaranteed</span>
+                <div className="space-y-2.5 border-t border-slate-100/80 pt-4">
+                  <div className="flex items-center gap-2.5 text-sm text-slate-600">
+                    <Shield className="h-4 w-4 shrink-0" style={{ color: GREEN }} />
+                    <span>Quality guaranteed</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Truck className="w-3.5 h-3.5" style={{ color: GREEN }} />
+                  <div className="flex items-center gap-2.5 text-sm text-slate-600">
+                    <Truck className="h-4 w-4 shrink-0" style={{ color: GREEN }} />
                     <span>Free delivery Rs.1500+</span>
                   </div>
                 </div>
@@ -772,6 +772,7 @@ export function Header() {
     deals: path.startsWith("/products"),
     account: path.startsWith("/account") || path.startsWith("/login"),
   };
+  const allProductsActive = path === "/products";
 
   return (
     <>
@@ -793,7 +794,7 @@ export function Header() {
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Top row */}
-            <div className={`flex items-center gap-3 lg:gap-4 transition-all duration-300 ${shrunk ? "h-[54px]" : "h-[62px]"}`}>
+            <div className={`flex items-center gap-3 lg:gap-5 transition-all duration-300 ${shrunk ? "h-[56px] lg:h-[60px]" : "h-[64px] lg:h-[76px]"}`}>
 
               {/* Mobile: Hamburger */}
               <button
@@ -835,42 +836,63 @@ export function Header() {
               </Link>
 
               {/* Search — desktop */}
-              <div ref={searchRef} className="hidden sm:flex flex-1 max-w-2xl mx-auto relative">
+              <div ref={searchRef} className="relative mx-auto hidden max-w-3xl flex-1 sm:flex lg:max-w-[52rem]">
                 <form onSubmit={handleSearch} className="w-full">
-                  <div className="relative group">
-                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-10 ${hintLoading ? "animate-pulse" : "text-gray-400 group-focus-within:text-green-600"}`}
-                      style={hintLoading ? { color: GREEN } : {}} />
+                  <div className="group relative">
+                    <Search
+                      className={`pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 transition-colors md:left-5 md:h-[1.35rem] md:w-[1.35rem] ${hintLoading ? "animate-pulse" : "text-slate-400 group-focus-within:text-[#5FA800]"}`}
+                      style={hintLoading ? { color: GREEN } : {}}
+                    />
                     <input
                       type="search"
                       placeholder={placeholder}
                       value={searchQuery}
-                      onChange={e => { setSearchQuery(e.target.value); setShowHints(true); }}
+                      onChange={e => {
+                        setSearchQuery(e.target.value);
+                        setShowHints(true);
+                      }}
                       onFocus={() => searchQuery.length > 0 && setShowHints(true)}
                       className={[
-                        "w-full h-[42px] pl-11 pr-24 rounded-2xl text-sm text-gray-800 placeholder:text-gray-400 outline-none transition-[background,box-shadow,border-color,transform] duration-200",
-                        scrolled ? "backdrop-blur-xl bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]" : "",
+                        "h-12 w-full rounded-full pl-12 pr-[7.25rem] text-[15px] font-medium text-slate-800 placeholder:text-slate-400 outline-none transition-[box-shadow,transform,border-color,background] duration-300 md:h-14 md:pl-14 md:pr-[7.75rem] md:text-base",
+                        "group-focus-within:shadow-[0_0_0_4px_rgba(95,168,0,0.12),0_20px_50px_rgba(15,23,42,0.08)]",
+                        scrolled ? "bg-white/85 shadow-inner backdrop-blur-xl" : "",
                       ].join(" ")}
                       style={{
-                        background: showHints || searchQuery ? "#fff" : scrolled ? "rgba(255,255,255,0.72)" : "#f3f4f6",
-                        border: showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid rgba(0,0,0,0.06)",
-                        boxShadow: showHints || searchQuery
-                          ? `0 0 0 3px ${GREEN}18, 0 12px 40px rgba(95,168,0,0.08)`
-                          : scrolled
-                            ? "0 8px 32px rgba(15,23,42,0.06)"
-                            : "none",
+                        background:
+                          showHints || searchQuery
+                            ? "#ffffff"
+                            : scrolled
+                              ? "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.95) 100%)"
+                              : "linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%)",
+                        border:
+                          showHints || searchQuery ? `2px solid ${GREEN}` : "2px solid rgba(148,163,184,0.35)",
+                        boxShadow:
+                          showHints || searchQuery
+                            ? `0 0 0 1px rgba(95,168,0,0.2), 0 16px 48px rgba(95,168,0,0.12)`
+                            : scrolled
+                              ? "0 10px 40px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)"
+                              : "0 8px 32px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.85)",
                       }}
                       data-testid="input-search"
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                      <button type="button" onClick={() => headerCameraRef.current?.click()}
-                        className={`p-1.5 rounded-xl transition-all hover:scale-110 ${headerCamLoad ? "text-green-600" : ""}`}
-                        style={{ background: `${GREEN}12`, color: headerCamLoad ? "#16a34a" : GREEN }}>
-                        {headerCamLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                    <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1 md:right-2">
+                      <button
+                        type="button"
+                        onClick={() => headerCameraRef.current?.click()}
+                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 md:h-11 md:w-11 ${headerCamLoad ? "text-green-600" : ""}`}
+                        style={{ background: `${GREEN}14`, color: headerCamLoad ? "#16a34a" : GREEN }}
+                        aria-label="Search by image"
+                      >
+                        {headerCamLoad ? <Loader2 className="h-4 w-4 animate-spin md:h-[1.15rem] md:w-[1.15rem]" /> : <Camera className="h-4 w-4 md:h-[1.15rem] md:w-[1.15rem]" />}
                       </button>
-                      <button type="button" onClick={startHeaderVoice}
-                        className={`p-1.5 rounded-xl transition-all hover:scale-110 ${headerListening ? "animate-pulse" : ""}`}
-                        style={{ background: headerListening ? "#ef4444" : `${GREEN}12`, color: headerListening ? "#fff" : GREEN }}>
-                        <Mic className="w-3.5 h-3.5" />
+                      <button
+                        type="button"
+                        onClick={startHeaderVoice}
+                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 md:h-11 md:w-11 ${headerListening ? "animate-pulse" : ""}`}
+                        style={{ background: headerListening ? "#ef4444" : `${GREEN}14`, color: headerListening ? "#fff" : GREEN }}
+                        aria-label="Voice search"
+                      >
+                        <Mic className="h-4 w-4 md:h-[1.15rem] md:w-[1.15rem]" />
                       </button>
                     </div>
                     <input ref={headerCameraRef} type="file" accept="image/*" className="hidden" onChange={handleHeaderCamImg} />
@@ -879,55 +901,57 @@ export function Header() {
 
                 {/* Search dropdown */}
                 {showHints && searchQuery.length > 0 && (searchHints.products.length > 0 || searchHints.categories.length > 0) && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl z-[300] overflow-hidden"
-                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)" }}>
+                  <div
+                    className="absolute left-0 right-0 top-[calc(100%+10px)] z-[300] overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl backdrop-blur-2xl md:rounded-3xl"
+                    style={{ boxShadow: "0 28px 80px rgba(15,23,42,0.16), 0 0 0 1px rgba(95,168,0,0.06)" }}
+                  >
                     {searchHints.products.length > 0 && (
                       <>
-                        <div className="px-4 pt-3 pb-1">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Products</p>
+                        <div className="px-5 pt-4 pb-2">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Products</p>
                         </div>
                         {searchHints.products.map(p => (
                           <button key={p.id} type="button"
-                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0 group"
+                            className="group flex w-full items-center gap-4 border-b border-slate-100/90 px-5 py-3 text-left transition-colors last:border-0 hover:bg-gradient-to-r hover:from-[#5FA800]/[0.06] hover:to-transparent"
                             onClick={() => { setShowHints(false); setSearchQuery(""); navigate(`/products/${p.slug || p.id}`); }}>
                             {p.image
                               ? (
                                 <img
-                                  src={getProductImageSrc(p.image, { maxWidth: 120 })}
+                                  src={getProductImageSrc(p.image, { maxWidth: 128 })}
                                   alt={p.name}
-                                  width={40}
-                                  height={40}
+                                  width={56}
+                                  height={56}
                                   loading="lazy"
                                   decoding="async"
-                                  className="w-10 h-10 rounded-xl object-cover flex-shrink-0 bg-muted/30"
+                                  className="h-12 w-12 shrink-0 rounded-2xl object-cover shadow-sm ring-1 ring-black/5 md:h-14 md:w-14"
                                 />
                               )
-                              : <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0 text-sm" style={{ background: GREEN }}>{p.name[0]}</div>
+                              : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-bold text-white shadow-md md:h-14 md:w-14" style={{ background: GREEN }}>{p.name[0]}</div>
                             }
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-gray-800">{p.name}</p>
-                              <p className="text-xs font-bold mt-0.5" style={{ color: GREEN }}>Rs. {p.price?.toLocaleString()}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[15px] font-semibold text-slate-900 group-hover:text-slate-950">{p.name}</p>
+                              <p className="mt-0.5 text-sm font-bold" style={{ color: GREEN }}>Rs. {p.price?.toLocaleString()}</p>
                             </div>
                             {p.stock === 0 ? (
-                              <span className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded-full flex-shrink-0">Out of stock</span>
+                              <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-500">Out of stock</span>
                             ) : (
-                              <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                              <ArrowRight className="h-5 w-5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
                             )}
                           </button>
                         ))}
                       </>
                     )}
                     {searchHints.categories.length > 0 && (
-                      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Categories</p>
-                        <div className="flex gap-2 flex-wrap">
+                      <div className="border-t border-slate-100/90 bg-slate-50/80 px-5 py-4 backdrop-blur-sm">
+                        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Categories</p>
+                        <div className="flex flex-wrap gap-2">
                           {searchHints.categories.map(c => (
                             <button key={c.id} type="button"
                               onClick={() => { setShowHints(false); setSearchQuery(""); navigate(`/products?category=${c.slug}`); }}
-                              className="text-xs px-3 py-1 rounded-full font-semibold border transition-all hover:text-white"
-                              style={{ background: `${GREEN}12`, borderColor: `${GREEN}20`, color: GREEN }}
+                              className="rounded-full border px-4 py-1.5 text-sm font-semibold shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                              style={{ background: `${GREEN}10`, borderColor: `${GREEN}28`, color: GREEN }}
                               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = GREEN; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${GREEN}12`; (e.currentTarget as HTMLElement).style.color = GREEN; }}>
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${GREEN}10`; (e.currentTarget as HTMLElement).style.color = GREEN; }}>
                               {c.name}
                             </button>
                           ))}
@@ -936,16 +960,16 @@ export function Header() {
                     )}
                     <button type="button"
                       onClick={() => { setShowHints(false); handleSearch(); }}
-                      className="w-full py-3 text-xs text-center font-semibold bg-white border-t border-gray-100 hover:bg-gray-50 transition-colors flex items-center justify-center gap-1.5"
+                      className="flex w-full items-center justify-center gap-2 border-t border-slate-100/90 bg-white py-3.5 text-sm font-bold transition-colors hover:bg-slate-50"
                       style={{ color: GREEN }}>
-                      <Search className="w-3.5 h-3.5" />See all results for "{searchQuery}"
+                      <Search className="h-4 w-4" />See all results for &ldquo;{searchQuery}&rdquo;
                     </button>
                   </div>
                 )}
               </div>
 
               {/* Right actions */}
-              <div className="flex items-center gap-0.5 ml-auto sm:ml-0 flex-shrink-0">
+              <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:ml-0 md:gap-2">
 
                 {/* Mobile: search icon */}
                 <button className="sm:hidden p-2.5 rounded-xl hover:bg-gray-100 transition-colors"
@@ -956,10 +980,13 @@ export function Header() {
                 {/* Location — desktop */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-sm" data-testid="button-location">
-                      <MapPin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: GREEN }} />
-                      <span className="max-w-[70px] truncate font-medium text-gray-700">{city}</span>
-                      <ChevronDown className="w-3 h-3 text-gray-400" />
+                    <button
+                      className="hidden items-center gap-2 rounded-full border border-slate-200/90 bg-white/90 px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-[#5FA800]/35 hover:shadow-md md:flex md:px-4 md:py-2.5"
+                      data-testid="button-location"
+                    >
+                      <MapPin className="h-4 w-4 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                      <span className="max-w-[100px] truncate lg:max-w-[140px]">{city}</span>
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48 max-h-72 overflow-y-auto">
@@ -974,24 +1001,25 @@ export function Header() {
 
                 {/* Wishlist — desktop */}
                 <Link href="/account?tab=wishlist" className="hidden sm:block">
-                  <button className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors group" aria-label="Wishlist">
-                    <Heart className="w-5 h-5 text-gray-500 group-hover:text-red-400 transition-colors" />
+                  <button className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-12 md:w-12" aria-label="Wishlist">
+                    <Heart className="h-5 w-5 text-slate-500 transition-all group-hover:scale-110 group-hover:text-red-500 md:h-6 md:w-6" strokeWidth={2} />
                   </button>
                 </Link>
 
                 {/* Cart */}
                 <button
-                  className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-all group"
+                  className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-12 md:w-12"
                   onClick={() => setMiniCartOpen(true)}
                   aria-label="Open cart"
                   data-testid="link-cart"
                 >
                   <ShoppingBag
-                    className={`w-5 h-5 text-gray-700 transition-transform duration-150 ${cartBounce ? "scale-125" : "scale-100"}`}
+                    className={`h-5 w-5 text-slate-800 transition-transform duration-200 md:h-6 md:w-6 ${cartBounce ? "scale-110" : "group-hover:scale-105"}`}
+                    strokeWidth={2}
                   />
                   {totalItems > 0 && (
                     <span
-                      className={`absolute -top-0.5 -right-0.5 min-w-[19px] h-[19px] flex items-center justify-center rounded-full text-white text-[10px] font-bold px-1 transition-transform duration-150 ${cartBounce ? "scale-125" : "scale-100"}`}
+                      className={`absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px] font-black text-white shadow-md transition-transform duration-200 md:h-6 md:min-w-[1.5rem] md:text-xs ${cartBounce ? "scale-110" : ""}`}
                       style={{ background: ORANGE }}
                       data-testid="badge-cart-count"
                     >
@@ -1004,10 +1032,10 @@ export function Header() {
                 {user ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="hidden sm:flex items-center gap-1.5 px-2 py-1.5 rounded-xl hover:bg-gray-100 transition-colors" data-testid="button-user-menu">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
-                          style={{ background: GREEN }}>{user.name.charAt(0).toUpperCase()}</div>
-                        <ChevronDown className="w-3 h-3 text-gray-400" />
+                      <button className="hidden items-center gap-2 rounded-full border border-slate-200/80 bg-white px-2 py-1.5 shadow-sm transition-all hover:shadow md:flex" data-testid="button-user-menu">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white shadow-inner ring-2 ring-white/30 md:h-10 md:w-10"
+                          style={{ background: `linear-gradient(145deg, ${GREEN} 0%, #3d7000 100%)` }}>{user.name.charAt(0).toUpperCase()}</div>
+                        <ChevronDown className="h-4 w-4 text-slate-400" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52">
@@ -1026,8 +1054,8 @@ export function Header() {
                 ) : (
                   <>
                     <Link href="/login" className="hidden sm:block" data-testid="link-login">
-                      <button className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 shadow-sm active:scale-95"
-                        style={{ background: `linear-gradient(135deg, ${GREEN} 0%, #3d7000 100%)` }}>
+                      <button className="rounded-full px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(95,168,0,0.35)] transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(95,168,0,0.45)] active:translate-y-0 md:px-8 md:py-3 md:text-[15px]"
+                        style={{ background: `linear-gradient(135deg, ${GREEN} 0%, #3d7000 55%, #2d5a00 100%)` }}>
                         Login
                       </button>
                     </Link>
@@ -1042,10 +1070,19 @@ export function Header() {
             </div>
 
             {/* ── Desktop Nav + Trust strip ── */}
-            <div className={`hidden sm:flex items-center justify-between border-t border-gray-100 transition-all duration-300 ${shrunk ? "py-0.5" : "py-1"} -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8`}>
-              <nav className="flex items-center gap-0.5 flex-wrap">
+            <div
+              className={`hidden sm:flex items-center justify-between border-t border-slate-200/80 bg-gradient-to-r from-white via-slate-50/40 to-white transition-all duration-300 ${shrunk ? "py-1.5" : "py-2.5"} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8`}
+            >
+              <nav className="flex flex-wrap items-center gap-1 md:gap-1.5">
                 <Link href="/products">
-                  <button className="text-[13px] font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-all whitespace-nowrap">
+                  <button
+                    type="button"
+                    className={`whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold tracking-tight transition-all md:px-4 md:py-2.5 md:text-[15px] ${
+                      allProductsActive
+                        ? "bg-slate-900 text-white shadow-md shadow-slate-900/15 ring-1 ring-slate-900/10"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
+                    }`}
+                  >
                     All Products
                   </button>
                 </Link>
@@ -1056,43 +1093,81 @@ export function Header() {
                 ))}
 
                 <Link href="/products?featured=true">
-                  <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full transition-all whitespace-nowrap"
-                    style={{ color: ORANGE, background: `${ORANGE}10` }}>
-                    <Flame className="w-3.5 h-3.5" />Deals
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-bold transition-all hover:brightness-105 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                    style={{ color: ORANGE, background: `${ORANGE}14`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.5)` }}
+                  >
+                    <Flame className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.25} />
+                    Deals
                   </button>
                 </Link>
                 <Link href="/products?sortBy=newest">
-                  <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-purple-50 hover:text-purple-700 transition-all whitespace-nowrap text-gray-600">
-                    <Sparkles className="w-3.5 h-3.5" />New Arrivals
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-violet-50 hover:text-violet-800 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                  >
+                    <Sparkles className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" />
+                    New Arrivals
                   </button>
                 </Link>
                 <Link href="/products?sortBy=rating">
-                  <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-yellow-50 hover:text-yellow-700 transition-all whitespace-nowrap text-gray-600">
-                    <Star className="w-3.5 h-3.5" />Best Sellers
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-amber-50 hover:text-amber-900 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
+                  >
+                    <Star className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.25} />
+                    Best Sellers
                   </button>
                 </Link>
                 <Link href="/blog">
-                  <button className="text-[13px] font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-all whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-white hover:text-slate-900 hover:shadow-sm md:px-4 md:py-2.5 md:text-[15px]"
+                  >
                     Blog
                   </button>
                 </Link>
                 <Link href="/track">
-                  <button className="text-[13px] font-semibold flex items-center gap-1 px-3 py-1.5 rounded-full transition-all whitespace-nowrap"
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-bold transition-all hover:bg-[#5FA800]/10 md:gap-2 md:px-4 md:py-2.5 md:text-[15px]"
                     style={{ color: GREEN }}
-                    data-testid="link-track-order">
-                    <Truck className="w-3.5 h-3.5" />Track Order
+                    data-testid="link-track-order"
+                  >
+                    <Truck className="h-4 w-4 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.25} />
+                    Track Order
                   </button>
                 </Link>
               </nav>
 
-              {/* Trust icons */}
-              <div className="hidden lg:flex items-center gap-4 text-[11px] text-gray-500 font-medium flex-shrink-0 ml-3">
-                <span className="flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" style={{ color: GREEN }} />Free Delivery Rs.1500+</span>
-                <span className="flex items-center gap-1.5"><Leaf className="w-3.5 h-3.5" style={{ color: GREEN }} />100% Fresh</span>
-                <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" style={{ color: GREEN }} />Easy Returns</span>
-                <a href="tel:+92300000000" className="flex items-center gap-1.5 hover:text-gray-700 transition-colors">
-                  <PhoneCall className="w-3.5 h-3.5" style={{ color: GREEN }} />24/7 Support
-                </a>
+              {/* Trust icons — desktop enterprise strip */}
+              <div className="ml-3 hidden shrink-0 items-center gap-2 lg:flex">
+                {([
+                  { Icon: Truck, t: "Free delivery", s: "Rs.1500+", c: GREEN },
+                  { Icon: Leaf, t: "100% Fresh", s: "Quality", c: GREEN },
+                  { Icon: Shield, t: "Easy returns", s: "7 days", c: GREEN },
+                  { Icon: PhoneCall, t: "24/7", s: "Support", c: GREEN, href: "tel:+92300000000" },
+                ] as const).map((row, i) => {
+                  const inner = (
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-sm transition-all hover:border-[#5FA800]/30 hover:shadow-md">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#5FA800]/12 to-slate-50 ring-1 ring-[#5FA800]/15">
+                        <row.Icon className="h-[18px] w-[18px]" style={{ color: row.c }} strokeWidth={2.25} />
+                      </span>
+                      <span className="max-w-[7.5rem] leading-tight">
+                        <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">{row.t}</span>
+                        <span className="block text-xs font-semibold text-slate-800">{row.s}</span>
+                      </span>
+                    </div>
+                  );
+                  if ("href" in row && row.href)
+                    return (
+                      <a key={i} href={row.href} className="text-inherit no-underline">
+                        {inner}
+                      </a>
+                    );
+                  return <div key={i}>{inner}</div>;
+                })}
               </div>
             </div>
 

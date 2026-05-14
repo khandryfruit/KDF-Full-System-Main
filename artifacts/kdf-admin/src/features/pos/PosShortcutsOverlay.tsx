@@ -11,7 +11,7 @@ const ROWS: { keys: string; action: string }[] = [
   { keys: "F6", action: "Change unit" },
   { keys: "F7", action: "Hold sale — saves to Holds, clears cart, new bill #" },
   { keys: "F8", action: "Additional charges" },
-  { keys: "F9", action: "Bill discount %" },
+  { keys: "F9", action: "Bill discount (% or fixed Rs)" },
   { keys: "F10", action: "Suspend — same as F7 (hold)" },
   { keys: "F11", action: "Toggle fullscreen" },
   { keys: "F12", action: "Remarks / notes" },

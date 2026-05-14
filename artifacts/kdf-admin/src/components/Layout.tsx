@@ -942,17 +942,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
 
         {/* Desktop topbar */}
-        <div className="hidden md:flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-card/55 px-5 shadow-[0_8px_40px_-28px_rgba(0,0,0,0.45)] backdrop-blur-2xl dark:bg-card/40">
+        <div className="hidden h-16 shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-gradient-to-r from-card/90 via-card/70 to-card/90 px-6 shadow-[0_12px_48px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl md:flex dark:from-card/50 dark:via-card/40 dark:to-card/50">
           <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
             <motion.button
               type="button"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.96 }}
               onClick={handleToggleCollapse}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground ring-1 ring-border/40 transition-colors hover:bg-muted/60 hover:text-foreground"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {isCollapsed ? <PanelLeftOpen className="h-[15px] w-[15px]" strokeWidth={2} /> : <PanelLeftClose className="h-[15px] w-[15px]" strokeWidth={2} />}
+              {isCollapsed ? <PanelLeftOpen className="h-4 w-4" strokeWidth={2} /> : <PanelLeftClose className="h-4 w-4" strokeWidth={2} />}
             </motion.button>
           </div>
           <div className="hidden min-w-0 flex-1 justify-center px-6 lg:flex">
@@ -961,11 +961,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
               onClick={() => setLocation("/orders")}
-              className="relative flex w-full max-w-lg items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-muted/20 px-3.5 py-2.5 text-left text-sm text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] transition-colors hover:border-primary/25 hover:bg-muted/35 hover:text-foreground hover:shadow-[0_0_32px_-12px_hsl(var(--primary)/0.35)]"
+              className="relative flex w-full max-w-xl items-center gap-3 rounded-2xl border border-border/50 bg-muted/25 px-4 py-3 text-left text-sm text-muted-foreground shadow-inner transition-all hover:border-primary/30 hover:bg-muted/40 hover:text-foreground hover:shadow-[0_0_40px_-12px_hsl(var(--primary)/0.4)]"
             >
               <Search className="h-4 w-4 shrink-0 opacity-70" strokeWidth={2} />
-              <span className="truncate">Search orders, SKUs, customers…</span>
-              <kbd className="ml-auto hidden h-5 items-center rounded-md border border-border/60 bg-background/60 px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
+              <span className="truncate font-medium">Search orders, SKUs, customers…</span>
+              <kbd className="ml-auto hidden h-6 items-center rounded-lg border border-border/60 bg-background/80 px-2 font-mono text-[10px] font-semibold text-muted-foreground sm:inline-flex">
                 ⌘K
               </kbd>
             </motion.button>

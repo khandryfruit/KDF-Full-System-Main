@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Wallet, Package, Banknote, Building2, Smartphone, MapPin, Navigation, ChevronDown, Truck, Zap, Clock, Loader2, Sparkles } from "lucide-react";
+import { CreditCard, Wallet, Package, Banknote, Building2, Smartphone, MapPin, Navigation, ChevronDown, Truck, Zap, Clock, Loader2, Sparkles, ShieldCheck, Lock } from "lucide-react";
 
 const checkoutSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -349,20 +349,41 @@ export default function CheckoutPage() {
         <title>Checkout — KDF Plus</title>
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
-        <h1 className="text-2xl font-bold mb-6">Checkout</h1>
+      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
+        <div className="mb-6 flex flex-col gap-4 md:mb-8 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight md:text-3xl">Checkout</h1>
+            <p className="mt-1 hidden text-sm text-muted-foreground md:block">Secure checkout — your details are encrypted in transit.</p>
+          </div>
+          <div className="hidden flex-wrap items-center gap-2 md:flex lg:justify-end">
+            {[
+              { icon: ShieldCheck, label: "Secure checkout" },
+              { icon: Truck, label: "Nationwide delivery" },
+              { icon: Lock, label: "Privacy protected" },
+            ].map(({ icon: Icon, label }) => (
+              <div
+                key={label}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 text-[#5FA800]" />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
               {/* Left: Delivery + Payment */}
-              <div className="lg:col-span-2 space-y-5">
+              <div className="space-y-5 md:space-y-6 lg:col-span-2">
                 {/* Delivery Address */}
-                <div className="bg-white border border-border rounded-xl p-5">
-                  <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-primary" /> Delivery Address
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6 [&_input]:md:h-11 [&_input]:md:rounded-xl [&_textarea]:md:rounded-xl">
+                  <h2 className="mb-1 flex items-center gap-2 text-base font-bold md:text-lg">
+                    <Package className="h-4 w-4 text-[#5FA800]" /> Delivery Address
                   </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <p className="mb-4 text-xs text-muted-foreground md:text-sm">We use this for delivery updates and order confirmation.</p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Your full name" data-testid="input-name" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -555,9 +576,9 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Shipping Method */}
-                <div className="bg-white border border-border rounded-xl p-5">
-                  <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-primary" /> Shipping Method
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-base font-bold md:text-lg">
+                    <Truck className="h-4 w-4 text-[#5FA800]" /> Shipping Method
                   </h2>
                   <div className="space-y-2">
                     {/* Standard Delivery */}
@@ -630,9 +651,9 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Payment Method */}
-                <div className="bg-white border border-border rounded-xl p-5">
-                  <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-primary" /> Payment Method
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-base font-bold md:text-lg">
+                    <CreditCard className="h-4 w-4 text-[#5FA800]" /> Payment Method
                   </h2>
                   <FormField control={form.control} name="paymentMethod" render={({ field }) => (
                     <FormItem>
@@ -734,14 +755,15 @@ export default function CheckoutPage() {
               </div>
 
               {/* Right: Order Summary */}
-              <div>
-                <div className="bg-white border border-border rounded-xl p-5 sticky top-20">
-                  <h2 className="font-semibold text-base mb-4">Order Summary</h2>
-                  <div className="space-y-3 mb-4 max-h-52 overflow-y-auto pr-1">
+              <div className="lg:sticky lg:top-24 lg:self-start">
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
+                  <h2 className="mb-1 text-base font-bold md:text-lg">Order Summary</h2>
+                  <p className="mb-4 text-xs text-muted-foreground">Items in your bag</p>
+                  <div className="mb-4 max-h-52 space-y-3 overflow-y-auto pr-1 md:max-h-64">
                     {items.map((item) => (
-                      <div key={`${item.product.id}-${item.variantId}`} className="flex gap-3 items-center">
+                      <div key={`${item.product.id}-${item.variantId}`} className="group flex items-center gap-3 rounded-xl border border-transparent px-1 py-1 transition-colors hover:border-[#5FA800]/15 hover:bg-[#5FA800]/[0.04]">
                         <img src={getProductImageSrc(item.product.images?.[0])} alt={item.product.name} loading="lazy"
-                          className="w-12 h-12 rounded-lg object-cover bg-muted/20 flex-shrink-0" />
+                          className="h-12 w-12 flex-shrink-0 rounded-lg bg-muted/20 object-cover ring-1 ring-black/[0.04] transition-transform duration-300 group-hover:scale-105 md:h-14 md:w-14 md:rounded-xl" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium line-clamp-1">{item.product.name}</p>
                           <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
@@ -763,7 +785,14 @@ export default function CheckoutPage() {
                     <span>Total</span>
                     <span data-testid="text-checkout-total">Rs. {grandTotal.toLocaleString()}</span>
                   </div>
-                  <Button type="submit" size="lg" className="w-full mt-4 font-semibold" disabled={createOrder.isPending} data-testid="button-place-order">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="mt-4 w-full rounded-xl font-semibold shadow-lg shadow-[#5FA800]/20 transition-[transform,box-shadow] duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:hover:scale-100"
+                    style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
+                    disabled={createOrder.isPending}
+                    data-testid="button-place-order"
+                  >
                     {createOrder.isPending ? "Placing Order..." : "Place Order"}
                   </Button>
                 </div>

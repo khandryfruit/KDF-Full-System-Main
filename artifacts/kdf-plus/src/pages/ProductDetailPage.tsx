@@ -276,17 +276,17 @@ function RelatedProducts({ currentId }: { currentId: number }) {
   if (products.length === 0) return null;
 
   return (
-    <div className="mt-10">
+    <div className="mt-10 md:mt-14">
       <Separator className="mb-8" />
-      <h2 className="text-xl font-bold mb-5">You May Also Like</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <h2 className="mb-5 text-xl font-black tracking-tight md:text-2xl">You May Also Like</h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-5">
         {products.map((p: any) => {
           const rPrice = Number(p.price);
           const rOld = p.originalPrice ? Number(p.originalPrice) : null;
           const rDisc = rOld && rOld > rPrice ? Math.round(((rOld - rPrice) / rOld) * 100) : null;
           const img = p.images?.[0];
           return (
-            <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer border border-border rounded-2xl overflow-hidden bg-card hover:shadow-md transition-all hover:-translate-y-0.5">
+            <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer overflow-hidden rounded-3xl border border-gray-100/90 bg-white shadow-sm ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[#5FA800]/30 hover:shadow-2xl hover:shadow-[#5FA800]/12 active:scale-[0.99] md:rounded-[1.75rem] md:hover:-translate-y-1.5">
               <div className="aspect-square bg-muted/20 overflow-hidden relative">
                 {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
@@ -492,10 +492,10 @@ export default function ProductDetailPage() {
         </nav>
 
         {/* 2-column grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-12 xl:gap-14">
           {/* Left: Images */}
-          <div className="space-y-3 max-w-[500px] w-full mx-auto lg:mx-0">
-            <div ref={imgRef} className="relative rounded-2xl overflow-hidden bg-muted/20 border border-border cursor-zoom-in" style={{ aspectRatio: "1/1" }}
+          <div className="mx-auto w-full max-w-[500px] space-y-3 lg:mx-0 lg:max-w-[560px]">
+            <div ref={imgRef} className="relative aspect-square cursor-zoom-in overflow-hidden rounded-2xl border border-gray-100/90 bg-muted/20 shadow-md ring-1 ring-black/[0.04] lg:rounded-[1.75rem] lg:shadow-xl"
               onMouseEnter={() => setImgZoomed(true)} onMouseLeave={() => setImgZoomed(false)} onMouseMove={handleMouseMove}>
               <img src={getProductImageSrc(images[selectedImage])} alt={(product as any).altText || product.name}
                 className="w-full h-full object-contain transition-transform duration-200"
@@ -510,9 +510,16 @@ export default function ProductDetailPage() {
               </>)}
             </div>
             {images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 md:gap-2.5 lg:gap-3">
                 {images.map((img, i) => (
-                  <button key={i} onClick={() => setSelectedImage(i)} className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all hover:scale-105 ${i === selectedImage ? "border-primary shadow-md" : "border-border hover:border-primary/40"}`} data-testid={`button-image-thumb-${i}`}>
+                  <button
+                    key={i}
+                    onClick={() => setSelectedImage(i)}
+                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 hover:scale-105 md:h-[72px] md:w-[72px] md:rounded-2xl md:hover:-translate-y-1 md:hover:shadow-lg ${
+                      i === selectedImage ? "border-primary shadow-md ring-[#5FA800]/20" : "border-border hover:border-[#5FA800]/40"
+                    }`}
+                    data-testid={`button-image-thumb-${i}`}
+                  >
                     <img src={getProductImageSrc(img)} alt={`${product.name} view ${i + 1}`} className="w-full h-full object-cover"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   </button>
@@ -521,8 +528,8 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Right: Info */}
-          <div className="flex flex-col gap-4">
+          {/* Right: Info — sticky glass buy column on large screens */}
+          <div className="flex flex-col gap-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:gap-5 lg:overflow-y-auto lg:overscroll-contain lg:self-start lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-[#5FA800]/10 lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-wrap gap-2">
                 {product.tags?.map((tag) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
@@ -535,7 +542,7 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black text-foreground leading-tight" data-testid="text-product-name">{product.name}</h1>
+            <h1 className="text-2xl font-black leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl" data-testid="text-product-name">{product.name}</h1>
 
             {product.rating && Number(product.rating) > 0 && (
               <div className="flex items-center gap-2">
@@ -545,8 +552,8 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            <div className="flex items-end gap-3 flex-wrap">
-              <span className="text-3xl font-black text-foreground" data-testid="text-price">Rs. {price.toLocaleString()}</span>
+            <div className="flex flex-wrap items-end gap-3">
+              <span className="text-3xl font-black tracking-tight text-foreground lg:text-4xl" data-testid="text-price">Rs. {price.toLocaleString()}</span>
               {originalPrice && originalPrice > price && <span className="text-lg text-muted-foreground line-through">Rs. {originalPrice.toLocaleString()}</span>}
               {discount && <Badge className="bg-[#5FA800]/10 text-[#5FA800] border border-[#5FA800]/30 font-bold">{discount}% OFF</Badge>}
             </div>
@@ -651,12 +658,12 @@ export default function ProductDetailPage() {
             )}
 
             {/* CTA — desktop */}
-            <div className="hidden lg:flex gap-3">
-              <Button size="lg" variant="outline" className="flex-1 font-semibold rounded-xl border-2 hover:scale-[1.02] active:scale-[0.98] transition-all" onClick={handleAddToCart} disabled={product.stock === 0} data-testid="button-add-to-cart">
-                <ShoppingCart className="w-4 h-4 mr-2" /> Add to Cart
+            <div className="hidden gap-3 lg:flex">
+              <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={handleAddToCart} disabled={product.stock === 0} data-testid="button-add-to-cart">
+                <ShoppingCart className="mr-2 h-4 w-4" /> Add to Cart
               </Button>
-              <Button size="lg" className="flex-1 font-semibold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all" onClick={handleBuyNow} disabled={product.stock === 0} style={{ backgroundColor: "#5FA800" }} data-testid="button-buy-now">
-                <Zap className="w-4 h-4 mr-2" /> Buy Now
+              <Button size="lg" className="flex-1 rounded-xl font-semibold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-300 hover:scale-[1.02] active:scale-[0.98]" onClick={handleBuyNow} disabled={product.stock === 0} style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }} data-testid="button-buy-now">
+                <Zap className="mr-2 h-4 w-4" /> Buy Now
               </Button>
             </div>
 
@@ -690,14 +697,14 @@ export default function ProductDetailPage() {
             )}
 
             {/* Trust Badges */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+            <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               {[
                 { icon: Truck, label: "Free Delivery", sub: "Orders > Rs. 1,500" },
                 { icon: RotateCcw, label: "Easy Returns", sub: "7-day hassle-free" },
                 { icon: Shield, label: "Secure Payment", sub: "100% safe & secure" },
                 { icon: Package, label: "100% Original", sub: "Quality guaranteed" },
               ].map(({ icon: Icon, label, sub }) => (
-                <div key={label} className="flex flex-col items-center text-center p-3 bg-accent/40 rounded-xl gap-1.5 border border-border/50">
+                <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl border border-gray-100/80 bg-white/60 p-3 text-center shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md md:p-3.5">
                   <Icon className="w-4 h-4 text-primary" />
                   <span className="text-xs font-semibold">{label}</span>
                   <span className="text-[10px] text-muted-foreground leading-tight">{sub}</span>
@@ -712,7 +719,7 @@ export default function ProductDetailPage() {
           {accordionSections.map(({ key, emoji, label, count }) => {
             const isOpen = openSection === key;
             return (
-              <div key={key} className="border border-border rounded-2xl bg-card shadow-sm overflow-hidden">
+              <div key={key} className="overflow-hidden rounded-2xl border border-gray-100/90 bg-card shadow-md ring-1 ring-black/[0.03] md:rounded-[1.75rem] md:shadow-lg md:ring-black/[0.04]">
                 {/* Header row */}
                 <button
                   onClick={() => {

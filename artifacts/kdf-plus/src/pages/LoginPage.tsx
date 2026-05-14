@@ -61,8 +61,8 @@ export default function LoginPage() {
         <link rel="canonical" href="/kdf-plus/login" />
       </Helmet>
 
-      <main className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-background">
-        <div className="w-full max-w-md">
+      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gradient-to-b from-slate-50/90 via-background to-background px-4 py-12 md:py-16 lg:px-8">
+        <div className="w-full max-w-md md:max-w-lg">
           {/* Back button */}
           <button
             onClick={() => setLocation("/")}
@@ -87,7 +87,7 @@ export default function LoginPage() {
             <p className="text-muted-foreground text-sm mt-1">Login to your {siteName} account</p>
           </div>
 
-          <div className="bg-white border border-border rounded-2xl p-6 sm:p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-6 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl sm:p-8 md:rounded-[1.75rem] md:p-9">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -102,6 +102,7 @@ export default function LoginPage() {
                           type="tel"
                           autoComplete="tel"
                           data-testid="input-phone"
+                          className="md:h-11 md:rounded-xl"
                           {...field}
                         />
                       </FormControl>
@@ -121,6 +122,7 @@ export default function LoginPage() {
                           placeholder="Enter your password"
                           autoComplete="current-password"
                           data-testid="input-password"
+                          className="md:h-11 md:rounded-xl"
                           {...field}
                         />
                       </FormControl>
@@ -131,8 +133,9 @@ export default function LoginPage() {
 
                 <Button
                   type="submit"
-                  className="w-full font-semibold"
+                  className="w-full rounded-xl font-semibold shadow-md shadow-[#5FA800]/20 transition-[transform,box-shadow] hover:scale-[1.01] active:scale-[0.99] md:h-12"
                   size="lg"
+                  style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
                   disabled={loginMutation.isPending}
                   data-testid="button-login"
                 >

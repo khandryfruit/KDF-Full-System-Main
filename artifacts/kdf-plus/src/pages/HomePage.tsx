@@ -144,7 +144,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
   if (loading) {
     return (
       <div className="px-3 sm:px-6 py-3 sm:py-4">
-        <Skeleton className="w-full min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] rounded-[28px] sm:rounded-3xl" />
+        <Skeleton className="w-full min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] rounded-[28px] sm:rounded-3xl" />
       </div>
     );
   }
@@ -155,10 +155,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
     return (
       <div className="px-3 sm:px-6 py-3 sm:py-4">
         <div
-          className="relative flex flex-col justify-end overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] sm:justify-center rounded-[28px] sm:rounded-3xl cursor-pointer active:scale-[0.995] transition-transform ring-1 ring-black/[0.04]"
+          className="relative flex flex-col justify-end overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] sm:justify-center rounded-[28px] sm:rounded-3xl cursor-pointer active:scale-[0.995] transition-transform ring-1 ring-black/[0.04]"
           style={{
             background: `linear-gradient(145deg, ${s.g1} 0%, ${s.g2} 55%, ${s.g3} 100%)`,
-            boxShadow: `0 24px 64px ${s.g3}55, 0 8px 24px rgba(0,0,0,0.35)`,
+            boxShadow: `0 28px 72px ${s.g3}55, 0 12px 36px rgba(0,0,0,0.35)`,
           }}
           onClick={() => setLocation('/products')}
         >
@@ -183,8 +183,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)' }}>
               {s.label}
             </span>
-            <h1 className="text-2xl sm:text-5xl font-black text-white leading-tight mb-2 sm:mb-3"
-              style={{ textShadow: '0 2px 16px rgba(0,0,0,0.4)' }}>
+            <h1 className="mb-2 text-2xl font-black leading-tight text-white sm:mb-3 sm:text-5xl lg:text-6xl"
+              style={{ textShadow: '0 2px 20px rgba(0,0,0,0.45)' }}>
               {s.headline.split('\n').map((line, i) => (
                 <Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</Fragment>
               ))}
@@ -228,10 +228,10 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
       onMouseLeave={() => setPaused(false)}
     >
       <div
-        className="relative overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[420px] sm:h-[420px] sm:max-h-none rounded-[28px] sm:rounded-3xl ring-1 ring-black/[0.04]"
+        className="relative overflow-hidden min-h-[272px] h-[min(76vw,360px)] sm:min-h-[460px] sm:h-[min(52vh,520px)] lg:min-h-[520px] lg:h-[min(56vh,600px)] sm:max-h-none rounded-[28px] sm:rounded-3xl ring-1 ring-black/[0.04]"
         style={{
           boxShadow:
-            "0 24px 64px rgba(13,43,0,0.18), 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.15)",
+            "0 28px 72px rgba(13,43,0,0.2), 0 12px 32px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.18)",
         }}
       >
         {/* Slides */}
@@ -313,7 +313,7 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
               />
 
               {/* Content — mobile: bottom stack + glass CTAs; desktop: side-by-side */}
-              <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 px-4 pb-5 pt-12 sm:flex-row sm:items-center sm:justify-start sm:gap-8 sm:px-12 sm:pb-0 sm:pt-0">
+              <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 px-4 pb-5 pt-12 sm:flex-row sm:items-center sm:justify-start sm:gap-10 sm:px-14 sm:pb-0 sm:pt-0 lg:gap-14 lg:px-16">
 
                 <div className="flex-1 min-w-0 sm:self-center">
                   {/* Trust micro-row — mobile only */}
@@ -333,13 +333,13 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                     </span>
                   )}
                   <h2
-                    className="text-[1.65rem] leading-[1.12] sm:text-4xl lg:text-5xl font-black tracking-tight text-white drop-shadow-lg mb-1.5 sm:mb-3"
-                    style={{ textShadow: "0 4px 24px rgba(0,0,0,0.45)" }}
+                    className="mb-1.5 max-w-[22rem] text-[1.65rem] font-black leading-[1.1] tracking-tight text-white drop-shadow-lg sm:mb-3 sm:max-w-3xl sm:text-4xl lg:text-6xl lg:leading-[1.05]"
+                    style={{ textShadow: "0 4px 28px rgba(0,0,0,0.5)" }}
                   >
                     {banner.title}
                   </h2>
                   {banner.subtitle && (
-                    <p className="text-white/85 text-sm sm:text-base mb-3 sm:mb-5 max-w-[20rem] sm:max-w-md line-clamp-2 font-medium leading-snug">
+                    <p className="mb-3 max-w-[20rem] text-sm font-medium leading-snug text-white/90 sm:mb-5 sm:max-w-xl sm:text-lg lg:text-xl">
                       {banner.subtitle}
                     </p>
                   )}
@@ -348,23 +348,26 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                       <CountdownTimer endAt={(banner as any).countdownEndAt} />
                     </div>
                   )}
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                     <button
-                      className="inline-flex items-center gap-1.5 px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-bold text-sm text-white shadow-lg transition-transform active:scale-[0.98] hover:brightness-110 ring-1 ring-white/20"
-                      style={{ backgroundColor: GREEN, boxShadow: `0 8px 28px ${GREEN}55` }}
-                      onClick={(e) => { e.stopPropagation(); handleBannerClick(banner); }}
+                      className="inline-flex items-center gap-2 rounded-full px-7 py-3 text-sm font-bold text-white shadow-[0_14px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/25 transition-all hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] sm:px-9 sm:py-3.5 sm:text-base"
+                      style={{ backgroundColor: GREEN, boxShadow: `0 12px 36px ${GREEN}50` }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleBannerClick(banner);
+                      }}
                     >
-                      {banner.cta || "Shop Now"} <ArrowRight className="w-4 h-4 sm:w-[1.05rem] sm:h-[1.05rem]" />
+                      {banner.cta || "Shop Now"} <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1.5 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-bold text-sm text-white border border-white/45 bg-white/12 backdrop-blur-md shadow-md transition-transform active:scale-[0.98] hover:bg-white/20"
+                      className="inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/15 px-6 py-3 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all hover:bg-white/25 active:scale-[0.98] sm:px-8 sm:py-3.5 sm:text-base"
                       onClick={(e) => {
                         e.stopPropagation();
                         setLocation("/products");
                       }}
                     >
-                      Explore deals
+                      Explore catalog
                     </button>
                   </div>
                 </div>
@@ -373,8 +376,8 @@ function HeroBanner({ banners, loading }: { banners: Banner[]; loading: boolean 
                 {desktopImg && !isMobile && (
                   <div className="hidden sm:flex flex-shrink-0 items-center justify-center">
                     <div
-                      className="relative bg-white/10 backdrop-blur-md border border-white/25 rounded-2xl shadow-2xl overflow-hidden hover:scale-[1.02] transition-transform duration-300"
-                      style={{ width: 240, height: 220 }}
+                      className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/10 shadow-2xl backdrop-blur-md transition-transform duration-500 hover:scale-[1.03] hover:shadow-[0_32px_80px_rgba(0,0,0,0.35)]"
+                      style={{ width: 260, height: 240 }}
                     >
                       <img
                         src={desktopImg}

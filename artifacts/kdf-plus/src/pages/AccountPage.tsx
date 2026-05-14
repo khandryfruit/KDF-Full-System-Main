@@ -238,9 +238,9 @@ export default function AccountPage() {
         <link rel="canonical" href="/kdf-plus/account" />
       </Helmet>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-24 sm:pb-6">
+      <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:px-6 sm:pb-6 md:max-w-5xl lg:px-8 lg:py-8">
         {/* Profile Header */}
-        <div className="bg-white border border-border rounded-2xl p-5 mb-5 flex items-center gap-4">
+        <div className="mb-5 flex items-center gap-4 rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:mb-6 md:rounded-[1.75rem] md:p-6">
           <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
             {(displayUser as any).profileImage
               ? <img src={(displayUser as any).profileImage} className="w-full h-full object-cover rounded-full" />
@@ -265,13 +265,13 @@ export default function AccountPage() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
-          <div className="bg-white border border-border rounded-xl p-4 text-center">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:mb-6 md:gap-4">
+          <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 text-center shadow-md shadow-slate-900/[0.03] ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-lg md:rounded-[1.75rem] md:p-5">
             <Package className="w-5 h-5 text-primary mx-auto mb-1" />
             <p className="text-xl font-black" data-testid="text-orders-count">{ordersData?.total ?? 0}</p>
             <p className="text-xs text-muted-foreground">Orders</p>
           </div>
-          <div className="bg-white border border-border rounded-xl p-4 text-center">
+          <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 text-center shadow-md shadow-slate-900/[0.03] ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-lg md:rounded-[1.75rem] md:p-5">
             <Wallet className="w-5 h-5 text-secondary mx-auto mb-1" />
             {walletLoading ? <Skeleton className="h-7 w-16 mx-auto mb-1" /> : (
               <p className="text-xl font-black text-secondary" data-testid="text-wallet-balance">
@@ -280,7 +280,7 @@ export default function AccountPage() {
             )}
             <p className="text-xs text-muted-foreground">Wallet</p>
           </div>
-          <div className="bg-white border border-border rounded-xl p-4 text-center col-span-2 sm:col-span-1">
+          <div className="col-span-2 rounded-2xl border border-gray-100/90 bg-white/90 p-4 text-center shadow-md shadow-slate-900/[0.03] ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:col-span-1 md:rounded-[1.75rem] md:p-5">
             <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
             {loyaltyLoading ? <Skeleton className="h-7 w-16 mx-auto mb-1" /> : (
               <p className="text-xl font-black text-yellow-600" data-testid="text-loyalty-points">{loyaltyBalance?.points ?? 0}</p>
@@ -290,7 +290,7 @@ export default function AccountPage() {
         </div>
 
         <Tabs defaultValue={defaultTab}>
-          <TabsList className="mb-4 flex-wrap h-auto gap-1">
+          <TabsList className="mb-4 h-auto flex-wrap gap-1 rounded-2xl border border-gray-100/80 bg-white/70 p-1 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm md:gap-1.5 md:p-1.5">
             <TabsTrigger value="profile" data-testid="tab-profile"><User className="w-4 h-4 mr-1.5" /> Profile</TabsTrigger>
             <TabsTrigger value="orders" data-testid="tab-orders"><Package className="w-4 h-4 mr-1.5" /> Orders</TabsTrigger>
             <TabsTrigger value="addresses" data-testid="tab-addresses"><MapPin className="w-4 h-4 mr-1.5" /> Addresses</TabsTrigger>
@@ -300,7 +300,7 @@ export default function AccountPage() {
 
           {/* ── Profile Tab ── */}
           <TabsContent value="profile">
-            <div className="bg-white border border-border rounded-2xl p-5">
+            <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold">Personal Information</h2>
                 {!editingProfile && (
@@ -374,7 +374,7 @@ export default function AccountPage() {
             <div className="space-y-3">
               {ordersLoading ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />) :
                orders.length === 0 ? (
-                <div className="bg-white border border-border rounded-2xl p-10 text-center">
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-10 text-center shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem]">
                   <Package className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                   <h3 className="font-semibold mb-1">No orders yet</h3>
                   <p className="text-sm text-muted-foreground mb-4">Your order history will appear here.</p>
@@ -382,7 +382,7 @@ export default function AccountPage() {
                 </div>
               ) : (
                 orders.map(order => (
-                  <div key={order.id} className="bg-white border border-border rounded-xl p-4 hover:border-primary/30 hover:shadow-sm transition-all"
+                  <div key={order.id} className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-md shadow-slate-900/[0.03] ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/25 hover:shadow-xl hover:shadow-[#5FA800]/10 md:rounded-[1.75rem] md:p-5"
                     data-testid={`order-card-${order.id}`}>
                     <div
                       className="flex items-start justify-between gap-3 cursor-pointer"
@@ -447,7 +447,7 @@ export default function AccountPage() {
               {addrLoading && <Skeleton className="h-28 rounded-xl" />}
 
               {!addrLoading && addresses.length === 0 && !showAddrForm && (
-                <div className="bg-white border border-border rounded-2xl p-8 text-center">
+                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-8 text-center shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem]">
                   <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                   <p className="font-medium mb-1">No saved addresses</p>
                   <p className="text-sm text-muted-foreground mb-4">Add a delivery address for faster checkout</p>
@@ -456,7 +456,7 @@ export default function AccountPage() {
               )}
 
               {addresses.map(a => (
-                <div key={a.id} className="bg-white border border-border rounded-xl p-4">
+                <div key={a.id} className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-md shadow-slate-900/[0.03] ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-lg md:rounded-[1.75rem] md:p-5">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><MapPin className="w-4 h-4 text-primary" /></div>
@@ -483,7 +483,7 @@ export default function AccountPage() {
               ))}
 
               {showAddrForm && (
-                <div className="bg-white border-2 border-primary/20 rounded-xl p-4">
+                <div className="rounded-2xl border-2 border-primary/25 bg-white/95 p-4 shadow-md ring-1 ring-[#5FA800]/10 backdrop-blur-sm md:rounded-[1.75rem] md:p-5">
                   <h3 className="font-semibold mb-3">{editAddrId ? "Edit Address" : "New Address"}</h3>
                   <form onSubmit={handleAddrSubmit} className="space-y-3">
                     <div className="flex gap-1.5">
@@ -536,7 +536,7 @@ export default function AccountPage() {
                   </div>
                 </div>
               </div>
-              <div className="bg-white border border-border rounded-xl p-4">
+              <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm md:rounded-[1.75rem] md:p-5">
                 <p className="text-sm text-muted-foreground">Use your wallet balance at checkout to pay for orders instantly. Earn loyalty points with every purchase.</p>
               </div>
             </div>
@@ -546,7 +546,7 @@ export default function AccountPage() {
           <TabsContent value="security">
             <div className="space-y-4">
               {/* Change Password */}
-              <div className="bg-white border border-border rounded-2xl p-5">
+              <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><Lock className="w-4 h-4 text-primary" /></div>
                   <h2 className="font-semibold">Change Password</h2>
@@ -581,7 +581,7 @@ export default function AccountPage() {
               </div>
 
               {/* Delete Account */}
-              <div className="bg-white border border-destructive/20 rounded-2xl p-5">
+              <div className="rounded-2xl border border-destructive/25 bg-white/90 p-5 shadow-lg shadow-red-900/[0.04] ring-1 ring-red-900/[0.06] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center"><Trash className="w-4 h-4 text-destructive" /></div>
                   <h2 className="font-semibold text-destructive">Delete Account</h2>
