@@ -22,6 +22,25 @@ function readEnvApiBase(): string {
   return "";
 }
 
+/** When env is missing/wrong, derive API origin from the page hostname (split admin / storefront). */
+function inferApiBaseFromWindow(): string {
+  if (typeof window === "undefined") return "";
+  const h = window.location.hostname.toLowerCase();
+  if (h.startsWith("admin.")) {
+    const rest = h.slice("admin.".length);
+    return `${window.location.protocol}//api.${rest}`.replace(/\/+$/, "");
+  }
+  const map: Record<string, string> = {
+    "www.khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
+    "khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
+  };
+  if (map[h]) return map[h];
+  if (h.endsWith("khanbabadryfruits.com") && !h.startsWith("api.")) {
+    return "https://api.khanbabadryfruits.com";
+  }
+  return "";
+}
+
 export function getApiBase(): string {
   let raw = readEnvApiBase();
   let base = raw.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
@@ -38,21 +57,8 @@ export function getApiBase(): string {
     }
   }
 
-  if (!base && typeof window !== "undefined") {
-    const h = window.location.hostname.toLowerCase();
-    if (h.startsWith("admin.")) {
-      const rest = h.slice("admin.".length);
-      base = `${window.location.protocol}//api.${rest}`.replace(/\/+$/, "");
-    }
-    const map: Record<string, string> = {
-      "www.khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
-      "khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
-    };
-    if (!base && map[h]) base = map[h];
-    /* Last-resort for split deploys: any storefront or admin host on this zone → API host. */
-    if (!base && h.endsWith("khanbabadryfruits.com") && !h.startsWith("api.")) {
-      base = "https://api.khanbabadryfruits.com";
-    }
+  if (!base) {
+    base = inferApiBaseFromWindow();
   }
 
   return base.replace(/\/+$/, "");
@@ -60,10 +66,15 @@ export function getApiBase(): string {
 
 /**
  * Absolute URL for `/api/...` paths. Use for `EventSource` (fetch patch does not apply).
+ * Never returns a bare `/api/...` in production when the path is an API call — avoids static host 503.
  */
 export function apiPublicUrl(pathWithQuery: string): string {
   const p = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
-  const base = getApiBase().replace(/\/+$/, "");
+  let base = getApiBase().replace(/\/+$/, "");
+  /* Built production bundles on unknown hosts (e.g. *.railway.app preview) must still hit the real API. */
+  if (!base && p.startsWith("/api") && import.meta.env.PROD) {
+    base = "https://api.khanbabadryfruits.com";
+  }
   if (!base) return p;
   return `${base}${p}`;
 }
