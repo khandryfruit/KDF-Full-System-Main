@@ -11,6 +11,8 @@ export const footerSettingsTable = pgTable("footer_settings", {
   phone:         text("phone"),
   email:         text("email"),
   copyrightText: text("copyright_text"),
+  /** JSON string: newsletter copy, AI rotating lines, Instagram URLs, section toggles — see kdf-plus Footer */
+  premiumConfig: text("premium_config"),
   isActive:      boolean("is_active").notNull().default(true),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
   updatedAt:     timestamp("updated_at").notNull().defaultNow(),
@@ -74,6 +76,10 @@ export const appLinksTable = pgTable("app_links", {
   id:          serial("id").primaryKey(),
   androidLink: text("android_link"),
   iosLink:     text("ios_link"),
+  qrImagePath: text("qr_image_path"),
+  downloadCountLabel: text("download_count_label"),
+  androidLabel: text("android_label"),
+  iosLabel:     text("ios_label"),
   isActive:    boolean("is_active").notNull().default(true),
   updatedAt:   timestamp("updated_at").notNull().defaultNow(),
 });

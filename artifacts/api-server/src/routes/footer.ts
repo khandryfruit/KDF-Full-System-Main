@@ -64,8 +64,8 @@ router.get("/admin/footer/settings", adminMiddleware as any, async (req, res) =>
 
 router.put("/admin/footer/settings", adminMiddleware as any, async (req, res) => {
   try {
-    const { logoPath, description, address, phone, email, copyrightText, isActive } = req.body;
-    const payload = { logoPath, description, address, phone, email, copyrightText, isActive: isActive ?? true, updatedAt: new Date() };
+    const { logoPath, description, address, phone, email, copyrightText, isActive, premiumConfig } = req.body;
+    const payload = { logoPath, description, address, phone, email, copyrightText, premiumConfig, isActive: isActive ?? true, updatedAt: new Date() };
     const existing = await db.select().from(footerSettingsTable).limit(1);
     if (existing.length > 0) {
       const [updated] = await db.update(footerSettingsTable).set(payload).where(eq(footerSettingsTable.id, existing[0]!.id)).returning();
@@ -193,8 +193,12 @@ router.get("/admin/footer/app-links", adminMiddleware as any, async (req, res) =
 
 router.put("/admin/footer/app-links", adminMiddleware as any, async (req, res) => {
   try {
-    const { androidLink, iosLink, isActive } = req.body;
-    const payload = { androidLink, iosLink, isActive: isActive ?? true, updatedAt: new Date() };
+    const { androidLink, iosLink, isActive, qrImagePath, downloadCountLabel, androidLabel, iosLabel } = req.body;
+    const payload = {
+      androidLink, iosLink, isActive: isActive ?? true,
+      qrImagePath, downloadCountLabel, androidLabel, iosLabel,
+      updatedAt: new Date(),
+    };
     const existing = await db.select().from(appLinksTable).limit(1);
     if (existing.length > 0) {
       const [u] = await db.update(appLinksTable).set(payload).where(eq(appLinksTable.id, existing[0]!.id)).returning();
@@ -236,6 +240,19 @@ router.delete("/admin/footer/social-links/:id", adminMiddleware as any, async (r
     await db.delete(socialLinksTable).where(eq(socialLinksTable.id, parseInt(req.params.id)));
     return res.json({ success: true });
   } catch { return res.status(500).json({ error: "Failed" }); }
+});
+
+/** Public: newsletter signup (validate only; persist via ESP/CRM when ready) */
+router.post("/newsletter-subscribe", async (req, res) => {
+  try {
+    const email = String((req.body as { email?: string })?.email ?? "").trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Invalid email" });
+    }
+    return res.status(204).send();
+  } catch {
+    return res.status(500).json({ error: "Failed" });
+  }
 });
 
 export default router;

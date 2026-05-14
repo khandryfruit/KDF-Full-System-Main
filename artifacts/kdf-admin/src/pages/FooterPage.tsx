@@ -31,6 +31,22 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "social",   label: "Social Links",  icon: Globe },
 ];
 
+const PREMIUM_CONFIG_PLACEHOLDER = `{
+  "newsletterHeadline": "Get Exclusive Deals & AI Recommended Healthy Products",
+  "newsletterSub": "Flash sales, seasonal picks, and curated wellness tips — zero spam.",
+  "aiTipsEnabled": true,
+  "showNewsletter": true,
+  "showInstagram": true,
+  "instagramUrls": ["https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=400&q=60","https://images.unsplash.com/photo-1606313564200-e75d5f21748a?w=400&q=60"],
+  "rotatingLines": [
+    "Best immunity boosters this week",
+    "AI-curated picks for energy & fitness",
+    "Trending dry fruits — limited batches"
+  ],
+  "stickyCtaLabel": "Shop bestsellers",
+  "stickyCtaHref": "/products?sortBy=rating"
+}`;
+
 const SOCIAL_PLATFORMS = ["Facebook", "Instagram", "TikTok", "YouTube", "Twitter / X", "WhatsApp", "LinkedIn", "Pinterest", "Snapchat"];
 const SOCIAL_ICONS: Record<string, React.ElementType> = {
   Facebook: Facebook, Instagram: Instagram, YouTube: Youtube,
@@ -72,6 +88,7 @@ export default function FooterPage() {
   });
   const [generalForm, setGeneralForm] = useState({
     description: "", address: "", phone: "", email: "", copyrightText: "", isActive: true,
+    premiumConfig: "",
   });
   useEffect(() => {
     if (settings) setGeneralForm({
@@ -81,6 +98,7 @@ export default function FooterPage() {
       email:         settings.email         ?? "",
       copyrightText: settings.copyrightText ?? "",
       isActive:      settings.isActive      ?? true,
+      premiumConfig: settings.premiumConfig ?? "",
     });
   }, [settings]);
   const saveGeneral = useMutation({
@@ -179,9 +197,20 @@ export default function FooterPage() {
     queryFn: () => apiFetch("/api/admin/footer/app-links").catch(() => null),
     enabled: tab === "applinks",
   });
-  const [appForm, setAppForm] = useState({ androidLink: "", iosLink: "", isActive: true });
+  const [appForm, setAppForm] = useState({
+    androidLink: "", iosLink: "", isActive: true,
+    qrImagePath: "", downloadCountLabel: "", androidLabel: "", iosLabel: "",
+  });
   useEffect(() => {
-    if (appLinks) setAppForm({ androidLink: appLinks.androidLink ?? "", iosLink: appLinks.iosLink ?? "", isActive: appLinks.isActive ?? true });
+    if (appLinks) setAppForm({
+      androidLink: appLinks.androidLink ?? "",
+      iosLink: appLinks.iosLink ?? "",
+      isActive: appLinks.isActive ?? true,
+      qrImagePath: appLinks.qrImagePath ?? "",
+      downloadCountLabel: appLinks.downloadCountLabel ?? "",
+      androidLabel: appLinks.androidLabel ?? "",
+      iosLabel: appLinks.iosLabel ?? "",
+    });
   }, [appLinks]);
   const saveAppLinks = useMutation({
     mutationFn: () => apiFetch("/api/admin/footer/app-links", { method: "PUT", body: JSON.stringify(appForm) }),
@@ -271,6 +300,20 @@ export default function FooterPage() {
                   <Label className="text-sm">Copyright Text</Label>
                   <Input value={generalForm.copyrightText} onChange={e => setGeneralForm(f => ({ ...f, copyrightText: e.target.value }))} placeholder="© 2024 KDF NUTS. All rights reserved." />
                   <p className="text-xs text-muted-foreground">Leave blank to auto-generate from site name.</p>
+                </div>
+                <div className="space-y-1.5 pt-2 border-t">
+                  <Label className="text-sm">Premium footer JSON (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Controls newsletter headline, rotating promo lines, Instagram image URLs, section toggles, and sticky mobile CTA. Invalid JSON is ignored on the storefront.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="text-xs h-8"
+                      onClick={() => setGeneralForm(f => ({ ...f, premiumConfig: PREMIUM_CONFIG_PLACEHOLDER }))}>
+                      Insert example JSON
+                    </Button>
+                  </div>
+                  <Textarea value={generalForm.premiumConfig} onChange={e => setGeneralForm(f => ({ ...f, premiumConfig: e.target.value }))}
+                    placeholder='{"newsletterHeadline":"...","rotatingLines":["..."]}' rows={12} className="font-mono text-xs" spellCheck={false} />
                 </div>
               </div>
             )}
@@ -511,8 +554,27 @@ export default function FooterPage() {
                 <Label className="text-sm">Apple App Store URL</Label>
                 <Input value={appForm.iosLink} onChange={e => setAppForm(f => ({ ...f, iosLink: e.target.value }))} placeholder="https://apps.apple.com/app/kdf-nuts/id..." />
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">QR code image path</Label>
+                  <Input value={appForm.qrImagePath} onChange={e => setAppForm(f => ({ ...f, qrImagePath: e.target.value }))} placeholder="storage key or https://… (optional)" />
+                  <p className="text-[10px] text-muted-foreground">If set, footer shows this instead of the WhatsApp QR route.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Download count label (optional)</Label>
+                  <Input value={appForm.downloadCountLabel} onChange={e => setAppForm(f => ({ ...f, downloadCountLabel: e.target.value }))} placeholder="50K+ downloads" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Google Play button line 2</Label>
+                  <Input value={appForm.androidLabel} onChange={e => setAppForm(f => ({ ...f, androidLabel: e.target.value }))} placeholder="Google Play" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">App Store button line 2</Label>
+                  <Input value={appForm.iosLabel} onChange={e => setAppForm(f => ({ ...f, iosLabel: e.target.value }))} placeholder="App Store" />
+                </div>
+              </div>
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700">
-                When active, "Get the App" section shows in the footer with download buttons. Toggle off to hide it.
+                When active, the premium footer shows the app block with glass cards. Toggle off to hide it.
               </div>
             </div>
           </div>
