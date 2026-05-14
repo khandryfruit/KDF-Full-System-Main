@@ -313,6 +313,17 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
   try { localStorage.setItem('kdf_embed_session', sessionId); } catch (e0b) {}
 
+  var _qsEmb;
+  try { _qsEmb = new URLSearchParams(window.location.search); } catch (eQ) { _qsEmb = { get: function() { return null; } }; }
+  var DBG_EMBED = (_qsEmb.get('debug') === '1' || _qsEmb.get('kdfdebug') === '1');
+  try { if (!DBG_EMBED && localStorage.getItem('kdf_embed_debug') === '1') DBG_EMBED = true; } catch (eDbg) {}
+  function embLog() {
+    if (!DBG_EMBED || !window.console) return;
+    var t = (typeof performance !== 'undefined' && performance.now) ? (Math.round(performance.now()) + 'ms') : '';
+    try { console.log.apply(console, ['[KDF-Embed]', t].concat([].slice.call(arguments))); } catch (eL) {}
+  }
+  embLog('boot', 'API=', API, 'sessionId=', sessionId, 'leadSaved=', leadSaved, '(?kdfdebug=1 or localStorage.kdf_embed_debug=1)');
+
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('msg-input');
   var btnSend   = document.getElementById('btn-send');
@@ -324,7 +335,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Header buttons ── */
   document.getElementById('btn-close').addEventListener('click', function() {
-    try { window.parent.postMessage({ type: 'KDF_CLOSE' }, '*'); } catch(e) {}
+    embLog('btn-close click -> postMessage KDF_CLOSE');
+    try { window.parent.postMessage({ type: 'KDF_CLOSE' }, '*'); } catch(e) { embLog('btn-close postMessage error', e && e.message); }
   });
   document.getElementById('btn-refresh').addEventListener('click', function() {
     var btn = this; btn.style.opacity = '0.5';
@@ -644,6 +656,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   /* ── Send message ── */
   async function sendMessage(text) {
     if (!text.trim()) return;
+    var msgT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+    embLog('sendMessage start', 'len=', String(text).length, 'sessionId=', sessionId);
     input.value = '';
     input.style.height = 'auto';
     btnSend.disabled = true;
@@ -652,6 +666,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     var controller = new AbortController();
     var timeout = setTimeout(function(){ controller.abort(); }, 28000);
     try {
+      embLog('sendMessage fetch POST /chat/message');
       var res = await fetch(API + '/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -662,6 +677,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       timeout = null;
       var data;
       var rawText = await res.text();
+      var msgDt = (typeof performance !== 'undefined' && performance.now && msgT0) ? Math.round(performance.now() - msgT0) : 0;
+      embLog('sendMessage response', res.status, res.ok, msgDt + 'ms', 'bodyLen=', rawText ? rawText.length : 0);
       try {
         data = rawText ? JSON.parse(rawText) : {};
       } catch (parseErr) {
@@ -673,7 +690,10 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       showTyping(false);
 
       var reply = data.reply || data.message || data.text || (data.error ? '❌ ' + data.error : 'Sorry, I could not process that.');
-      if (data.sessionId) sessionId = data.sessionId;
+      if (data.sessionId) {
+        if (DBG_EMBED && data.sessionId !== sessionId) embLog('sessionId updated', sessionId, '->', data.sessionId);
+        sessionId = data.sessionId;
+      }
       if (reply) addBubble(reply, 'bot');
 
       /* Product cards — 2-col grid for ≥2, single for 1 */
@@ -705,6 +725,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
     } catch(e) {
       if (timeout) clearTimeout(timeout);
+      var msgDt2 = (typeof performance !== 'undefined' && performance.now && msgT0) ? Math.round(performance.now() - msgT0) : 0;
+      embLog('sendMessage error', e && e.name, e && e.message, msgDt2 + 'ms');
       showTyping(false);
       var errMsg = (e && e.name === 'AbortError') ? '⏱️ Request timed out. Please try again.' : '⚠️ Connection error. Tap below to reach us on WhatsApp.';
       addBubble(errMsg, 'bot');
@@ -716,6 +738,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       }
     }
     btnSend.disabled = false;
+    embLog('sendMessage done btnSend.enabled');
   }
 
   /* ── Voice input (Web Speech API) ── */
@@ -790,6 +813,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Lead form ── */
   function showChatInterface() {
+    embLog('showChatInterface');
     leadForm.style.display = 'none';
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
@@ -802,8 +826,12 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
 
   function submitLead() {
+    embLog('submitLead enter');
     try {
-      if (leadForm && leadForm.style.display === 'none') return;
+      if (leadForm && leadForm.style.display === 'none') {
+        embLog('submitLead skip (form already hidden)');
+        return;
+      }
     } catch (eGuard) {}
     var btnLead = document.getElementById('btn-lead');
     var errEl   = document.getElementById('lead-err');
@@ -824,6 +852,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     }
     clearLeadErr();
     if (!name || !phone) {
+      embLog('submitLead validation fail', 'nameEmpty=', !name, 'phoneEmpty=', !phone);
       nameEl.style.borderColor = name ? '#e5e7eb' : '#ef4444';
       phoneEl.style.borderColor = phone ? '#e5e7eb' : '#ef4444';
       showLeadErr('Please fill in your name and phone number.');
@@ -831,6 +860,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     }
     var phoneDigits = phone.replace(/\\D/g, '');
     if (phoneDigits.length < 10) {
+      embLog('submitLead validation fail phoneDigits', phoneDigits.length);
       phoneEl.style.borderColor = '#ef4444';
       nameEl.style.borderColor = '#e5e7eb';
       showLeadErr('Enter a valid phone number (at least 10 digits).');
@@ -848,21 +878,28 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       } catch (eBlur) {}
       try { localStorage.setItem('kdf_embed_lead', '1'); } catch (e1) {}
+      var leadT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      embLog('submitLead showChatInterface done, fetch POST /chat/lead');
       fetch(API + '/chat/lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
       })
         .then(function (r) {
+          var leadDt = (typeof performance !== 'undefined' && performance.now && leadT0) ? Math.round(performance.now() - leadT0) : 0;
+          embLog('submitLead lead response', r.status, r.ok, leadDt + 'ms');
           if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || 'lead ' + r.status); }).catch(function () { throw new Error('lead ' + r.status); });
           try { window.parent.postMessage({ type: 'KDF_LEAD_OK', sessionId: sessionId }, '*'); } catch (e2) {}
+          embLog('submitLead KDF_LEAD_OK postMessage');
         })
         .catch(function (err) {
+          embLog('submitLead /chat/lead failed', err && err.message ? err.message : err);
           try {
             console.warn('[KDF chat-embed] /chat/lead failed', err && err.message ? err.message : err);
           } catch (e3) {}
         });
     } catch (err) {
+      embLog('submitLead outer catch', err && err.message);
       try {
         btnLead.disabled = false;
         btnLead.textContent = 'Start Chat →';
@@ -873,6 +910,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   document.getElementById('btn-lead').addEventListener('click', function (e) {
     e.preventDefault();
+    embLog('btn-lead pointer click');
     submitLead();
   });
   document.getElementById('lead-form-el').addEventListener('keydown', function (e) {
@@ -883,12 +921,13 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     submitLead();
   });
   document.getElementById('lead-skip').addEventListener('click', function() {
+    embLog('lead-skip click');
     try { localStorage.setItem('kdf_embed_lead', '1'); } catch (eSk) {}
     showChatInterface();
   });
 
   /* ── Auto-show chat if lead already captured ── */
-  if (leadSaved) { showChatInterface(); }
+  if (leadSaved) { embLog('auto showChatInterface (leadSaved)'); showChatInterface(); }
 
   /* ── Viewport / keyboard (Shopify iframe-safe) ───────────────────────────
      Never assign body.style.height from visualViewport inside a cross-origin
@@ -1053,17 +1092,24 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.5 — no #kdf-chat-root wrapper; iframe z-index above FAB; optional KDFChatConfig.debug */
+  const js = `/* KDF NUTS Chat Widget v3.6 — debug via KDFChatConfig.debug / ?kdfdebug=1 on widget.js; iframe unload on close (Safari) */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
   window._KDFChatLoaded = true;
 
   var cfg       = window.KDFChatConfig || {};
-  var DBG       = !!cfg.debug;
+  try {
+    var _sc = document.currentScript || document.querySelector('script[src*="widget.js"],script[src*="/api/widget"]');
+    if (_sc && _sc.src && /[?&](kdfdebug|debug)=1(?:&|$)/.test(_sc.src)) cfg.debug = true;
+  } catch (e0) {}
+  try {
+    if (!cfg.debug && typeof localStorage !== 'undefined' && localStorage.getItem('kdf_widget_debug') === '1') cfg.debug = true;
+  } catch (e1) {}
+  var DBG       = !!(cfg.debug || cfg.verbose);
   function log() {
     if (!DBG || !window.console) return;
-    try { console.log.apply(console, ['[KDF-Chat]'].concat([].slice.call(arguments))); } catch (e) {}
+    try { console.log.apply(console, ['[KDF-Widget]', (typeof performance !== 'undefined' && performance.now) ? Math.round(performance.now()) + 'ms' : ''].concat([].slice.call(arguments))); } catch (e) {}
   }
   var EMBED_DEFAULT = ${JSON.stringify(embedUrl)};
   var EMBED_URL = cfg.embedUrl || EMBED_DEFAULT;
@@ -1090,8 +1136,8 @@ router.get("/widget.js", (req: Request, res: Response) => {
     .kdf-ai{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
     #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .22s,transform .22s;opacity:0;transform:translateY(10px) scale(0.94);pointer-events:none;}
     #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
-    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:0;outline:0;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483647;background:#fff;display:none;opacity:0;transform:translateY(12px) scale(0.96);transition:opacity .28s,transform .28s;pointer-events:auto;touch-action:manipulation;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;}
-    #kdf-popup.kdf-open{display:block;opacity:1;transform:none;}
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:0;outline:0;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483647;background:#fff;display:none;opacity:0;transform:translateZ(0);transition:opacity .22s ease;pointer-events:none;touch-action:manipulation;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;will-change:opacity;}
+    #kdf-popup.kdf-open{display:block;opacity:1;pointer-events:auto;will-change:auto;}
     @media(max-width:480px){
       #kdf-w{bottom:16px;right:16px;}
       #kdf-popup{bottom:0;right:0;width:100%;height:min(90svh,90vh);max-height:90svh;max-height:90vh;border-radius:22px 22px 0 0;}
@@ -1128,42 +1174,66 @@ router.get("/widget.js", (req: Request, res: Response) => {
   popup.setAttribute('aria-label','KDF NUTS Chat');
   popup.setAttribute('title','KDF NUTS Chat');
   popup.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
-  popup.addEventListener('load', function() { log('iframe load', EMBED_URL); });
+  popup.addEventListener('load', function() { log('iframe load', popup.src); });
   popup.addEventListener('error', function() { log('iframe error', EMBED_URL); });
 
   wrap.appendChild(stack); wrap.appendChild(fab);
   document.body.appendChild(wrap);
   document.body.appendChild(popup);
-  log('mounted v3.5 (no kdf-chat-root), embed=', EMBED_URL);
+  log('mounted v3.6', 'embed=', EMBED_URL, 'DBG=', DBG, '(set KDFChatConfig.debug true or ?kdfdebug=1 on widget.js or localStorage.kdf_widget_debug=1)');
 
   /* ── State ──────────────────────────────────────────── */
-  var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null;
+  var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null, unloadTimer = null;
+
+  function embedUrlWithDebug() {
+    var u = EMBED_URL;
+    if (!DBG) return u;
+    if (/[?&](kdfdebug|debug)=1(?:&|$)/.test(u)) return u;
+    return u + (u.indexOf('?') < 0 ? '?' : '&') + 'kdfdebug=1';
+  }
 
   /* ── Functions ──────────────────────────────────────── */
   function openStack() {
+    log('openStack');
     stackOpen = true;
     stack.classList.add('kdf-vis');
     fab.setAttribute('data-open', '1');
     fab.innerHTML = I_CLOSE; fab.appendChild(badge);
   }
   function closeStack() {
+    log('closeStack');
     stackOpen = false;
     stack.classList.remove('kdf-vis');
     fab.removeAttribute('data-open');
     fab.innerHTML = I_CHAT; fab.appendChild(badge);
   }
   function openChat() {
+    if (unloadTimer) { clearTimeout(unloadTimer); unloadTimer = null; }
+    var url = embedUrlWithDebug();
     if (!iframeLoaded) {
-      log('assign iframe src', EMBED_URL);
-      popup.src = EMBED_URL;
+      log('iframe assign src', url);
+      popup.src = url;
       iframeLoaded = true;
     }
     chatOpen = true;
     popup.classList.add('kdf-open');
+    log('openChat', 'chatOpen=', chatOpen);
   }
   function closeChat() {
+    if (unloadTimer) { clearTimeout(unloadTimer); unloadTimer = null; }
+    log('closeChat');
     chatOpen = false;
     popup.classList.remove('kdf-open');
+    unloadTimer = setTimeout(function() {
+      unloadTimer = null;
+      if (!popup.classList.contains('kdf-open')) {
+        try {
+          popup.src = 'about:blank';
+          iframeLoaded = false;
+          log('iframe -> about:blank (unload for Safari / stuck state)');
+        } catch (e) {}
+      }
+    }, 420);
     /* Auto-reopen after delay */
     if (reopenTimer) clearTimeout(reopenTimer);
     reopenTimer = setTimeout(function() {
@@ -1175,32 +1245,45 @@ router.get("/widget.js", (req: Request, res: Response) => {
   /* ── Events ─────────────────────────────────────────── */
   fab.addEventListener('click', function(e) {
     e.stopPropagation();
+    log('fab click', 'chatOpen', chatOpen, 'stackOpen', stackOpen);
     if (chatOpen) { closeChat(); closeStack(); return; }
     stackOpen ? closeStack() : openStack();
-  });
+  }, { passive: false });
 
   bChat.addEventListener('click', function(e) {
     e.stopPropagation();
+    log('bChat click');
     closeStack();
     chatOpen ? closeChat() : openChat();
-  });
+  }, { passive: false });
 
   bWA.addEventListener('click', function(e) {
     e.stopPropagation();
+    log('bWA click');
     closeStack();
     window.open(WA_HREF, '_blank', 'noopener,noreferrer');
-  });
+  }, { passive: false });
 
   document.addEventListener('click', function(e) {
     if (chatOpen) return;
-    if (stackOpen && !wrap.contains(e.target) && !popup.contains(e.target)) closeStack();
-  });
+    if (stackOpen && !wrap.contains(e.target) && !popup.contains(e.target)) {
+      if (DBG) log('document click -> closeStack', (e.target && e.target.nodeName) || '?');
+      closeStack();
+    }
+  }, { capture: false, passive: true });
 
   /* Close from iframe message */
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
     if (DBG) log('postMessage', e.origin, e.data.type || e.data);
-    if (e.data.type === 'KDF_CLOSE') { closeChat(); closeStack(); fab.innerHTML = I_CHAT; fab.appendChild(badge); fab.removeAttribute('data-open'); }
+    if (e.data.type === 'KDF_CLOSE') {
+      log('KDF_CLOSE from iframe');
+      closeChat();
+      closeStack();
+      fab.innerHTML = I_CHAT;
+      fab.appendChild(badge);
+      fab.removeAttribute('data-open');
+    }
     if (e.data.type === 'KDF_UNREAD') {
       var c = parseInt(e.data.count, 10) || 0;
       badge.textContent = c > 99 ? '99+' : String(c);
@@ -1216,7 +1299,11 @@ router.get("/widget.js", (req: Request, res: Response) => {
     open: openStack,
     openChat: function() { openStack(); openChat(); },
     close: function() { closeStack(); closeChat(); },
-    init: function(c) { cfg = Object.assign({}, cfg, c); DBG = !!cfg.debug; },
+    init: function(c) {
+      cfg = Object.assign({}, cfg, c);
+      DBG = !!(cfg.debug || cfg.verbose);
+      log('KDFChat.init', 'DBG=', DBG);
+    },
   };
 
 })();
@@ -1242,7 +1329,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.5 — no fullscreen #kdf-chat-root; set KDFChatConfig.debug true for console logs. {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.6 — widget: ?kdfdebug=1 or localStorage.kdf_widget_debug=1; embed: ?kdfdebug=1 on chat-embed URL or localStorage.kdf_embed_debug=1. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
     store: "shopify"
