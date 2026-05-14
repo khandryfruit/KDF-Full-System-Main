@@ -1,5 +1,6 @@
-# Optional Railway build for @workspace/kdf-admin — uses full Debian Node image so we
-# avoid Railpack (mise node/pnpm + apt libatomic1), which often fails with "failed to solve: secret…".
+# Optional Railway build for @workspace/kdf-admin — same as root ./Dockerfile with KDF_RAILWAY_TARGET=admin.
+# Prefer repo-root Dockerfile (auto-detected) unless you set RAILWAY_DOCKERFILE_PATH to this file.
+# Uses full Debian Node image so we avoid Railpack (mise node/pnpm + apt libatomic1), which often fails with "failed to solve: secret…".
 #
 # Railway (this service only):
 #   Root directory: repository root (/) — required so COPY sees the full pnpm workspace.
