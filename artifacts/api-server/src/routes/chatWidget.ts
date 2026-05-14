@@ -79,7 +79,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   .hdr-btn svg{pointer-events:none;}
 
   /* ── Messages ────────────────────────────────── */
-  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;background:#f0f2f5;overscroll-behavior:contain;position:relative;z-index:1;}
+  #msgs{flex:1;overflow-y:auto;min-height:0;padding:12px 10px;display:flex;flex-direction:column;gap:8px;scroll-behavior:auto;background:#f0f2f5;overscroll-behavior:contain;position:relative;z-index:1;}
   #msgs::-webkit-scrollbar{width:3px;}
   #msgs::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
 
@@ -317,12 +317,19 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   try { _qsEmb = new URLSearchParams(window.location.search); } catch (eQ) { _qsEmb = { get: function() { return null; } }; }
   var DBG_EMBED = (_qsEmb.get('debug') === '1' || _qsEmb.get('kdfdebug') === '1');
   try { if (!DBG_EMBED && localStorage.getItem('kdf_embed_debug') === '1') DBG_EMBED = true; } catch (eDbg) {}
+  var TRACE_EMBED = (_qsEmb.get('kdftrace') === '1');
+  try { if (!TRACE_EMBED && localStorage.getItem('kdf_embed_trace') === '1') TRACE_EMBED = true; } catch (eTr) {}
   function embLog() {
     if (!DBG_EMBED || !window.console) return;
     var t = (typeof performance !== 'undefined' && performance.now) ? (Math.round(performance.now()) + 'ms') : '';
     try { console.log.apply(console, ['[KDF-Embed]', t].concat([].slice.call(arguments))); } catch (eL) {}
   }
+  function trLog() {
+    if (!TRACE_EMBED || !window.console) return;
+    try { console.log.apply(console, ['[KDF-Trace]'].concat([].slice.call(arguments))); } catch (eT) {}
+  }
   embLog('boot', 'API=', API, 'sessionId=', sessionId, 'leadSaved=', leadSaved, '(?kdfdebug=1 or localStorage.kdf_embed_debug=1)');
+  trLog('boot', 'sessionId=', sessionId, 'leadSaved=', leadSaved, '(?kdftrace=1 or localStorage.kdf_embed_trace=1)');
 
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('msg-input');
@@ -335,6 +342,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Header buttons ── */
   document.getElementById('btn-close').addEventListener('click', function() {
+    trLog('btn-close click');
     embLog('btn-close click -> postMessage KDF_CLOSE');
     try { window.parent.postMessage({ type: 'KDF_CLOSE' }, '*'); } catch(e) { embLog('btn-close postMessage error', e && e.message); }
   });
@@ -352,7 +360,9 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   function appendToMsgs(el) {
     msgs.appendChild(el);
-    msgs.scrollTop = msgs.scrollHeight;
+    requestAnimationFrame(function() {
+      try { msgs.scrollTop = msgs.scrollHeight; } catch (eScroll) {}
+    });
   }
 
   function addBubble(text, role) {
@@ -377,9 +387,29 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     return wrap;
   }
 
+  var _embedErrBubbleAt = 0;
+  window.addEventListener('error', function(ev) {
+    try { console.warn('[KDF-Embed] window.error', ev && ev.message, ev && ev.error && ev.error.stack); } catch (eW) {}
+    var now = Date.now();
+    if (now - _embedErrBubbleAt < 8000) return;
+    _embedErrBubbleAt = now;
+    try {
+      addBubble('⚠️ Something went wrong in chat. Tap × to close, then reopen. You can still try typing below.', 'bot');
+    } catch (eB) {}
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    try { console.warn('[KDF-Embed] unhandledrejection', ev && ev.reason); } catch (eU) {}
+    var now = Date.now();
+    if (now - _embedErrBubbleAt < 8000) return;
+    _embedErrBubbleAt = now;
+    try {
+      addBubble('⚠️ Network or server issue. You can try sending a message below, or close and reopen chat.', 'bot');
+    } catch (eB2) {}
+  });
+
   function showTyping(show) {
     typing.style.display = show ? 'flex' : 'none';
-    if (show) msgs.scrollTop = msgs.scrollHeight;
+    if (show) requestAnimationFrame(function() { try { msgs.scrollTop = msgs.scrollHeight; } catch(e) {} });
   }
 
   /* ── Cart state ── */
@@ -813,20 +843,39 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Lead form ── */
   function showChatInterface() {
-    embLog('showChatInterface');
-    leadForm.style.display = 'none';
+    trLog('showChatInterface:before');
+    embLog('showChatInterface enter');
+    try {
+      leadForm.style.display = 'none';
+      leadForm.style.pointerEvents = 'none';
+      leadForm.setAttribute('aria-hidden', 'true');
+      try {
+        var nodes = leadForm.querySelectorAll('input,button,select,textarea');
+        for (var ni = 0; ni < nodes.length; ni++) { nodes[ni].tabIndex = -1; }
+      } catch (eTab) {}
+    } catch (eLf) {}
     chips.style.display = 'flex';
     inputArea.style.display = 'flex';
-    /* Do NOT call input.focus() here — inside a cross-origin iframe on iOS Safari
-       calling focus() immediately triggers the virtual keyboard and causes the
-       touch-event system to freeze (blank/unresponsive screen). Let user tap to type. */
-    setTimeout(function() {
-      addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
-    }, 200);
+    trLog('showChatInterface:after layout');
+    embLog('showChatInterface layout done');
+    /* Do NOT call input.focus() here — iOS Safari + cross-origin iframe can freeze touches if we focus the textarea synchronously. */
+    function welcome() {
+      trLog('showChatInterface:welcome bubble');
+      embLog('showChatInterface welcome addBubble');
+      try {
+        addBubble('Assalam o Alaikum! 🌰 Welcome to KDF NUTS. Main aapki 24/7 madad kar sakta hoon — products, prices, orders, ya tracking. Kaise madad karoon?', 'bot');
+      } catch (eWel) {
+        try { console.warn('[KDF-Embed] welcome addBubble failed', eWel); } catch (e2) {}
+      }
+    }
+    requestAnimationFrame(function() {
+      requestAnimationFrame(welcome);
+    });
   }
 
   function submitLead() {
     embLog('submitLead enter');
+    trLog('submitLead:enter');
     try {
       if (leadForm && leadForm.style.display === 'none') {
         embLog('submitLead skip (form already hidden)');
@@ -869,47 +918,76 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     nameEl.style.borderColor = '#e5e7eb';
     phoneEl.style.borderColor = '#e5e7eb';
     try {
+      trLog('submitLead:before UI');
       btnLead.disabled = true;
       btnLead.textContent = 'Starting…';
       /* Open chat UI first so the iframe never “hangs” on slow storage or network (Shopify / Safari). */
       showChatInterface();
       try { btnLead.disabled = false; btnLead.textContent = 'Start Chat →'; } catch (eBtn) {}
-      try {
-        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      } catch (eBlur) {}
+      /* Defer blur — same-tick blur + DOM churn has caused Safari/WebKit touch dead-zones inside iframes. */
+      setTimeout(function() {
+        try {
+          if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        } catch (eBlur) {}
+        trLog('submitLead:after deferred blur');
+      }, 0);
       try { localStorage.setItem('kdf_embed_lead', '1'); } catch (e1) {}
       var leadT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      trLog('submitLead:before fetch');
       embLog('submitLead showChatInterface done, fetch POST /chat/lead');
+      var leadAbort = new AbortController();
+      var leadAbortTimer = setTimeout(function() {
+        try { leadAbort.abort(); } catch (eAb) {}
+      }, 15000);
       fetch(API + '/chat/lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
+        body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId }),
+        signal: leadAbort.signal
       })
         .then(function (r) {
           var leadDt = (typeof performance !== 'undefined' && performance.now && leadT0) ? Math.round(performance.now() - leadT0) : 0;
+          trLog('submitLead:fetch response', r.status, r.ok, leadDt + 'ms');
           embLog('submitLead lead response', r.status, r.ok, leadDt + 'ms');
           if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || 'lead ' + r.status); }).catch(function () { throw new Error('lead ' + r.status); });
           try { window.parent.postMessage({ type: 'KDF_LEAD_OK', sessionId: sessionId }, '*'); } catch (e2) {}
           embLog('submitLead KDF_LEAD_OK postMessage');
         })
         .catch(function (err) {
+          var isAbort = err && (err.name === 'AbortError' || (String(err.message || '').indexOf('aborted') >= 0));
+          trLog('submitLead:fetch catch', isAbort ? 'timeout/abort' : (err && err.message));
           embLog('submitLead /chat/lead failed', err && err.message ? err.message : err);
           try {
             console.warn('[KDF chat-embed] /chat/lead failed', err && err.message ? err.message : err);
           } catch (e3) {}
+          try {
+            addBubble(isAbort ? '⏱️ Could not save your contact (timed out). You can still chat below — we will help you here.' : '⚠️ Could not save your contact right now. You can still chat below, or tap × to close and try again.', 'bot');
+          } catch (e4) {}
+        })
+        .finally(function() {
+          clearTimeout(leadAbortTimer);
+          trLog('submitLead:fetch finally');
+          embLog('submitLead fetch finally');
         });
     } catch (err) {
       embLog('submitLead outer catch', err && err.message);
+      trLog('submitLead:outer catch', err && err.message);
       try {
         btnLead.disabled = false;
         btnLead.textContent = 'Start Chat →';
       } catch (e2) {}
+      try {
+        if (leadForm && leadForm.style.display === 'none') {
+          addBubble('⚠️ Chat UI hit an error. Tap × to close, then reopen the chat widget.', 'bot');
+        }
+      } catch (eB0) {}
       showLeadErr('Could not open chat. Try again or tap Skip for now.');
     }
   }
 
   document.getElementById('btn-lead').addEventListener('click', function (e) {
     e.preventDefault();
+    trLog('btn-lead click');
     embLog('btn-lead pointer click');
     submitLead();
   });
@@ -944,7 +1022,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     vvTimer = setTimeout(function() {
       vvTimer = null;
       scrollMsgsToEnd();
-    }, 120);
+    }, 320);
   }
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', onViewportChange, { passive: true });
@@ -1092,7 +1170,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.6 — debug via KDFChatConfig.debug / ?kdfdebug=1 on widget.js; iframe unload on close (Safari) */
+  const js = `/* KDF NUTS Chat Widget v3.7 — Safari-safe iframe visibility; embed: deferred blur + lead fetch timeout */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -1136,8 +1214,8 @@ router.get("/widget.js", (req: Request, res: Response) => {
     .kdf-ai{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
     #kdf-stack{display:flex;flex-direction:column;align-items:flex-end;gap:9px;transition:opacity .22s,transform .22s;opacity:0;transform:translateY(10px) scale(0.94);pointer-events:none;}
     #kdf-stack.kdf-vis{opacity:1;transform:none;pointer-events:auto;}
-    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:0;outline:0;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483647;background:#fff;display:none;opacity:0;transform:translateZ(0);transition:opacity .22s ease;pointer-events:none;touch-action:manipulation;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;will-change:opacity;}
-    #kdf-popup.kdf-open{display:block;opacity:1;pointer-events:auto;will-change:auto;}
+    #kdf-popup{position:fixed;bottom:90px;right:20px;width:370px;height:min(580px,calc(100vh - 120px));max-height:calc(100vh - 120px);border:0;outline:0;border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,0.25);z-index:2147483647;background:#fff;display:block;visibility:hidden;opacity:0;transform:translateZ(0);transition:opacity .22s ease,visibility 0s linear .22s;pointer-events:none;touch-action:manipulation;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;will-change:opacity;}
+    #kdf-popup.kdf-open{visibility:visible;opacity:1;transition:opacity .22s ease,visibility 0s linear 0s;pointer-events:auto;will-change:auto;}
     @media(max-width:480px){
       #kdf-w{bottom:16px;right:16px;}
       #kdf-popup{bottom:0;right:0;width:100%;height:min(90svh,90vh);max-height:90svh;max-height:90vh;border-radius:22px 22px 0 0;}
@@ -1180,7 +1258,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   wrap.appendChild(stack); wrap.appendChild(fab);
   document.body.appendChild(wrap);
   document.body.appendChild(popup);
-  log('mounted v3.6', 'embed=', EMBED_URL, 'DBG=', DBG, '(set KDFChatConfig.debug true or ?kdfdebug=1 on widget.js or localStorage.kdf_widget_debug=1)');
+  log('mounted v3.7', 'embed=', EMBED_URL, 'DBG=', DBG, '(set KDFChatConfig.debug true or ?kdfdebug=1 on widget.js or localStorage.kdf_widget_debug=1)');
 
   /* ── State ──────────────────────────────────────────── */
   var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null, unloadTimer = null;
@@ -1329,7 +1407,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.6 — widget: ?kdfdebug=1 or localStorage.kdf_widget_debug=1; embed: ?kdfdebug=1 on chat-embed URL or localStorage.kdf_embed_debug=1. {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.7 — widget: ?kdfdebug=1 / kdf_widget_debug; embed: ?kdfdebug=1 / kdf_embed_debug; light trace: ?kdftrace=1 / kdf_embed_trace. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
     store: "shopify"
