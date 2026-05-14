@@ -1,12 +1,13 @@
 /**
  * When the admin SPA is on a different origin than api-server (Railway: admin host vs api host),
  * relative fetch URLs that start with /api must be rewritten to the API origin (VITE_API_BASE_URL).
- * Also rewrites mistaken absolute URLs on the admin origin under /api to the API origin.
+ * Uses getEffectiveApiOrigin() so production bundles never leave /api on the static host.
+ * (Admin code uses fetch; there is no axios client here.)
  */
-import { getApiBase } from "./lib/apiBase";
+import { getEffectiveApiOrigin } from "./lib/apiBase";
 
 function apiOriginPrefix(): string {
-  return getApiBase().replace(/\/$/, "");
+  return getEffectiveApiOrigin().replace(/\/$/, "");
 }
 
 /** Map same-origin paths to `/api/...` so they can be sent to the API host (Vite base may be `/admin/`). */

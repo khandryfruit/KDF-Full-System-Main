@@ -64,17 +64,25 @@ export function getApiBase(): string {
   return base.replace(/\/+$/, "");
 }
 
+const PROD_API_FALLBACK = "https://api.khanbabadryfruits.com";
+
+/**
+ * Origin used for all browser → api-server traffic (fetch patch, Orval `setBaseUrl`, `apiPublicUrl`).
+ * In production builds, never empty — avoids relative `/api` hitting the static admin host.
+ */
+export function getEffectiveApiOrigin(): string {
+  const b = getApiBase().replace(/\/+$/, "");
+  if (b) return b;
+  if (import.meta.env.PROD) return PROD_API_FALLBACK;
+  return "";
+}
+
 /**
  * Absolute URL for `/api/...` paths. Use for `EventSource` (fetch patch does not apply).
- * Never returns a bare `/api/...` in production when the path is an API call — avoids static host 503.
  */
 export function apiPublicUrl(pathWithQuery: string): string {
   const p = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
-  let base = getApiBase().replace(/\/+$/, "");
-  /* Built production bundles on unknown hosts (e.g. *.railway.app preview) must still hit the real API. */
-  if (!base && p.startsWith("/api") && import.meta.env.PROD) {
-    base = "https://api.khanbabadryfruits.com";
-  }
+  const base = getEffectiveApiOrigin().replace(/\/+$/, "");
   if (!base) return p;
   return `${base}${p}`;
 }

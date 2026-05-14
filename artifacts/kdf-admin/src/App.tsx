@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
-import { getApiBase } from "@/lib/apiBase";
+import { getEffectiveApiOrigin } from "@/lib/apiBase";
 import { BranchAuthProvider } from "@/context/BranchAuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
@@ -96,8 +96,8 @@ const SEORedirectsPage = lazy(() => import("@/pages/SEORedirectsPage"));
 const SEOSchemaPage = lazy(() => import("@/pages/SEOSchemaPage"));
 const SEOAIWriterPage = lazy(() => import("@/pages/SEOAIWriterPage"));
 
-/* Orval / React Query hooks use relative `/api/...` unless base URL is set via setBaseUrl(getApiBase()). */
-const adminApiBase = getApiBase();
+/* Orval / React Query: relative `/api/...` → prepend API origin (never empty in production). */
+const adminApiBase = getEffectiveApiOrigin();
 if (adminApiBase) {
   setBaseUrl(adminApiBase);
 }
