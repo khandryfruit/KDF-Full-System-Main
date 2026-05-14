@@ -80,6 +80,15 @@ export const appLinksTable = pgTable("app_links", {
   downloadCountLabel: text("download_count_label"),
   androidLabel: text("android_label"),
   iosLabel:     text("ios_label"),
+  /** Custom uploaded badge (PNG/SVG); when set, overrides official badge art for that platform */
+  androidBadgePath: text("android_badge_path"),
+  iosBadgePath:     text("ios_badge_path"),
+  showAndroidButton: boolean("show_android_button").notNull().default(true),
+  showIosButton:     boolean("show_ios_button").notNull().default(true),
+  /** When true (and no custom badge path), storefront uses official Google / Apple badge images */
+  useOfficialBadges: boolean("use_official_badges").notNull().default(true),
+  /** JSON string array of storage paths for app screenshots shown in footer */
+  screenshotPaths: text("screenshot_paths"),
   isActive:    boolean("is_active").notNull().default(true),
   updatedAt:   timestamp("updated_at").notNull().defaultNow(),
 });

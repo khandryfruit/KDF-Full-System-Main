@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { uploadFile } from "@/lib/upload";
+import { getProductImageSrc } from "@/lib/imageUrl";
 
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN()}` });
@@ -37,11 +39,26 @@ const PREMIUM_CONFIG_PLACEHOLDER = `{
   "aiTipsEnabled": true,
   "showNewsletter": true,
   "showInstagram": true,
+  "showTrustStrip": true,
+  "showFooterBlog": true,
+  "footerBlogTitle": "Intelligence desk",
+  "footerBlogCount": 3,
+  "showBlogAiTag": true,
+  "aiPicksTitle": "AI recommendations",
+  "aiPicks": [
+    { "label": "Immunity essentials", "href": "/products?sortBy=popular" },
+    { "label": "Gift-ready hampers", "href": "/products?sortBy=newest" }
+  ],
+  "certificationImages": [],
+  "trustBadges": [
+    { "icon": "shield", "label": "Secure Checkout", "sub": "256-bit SSL" },
+    { "icon": "truck", "label": "Fast Delivery", "sub": "Tracked nationwide" }
+  ],
   "instagramUrls": ["https://images.unsplash.com/photo-1599599810769-bcde5a160d32?w=400&q=60","https://images.unsplash.com/photo-1606313564200-e75d5f21748a?w=400&q=60"],
   "rotatingLines": [
-    "Best immunity boosters this week",
-    "AI-curated picks for energy & fitness",
-    "Trending dry fruits — limited batches"
+    "AI Recommended Products",
+    "Trending This Week",
+    "Healthy Picks For You"
   ],
   "stickyCtaLabel": "Shop bestsellers",
   "stickyCtaHref": "/products?sortBy=rating"
@@ -200,9 +217,15 @@ export default function FooterPage() {
   const [appForm, setAppForm] = useState({
     androidLink: "", iosLink: "", isActive: true,
     qrImagePath: "", downloadCountLabel: "", androidLabel: "", iosLabel: "",
+    androidBadgePath: "", iosBadgePath: "",
+    showAndroidButton: true, showIosButton: true, useOfficialBadges: true,
   });
+  const [appScreenshots, setAppScreenshots] = useState<string[]>([]);
+  const [appUploading, setAppUploading] = useState<string | null>(null);
+
   useEffect(() => {
-    if (appLinks) setAppForm({
+    if (!appLinks) return;
+    setAppForm({
       androidLink: appLinks.androidLink ?? "",
       iosLink: appLinks.iosLink ?? "",
       isActive: appLinks.isActive ?? true,
@@ -210,10 +233,31 @@ export default function FooterPage() {
       downloadCountLabel: appLinks.downloadCountLabel ?? "",
       androidLabel: appLinks.androidLabel ?? "",
       iosLabel: appLinks.iosLabel ?? "",
+      androidBadgePath: appLinks.androidBadgePath ?? "",
+      iosBadgePath: appLinks.iosBadgePath ?? "",
+      showAndroidButton: appLinks.showAndroidButton !== false,
+      showIosButton: appLinks.showIosButton !== false,
+      useOfficialBadges: appLinks.useOfficialBadges !== false,
     });
+    const raw = appLinks.screenshotPaths as string | undefined;
+    if (raw && typeof raw === "string") {
+      try {
+        const p = JSON.parse(raw) as unknown;
+        setAppScreenshots(Array.isArray(p) ? p.filter((x): x is string => typeof x === "string") : []);
+      } catch {
+        setAppScreenshots([]);
+      }
+    } else setAppScreenshots([]);
   }, [appLinks]);
   const saveAppLinks = useMutation({
-    mutationFn: () => apiFetch("/api/admin/footer/app-links", { method: "PUT", body: JSON.stringify(appForm) }),
+    mutationFn: () =>
+      apiFetch("/api/admin/footer/app-links", {
+        method: "PUT",
+        body: JSON.stringify({
+          ...appForm,
+          screenshotPaths: appScreenshots.length ? JSON.stringify(appScreenshots) : "",
+        }),
+      }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/footer/app-links"] }); toast({ title: "App links saved" }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
@@ -573,8 +617,130 @@ export default function FooterPage() {
                   <Input value={appForm.iosLabel} onChange={e => setAppForm(f => ({ ...f, iosLabel: e.target.value }))} placeholder="App Store" />
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
+                <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <Label className="text-sm">Show Google Play button</Label>
+                  <Switch checked={appForm.showAndroidButton} onCheckedChange={v => setAppForm(f => ({ ...f, showAndroidButton: v }))} />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <Label className="text-sm">Show App Store button</Label>
+                  <Switch checked={appForm.showIosButton} onCheckedChange={v => setAppForm(f => ({ ...f, showIosButton: v }))} />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border px-3 py-2 sm:col-span-2">
+                  <div>
+                    <Label className="text-sm">Use official store badge art</Label>
+                    <p className="text-[10px] text-muted-foreground">Google / Apple standard badges when no custom upload is set.</p>
+                  </div>
+                  <Switch checked={appForm.useOfficialBadges} onCheckedChange={v => setAppForm(f => ({ ...f, useOfficialBadges: v }))} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Custom Google Play badge (PNG/SVG)</Label>
+                  <div className="flex gap-2">
+                    <Input value={appForm.androidBadgePath} onChange={e => setAppForm(f => ({ ...f, androidBadgePath: e.target.value }))} placeholder="storage path after upload" className="font-mono text-xs" readOnly />
+                    <Button type="button" variant="outline" size="sm" className="shrink-0"
+                      disabled={!!appUploading}
+                      onClick={() => {
+                        const inp = document.createElement("input");
+                        inp.type = "file";
+                        inp.accept = "image/png,image/svg+xml,image/webp";
+                        inp.onchange = async () => {
+                          const file = inp.files?.[0];
+                          if (!file) return;
+                          setAppUploading("android");
+                          try {
+                            const path = await uploadFile(file, "footer-app");
+                            setAppForm(f => ({ ...f, androidBadgePath: path }));
+                            toast({ title: "Android badge uploaded" });
+                          } catch (e: any) {
+                            toast({ variant: "destructive", title: e?.message ?? "Upload failed" });
+                          } finally {
+                            setAppUploading(null);
+                          }
+                        };
+                        inp.click();
+                      }}>
+                      {appUploading === "android" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Upload"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Custom App Store badge (PNG/SVG)</Label>
+                  <div className="flex gap-2">
+                    <Input value={appForm.iosBadgePath} onChange={e => setAppForm(f => ({ ...f, iosBadgePath: e.target.value }))} placeholder="storage path after upload" className="font-mono text-xs" readOnly />
+                    <Button type="button" variant="outline" size="sm" className="shrink-0"
+                      disabled={!!appUploading}
+                      onClick={() => {
+                        const inp = document.createElement("input");
+                        inp.type = "file";
+                        inp.accept = "image/png,image/svg+xml,image/webp";
+                        inp.onchange = async () => {
+                          const file = inp.files?.[0];
+                          if (!file) return;
+                          setAppUploading("ios");
+                          try {
+                            const path = await uploadFile(file, "footer-app");
+                            setAppForm(f => ({ ...f, iosBadgePath: path }));
+                            toast({ title: "iOS badge uploaded" });
+                          } catch (e: any) {
+                            toast({ variant: "destructive", title: e?.message ?? "Upload failed" });
+                          } finally {
+                            setAppUploading(null);
+                          }
+                        };
+                        inp.click();
+                      }}>
+                      {appUploading === "ios" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Upload"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-sm">App screenshots (footer gallery)</Label>
+                <p className="text-[10px] text-muted-foreground">Upload up to 6 images; shown in the storefront app glass panel.</p>
+                <div className="flex flex-wrap gap-2">
+                  {appScreenshots.map((p, i) => (
+                    <div key={p + i} className="relative group w-20 h-14 rounded border overflow-hidden bg-muted">
+                      <img src={getProductImageSrc(p)} alt="" className="w-full h-full object-cover" />
+                      <button type="button" className="absolute inset-0 bg-black/60 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setAppScreenshots(s => s.filter((_, j) => j !== i))}>Remove</button>
+                    </div>
+                  ))}
+                  {appScreenshots.length < 6 && (
+                    <Button type="button" variant="outline" size="sm" className="h-14 w-20"
+                      disabled={!!appUploading}
+                      onClick={() => {
+                        const inp = document.createElement("input");
+                        inp.type = "file";
+                        inp.accept = "image/*";
+                        inp.onchange = async () => {
+                          const file = inp.files?.[0];
+                          if (!file) return;
+                          setAppUploading("shot");
+                          try {
+                            const path = await uploadFile(file, "footer-app");
+                            setAppScreenshots(s => [...s, path].slice(0, 6));
+                            toast({ title: "Screenshot added" });
+                          } catch (e: any) {
+                            toast({ variant: "destructive", title: e?.message ?? "Upload failed" });
+                          } finally {
+                            setAppUploading(null);
+                          }
+                        };
+                        inp.click();
+                      }}>
+                      {appUploading === "shot" ? <Loader2 className="w-4 h-4 animate-spin" /> : "+"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700">
-                When active, the premium footer shows the app block with glass cards. Toggle off to hide it.
+                When active, the storefront shows the premium app glass panel if at least one store button is on, or screenshots are present. Use official badges for polished default art, or upload your own PNG/SVG.
               </div>
             </div>
           </div>

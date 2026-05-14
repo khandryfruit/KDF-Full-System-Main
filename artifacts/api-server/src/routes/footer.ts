@@ -193,10 +193,18 @@ router.get("/admin/footer/app-links", adminMiddleware as any, async (req, res) =
 
 router.put("/admin/footer/app-links", adminMiddleware as any, async (req, res) => {
   try {
-    const { androidLink, iosLink, isActive, qrImagePath, downloadCountLabel, androidLabel, iosLabel } = req.body;
+    const {
+      androidLink, iosLink, isActive, qrImagePath, downloadCountLabel, androidLabel, iosLabel,
+      androidBadgePath, iosBadgePath, showAndroidButton, showIosButton, useOfficialBadges, screenshotPaths,
+    } = req.body;
     const payload = {
       androidLink, iosLink, isActive: isActive ?? true,
       qrImagePath, downloadCountLabel, androidLabel, iosLabel,
+      androidBadgePath, iosBadgePath,
+      showAndroidButton: showAndroidButton ?? true,
+      showIosButton: showIosButton ?? true,
+      useOfficialBadges: useOfficialBadges ?? true,
+      screenshotPaths,
       updatedAt: new Date(),
     };
     const existing = await db.select().from(appLinksTable).limit(1);

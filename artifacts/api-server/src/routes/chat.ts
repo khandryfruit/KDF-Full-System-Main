@@ -257,7 +257,8 @@ function buildTools(orderingEnabled: boolean) {
 /* ── POST /api/chat/message ── */
 router.post("/chat/message", async (req, res) => {
   try {
-    const { sessionId, message, userId } = req.body as { sessionId?: string; message: string; userId?: number };
+    const { sessionId: rawSid, message, userId } = req.body as { sessionId?: string; message: string; userId?: number };
+    const sessionId = typeof rawSid === "string" ? rawSid.trim() : rawSid != null ? String(rawSid).trim() : "";
     if (!message?.trim()) return res.status(400).json({ error: "message is required" });
 
     const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1);
@@ -267,7 +268,7 @@ router.post("/chat/message", async (req, res) => {
       ? (await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.sessionId, sessionId)).limit(1))[0]
       : null;
 
-    const newSessionId = sessionId ?? `widget_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newSessionId = sessionId || `widget_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     if (!session) {
       [session] = await db.insert(chatSessionsTable).values({ sessionId: newSessionId, userId: userId ?? null, messages: [] }).returning();
     }

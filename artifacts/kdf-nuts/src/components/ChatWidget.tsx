@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { X, Send, MessageCircle, RotateCcw, ChevronDown, Loader2, ShoppingBag, AlertCircle, ShoppingCart, Eye, Tag, Gift, ClipboardList, CreditCard, Truck, ExternalLink, Zap, Mic, MicOff, MapPin, Search, Plus, Package } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -7,6 +7,16 @@ const SESSION_KEY = "kdfnuts_chat_session";
 const CHAT_CART_KEY = "kdfnuts_chat_cart";
 const LEAD_KEY = "kdfnuts_lead";
 const CITIES = ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Abbottabad", "Bahawalpur", "Sargodha", "Other"];
+
+/** Same rules as EmbedApp: cross-origin iframe must not POST to the shop’s /api. */
+function normalizeEmbedApiUrl(raw: string | undefined | null): string | undefined {
+  const s = raw?.trim();
+  if (!s) return undefined;
+  let u = s.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(u)) u = `https://${u.replace(/^\/+/, "")}`;
+  if (!/\/api$/i.test(u)) u = `${u}/api`;
+  return u;
+}
 
 function getImageUrl(key: string | null | undefined, base = BASE_URL + "api/"): string | null {
   if (!key) return null;
@@ -1005,9 +1015,14 @@ function OrderFormScreen({ initialCart, sessionId, onClose, onSuccess, apiBase }
 ════════════════════════════════════════════ */
 export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean; apiUrl?: string } = {}) {
   const [, setLocation] = useLocation();
-  /* In embed mode, override the BASE_URL with the absolute API origin.
-     This ensures cross-origin iframe API calls reach the correct server. */
-  const API_BASE = (embedMode && apiUrl) ? `${apiUrl.replace(/\/$/, "")}/` : BASE_URL + "api/";
+  /* In embed mode, use absolute …/api/ so POSTs never hit the Shopify storefront. */
+  const API_BASE = useMemo(() => {
+    if (embedMode) {
+      const resolved = normalizeEmbedApiUrl(apiUrl) ?? normalizeEmbedApiUrl(import.meta.env.VITE_API_BASE_URL as string | undefined);
+      if (resolved) return `${resolved.replace(/\/$/, "")}/`;
+    }
+    return BASE_URL + "api/";
+  }, [embedMode, apiUrl]);
   const [waConfig, setWaConfig] = useState<{ phone: string; message: string } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   /* In embed mode (Shopify iframe) chat is always visible */
@@ -1062,12 +1077,15 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
     e.preventDefault();
     if (!leadName.trim() || !leadPhone.trim()) return;
     setLeadSubmitting(true);
+    const newSessionId = sessionId ?? `kdfnuts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    if (!sessionId) setSessionId(newSessionId);
     try {
-      const newSessionId = sessionId ?? `kdfnuts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      if (!sessionId) setSessionId(newSessionId);
-      await fetch(`${API_BASE}chat/lead`, {
+      const ac = new AbortController();
+      const to = window.setTimeout(() => ac.abort(), 14_000);
+      const res = await fetch(`${API_BASE}chat/lead`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: ac.signal,
         body: JSON.stringify({
           name: leadName.trim(),
           phone: leadPhone.trim(),
@@ -1079,16 +1097,42 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
           deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
         }),
       });
+      window.clearTimeout(to);
+      if (!res.ok) {
+        try {
+          const errBody = await res.json();
+          console.warn("[KDF Chat] chat/lead failed", res.status, errBody);
+        } catch {
+          console.warn("[KDF Chat] chat/lead failed", res.status);
+        }
+      }
+    } catch (err) {
+      console.warn("[KDF Chat] chat/lead", err);
+    } finally {
+      setLeadSubmitting(false);
+      setShowLeadForm(false);
+      setIsChatOpen(true);
+    }
+    try {
       localStorage.setItem(LEAD_STORE, JSON.stringify({ name: leadName.trim(), phone: leadPhone.trim(), submitted: true }));
-    } catch {}
-    setLeadSubmitting(false);
-    setShowLeadForm(false);
-    setIsChatOpen(true);
+    } catch {
+      /* Safari / ITP may block storage in third-party iframe; chat still opens */
+    }
   };
 
   useEffect(() => {
     fetch(`${API_BASE}whatsapp/chat-config`).then(r => r.json()).then(d => { if (d?.enabled && d.phone) setWaConfig({ phone: d.phone, message: d.message }); }).catch(() => {});
-  }, []);
+  }, [API_BASE]);
+
+  /* Embed: show pre-chat gate until we have a saved lead (matches static chat-embed UX). */
+  useEffect(() => {
+    if (!embedMode) return;
+    try {
+      if (!localStorage.getItem(LEAD_STORE)) setShowLeadForm(true);
+    } catch {
+      setShowLeadForm(true);
+    }
+  }, [embedMode, LEAD_STORE]);
 
   useEffect(() => {
     const saved = localStorage.getItem(SESSION_STORE);
@@ -1129,7 +1173,13 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
                 deviceInfo: { userAgent: navigator.userAgent, language: navigator.language },
               }),
             }).catch(() => {});
-            localStorage.setItem(LEAD_STORE, JSON.stringify({ name: customer.name.trim(), phone: customer.phone.trim(), submitted: true }));
+            try {
+              localStorage.setItem(LEAD_STORE, JSON.stringify({ name: customer.name.trim(), phone: customer.phone.trim(), submitted: true }));
+            } catch {
+              /* ignore */
+            }
+            setShowLeadForm(false);
+            setIsChatOpen(true);
           }
         }
       }
@@ -1139,7 +1189,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
     /* Tell parent we loaded */
     window.parent.postMessage({ type: "KDF_READY" }, "*");
     return () => window.removeEventListener("message", handler);
-  }, [embedMode, BASE_URL, LEAD_STORE]);
+  }, [embedMode, API_BASE, LEAD_STORE]);
 
   /* ── postMessage: send unread count to Shopify parent ── */
   useEffect(() => {
@@ -1191,7 +1241,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
       }, 5000);
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [isChatOpen, sessionId]);
+  }, [isChatOpen, sessionId, API_BASE]);
 
   const sendMessage = useCallback(async (text?: string) => {
     const userText = (text ?? input).trim();
@@ -1199,8 +1249,11 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
     setInput("");
     setMessages(prev => [...prev, { role: "user", content: userText, timestamp: new Date() }]);
     setIsLoading(true);
+    const ac = new AbortController();
+    const to = window.setTimeout(() => ac.abort(), 28_000);
     try {
-      const res = await fetch(`${API_BASE}chat/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, message: userText }) });
+      const res = await fetch(`${API_BASE}chat/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, message: userText }), signal: ac.signal });
+      window.clearTimeout(to);
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? `Error ${res.status}`); }
       const data = await res.json();
       if (data.sessionId && !sessionId) setSessionId(data.sessionId);
@@ -1224,10 +1277,12 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
       }]);
       if (data.showOrderForm && !data.escalateToHuman) { setDefaultOrderProduct(""); setShowOrderForm(true); }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Sorry about that! Please try again in a moment.";
+      const msg = err instanceof Error && err.name === "AbortError"
+        ? "That took too long. Please try again."
+        : err instanceof Error ? err.message : "Sorry about that! Please try again in a moment.";
       setMessages(prev => [...prev, { role: "assistant", content: msg, timestamp: new Date() }]);
-    } finally { setIsLoading(false); }
-  }, [input, isLoading, sessionId, messages.length]);
+    } finally { window.clearTimeout(to); setIsLoading(false); }
+  }, [input, isLoading, sessionId, messages.length, API_BASE]);
 
   const trackActivity = useCallback((product: Product, variant: ProductVariant | null, price: number, action: "cart_add" | "buy_now" | "order_placed", qty = 1) => {
     const sid = sessionId;
@@ -1237,7 +1292,7 @@ export function ChatWidget({ embedMode = false, apiUrl }: { embedMode?: boolean;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: sid, productId: product.id, name: product.name, variant: variant?.value, price, qty, action }),
     }).catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, API_BASE]);
 
   const handleAddToCart = useCallback((product: Product, variant: ProductVariant | null, price: number) => {
     setChatCart(prev => {

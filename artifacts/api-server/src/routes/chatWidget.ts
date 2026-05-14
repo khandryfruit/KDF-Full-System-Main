@@ -275,7 +275,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     <input class="lf-input" id="lf-name" type="text" placeholder="Your name *" autocomplete="name" name="name" enterkeyhint="next">
     <input class="lf-input" id="lf-phone" type="tel" placeholder="Phone * (03xx… or +92…)" autocomplete="tel" name="phone" enterkeyhint="done">
     <input class="lf-input" id="lf-email" type="email" placeholder="Email (optional)" autocomplete="email" name="email" enterkeyhint="done">
-    <button type="submit" id="btn-lead">Start Chat →</button>
+    <button type="button" id="btn-lead">Start Chat →</button>
   </form>
   <span id="lead-skip">Skip for now</span>
 </div>
@@ -306,9 +306,12 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   var API       = ${JSON.stringify(apiUrl)};
   var WA_URL    = 'https://wa.me/923049996000?text=' + encodeURIComponent('Hello! I need help with my KDF Nuts order.');
   var sessionId = localStorage.getItem('kdf_embed_session') || ('embed_' + Date.now() + '_' + Math.random().toString(36).slice(2,7));
-  var leadSaved = localStorage.getItem('kdf_embed_lead') === '1';
-
-  localStorage.setItem('kdf_embed_session', sessionId);
+  var leadSaved = false;
+  try { leadSaved = localStorage.getItem('kdf_embed_lead') === '1'; } catch (e0) {}
+  if (!sessionId || !String(sessionId).trim()) {
+    sessionId = 'embed_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  }
+  try { localStorage.setItem('kdf_embed_session', sessionId); } catch (e0b) {}
 
   var msgs      = document.getElementById('msgs');
   var input     = document.getElementById('msg-input');
@@ -656,10 +659,21 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         signal: controller.signal
       });
       clearTimeout(timeout);
-      var data = await res.json();
+      timeout = null;
+      var data;
+      var rawText = await res.text();
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (parseErr) {
+        throw new Error(!res.ok ? 'Server error (' + res.status + ')' : 'Invalid JSON from server');
+      }
+      if (!res.ok) {
+        throw new Error((data && data.error) ? data.error : ('Request failed (' + res.status + ')'));
+      }
       showTyping(false);
 
       var reply = data.reply || data.message || data.text || (data.error ? '❌ ' + data.error : 'Sorry, I could not process that.');
+      if (data.sessionId) sessionId = data.sessionId;
       if (reply) addBubble(reply, 'bot');
 
       /* Product cards — 2-col grid for ≥2, single for 1 */
@@ -690,7 +704,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       try { window.parent.postMessage({ type: 'KDF_UNREAD', count: 1 }, '*'); } catch(e) {}
 
     } catch(e) {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       showTyping(false);
       var errMsg = (e && e.name === 'AbortError') ? '⏱️ Request timed out. Please try again.' : '⚠️ Connection error. Tap below to reach us on WhatsApp.';
       addBubble(errMsg, 'bot');
@@ -788,6 +802,9 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   }
 
   function submitLead() {
+    try {
+      if (leadForm && leadForm.style.display === 'none') return;
+    } catch (eGuard) {}
     var btnLead = document.getElementById('btn-lead');
     var errEl   = document.getElementById('lead-err');
     var nameEl  = document.getElementById('lf-name');
@@ -824,13 +841,27 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     try {
       btnLead.disabled = true;
       btnLead.textContent = 'Starting…';
-      localStorage.setItem('kdf_embed_lead', '1');
+      /* Open chat UI first so the iframe never “hangs” on slow storage or network (Shopify / Safari). */
+      showChatInterface();
+      try { btnLead.disabled = false; btnLead.textContent = 'Start Chat →'; } catch (eBtn) {}
+      try {
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      } catch (eBlur) {}
+      try { localStorage.setItem('kdf_embed_lead', '1'); } catch (e1) {}
       fetch(API + '/chat/lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, phone: phone, email: email || undefined, source: 'shopify_widget', sessionId: sessionId })
-      }).catch(function(){});
-      showChatInterface();
+      })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || 'lead ' + r.status); }).catch(function () { throw new Error('lead ' + r.status); });
+          try { window.parent.postMessage({ type: 'KDF_LEAD_OK', sessionId: sessionId }, '*'); } catch (e2) {}
+        })
+        .catch(function (err) {
+          try {
+            console.warn('[KDF chat-embed] /chat/lead failed', err && err.message ? err.message : err);
+          } catch (e3) {}
+        });
     } catch (err) {
       try {
         btnLead.disabled = false;
@@ -840,12 +871,19 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     }
   }
 
-  document.getElementById('lead-form-el').addEventListener('submit', function(e) {
+  document.getElementById('btn-lead').addEventListener('click', function (e) {
+    e.preventDefault();
+    submitLead();
+  });
+  document.getElementById('lead-form-el').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var t = e.target;
+    if (t && t.tagName === 'TEXTAREA') return;
     e.preventDefault();
     submitLead();
   });
   document.getElementById('lead-skip').addEventListener('click', function() {
-    localStorage.setItem('kdf_embed_lead', '1');
+    try { localStorage.setItem('kdf_embed_lead', '1'); } catch (eSk) {}
     showChatInterface();
   });
 
@@ -855,20 +893,27 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   /* ── Viewport / keyboard (Shopify iframe-safe) ───────────────────────────
      Never assign body.style.height from visualViewport inside a cross-origin
      iframe: values are often wrong vs the iframe layout box, which clips the
-     flex column and makes inputs/buttons feel "frozen" or unclickable. */
+     flex column and makes inputs/buttons feel "frozen" or unclickable.
+     Throttle viewport handlers — rapid visualViewport scroll/resize on Safari
+     can starve the main thread and make “Start Chat” feel stuck. */
   function scrollMsgsToEnd() {
     setTimeout(function(){ try { msgs.scrollTop = msgs.scrollHeight; } catch(e) {} }, 60);
   }
+  var vvTimer = null;
   function onViewportChange() {
-    scrollMsgsToEnd();
+    if (vvTimer) return;
+    vvTimer = setTimeout(function() {
+      vvTimer = null;
+      scrollMsgsToEnd();
+    }, 120);
   }
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', onViewportChange);
-    window.visualViewport.addEventListener('scroll', onViewportChange);
+    window.visualViewport.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport.addEventListener('scroll', onViewportChange, { passive: true });
   }
-  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('resize', onViewportChange, { passive: true });
   input.addEventListener('focus', function() {
-    setTimeout(function(){ msgs.scrollTop = msgs.scrollHeight; }, 350);
+    setTimeout(function(){ try { msgs.scrollTop = msgs.scrollHeight; } catch(e) {} }, 350);
   });
 
   /* ── Order Form (triggered by showOrderForm from API) ── */

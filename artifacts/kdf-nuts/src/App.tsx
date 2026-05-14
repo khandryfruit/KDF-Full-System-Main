@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,12 +12,25 @@ import { LocationProvider, useNutsLocation } from "./context/LocationContext";
 import { ChatWidget } from "./components/ChatWidget";
 import { LocationModal } from "./components/LocationModal";
 
+/** Absolute …/api base for Shopify iframe (never rely on the storefront origin). */
+function normalizeEmbedApiUrl(raw: string | undefined | null): string | undefined {
+  const s = raw?.trim();
+  if (!s) return undefined;
+  let u = s.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(u)) u = `https://${u.replace(/^\/+/, "")}`;
+  if (!/\/api$/i.test(u)) u = `${u}/api`;
+  return u;
+}
+
 /* ── Embed mode: Shopify iframe full-screen chat ── */
 function EmbedApp() {
-  /* Extract apiUrl from query params so the widget can call the correct API origin */
-  const apiUrl = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("apiUrl") ?? undefined
-    : undefined;
+  const apiUrl = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    const q = new URLSearchParams(window.location.search).get("apiUrl");
+    const fromQuery = normalizeEmbedApiUrl(q);
+    if (fromQuery) return fromQuery;
+    return normalizeEmbedApiUrl(import.meta.env.VITE_API_BASE_URL as string | undefined);
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

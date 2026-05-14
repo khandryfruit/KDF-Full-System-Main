@@ -4,8 +4,15 @@ import {
   MapPin, Phone, Mail, Facebook, Instagram, ChevronRight,
   Youtube, Twitter, Shield, Truck, Package, Clock,
   ChevronUp, ArrowRight, Calendar, BookOpen, CheckCircle,
-  Sparkles, Zap, Heart, ExternalLink, X, ChevronDown,
+  Sparkles, Zap, Heart, ExternalLink, X,
+  Leaf, Bot, Headphones, BadgeCheck,
 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useQuery } from "@tanstack/react-query";
 import { useSiteSettings, logoSrc } from "@/hooks/useSiteSettings";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -15,7 +22,14 @@ const ORANGE = "#F58300";
 const VOID   = "#020617";
 const DEEP   = "#071018";
 
+/** Official marketing badge assets (storefront only; lazy-loaded). */
+const OFFICIAL_PLAY_BADGE =
+  "https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png";
+const OFFICIAL_APP_STORE_BADGE =
+  "https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83";
+
 /* ─── Premium config (admin JSON: footer_settings.premium_config) ─── */
+type TrustIconKey = "shield" | "truck" | "package" | "clock" | "sparkles" | "leaf" | "headphones" | "bot";
 type PremiumCfg = {
   newsletterHeadline?: string;
   newsletterSub?: string;
@@ -28,12 +42,23 @@ type PremiumCfg = {
   instagramUrls?: string[];
   stickyCtaLabel?: string;
   stickyCtaHref?: string;
+  showTrustStrip?: boolean;
+  trustBadges?: { icon?: TrustIconKey; label: string; sub: string }[];
+  showFooterBlog?: boolean;
+  footerBlogTitle?: string;
+  footerBlogCount?: number;
+  showBlogAiTag?: boolean;
+  certificationImages?: string[];
+  aiPicks?: { label: string; href: string }[];
+  aiPicksTitle?: string;
 };
 
 const DEFAULT_ROTATING = [
-  "Flash sales · limited batches",
-  "AI-curated picks for immunity & energy",
-  "Trending dry fruits this week",
+  "AI Recommended Products",
+  "Trending This Week",
+  "Healthy Picks For You",
+  "Flash Deals Live",
+  "Personalized Wellness Picks",
   "Seasonal harvest · freshest stock",
   "Smart picks for fitness & focus",
 ];
@@ -54,6 +79,40 @@ function parsePremium(raw: string | null | undefined): PremiumCfg {
     return {};
   }
 }
+
+function parseScreenshotPaths(raw: unknown): string[] {
+  if (!raw || typeof raw !== "string") return [];
+  try {
+    const a = JSON.parse(raw) as unknown;
+    return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readingMinutesFromPost(post: Record<string, unknown>): number {
+  const raw = String(post.content ?? "").replace(/<[^>]+>/g, " ");
+  const words = raw.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
+}
+
+const TRUST_ICON_MAP: Record<TrustIconKey, React.ElementType> = {
+  shield: Shield,
+  truck: Truck,
+  package: Package,
+  clock: Clock,
+  sparkles: Sparkles,
+  leaf: Leaf,
+  headphones: Headphones,
+  bot: Bot,
+};
+
+const DEFAULT_AI_PICKS: { label: string; href: string }[] = [
+  { label: "Immunity essentials", href: "/products?sortBy=popular" },
+  { label: "Protein & gym fuel", href: "/products?featured=true" },
+  { label: "Office snack bundles", href: "/categories" },
+  { label: "Gift-ready hampers", href: "/products?sortBy=newest" },
+];
 
 function TikTokIcon({ className }: { className?: string }) {
   return (
@@ -142,12 +201,30 @@ const FALLBACK_MENUS = [
   ]},
 ];
 
-const TRUST_BADGES = [
-  { icon: Shield,  label: "Secure Checkout",   sub: "256-bit SSL" },
-  { icon: Truck,   label: "Free Delivery",      sub: "On orders Rs.1500+" },
-  { icon: Package, label: "Cash on Delivery",   sub: "Nationwide" },
-  { icon: Clock,   label: "Fast Dispatch",      sub: "Same day · Lahore" },
+const TRUST_BADGES_DEFAULT: { icon: TrustIconKey; label: string; sub: string }[] = [
+  { icon: "shield", label: "Secure Checkout", sub: "256-bit SSL encryption" },
+  { icon: "truck", label: "Fast Delivery", sub: "Tracked nationwide" },
+  { icon: "bot", label: "AI Recommendations", sub: "Curated for your goals" },
+  { icon: "leaf", label: "Organic Certified", sub: "Verified sourcing" },
+  { icon: "package", label: "Premium Quality", sub: "Cold-chain freshness" },
+  { icon: "headphones", label: "Live Support", sub: "Real humans, fast replies" },
 ];
+
+function mergeTrustBadges(premium: PremiumCfg) {
+  const custom = premium.trustBadges;
+  if (Array.isArray(custom) && custom.length > 0) {
+    return custom.map((t) => ({
+      icon: TRUST_ICON_MAP[(t.icon ?? "sparkles") as TrustIconKey] ?? Sparkles,
+      label: t.label,
+      sub: t.sub,
+    }));
+  }
+  return TRUST_BADGES_DEFAULT.map((t) => ({
+    icon: TRUST_ICON_MAP[t.icon],
+    label: t.label,
+    sub: t.sub,
+  }));
+}
 
 function FooterLinkItem({ label, linkValue, openInNewTab }: { label: string; linkValue: string; openInNewTab?: boolean }) {
   const cls =
@@ -265,6 +342,17 @@ function NewsletterBand({
         ["--fy" as string]: "0.35",
       }}
     >
+      <div className="pointer-events-none absolute inset-0 kdf-nl-mesh motion-reduce:opacity-30" aria-hidden />
+      <div
+        className="pointer-events-none absolute -left-1/4 top-0 h-[120%] w-1/2 rounded-full opacity-25 blur-[100px] motion-reduce:opacity-10 kdf-nl-orb-a"
+        style={{ background: `radial-gradient(circle, ${GREEN} 0%, transparent 70%)` }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -right-1/4 bottom-0 h-[100%] w-1/2 rounded-full opacity-20 blur-[90px] motion-reduce:opacity-8 kdf-nl-orb-b"
+        style={{ background: `radial-gradient(circle, ${ORANGE} 0%, transparent 72%)` }}
+        aria-hidden
+      />
       <div
         className="pointer-events-none absolute inset-0 opacity-90 motion-reduce:opacity-40"
         style={{
@@ -279,16 +367,20 @@ function NewsletterBand({
       />
       {!reduced && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          {["🥜", "🌰", "🍇", "🌴", "✨", "🍯"].map((emoji, i) => (
+          {["🥜", "🌰", "🍇", "🌴", "✨", "🍯", "🫐", "🥭"].map((emoji, i) => (
             <span
               key={i}
-              className="kdf-float-emoji absolute text-lg opacity-[0.12] motion-reduce:animate-none"
-              style={{ left: `${8 + i * 15}%`, top: `${20 + (i % 3) * 18}%`, animationDelay: `${i * 0.7}s` }}
+              className="kdf-float-emoji absolute text-lg opacity-[0.14] motion-reduce:animate-none"
+              style={{ left: `${5 + i * 11}%`, top: `${14 + (i % 4) * 16}%`, animationDelay: `${i * 0.55}s` }}
               aria-hidden
             >
               {emoji}
             </span>
           ))}
+          <div className="absolute bottom-8 right-[12%] flex gap-3 opacity-20 motion-reduce:hidden" aria-hidden>
+            <Leaf className="h-6 w-6 text-emerald-300 kdf-icon-drift" />
+            <Sparkles className="h-5 w-5 text-amber-200 kdf-icon-drift2" />
+          </div>
         </div>
       )}
 
@@ -299,7 +391,18 @@ function NewsletterBand({
               <Sparkles className="h-3 w-3" style={{ color: ORANGE }} aria-hidden />
               Intelligence layer
             </p>
-            <h2 className="text-balance text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200/90">
+                <Bot className="h-3 w-3" aria-hidden /> AI picks live
+              </span>
+              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100/90">
+                <Zap className="h-3 w-3" aria-hidden /> Flash lane
+              </span>
+              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-200/90">
+                <BadgeCheck className="h-3 w-3 text-sky-300" aria-hidden /> Verified quality
+              </span>
+            </div>
+            <h2 className="mt-4 text-balance text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
               {headline}
             </h2>
             <p className="mt-3 max-w-lg text-pretty text-sm leading-relaxed text-slate-400 sm:text-base">{sub}</p>
@@ -336,7 +439,9 @@ function NewsletterBand({
               </div>
             ) : (
               <form onSubmit={onSubmit} className="space-y-3">
-                <div className="relative rounded-2xl border border-white/[0.12] bg-white/[0.06] p-1 shadow-[0_0_0_1px_rgba(95,168,0,0.08)] backdrop-blur-xl ring-1 ring-[#5FA800]/15 transition-shadow duration-300 focus-within:ring-[#5FA800]/35 focus-within:shadow-[0_0_40px_-12px_rgba(95,168,0,0.45)]">
+                <div className="kdf-nl-form-shell group relative rounded-2xl border border-white/[0.14] bg-gradient-to-br from-white/[0.09] to-white/[0.03] p-[1px] shadow-[0_0_0_1px_rgba(95,168,0,0.12),0_24px_80px_-40px_rgba(245,131,0,0.35)] backdrop-blur-xl ring-1 ring-white/[0.06] transition-[box-shadow,transform] duration-500 ease-out hover:shadow-[0_0_0_1px_rgba(95,168,0,0.28),0_28px_90px_-36px_rgba(95,168,0,0.45)] motion-reduce:transition-none">
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100 motion-reduce:opacity-0 kdf-nl-shimmer" aria-hidden />
+                  <div className="relative rounded-[15px] bg-[#060d18]/85 p-1 ring-1 ring-white/[0.04] backdrop-blur-xl focus-within:ring-[#5FA800]/40">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                     <div className="relative flex-1">
                       <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -367,6 +472,7 @@ function NewsletterBand({
                       )}
                     </button>
                   </div>
+                  </div>
                 </div>
                 <p className="text-center text-[10px] text-slate-600 sm:text-left">
                   By subscribing you agree to our{" "}
@@ -381,7 +487,7 @@ function NewsletterBand({
   );
 }
 
-function BlogCardLux({ post }: { post: Record<string, unknown> }) {
+function BlogCardLux({ post, showAiTag }: { post: Record<string, unknown>; showAiTag?: boolean }) {
   const imgRaw = (post.featuredImagePath ?? post.featured_image_path) as string | undefined;
   const imgSrc = imgRaw ? getProductImageSrc(imgRaw, { maxWidth: 400 }) : null;
   const created = (post.createdAt ?? post.created_at) as string | undefined;
@@ -391,6 +497,7 @@ function BlogCardLux({ post }: { post: Record<string, unknown> }) {
   const excerpt = (post.excerpt as string) || String(post.content ?? "").replace(/<[^>]+>/g, "").slice(0, 100);
   const tags = String(post.tags ?? "");
   const badge = tags.split(",").map(t => t.trim()).filter(Boolean)[0] ?? "Journal";
+  const mins = readingMinutesFromPost(post);
 
   return (
     <Link
@@ -409,19 +516,25 @@ function BlogCardLux({ post }: { post: Record<string, unknown> }) {
         <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/90 backdrop-blur-md">
           {badge}
         </span>
+        {showAiTag !== false ? (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100 backdrop-blur-md kdf-ai-tag">
+            <Sparkles className="h-3 w-3" aria-hidden /> AI pick
+          </span>
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col p-4">
         <h4 className="line-clamp-2 text-sm font-bold leading-snug text-white group-hover:text-[#a8e063] transition-colors">
           {String(post.title)}
         </h4>
         {excerpt ? <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500">{excerpt}</p> : null}
-        <div className="mt-auto flex items-center justify-between pt-3">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 pt-3">
           {formattedDate ? (
             <span className="flex items-center gap-1 text-[10px] font-medium text-slate-600">
-              <Calendar className="h-3 w-3" />{formattedDate}
+              <Calendar className="h-3 w-3 shrink-0" />{formattedDate}
             </span>
           ) : <span />}
-          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: GREEN }}>Read</span>
+          <span className="text-[10px] font-medium text-slate-500 whitespace-nowrap">{mins} min read</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ color: GREEN }}>Read</span>
         </div>
       </div>
     </Link>
@@ -444,7 +557,7 @@ export function Footer() {
 
   const { data: blogData } = useQuery<{ posts?: Record<string, unknown>[] } | null>({
     queryKey: ["/api/blog-posts-footer-v2"],
-    queryFn: () => fetch("/api/blog-posts?limit=4&status=published").then(r => r.ok ? r.json() : null),
+    queryFn: () => fetch("/api/blog-posts?limit=8&status=published").then(r => r.ok ? r.json() : null),
     staleTime: 10 * 60 * 1000,
   });
 
@@ -460,9 +573,17 @@ export function Footer() {
   const appLinks    = footerData?.appLinks as Record<string, unknown> | null | undefined;
   const policies    = (footerData?.policies ?? []) as { id: number; title: string; slug: string }[];
   const blogPosts   = blogData?.posts ?? [];
-  const showApp     = !appLinks || appLinks.isActive !== false;
+  const appShots    = parseScreenshotPaths(appLinks?.screenshotPaths);
+  const showAndroidBtn = appLinks?.showAndroidButton !== false;
+  const showIosBtn     = appLinks?.showIosButton !== false;
+  const useOfficialBadges = appLinks?.useOfficialBadges !== false;
+  const showAppDock = (!appLinks || appLinks.isActive !== false) && (showAndroidBtn || showIosBtn || appShots.length > 0);
   const showNews    = premium.showNewsletter !== false;
   const showInsta   = premium.showInstagram !== false && (premium.instagramUrls?.length ?? 0) > 0;
+  const blogLimit   = Math.min(6, Math.max(1, premium.footerBlogCount ?? 3));
+  const showBlogCol = premium.showFooterBlog !== false && blogPosts.length > 0;
+  const aiPickLinks = (premium.aiPicks?.length ? premium.aiPicks : DEFAULT_AI_PICKS).slice(0, 6);
+  const certs       = (premium.certificationImages ?? []).filter((u): u is string => typeof u === "string" && u.length > 0);
 
   const description = (settings?.description as string) || "Premium dry fruits & nuts — sourced with care, delivered fresh across Pakistan.";
   const address       = (settings?.address as string) || "Lahore, Pakistan";
@@ -518,13 +639,18 @@ export function Footer() {
       )}
 
       <footer className="relative border-t border-white/[0.06] bg-[#020617] text-slate-300" style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}>
-        {/* trust strip */}
+        {premium.showTrustStrip !== false && (
         <div className="border-b border-white/[0.05] bg-[#030b14]">
-          <div className="mx-auto flex max-w-7xl gap-3 overflow-x-auto px-4 py-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TRUST_BADGES.map(({ icon: Icon, label, sub }) => (
-              <div key={label} className="flex min-w-[200px] shrink-0 items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 backdrop-blur-sm">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-[#5FA800]/25" style={{ background: `${GREEN}18` }}>
-                  <Icon className="h-4 w-4" style={{ color: GREEN }} />
+          <div className="mx-auto flex max-w-7xl gap-3 overflow-x-auto px-4 py-5 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none">
+            {mergeTrustBadges(premium).map(({ icon: Icon, label, sub }, i) => (
+              <div
+                key={label}
+                className="kdf-trust-card group flex min-w-[210px] shrink-0 snap-start items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3.5 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/25 hover:shadow-[0_16px_48px_-28px_rgba(95,168,0,0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                style={{ animationDelay: `${i * 70}ms` }}
+              >
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-[#5FA800]/30 transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none" style={{ background: `${GREEN}22` }}>
+                  <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 blur-md transition-opacity group-hover:opacity-70 motion-reduce:opacity-0" style={{ background: `radial-gradient(circle, ${GREEN} 0%, transparent 70%)` }} aria-hidden />
+                  <Icon className="relative h-4 w-4" style={{ color: GREEN }} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-white">{label}</p>
@@ -534,11 +660,13 @@ export function Footer() {
             ))}
           </div>
         </div>
+        )}
 
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden />
           {/* Brand + columns */}
-          <div className="grid gap-12 lg:grid-cols-12">
-            <div className="lg:col-span-4">
+          <div className="grid gap-14 lg:grid-cols-12">
+            <div className="lg:col-span-3">
               <div className="flex items-center gap-3">
                 {logoUrl ? (
                   <img src={logoUrl} alt={siteName} className="h-11 w-auto max-w-[140px] object-contain brightness-110" loading="lazy" />
@@ -628,7 +756,7 @@ export function Footer() {
 
             {/* Desktop link columns */}
             <div className="hidden lg:col-span-5 lg:block">
-              <div className="grid grid-cols-3 gap-8">
+              <div className="grid grid-cols-3 gap-x-6 gap-y-2">
                 {menus.map(menu => (
                   <div key={menu.id}>
                     <h3 className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -646,35 +774,65 @@ export function Footer() {
             </div>
 
             {/* Mobile accordions */}
-            <div className="space-y-2 lg:col-span-5 lg:hidden">
+            <Accordion type="multiple" className="space-y-2 lg:col-span-5 lg:hidden">
               {menus.map(menu => (
-                <details key={menu.id} className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] px-4 open:bg-white/[0.04]">
-                  <summary className="flex cursor-pointer list-none items-center justify-between py-3 text-sm font-bold text-white [&::-webkit-details-marker]:hidden">
+                <AccordionItem
+                  key={menu.id}
+                  value={`footer-menu-${menu.id}`}
+                  className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] border-b-0 data-[state=open]:bg-white/[0.05]"
+                >
+                  <AccordionTrigger className="px-4 py-3.5 text-sm font-bold text-white hover:no-underline [&>svg]:text-slate-500">
                     {menu.title}
-                    <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
-                  </summary>
-                  <ul className="border-t border-white/[0.06] pb-3 pt-1">
-                    {(menu.items ?? []).map(item => (
-                      <FooterLinkItem key={item.label + item.linkValue} {...item} />
-                    ))}
-                  </ul>
-                </details>
+                  </AccordionTrigger>
+                  <AccordionContent className="border-t border-white/[0.06] px-2 pb-2">
+                    <ul className="space-y-0.5 pt-1">
+                      {(menu.items ?? []).map(item => (
+                        <FooterLinkItem key={item.label + item.linkValue} {...item} />
+                      ))}
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
               ))}
-            </div>
+            </Accordion>
 
-            <div className="space-y-8 lg:col-span-3">
-              {blogPosts.length > 0 && (
+            <div className="space-y-8 lg:col-span-4">
+              <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 shadow-[0_24px_80px_-48px_rgba(95,168,0,0.55)] backdrop-blur-xl ring-1 ring-[#5FA800]/10">
+                <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  <Bot className="h-3.5 w-3.5 text-violet-300" aria-hidden />
+                  {premium.aiPicksTitle ?? "AI recommendations"}
+                </h3>
+                <ul className="space-y-1">
+                  {aiPickLinks.map((row) => (
+                    <li key={row.label + row.href}>
+                      <Link
+                        href={row.href}
+                        className="group flex items-center justify-between gap-2 rounded-xl border border-transparent px-2 py-2 text-sm text-slate-300 transition-all hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300/90 opacity-80 group-hover:opacity-100" aria-hidden />
+                          <span className="truncate">{row.label}</span>
+                        </span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {showBlogCol && (
                 <div>
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Journal</h3>
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                      {premium.footerBlogTitle ?? "Intelligence desk"}
+                    </h3>
                     <Link href="/blog" className="group inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-white" style={{ color: GREEN }}>
                       View all
                       <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                     </Link>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                    {blogPosts.slice(0, 4).map(post => (
-                      <BlogCardLux key={String(post.id)} post={post} />
+                    {blogPosts.slice(0, blogLimit).map(post => (
+                      <BlogCardLux key={String(post.id)} post={post} showAiTag={premium.showBlogAiTag} />
                     ))}
                   </div>
                 </div>
@@ -716,48 +874,122 @@ export function Footer() {
                 </div>
               )}
 
-              {showApp && (
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-md">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Apps</h3>
+              {showAppDock && (
+                <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-gradient-to-br from-[#0a1424]/95 via-[#060d18]/90 to-[#030910]/95 p-4 shadow-[0_28px_100px_-40px_rgba(245,131,0,0.25)] backdrop-blur-2xl ring-1 ring-white/[0.06]">
+                  <div className="pointer-events-none absolute -right-8 -top-12 h-40 w-40 rounded-full bg-[#5FA800]/15 blur-3xl motion-reduce:opacity-40" aria-hidden />
+                  <div className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-orange-500/10 blur-3xl motion-reduce:opacity-40" aria-hidden />
+                  <div className="relative mb-4 flex items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Download the app</h3>
                     {(appLinks?.downloadCountLabel as string)?.trim() ? (
-                      <span className="rounded-full border border-[#5FA800]/30 bg-[#5FA800]/10 px-2 py-0.5 text-[10px] font-bold text-[#b6f076]">
+                      <span className="rounded-full border border-[#5FA800]/35 bg-[#5FA800]/12 px-2.5 py-0.5 text-[10px] font-bold text-[#c8f090] kdf-pulse-soft">
                         {String(appLinks?.downloadCountLabel)}
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <a
-                      href={String(appLinks?.androidLink || "#")}
-                      target={appLinks?.androidLink ? "_blank" : undefined}
-                      rel="noreferrer"
-                      className="group flex flex-1 items-center gap-3 rounded-xl border border-white/[0.08] bg-[#0b1220] px-3 py-3 transition-all duration-200 hover:border-[#5FA800]/35 hover:shadow-[0_0_24px_-10px_rgba(95,168,0,0.35)]"
-                    >
-                      <PlayStoreIcon className="h-6 w-6 shrink-0 text-white" />
-                      <div className="leading-tight">
-                        <p className="text-[9px] uppercase tracking-wider text-slate-500">Get it on</p>
-                        <p className="text-sm font-bold text-white">{(appLinks?.androidLabel as string) || "Google Play"}</p>
-                      </div>
-                      <ArrowRight className="ml-auto h-4 w-4 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
-                    </a>
-                    <a
-                      href={String(appLinks?.iosLink || "#")}
-                      target={appLinks?.iosLink ? "_blank" : undefined}
-                      rel="noreferrer"
-                      className="group flex flex-1 items-center gap-3 rounded-xl border border-white/[0.08] bg-[#0b1220] px-3 py-3 transition-all duration-200 hover:border-[#5FA800]/35 hover:shadow-[0_0_24px_-10px_rgba(95,168,0,0.35)]"
-                    >
-                      <AppStoreIcon className="h-6 w-6 shrink-0 text-white" />
-                      <div className="leading-tight">
-                        <p className="text-[9px] uppercase tracking-wider text-slate-500">Download on</p>
-                        <p className="text-sm font-bold text-white">{(appLinks?.iosLabel as string) || "App Store"}</p>
-                      </div>
-                      <ArrowRight className="ml-auto h-4 w-4 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
-                    </a>
+                  <div className={`grid gap-4 ${showAndroidBtn && showIosBtn ? "sm:grid-cols-2" : ""}`}>
+                    {showAndroidBtn && (
+                      <a
+                        href={String(appLinks?.androidLink || "#")}
+                        target={appLinks?.androidLink ? "_blank" : undefined}
+                        rel="noreferrer"
+                        className="kdf-app-badge group relative flex min-h-[56px] items-center justify-center overflow-hidden rounded-xl border border-white/[0.1] bg-black/35 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                      >
+                        <span className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:opacity-0 kdf-app-badge-shine" aria-hidden />
+                        {(() => {
+                          const custom = String(appLinks?.androidBadgePath ?? "").trim();
+                          if (custom) {
+                            return (
+                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Get it on Google Play" className="h-11 w-auto max-w-full object-contain" loading="lazy" decoding="async" />
+                            );
+                          }
+                          if (useOfficialBadges) {
+                            return (
+                              <img src={OFFICIAL_PLAY_BADGE} alt="Get it on Google Play" className="h-12 w-auto object-contain" loading="lazy" decoding="async" />
+                            );
+                          }
+                          return (
+                            <span className="flex w-full items-center gap-3 text-white">
+                              <PlayStoreIcon className="h-7 w-7 shrink-0" />
+                              <span className="text-left leading-tight">
+                                <span className="block text-[9px] uppercase tracking-wider text-slate-500">Get it on</span>
+                                <span className="text-sm font-bold">{(appLinks?.androidLabel as string) || "Google Play"}</span>
+                              </span>
+                              <ArrowRight className="ml-auto h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+                            </span>
+                          );
+                        })()}
+                      </a>
+                    )}
+                    {showIosBtn && (
+                      <a
+                        href={String(appLinks?.iosLink || "#")}
+                        target={appLinks?.iosLink ? "_blank" : undefined}
+                        rel="noreferrer"
+                        className="kdf-app-badge group relative flex min-h-[56px] items-center justify-center overflow-hidden rounded-xl border border-white/[0.1] bg-black/35 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                      >
+                        <span className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:opacity-0 kdf-app-badge-shine" aria-hidden />
+                        {(() => {
+                          const custom = String(appLinks?.iosBadgePath ?? "").trim();
+                          if (custom) {
+                            return (
+                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Download on the App Store" className="h-10 w-auto max-w-full object-contain" loading="lazy" decoding="async" />
+                            );
+                          }
+                          if (useOfficialBadges) {
+                            return (
+                              <img src={OFFICIAL_APP_STORE_BADGE} alt="Download on the App Store" className="h-10 w-auto object-contain" loading="lazy" decoding="async" />
+                            );
+                          }
+                          return (
+                            <span className="flex w-full items-center gap-3 text-white">
+                              <AppStoreIcon className="h-7 w-7 shrink-0" />
+                              <span className="text-left leading-tight">
+                                <span className="block text-[9px] uppercase tracking-wider text-slate-500">Download on</span>
+                                <span className="text-sm font-bold">{(appLinks?.iosLabel as string) || "App Store"}</span>
+                              </span>
+                              <ArrowRight className="ml-auto h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+                            </span>
+                          );
+                        })()}
+                      </a>
+                    )}
                   </div>
+                  {appShots.length > 0 ? (
+                    <div className="relative mt-4 border-t border-white/[0.06] pt-4">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Inside the app</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                        {appShots.map((path) => (
+                          <button
+                            key={path}
+                            type="button"
+                            onClick={() => setLightbox(getProductImageSrc(path, { maxWidth: 1200 }))}
+                            className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-white/[0.08] ring-1 ring-transparent transition-all hover:ring-[#5FA800]/40"
+                          >
+                            <img src={getProductImageSrc(path, { maxWidth: 400 })} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
           </div>
+          {certs.length > 0 && (
+            <div className="mt-14 flex flex-wrap items-center justify-center gap-10 border-t border-white/[0.06] px-2 pt-12">
+              {certs.map((src) => (
+                <img
+                  key={src}
+                  src={getProductImageSrc(src, { maxWidth: 200 })}
+                  alt="Trust certification"
+                  className="h-11 w-auto max-w-[160px] object-contain opacity-[0.78] transition duration-300 hover:opacity-100"
+                  style={{ filter: "drop-shadow(0 0 14px rgba(95,168,0,0.15))" }}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* bottom */}
@@ -846,8 +1078,75 @@ export function Footer() {
           color: transparent;
           animation: kdf-tagline-shimmer 8s linear infinite;
         }
+        @keyframes kdf-nl-mesh-shift {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 100% 50%; }
+        }
+        .kdf-nl-mesh {
+          opacity: 0.55;
+          background:
+            radial-gradient(ellipse 120% 80% at 20% 20%, rgba(95,168,0,0.16), transparent 50%),
+            radial-gradient(ellipse 100% 70% at 80% 70%, rgba(245,131,0,0.12), transparent 45%),
+            linear-gradient(125deg, rgba(15,23,42,0.9), rgba(2,6,23,0.4));
+          background-size: 200% 200%;
+          animation: kdf-nl-mesh-shift 18s ease-in-out infinite alternate;
+        }
+        @keyframes kdf-nl-orb-float-a {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(6%, 4%) scale(1.05); }
+        }
+        @keyframes kdf-nl-orb-float-b {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-5%, -3%) scale(1.08); }
+        }
+        .kdf-nl-orb-a { animation: kdf-nl-orb-float-a 14s ease-in-out infinite; }
+        .kdf-nl-orb-b { animation: kdf-nl-orb-float-b 16s ease-in-out infinite; }
+        @keyframes kdf-nl-shimmer-move {
+          0% { transform: translateX(-60%) skewX(-12deg); opacity: 0; }
+          35% { opacity: 0.35; }
+          100% { transform: translateX(120%) skewX(-12deg); opacity: 0; }
+        }
+        .kdf-nl-shimmer {
+          background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%);
+          animation: kdf-nl-shimmer-move 2.8s ease-in-out infinite;
+        }
+        @keyframes kdf-badge-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(95,168,0,0); }
+          50% { box-shadow: 0 0 20px -4px rgba(95,168,0,0.25); }
+        }
+        .kdf-badge-pill { animation: kdf-badge-pulse 4s ease-in-out infinite; }
+        @keyframes kdf-icon-drift {
+          0%, 100% { transform: translateY(0); opacity: 0.2; }
+          50% { transform: translateY(-6px); opacity: 0.35; }
+        }
+        .kdf-icon-drift { animation: kdf-icon-drift 6s ease-in-out infinite; }
+        @keyframes kdf-icon-drift2 {
+          0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.18; }
+          50% { transform: translateY(-8px) rotate(-8deg); opacity: 0.32; }
+        }
+        .kdf-icon-drift2 { animation: kdf-icon-drift2 7s ease-in-out infinite 0.5s; }
+        @keyframes kdf-app-shine {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .kdf-app-badge-shine {
+          background: linear-gradient(95deg, transparent, rgba(255,255,255,0.12), transparent);
+          animation: kdf-app-shine 1.8s ease-in-out infinite;
+        }
+        @keyframes kdf-pulse-soft-k {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.92; transform: scale(1.02); }
+        }
+        .kdf-pulse-soft { animation: kdf-pulse-soft-k 2.4s ease-in-out infinite; }
+        @keyframes kdf-ai-tag-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0); }
+          50% { box-shadow: 0 0 14px 0 rgba(167,139,250,0.25); }
+        }
+        .kdf-ai-tag { animation: kdf-ai-tag-glow 3s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
-          .kdf-float-emoji, .kdf-fade-up, .kdf-pulse-glow, .kdf-qr-pulse, .kdf-tagline { animation: none !important; }
+          .kdf-float-emoji, .kdf-fade-up, .kdf-pulse-glow, .kdf-qr-pulse, .kdf-tagline,
+          .kdf-nl-mesh, .kdf-nl-orb-a, .kdf-nl-orb-b, .kdf-nl-shimmer, .kdf-badge-pill,
+          .kdf-icon-drift, .kdf-icon-drift2, .kdf-app-badge-shine, .kdf-pulse-soft, .kdf-ai-tag { animation: none !important; }
         }
       `}</style>
     </>
