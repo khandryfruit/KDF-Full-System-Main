@@ -23,7 +23,18 @@ async function api(path: string) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
   const base = getApiBase().replace(/\/$/, "");
   const url = `${base}/api${path}`;
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  let r: Response;
+  try {
+    r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
+      throw new Error(
+        `Cannot reach API at ${url} — open https://api.khanbabadryfruits.com/api/healthz in a new tab. If that works: hard-refresh admin (Ctrl+Shift+R), disable VPN/ad-block, or redeploy admin with latest main.`,
+      );
+    }
+    throw e;
+  }
   const ct = r.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) {
     const text = await r.text();
