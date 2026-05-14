@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { SlidersHorizontal, Search, Loader2, CheckCircle, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 interface Product {
   id: number; itemCode: string; name: string; unit: string;

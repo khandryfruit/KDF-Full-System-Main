@@ -19,11 +19,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { adminApiUrl } from "@/lib/apiBase";
 
 const GREEN  = "#5FA800";
 const token  = () => localStorage.getItem("kdf_admin_token") ?? "";
 const api    = (path: string, opts?: RequestInit) =>
-  fetch(`/api${path}`, { headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" }, ...opts });
+  fetch(adminApiUrl(path), { headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" }, ...opts });
 
 type CTA = { label: string; url: string; style: "primary" | "secondary" | "outline" };
 type VideoBanner = {

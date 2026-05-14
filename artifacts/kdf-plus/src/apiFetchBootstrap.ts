@@ -1,8 +1,11 @@
 import { getPublicApiOrigin } from "./lib/apiOrigin";
 
-const origin = getPublicApiOrigin();
+function apiOriginPrefix(): string {
+  return getPublicApiOrigin().replace(/\/+$/, "");
+}
 
 function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
+  const origin = apiOriginPrefix();
   if (!origin || typeof window === "undefined") return input;
 
   if (typeof input === "string") {
@@ -35,12 +38,14 @@ function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
   return input;
 }
 
-if (origin && typeof window !== "undefined") {
+function install(): void {
+  if (typeof window === "undefined") return;
   const w = window as Window & { __kdfApiFetchPatched?: boolean };
-  if (!w.__kdfApiFetchPatched) {
-    w.__kdfApiFetchPatched = true;
-    const nativeFetch = window.fetch.bind(window);
-    window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-      nativeFetch(rewriteInput(input) as RequestInfo, init);
-  }
+  if (w.__kdfApiFetchPatched) return;
+  w.__kdfApiFetchPatched = true;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
+    nativeFetch(rewriteInput(input) as RequestInfo, init);
 }
+
+install();

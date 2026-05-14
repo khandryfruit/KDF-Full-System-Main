@@ -31,5 +31,9 @@ export function getPublicApiOrigin(): string {
     "www.khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
     "khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
   };
-  return map[h] ?? "";
+  if (map[h]) return map[h];
+  if (h.endsWith("khanbabadryfruits.com") && !h.startsWith("api.")) {
+    return "https://api.khanbabadryfruits.com";
+  }
+  return "";
 }

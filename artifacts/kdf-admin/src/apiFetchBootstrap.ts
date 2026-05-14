@@ -60,7 +60,6 @@ function rewriteInput(input: RequestInfo | URL): RequestInfo | URL {
 
 function install(): void {
   if (typeof window === "undefined") return;
-  if (!apiOriginPrefix()) return;
   const win = window as Window & { __kdfAdminApiFetchPatched?: boolean };
   if (win.__kdfAdminApiFetchPatched) return;
   win.__kdfAdminApiFetchPatched = true;

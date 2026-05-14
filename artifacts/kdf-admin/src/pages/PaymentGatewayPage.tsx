@@ -33,7 +33,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { getApiBase } from "@/lib/apiBase";
+import { getApiBase, apiPublicUrl } from "@/lib/apiBase";
 
 /* ═══════════════════════════════ API HELPERS ═════════════════════════ */
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
@@ -2095,7 +2095,7 @@ function InvoicePayTab() {
     queryKey: ["invoices", linkFilter],
     queryFn: async () => {
       const qs = linkFilter !== "all" ? `?status=${linkFilter}` : "";
-      const r  = await fetch(`/api/admin/invoices${qs}`, { credentials: "include" });
+      const r  = await fetch(apiPublicUrl(`/api/admin/invoices${qs}`), { credentials: "include" });
       if (!r.ok) throw new Error("Failed to load invoices");
       return r.json() as Promise<{ invoices: any[]; total: number; stats: any }>;
     },
@@ -2135,7 +2135,7 @@ function InvoicePayTab() {
   const genLinkMutation = useMutation({
     mutationFn: async (id: number) => {
       setGenLinkId(id);
-      const r = await fetch(`/api/admin/invoices/${id}/generate-link`, {
+      const r = await fetch(apiPublicUrl(`/api/admin/invoices/${id}/generate-link`), {
         method: "POST", credentials: "include",
       });
       const j = await r.json();
@@ -2159,7 +2159,7 @@ function InvoicePayTab() {
   const sendMutation = useMutation({
     mutationFn: async ({ id, via }: { id: number; via: string }) => {
       setSendingId(id);
-      const r = await fetch(`/api/admin/invoices/${id}/send`, {
+      const r = await fetch(apiPublicUrl(`/api/admin/invoices/${id}/send`), {
         method:      "POST",
         headers:     { "Content-Type": "application/json" },
         credentials: "include",

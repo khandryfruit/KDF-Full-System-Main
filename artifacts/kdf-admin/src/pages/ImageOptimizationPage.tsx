@@ -11,7 +11,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, Info, Save,
   TrendingDown,
 } from "lucide-react";
-import { API_BASE } from "@/lib/apiBase";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 interface ImageOptSettings {
   enabled: boolean;
@@ -52,7 +52,7 @@ export default function ImageOptimizationPage() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/image-settings", { headers: getAuthHeader() })
+    fetch(apiPublicUrl("/api/admin/image-settings"), { headers: getAuthHeader() })
       .then((r) => (r.ok ? r.json() : DEFAULTS))
       .then((data) => setSettings({ ...DEFAULTS, ...data }))
       .catch(() => setSettings(DEFAULTS))
@@ -62,7 +62,7 @@ export default function ImageOptimizationPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const r = await fetch("/api/admin/image-settings", {
+      const r = await fetch(apiPublicUrl("/api/admin/image-settings"), {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...getAuthHeader() },
         body: JSON.stringify(settings),
@@ -83,7 +83,7 @@ export default function ImageOptimizationPage() {
     try {
       const fd = new FormData();
       fd.append("file", testFile);
-      const r = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+      const r = await fetch(apiPublicUrl("/api/storage/uploads/image"), {
         method: "POST",
         headers: getAuthHeader(),
         body: fd,

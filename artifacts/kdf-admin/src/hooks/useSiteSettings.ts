@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 export interface SiteSettings {
   id: number;
@@ -8,11 +9,9 @@ export interface SiteSettings {
   updatedAt: string;
 }
 
-const BASE = "/api";
-
 async function fetchSettings(): Promise<SiteSettings> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`${BASE}/admin/site-settings`, {
+  const res = await fetch(apiPublicUrl("/api/admin/site-settings"), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("Failed to fetch");
@@ -21,7 +20,7 @@ async function fetchSettings(): Promise<SiteSettings> {
 
 async function updateSettings(data: Partial<Pick<SiteSettings, "siteName" | "logoPath" | "faviconPath">>): Promise<SiteSettings> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`${BASE}/admin/site-settings`, {
+  const res = await fetch(apiPublicUrl("/api/admin/site-settings"), {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -52,7 +51,7 @@ export function useUpdateSiteSettings() {
 
 export async function requestUploadUrl(file: File): Promise<{ uploadURL: string; objectPath: string }> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`${BASE}/storage/uploads/request-url`, {
+  const res = await fetch(apiPublicUrl("/api/storage/uploads/request-url"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

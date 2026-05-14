@@ -1,7 +1,7 @@
-import { API_BASE } from "./apiBase";
+import { apiPublicUrl } from "./apiBase";
 
 export async function uploadFile(file: File, folder = "general"): Promise<string> {
-  const reqRes = await fetch(`${API_BASE}/api/storage/uploads/request-url`, {
+  const reqRes = await fetch(apiPublicUrl("/api/storage/uploads/request-url"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

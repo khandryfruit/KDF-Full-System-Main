@@ -27,7 +27,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { API_BASE } from "@/lib/apiBase";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 function getImageUrl(path: string): string {
   if (!path) return "";
@@ -48,7 +48,7 @@ function useCategoryImageUpload() {
       const formData = new FormData();
       formData.append("file", file);
       setProgress(30);
-      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+      const res = await fetch(apiPublicUrl("/api/storage/uploads/image"), {
         method: "POST",
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: formData,

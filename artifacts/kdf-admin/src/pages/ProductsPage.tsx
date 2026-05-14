@@ -36,7 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { API_BASE } from "@/lib/apiBase";
+import { apiPublicUrl } from "@/lib/apiBase";
 import { optimizeCloudinaryDelivery } from "@/lib/imageDelivery";
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -96,7 +96,7 @@ function useProductImageUpload() {
       }, 120);
 
       try {
-        const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+        const res = await fetch(apiPublicUrl("/api/storage/uploads/image"), {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
@@ -661,7 +661,7 @@ function useAdminProducts(page: number, search: string, status: string) {
         ...(search ? { search } : {}),
         ...(status !== "all" ? { status } : {}),
       });
-      const res = await fetch(`/api/admin/products?${params}`, {
+      const res = await fetch(apiPublicUrl(`/api/admin/products?${params}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch products");
@@ -702,7 +702,7 @@ export default function ProductsPage() {
     setTogglingId(product.id);
     const token = localStorage.getItem("kdf_admin_token") ?? "";
     try {
-      const res = await fetch(`/api/admin/products/${product.id}/toggle-active`, {
+      const res = await fetch(apiPublicUrl(`/api/admin/products/${product.id}/toggle-active`), {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });

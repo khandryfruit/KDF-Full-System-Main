@@ -23,14 +23,15 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { API_BASE } from "@/lib/apiBase";
+import { apiPublicUrl, getApiBase } from "@/lib/apiBase";
 import { Link } from "wouter";
 
 function storagePublicUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  const base = API_BASE.replace(/\/+$/, "");
-  if (path.startsWith("/objects/")) return `${base}/api/storage${path}`;
+  if (path.startsWith("/objects/")) return apiPublicUrl(`/api/storage${path}`);
+  const base = getApiBase().replace(/\/+$/, "");
+  if (!base) return path.startsWith("/") ? path : `/${path}`;
   return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
@@ -100,7 +101,7 @@ function BannerImageUploader({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+      const res = await fetch(apiPublicUrl("/api/storage/uploads/image"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}`,
@@ -219,7 +220,7 @@ function BannerVideoUploader({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/api/storage/uploads/video`, {
+      const res = await fetch(apiPublicUrl("/api/storage/uploads/video"), {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` },
         body: formData,

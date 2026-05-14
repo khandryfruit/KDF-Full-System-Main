@@ -48,6 +48,10 @@ export function getApiBase(): string {
       "khanbabadryfruits.com": "https://api.khanbabadryfruits.com",
     };
     if (!base && map[h]) base = map[h];
+    /* Last-resort for split deploys: any storefront or admin host on this zone → API host. */
+    if (!base && h.endsWith("khanbabadryfruits.com") && !h.startsWith("api.")) {
+      base = "https://api.khanbabadryfruits.com";
+    }
   }
 
   return base.replace(/\/+$/, "");
@@ -69,5 +73,8 @@ export function adminApiUrl(path: string): string {
   return apiPublicUrl(`/api${p}`);
 }
 
-/** Convenience — same as `getApiBase()`. */
+/**
+ * @deprecated Prefer `getApiBase()` or `apiPublicUrl("/api/...")` at call time.
+ * Module-load snapshot can be empty before hostname/env is available in some bundles.
+ */
 export const API_BASE = getApiBase();

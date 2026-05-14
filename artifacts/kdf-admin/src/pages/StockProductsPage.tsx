@@ -5,6 +5,7 @@ import {
   AlertTriangle, CheckCircle, TrendingDown, ChevronDown,
   SlidersHorizontal, Download, RefreshCw, Store, ExternalLink,
 } from "lucide-react";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 interface Product {
   id: number;
@@ -65,7 +66,7 @@ export default function StockProductsPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(LIMIT), q });
       if (lowStockOnly) params.set("lowStock", "1");
-      const res = await fetch(`/api/admin/stock/products?${params}`, { headers: authHeader() });
+      const res = await fetch(apiPublicUrl(`/api/admin/stock/products?${params}`), { headers: authHeader() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast({ title: "Failed to load products", description: err.error ?? `HTTP ${res.status}`, variant: "destructive" });
@@ -88,7 +89,7 @@ export default function StockProductsPage() {
     setSaving(true);
     try {
       const isEdit = modal === "edit" && selected.id;
-      const url  = isEdit ? `/api/admin/stock/products/${selected.id}` : "/api/admin/stock/products";
+      const url  = isEdit ? apiPublicUrl(`/api/admin/stock/products/${selected.id}`) : apiPublicUrl("/api/admin/stock/products");
       const method = isEdit ? "PUT" : "POST";
       const res = await fetch(url, {
         method, headers: { "Content-Type": "application/json", ...authHeader() },
@@ -106,7 +107,7 @@ export default function StockProductsPage() {
 
   async function deleteProduct(id: number) {
     if (!confirm("Mark this product as inactive?")) return;
-    await fetch(`/api/admin/stock/products/${id}`, { method: "DELETE", headers: authHeader() });
+    await fetch(apiPublicUrl(`/api/admin/stock/products/${id}`), { method: "DELETE", headers: authHeader() });
     load();
   }
 

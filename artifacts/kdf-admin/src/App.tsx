@@ -96,9 +96,7 @@ const SEORedirectsPage = lazy(() => import("@/pages/SEORedirectsPage"));
 const SEOSchemaPage = lazy(() => import("@/pages/SEOSchemaPage"));
 const SEOAIWriterPage = lazy(() => import("@/pages/SEOAIWriterPage"));
 
-/* Orval / React Query hooks use relative `/api/...` unless base URL is set.
-   Uploads already use `API_BASE` (VITE_API_BASE_URL) — without this, banners list/create
-   hit the admin host instead of the API server on split Railway deploys. */
+/* Orval / React Query hooks use relative `/api/...` unless base URL is set via setBaseUrl(getApiBase()). */
 const adminApiBase = getApiBase();
 if (adminApiBase) {
   setBaseUrl(adminApiBase);

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { adminApiUrl } from "@/lib/apiBase";
+import { adminApiUrl, apiPublicUrl } from "@/lib/apiBase";
 
 /* ─── API helper ───────────────────────────────────────── */
 function api(path: string, opts?: RequestInit) {
@@ -804,7 +804,7 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
                 onClick={async () => {
                   try {
                     const token = localStorage.getItem("kdf_admin_token") ?? "";
-                    const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, {
+                    const resp = await fetch(apiPublicUrl(`/api/admin/shipments/${shipment.id}/print-label`), {
                       headers: { Authorization: `Bearer ${token}` },
                     });
                     if (!resp.ok) { toast({ title: "Label generation failed", variant: "destructive" }); return; }
@@ -828,7 +828,7 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
                       try {
                         const token = localStorage.getItem("kdf_admin_token") ?? "";
                         const cn = shipment.trackingId!;
-                        const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+                        const res = await fetch(apiPublicUrl(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`), {
                           headers: { Authorization: `Bearer ${token}` },
                         });
                         if (res.ok && res.headers.get("content-type")?.includes("pdf")) {
@@ -840,7 +840,7 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
                           toast({ title: "✅ TCS PDF downloaded" });
                         } else {
                           /* Fallback — download HTML label */
-                          const r2 = await fetch(`/api/admin/shipments/${shipment.id}/print-label`, { headers: { Authorization: `Bearer ${token}` } });
+                          const r2 = await fetch(apiPublicUrl(`/api/admin/shipments/${shipment.id}/print-label`), { headers: { Authorization: `Bearer ${token}` } });
                           const html = await r2.text();
                           const blob = new Blob([html], { type: "text/html" });
                           const url = URL.createObjectURL(blob);
@@ -861,7 +861,7 @@ function ShipmentCard({ shipment, orderId, onRefresh }: { shipment: any; orderId
                     onClick={async () => {
                       try {
                         const token = localStorage.getItem("kdf_admin_token") ?? "";
-                        const resp = await fetch(`/api/admin/shipments/${shipment.id}/print-label?format=thermal`, {
+                        const resp = await fetch(apiPublicUrl(`/api/admin/shipments/${shipment.id}/print-label?format=thermal`), {
                           headers: { Authorization: `Bearer ${token}` },
                         });
                         if (!resp.ok) { toast({ title: "Thermal label failed", variant: "destructive" }); return; }

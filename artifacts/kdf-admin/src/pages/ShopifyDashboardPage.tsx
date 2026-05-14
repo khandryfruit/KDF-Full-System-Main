@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE, adminApiUrl } from "@/lib/apiBase";
+import { getApiBase, adminApiUrl } from "@/lib/apiBase";
 
 function api(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -319,7 +319,7 @@ export default function ShopifyDashboardPage() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs">
                 <p className="font-medium text-blue-800 mb-1">Webhook URL for real-time sync</p>
                 <code className="text-blue-700 break-all">
-                  {(API_BASE || (typeof window !== "undefined" ? window.location.origin : "")) + "/api/shopify/webhook"}
+                  {(getApiBase() || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/$/, "") + "/api/shopify/webhook"}
                 </code>
               </div>
             </div>

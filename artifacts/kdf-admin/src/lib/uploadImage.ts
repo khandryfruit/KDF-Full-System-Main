@@ -1,4 +1,4 @@
-import { API_BASE } from "./apiBase";
+import { apiPublicUrl } from "./apiBase";
 
 export interface UploadResult {
   objectPath: string;
@@ -19,7 +19,7 @@ export async function uploadImage(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/api/storage/uploads/image`, {
+  const res = await fetch(apiPublicUrl("/api/storage/uploads/image"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -46,7 +46,7 @@ export async function uploadImage(file: File): Promise<string> {
 export async function uploadFile(file: File, folder = "general"): Promise<string> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
 
-  const metaRes = await fetch(`${API_BASE}/api/storage/uploads/request-url`, {
+  const metaRes = await fetch(apiPublicUrl("/api/storage/uploads/request-url"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

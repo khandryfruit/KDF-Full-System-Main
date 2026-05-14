@@ -1,3 +1,5 @@
+import { apiPublicUrl } from "./apiBase";
+
 export interface CourierServiceType {
   code: string;
   label: string;
@@ -321,12 +323,12 @@ export function buildLabelHtml(d: Record<string, unknown>): string {
 
 export async function printShipmentLabel(shipmentId: number): Promise<void> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label`, {
+  const res = await fetch(apiPublicUrl(`/api/admin/shipments/${shipmentId}/print-label`), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
     /* fallback: JSON label data → HTML */
-    const res2 = await fetch(`/api/admin/shipments/${shipmentId}/label`, { headers: { Authorization: `Bearer ${token}` } });
+    const res2 = await fetch(apiPublicUrl(`/api/admin/shipments/${shipmentId}/label`), { headers: { Authorization: `Bearer ${token}` } });
     if (!res2.ok) { alert("Could not load label data"); return; }
     const d = await res2.json() as Record<string, unknown>;
     const html = buildLabelHtml(d);
@@ -345,7 +347,7 @@ export async function printShipmentLabel(shipmentId: number): Promise<void> {
  */
 export async function openThermalLabel(shipmentId: number): Promise<void> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
-  const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label?format=thermal`, {
+  const res = await fetch(apiPublicUrl(`/api/admin/shipments/${shipmentId}/print-label?format=thermal`), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) { alert("Could not load thermal label"); return; }
@@ -368,7 +370,7 @@ export async function downloadTcsLabel(
   /* Step 1 — try official ECOM label API */
   if (cn) {
     try {
-      const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+      const res = await fetch(apiPublicUrl(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -389,7 +391,7 @@ export async function downloadTcsLabel(
   /* Step 2 — fall back to HTML label download */
   if (shipmentId) {
     try {
-      const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label`, {
+      const res = await fetch(apiPublicUrl(`/api/admin/shipments/${shipmentId}/print-label`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -422,7 +424,7 @@ export async function openTcsOfficialLabel(
   /* Step 1 — try ECOM PDF */
   if (cn) {
     try {
-      const res = await fetch(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`, {
+      const res = await fetch(apiPublicUrl(`/api/admin/couriers/tcs/label/${encodeURIComponent(cn)}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -441,7 +443,7 @@ export async function openTcsOfficialLabel(
   /* Step 2 — fall back to HTML label */
   if (shipmentId) {
     const fmtParam = format !== "standard" ? `?format=${format}` : "";
-    const res = await fetch(`/api/admin/shipments/${shipmentId}/print-label${fmtParam}`, {
+    const res = await fetch(apiPublicUrl(`/api/admin/shipments/${shipmentId}/print-label${fmtParam}`), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
