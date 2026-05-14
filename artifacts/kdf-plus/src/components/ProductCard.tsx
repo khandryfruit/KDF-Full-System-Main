@@ -68,10 +68,14 @@ function ProductCardInner({ product }: ProductCardProps) {
     setWished(!wished);
   };
 
+  const stock = typeof product.stock === "number" ? product.stock : null;
+  const lowStock = stock !== null && stock > 0 && stock <= 8;
+  const outOfStock = stock === 0;
+
   return (
     <>
       <Link href={`/products/${(product as any).slug || product.id}`} data-testid={`card-product-${product.id}`}>
-        <div className="group bg-white rounded-2xl border border-gray-100 hover:border-[#5FA800]/30 hover:shadow-lg transition-all duration-200 overflow-hidden relative cursor-pointer h-full flex flex-col">
+        <div className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-gray-100/90 bg-white shadow-sm ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 will-change-transform hover:-translate-y-1 hover:border-[#5FA800]/25 hover:shadow-xl hover:shadow-[#5FA800]/10 active:scale-[0.99] md:active:scale-100">
 
           {/* Wishlist */}
           <button
@@ -83,6 +87,19 @@ function ProductCardInner({ product }: ProductCardProps) {
               className={`w-3.5 h-3.5 transition-colors ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`}
             />
           </button>
+
+          {lowStock && !outOfStock && (
+            <div className={`absolute left-2.5 z-10 ${discount ? "top-11" : "top-2.5"}`}>
+              <Badge className="rounded-lg border-0 bg-amber-500/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                Only {stock} left
+              </Badge>
+            </div>
+          )}
+          {outOfStock && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center rounded-3xl bg-white/75 backdrop-blur-[2px]">
+              <span className="rounded-full bg-gray-900/85 px-3 py-1.5 text-xs font-bold text-white">Out of stock</span>
+            </div>
+          )}
 
           {/* Discount Badge */}
           {discount && (
@@ -116,15 +133,16 @@ function ProductCardInner({ product }: ProductCardProps) {
                 alt={product.name}
                 loading="lazy"
                 decoding="async"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
                 onError={() => setImgError(true)}
-                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out will-change-transform group-hover:scale-[1.06]"
                 data-testid={`img-product-${product.id}`}
               />
             )}
           </div>
 
           {/* Info */}
-          <div className="p-3 flex flex-col flex-1 gap-1">
+          <div className="flex flex-1 flex-col gap-1 p-3.5">
             {(product.weight ?? product.unit) && (
               <p className="text-[11px] text-gray-400 font-medium">{product.weight ?? product.unit}</p>
             )}
@@ -195,7 +213,8 @@ function ProductCardInner({ product }: ProductCardProps) {
               ) : (
                 <button
                   onClick={handleAddToCart}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-md active:scale-95 transition-all"
+                  disabled={outOfStock}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-white shadow-md transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   style={{ backgroundColor: "#5FA800" }}
                   data-testid={`button-add-cart-${product.id}`}
                   aria-label={`Add ${product.name} to cart`}

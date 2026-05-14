@@ -775,18 +775,20 @@ export function Header() {
 
   return (
     <>
-      <div className="sticky top-0 z-40">
+      <div className={`sticky z-40 transition-[padding] duration-300 ease-out ${scrolled ? "top-2 sm:top-3" : "top-0"}`}>
         {/* ── Announcement Bar ── */}
         <AnnouncementBar items={announcements} />
 
-        {/* ── Main Header ── */}
+        {/* ── Main Header (floating glass bar when scrolled) ── */}
         <header
-          className="transition-all duration-300"
+          className={`transition-all duration-300 ease-out ${scrolled ? "mx-1.5 overflow-hidden rounded-2xl ring-1 ring-slate-900/[0.06] sm:mx-3" : ""}`}
           style={{
-            background: scrolled ? "rgba(255,255,255,0.97)" : "#fff",
-            backdropFilter: scrolled ? "blur(12px)" : "none",
-            WebkitBackdropFilter: scrolled ? "blur(12px)" : "none",
-            boxShadow: scrolled ? "0 2px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)" : "0 1px 0 rgba(0,0,0,0.06)",
+            background: scrolled ? "rgba(255,255,255,0.88)" : "#fff",
+            backdropFilter: scrolled ? "blur(20px) saturate(1.35)" : "none",
+            WebkitBackdropFilter: scrolled ? "blur(20px) saturate(1.35)" : "none",
+            boxShadow: scrolled
+              ? "0 12px 40px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.75)"
+              : "0 1px 0 rgba(0,0,0,0.06)",
           }}
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1094,13 +1096,19 @@ export function Header() {
               </div>
             </div>
 
-            {/* ── Mobile search row ── */}
+            {/* ── Mobile search row (premium glass strip) ── */}
             <div className="sm:hidden pb-2.5">
-              <div className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm text-gray-400">
-                <button className="flex-1 flex items-center gap-2 text-left" onClick={() => setSearchOverlay(true)}>
-                  <Search className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 truncate">
-                    {headerListening ? "🎤 Listening…" : headerCamLoad ? "🔍 Analyzing…" : "Search nuts, dry fruits…"}
+              <div
+                className="flex w-full items-center gap-2 rounded-2xl border border-white/70 px-4 py-3 text-sm text-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl"
+                style={{
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 50%, rgba(241,245,249,0.9) 100%)",
+                  boxShadow: "0 4px 24px rgba(15,23,42,0.06), 0 0 0 1px rgba(95,168,0,0.08)",
+                }}
+              >
+                <button type="button" className="flex flex-1 items-center gap-2.5 text-left min-h-[44px]" onClick={() => setSearchOverlay(true)}>
+                  <Search className="h-5 w-5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
+                  <span className="flex-1 truncate font-medium text-gray-500">
+                    {headerListening ? "Listening…" : headerCamLoad ? "Analyzing…" : "Search mixed nuts, dry fruits…"}
                   </span>
                 </button>
                 <button type="button" onClick={() => headerCameraRef.current?.click()}
@@ -1143,7 +1151,7 @@ export function Header() {
               const inner = (
                 <>
                   <div
-                    className={`relative flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200 ${
+                    className={`relative flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200 ${
                       active ? "shadow-md ring-1 ring-[#5FA800]/25" : "bg-transparent"
                     }`}
                     style={active ? { backgroundColor: "rgba(95,168,0,0.12)" } : undefined}

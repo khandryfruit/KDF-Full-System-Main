@@ -94,6 +94,32 @@ function ScrollToTop() {
   return null;
 }
 
+/** Warm common route chunks after first paint (better perceived speed on PLP / categories). */
+function IdleRoutePrefetch() {
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      void import("@/pages/ProductsPage");
+      void import("@/pages/CategoriesPage");
+    };
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    if (typeof ric === "function") {
+      const id = ric(run, { timeout: 4500 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(run, 2800);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+  return null;
+}
+
 function LocationGate() {
   const { locationPermission, setLocationPermission } = useUserLocation();
   const [show, setShow] = useState(false);
@@ -238,6 +264,7 @@ function App() {
               <TooltipProvider>
                 <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                   <Router />
+                  <IdleRoutePrefetch />
                   <LocationGate />
                   <DeferredChatWidget />
                 </WouterRouter>
