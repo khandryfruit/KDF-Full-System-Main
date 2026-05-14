@@ -24,9 +24,12 @@ export default function LoginPage() {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 15_000);
     const url = apiPublicUrl(apiPath.startsWith("/") ? apiPath : `/${apiPath}`);
+    const headers = new Headers(init.headers as HeadersInit | undefined);
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
     let res: Response;
     try {
-      res = await fetch(url, { ...init, signal: controller.signal });
+      res = await fetch(url, { ...init, signal: controller.signal, headers });
     } catch (e: any) {
       clearTimeout(tid);
       if (e?.name === "AbortError") throw new Error("Request timed out — please try again.");

@@ -55,7 +55,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("kdf_admin_token");
     localStorage.removeItem(STORAGE_KEY);
     setUserState(null);
-    window.location.href = window.location.pathname.replace(/\/[^/]+$/, "/login");
+    const base = (import.meta.env.BASE_URL || "/admin/").replace(/\/$/, "");
+    window.location.href = `${base}/login`;
   }, []);
 
   const refreshMe = useCallback(async () => {
