@@ -108,17 +108,67 @@ function resolveFile(urlPath) {
   return path.join(root, "index.html");
 }
 
-function handler(req, res) {
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    res.writeHead(405).end();
-    return;
-  }
+function isApiPath(pathname) {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
 
+/**
+ * When `api.*` is wrongly attached to this static service, browsers send OPTIONS preflight
+ * and get 405 (this server only allowed GET/HEAD) → "CORS failed". Reply with real CORS
+ * and JSON so operators see a clear Railway misconfiguration instead of opaque errors.
+ */
+function corsHeadersForApiMisroute(req) {
+  const origin = req.headers.origin;
+  const requestHdrs = req.headers["access-control-request-headers"];
+  const headers = {
+    "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Headers":
+      requestHdrs || "Content-Type,Authorization,X-Requested-With,Accept",
+  };
+  if (origin) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+    headers.Vary = "Origin";
+  } else {
+    headers["Access-Control-Allow-Origin"] = "*";
+  }
+  return headers;
+}
+
+function handler(req, res) {
   let pathname;
   try {
     pathname = new URL(req.url || "/", `http://${req.headers.host || "local"}`).pathname;
   } catch {
     res.writeHead(400).end();
+    return;
+  }
+
+  if (isApiPath(pathname)) {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, corsHeadersForApiMisroute(req)).end();
+      return;
+    }
+    res
+      .writeHead(503, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...corsHeadersForApiMisroute(req),
+      })
+      .end(
+        JSON.stringify({
+          error: "api_not_served_here",
+          message:
+            "This host serves static files only. In Railway → Networking, attach api.<your-domain> to the @workspace/api-server service and remove it from kdf-admin.",
+          service: "kdf-admin",
+        }),
+      );
+    return;
+  }
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405).end();
     return;
   }
 

@@ -88,7 +88,16 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "X-Request-Id",
+      "If-None-Match",
+      "If-Modified-Since",
+    ],
+    optionsSuccessStatus: 204,
     maxAge: 86400, // preflight cache 24 h
   })
 );
