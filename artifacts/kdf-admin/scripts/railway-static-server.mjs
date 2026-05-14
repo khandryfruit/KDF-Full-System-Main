@@ -153,7 +153,8 @@ if (!fs.existsSync(root)) {
 http
   .createServer(handler)
   .listen(port, "0.0.0.0", () => {
-    console.error(
+    // stdout so log aggregators (Railway, etc.) don't mark healthy startup as "error"
+    console.log(
       `[kdf-admin] static ${listenKey}=${port} root=${root} base=${basePrefix || "/"}`,
     );
   });

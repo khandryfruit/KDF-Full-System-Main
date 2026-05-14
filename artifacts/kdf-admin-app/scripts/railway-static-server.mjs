@@ -151,7 +151,7 @@ if (!fs.existsSync(root)) {
 http
   .createServer(handler)
   .listen(port, "0.0.0.0", () => {
-    console.error(
+    console.log(
       `[kdf-admin-app] static ${listenKey}=${port} root=${root} base=${basePrefix || "/"}`,
     );
   });
