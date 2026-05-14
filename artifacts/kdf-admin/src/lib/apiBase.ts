@@ -22,6 +22,25 @@ function readEnvApiBase(): string {
   return "";
 }
 
+/**
+ * `railway-static-server.mjs` injects `window.__KDF_API_PUBLIC_ORIGIN__` into `index.html` at runtime
+ * so API base is correct even if CDN/browser cached an older JS bundle without env bake-in.
+ */
+function readRuntimeInjectedApiOrigin(): string {
+  if (typeof window === "undefined" || !import.meta.env.PROD) return "";
+  try {
+    const w = (window as Window & { __KDF_API_PUBLIC_ORIGIN__?: string }).__KDF_API_PUBLIC_ORIGIN__;
+    if (typeof w !== "string" || !w.trim()) return "";
+    let raw = w.trim().replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+    if (!raw.startsWith("http")) raw = `https://${raw}`;
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host.startsWith("admin.")) return "";
+    return raw.replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
 /** When env is missing/wrong, derive API origin from the page hostname (split admin / storefront). */
 function inferApiBaseFromWindow(): string {
   if (typeof window === "undefined") return "";
@@ -42,6 +61,9 @@ function inferApiBaseFromWindow(): string {
 }
 
 export function getApiBase(): string {
+  const injected = readRuntimeInjectedApiOrigin();
+  if (injected) return injected;
+
   let raw = readEnvApiBase();
   let base = raw.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
 

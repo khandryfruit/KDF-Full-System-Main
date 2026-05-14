@@ -25,10 +25,51 @@ function viteBasePrefix() {
   return b;
 }
 
+const rootIndexPath = path.join(root, "index.html");
+
+/** Public API origin for split deploys — override on kdf-admin service via Railway env. */
+function runtimePublicApiOrigin() {
+  const raw = (
+    process.env.PUBLIC_API_ORIGIN ||
+    process.env.VITE_API_BASE_URL ||
+    process.env.API_PUBLIC_ORIGIN ||
+    "https://api.khanbabadryfruits.com"
+  )
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api\/?$/i, "");
+  if (!raw) return "https://api.khanbabadryfruits.com";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  return `https://${raw}`;
+}
+
+let spaIndexHtmlCache;
+
+function spaIndexHtmlWithInjectedApiOrigin() {
+  if (spaIndexHtmlCache) return spaIndexHtmlCache;
+  const raw = fs.readFileSync(rootIndexPath, "utf8");
+  const o = runtimePublicApiOrigin();
+  const escaped = JSON.stringify(o);
+  const block = `<meta name="kdf-api-public-origin" content="${String(o)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")}" /><script>try{window.__KDF_API_PUBLIC_ORIGIN__=${escaped};}catch(e){}</script>`;
+  spaIndexHtmlCache = raw.includes("</head>")
+    ? raw.replace("</head>", `${block}</head>`)
+    : raw.replace("<head>", `<head>${block}`);
+  return spaIndexHtmlCache;
+}
+
+function isRootSpaIndex(filePath) {
+  try {
+    return path.resolve(filePath) === path.resolve(rootIndexPath);
+  } catch {
+    return false;
+  }
+}
+
 const basePrefix = viteBasePrefix();
 
 const MIME = {
-  ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".mjs": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -109,7 +150,12 @@ function resolveFile(urlPath) {
 }
 
 function isApiPath(pathname) {
-  return pathname === "/api" || pathname.startsWith("/api/");
+  return (
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/admin/api" ||
+    pathname.startsWith("/admin/api/")
+  );
 }
 
 /**
@@ -200,6 +246,11 @@ function handler(req, res) {
     return;
   }
 
+  if (ext === ".html" && isRootSpaIndex(filePath)) {
+    res.end(spaIndexHtmlWithInjectedApiOrigin());
+    return;
+  }
+
   fs.createReadStream(filePath).pipe(res);
 }
 
@@ -209,6 +260,7 @@ if (!fs.existsSync(root)) {
 }
 
 console.log(`[kdf-admin] boot cwd=${process.cwd()} pkgRoot=${pkgRoot} distExists=${fs.existsSync(root)}`);
+console.log(`[kdf-admin] injected API origin for SPA shell: ${runtimePublicApiOrigin()}`);
 
 const server = http.createServer(handler);
 server.on("error", (err) => {
