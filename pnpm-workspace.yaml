@@ -1,9 +1,12 @@
-
 packages:
   - artifacts/*
   - lib/*
   - lib/integrations/*
   - scripts
+
+allowBuilds:
+  esbuild: set this to true or false
+  sharp: set this to true or false
 
 autoInstallPeers: false
 
