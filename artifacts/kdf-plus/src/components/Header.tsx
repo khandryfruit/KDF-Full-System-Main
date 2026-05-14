@@ -157,7 +157,7 @@ function AnnouncementBar({ items }: { items: any[] }) {
 }
 
 /* ─── Mega Menu Dropdown (desktop only — wide horizontal panel; mobile uses drawer) ─── */
-function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void }) {
+function MegaMenuDropdown({ item, onNavigate, alignEnd }: { item: typeof MEGA_ITEMS[0]; onNavigate: (path: string) => void; alignEnd?: boolean }) {
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -178,7 +178,7 @@ function MegaMenuDropdown({ item, onNavigate }: { item: typeof MEGA_ITEMS[0]; on
 
       {open && (
         <div
-          className="absolute left-0 top-full z-[350] hidden pt-2 sm:block"
+          className={`absolute top-full z-[350] hidden pt-2 sm:block ${alignEnd ? "right-0 left-auto" : "left-0"}`}
           style={{ width: "min(calc(100vw - 1.5rem), 72rem)" }}
           onMouseEnter={enter}
           onMouseLeave={leave}
@@ -1044,20 +1044,20 @@ export function Header() {
 
                 {/* Wishlist — desktop */}
                 <Link href="/account?tab=wishlist" className="hidden sm:block">
-                  <button className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-12 md:w-12" aria-label="Wishlist">
-                    <Heart className="h-5 w-5 text-slate-500 transition-all group-hover:scale-110 group-hover:text-red-500 md:h-6 md:w-6" strokeWidth={2} />
+                  <button className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-11 md:w-11" aria-label="Wishlist">
+                    <Heart className="h-[1.15rem] w-[1.15rem] text-slate-500 transition-all group-hover:scale-110 group-hover:text-red-500 md:h-5 md:w-5" strokeWidth={2} />
                   </button>
                 </Link>
 
                 {/* Cart */}
                 <button
-                  className="group relative flex h-11 w-11 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-12 md:w-12"
+                  className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-11 md:w-11"
                   onClick={() => setMiniCartOpen(true)}
                   aria-label="Open cart"
                   data-testid="link-cart"
                 >
                   <ShoppingBag
-                    className={`h-5 w-5 text-slate-800 transition-transform duration-200 md:h-6 md:w-6 ${cartBounce ? "scale-110" : "group-hover:scale-105"}`}
+                    className={`h-[1.15rem] w-[1.15rem] text-slate-800 transition-transform duration-200 md:h-5 md:w-5 ${cartBounce ? "scale-110" : "group-hover:scale-105"}`}
                     strokeWidth={2}
                   />
                   {totalItems > 0 && (
@@ -1131,8 +1131,8 @@ export function Header() {
                 </Link>
 
                 {/* Mega menus */}
-                {MEGA_ITEMS.map(item => (
-                  <MegaMenuDropdown key={item.slug} item={item} onNavigate={navigate} />
+                {MEGA_ITEMS.map((item, idx) => (
+                  <MegaMenuDropdown key={item.slug} item={item} onNavigate={navigate} alignEnd={idx >= MEGA_ITEMS.length - 2} />
                 ))}
 
                 <Link href="/products?featured=true">
@@ -1193,13 +1193,13 @@ export function Header() {
                   { Icon: PhoneCall, t: "24/7", s: "Support", c: GREEN, href: "tel:+92300000000" },
                 ] as const).map((row, i) => {
                   const inner = (
-                    <div className="flex items-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-sm transition-all hover:border-[#5FA800]/30 hover:shadow-md">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#5FA800]/12 to-slate-50 ring-1 ring-[#5FA800]/15">
-                        <row.Icon className="h-[18px] w-[18px]" style={{ color: row.c }} strokeWidth={2.25} />
+                    <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-2.5 py-1.5 shadow-sm backdrop-blur-sm transition-all hover:border-[#5FA800]/28 hover:shadow-md">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#5FA800]/12 to-slate-50 ring-1 ring-[#5FA800]/12">
+                        <row.Icon className="h-3.5 w-3.5" style={{ color: row.c }} strokeWidth={2.25} />
                       </span>
-                      <span className="max-w-[7.5rem] leading-tight">
-                        <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">{row.t}</span>
-                        <span className="block text-xs font-semibold text-slate-800">{row.s}</span>
+                      <span className="max-w-[6.5rem] leading-tight">
+                        <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">{row.t}</span>
+                        <span className="block text-[11px] font-semibold text-slate-800">{row.s}</span>
                       </span>
                     </div>
                   );
