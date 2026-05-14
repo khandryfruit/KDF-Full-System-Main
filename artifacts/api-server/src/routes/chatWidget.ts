@@ -50,6 +50,9 @@ function host_is_dev(req: Request): boolean {
 /* ═══════════════════════════════════════════════════════════
    GET /api/chat-embed — standalone chat-only HTML page
    No kdf-nuts app, no storefront, pure chat UI
+   NOTE: Inline script must stay ES5-safe for Shopify/mobile WebViews.
+   NodeList.prototype.forEach is NOT universal — never use it on querySelectorAll
+   results in the embed boot path (would throw and skip btn-lead listeners).
 ═══════════════════════════════════════════════════════════ */
 router.get("/chat-embed", (req: Request, res: Response) => {
   const baseUrl = getPublicApiOrigin(req);
@@ -355,10 +358,16 @@ router.get("/chat-embed", (req: Request, res: Response) => {
 
   /* ── Helpers ── */
   function fmtTime() {
-    return new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true});
+    try {
+      return new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true});
+    } catch (eFmt) {
+      var d = new Date();
+      return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
   }
 
   function appendToMsgs(el) {
+    if (!msgs || !el) return;
     msgs.appendChild(el);
     requestAnimationFrame(function() {
       try { msgs.scrollTop = msgs.scrollHeight; } catch (eScroll) {}
@@ -408,6 +417,7 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   });
 
   function showTyping(show) {
+    if (!typing || !msgs) return;
     typing.style.display = show ? 'flex' : 'none';
     if (show) requestAnimationFrame(function() { try { msgs.scrollTop = msgs.scrollHeight; } catch(e) {} });
   }
@@ -440,12 +450,13 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         '<button class="cart-item-rm" data-idx="' + idx + '">✕</button>' +
       '</div>';
     }).join('');
-    inner.querySelectorAll('.cart-item-rm').forEach(function(btn) {
-      btn.addEventListener('click', function() {
+    var rmBtns = inner.querySelectorAll('.cart-item-rm');
+    for (var ri = 0; ri < rmBtns.length; ri++) {
+      rmBtns[ri].addEventListener('click', function() {
         cart.splice(parseInt(this.dataset.idx,10), 1);
         updateCartBar();
       });
-    });
+    }
   }
 
   /* ── Cart bar toggle + checkout ── */
@@ -530,15 +541,17 @@ router.get("/chat-embed", (req: Request, res: Response) => {
       '</div>';
 
     /* Variant selection — update price display */
-    card.querySelectorAll('.pv-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        card.querySelectorAll('.pv-btn').forEach(function(b){ b.classList.remove('active'); });
+    var pvBtns = card.querySelectorAll('.pv-btn');
+    for (var pi = 0; pi < pvBtns.length; pi++) {
+      pvBtns[pi].addEventListener('click', function() {
+        var allPv = card.querySelectorAll('.pv-btn');
+        for (var pj = 0; pj < allPv.length; pj++) { allPv[pj].classList.remove('active'); }
         this.classList.add('active');
         selectedIdx = parseInt(this.dataset.idx, 10);
         var el = document.getElementById(priceId);
         if (el) el.textContent = 'Rs.' + Number(curPrice()).toLocaleString();
       });
-    });
+    }
 
     /* Add to cart → update sticky bar */
     card.querySelector('.prod-btn-add').addEventListener('click', function() {
@@ -578,9 +591,9 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     gridWrap.style.cssText = 'padding:0 4px 8px;width:100%;';
     var grid = document.createElement('div');
     grid.className = 'prod-grid';
-    products.forEach(function(p) {
-      grid.appendChild(buildProductCard(p));
-    });
+    for (var pk = 0; pk < products.length; pk++) {
+      grid.appendChild(buildProductCard(products[pk]));
+    }
     gridWrap.appendChild(grid);
     msgs.appendChild(gridWrap);
     msgs.scrollTop = msgs.scrollHeight;
@@ -837,16 +850,22 @@ router.get("/chat-embed", (req: Request, res: Response) => {
   btnSend.addEventListener('click', function() { sendMessage(input.value); });
 
   /* ── Quick chips ── */
-  document.querySelectorAll('.chip').forEach(function(chip) {
-    chip.addEventListener('click', function() { sendMessage(this.dataset.msg); });
-  });
+  /* NodeList.prototype.forEach is missing in many mobile WebViews — a throw here aborted the rest of this script, so "Start Chat" never received a listener (production freeze). */
+  var chipNodes = document.querySelectorAll('.chip');
+  for (var cix = 0; cix < chipNodes.length; cix++) {
+    chipNodes[cix].addEventListener('click', function() { sendMessage(this.dataset.msg); });
+  }
 
   /* ── Lead form ── */
   function showChatInterface() {
     trLog('showChatInterface:before');
     embLog('showChatInterface enter');
+    if (!leadForm || !chips || !inputArea || !msgs) {
+      try { console.error('[KDF-Embed] showChatInterface missing DOM nodes'); } catch (e0) {}
+      return;
+    }
     try {
-      leadForm.style.display = 'none';
+      leadForm.style.setProperty('display', 'none', 'important');
       leadForm.style.pointerEvents = 'none';
       leadForm.setAttribute('aria-hidden', 'true');
       try {
@@ -854,8 +873,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         for (var ni = 0; ni < nodes.length; ni++) { nodes[ni].tabIndex = -1; }
       } catch (eTab) {}
     } catch (eLf) {}
-    chips.style.display = 'flex';
-    inputArea.style.display = 'flex';
+    chips.style.setProperty('display', 'flex', 'important');
+    inputArea.style.setProperty('display', 'flex', 'important');
     trLog('showChatInterface:after layout');
     embLog('showChatInterface layout done');
     /* Do NOT call input.focus() here — iOS Safari + cross-origin iframe can freeze touches if we focus the textarea synchronously. */
@@ -877,9 +896,12 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     embLog('submitLead enter');
     trLog('submitLead:enter');
     try {
-      if (leadForm && leadForm.style.display === 'none') {
-        embLog('submitLead skip (form already hidden)');
-        return;
+      if (leadForm) {
+        var csLf = window.getComputedStyle(leadForm);
+        if (csLf && csLf.display === 'none') {
+          embLog('submitLead skip (form already hidden)');
+          return;
+        }
       }
     } catch (eGuard) {}
     var btnLead = document.getElementById('btn-lead');
@@ -977,7 +999,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
         btnLead.textContent = 'Start Chat →';
       } catch (e2) {}
       try {
-        if (leadForm && leadForm.style.display === 'none') {
+        var csLf2 = leadForm && window.getComputedStyle(leadForm);
+        if (leadForm && csLf2 && csLf2.display === 'none') {
           addBubble('⚠️ Chat UI hit an error. Tap × to close, then reopen the chat widget.', 'bot');
         }
       } catch (eB0) {}
@@ -996,6 +1019,12 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     var t = e.target;
     if (t && t.tagName === 'TEXTAREA') return;
     e.preventDefault();
+    submitLead();
+  });
+  document.getElementById('lead-form-el').addEventListener('submit', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    trLog('lead-form submit (blocked native)');
     submitLead();
   });
   document.getElementById('lead-skip').addEventListener('click', function() {
@@ -1143,6 +1172,8 @@ router.get("/chat-embed", (req: Request, res: Response) => {
     return 'width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 14px;font-size:14px;background:#fff;box-sizing:border-box;font-family:inherit;outline:none;';
   }
 
+  trLog('embed-script-ready');
+  embLog('embed-script-ready');
 })();
 </script>
 </body>
@@ -1170,7 +1201,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   const WA_MSG    = encodeURIComponent("Hello! I need help with my order.");
   const WA_URL    = `https://wa.me/${WA_NUMBER}?text=${WA_MSG}`;
 
-  const js = `/* KDF NUTS Chat Widget v3.7 — Safari-safe iframe visibility; embed: deferred blur + lead fetch timeout */
+  const js = `/* KDF NUTS Chat Widget v3.8 — compat: no NodeList.forEach in embed cold path (mobile WebViews) */
 (function () {
   'use strict';
   if (window._KDFChatLoaded) return;
@@ -1258,7 +1289,7 @@ router.get("/widget.js", (req: Request, res: Response) => {
   wrap.appendChild(stack); wrap.appendChild(fab);
   document.body.appendChild(wrap);
   document.body.appendChild(popup);
-  log('mounted v3.7', 'embed=', EMBED_URL, 'DBG=', DBG, '(set KDFChatConfig.debug true or ?kdfdebug=1 on widget.js or localStorage.kdf_widget_debug=1)');
+  log('mounted v3.8', 'embed=', EMBED_URL, 'DBG=', DBG, '(set KDFChatConfig.debug true or ?kdfdebug=1 on widget.js or localStorage.kdf_widget_debug=1)');
 
   /* ── State ──────────────────────────────────────────── */
   var stackOpen = false, chatOpen = false, iframeLoaded = false, reopenTimer = null, unloadTimer = null;
@@ -1407,7 +1438,7 @@ router.get("/chat/shopify-install", (req: Request, res: Response) => {
   res.json({
     widgetUrl,
     embedUrl,
-    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.7 — widget: ?kdfdebug=1 / kdf_widget_debug; embed: ?kdfdebug=1 / kdf_embed_debug; light trace: ?kdftrace=1 / kdf_embed_trace. {%- endcomment -%}
+    liquidSnippet: `{%- comment -%} KDF NUTS Live Chat v3.8 — embed fixes mobile WebView init (no NodeList.forEach). Debug: ?kdfdebug=1 / kdf_embed_debug; trace: ?kdftrace=1 / kdf_embed_trace. {%- endcomment -%}
 <script>
   window.KDFChatConfig = {
     store: "shopify"
