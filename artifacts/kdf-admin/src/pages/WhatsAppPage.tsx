@@ -1127,7 +1127,10 @@ export default function WhatsAppPage() {
   const handleTestWebhook = async () => {
     setIsTestingWebhook(true); setWebhookTestResult(null);
     try {
-      const r = await apiFetch("/api/admin/whatsapp/test-webhook", { method: "POST", body: "{}" });
+      const r = await apiFetch("/api/admin/whatsapp/test-webhook", {
+        method: "POST",
+        body: JSON.stringify({ webhookUrl: webhookInfo?.webhookUrl ?? undefined }),
+      });
       setWebhookTestResult(r);
     } catch (e: any) { setWebhookTestResult({ success: false, error: e.message }); }
     finally { setIsTestingWebhook(false); }

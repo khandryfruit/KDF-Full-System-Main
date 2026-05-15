@@ -42,20 +42,36 @@ router.get("/whatsapp/chat-config", async (req, res) => {
 });
 
 /* ─── Public: Webhook URL info ──────────────────────── */
-function getPublicWebhookUrl(reqHost?: string): string {
-  const prodDomains = process.env.REPLIT_DOMAINS ?? "";
-  const prodPrimary = prodDomains.split(",")[0]?.trim();
-  if (prodPrimary) return `https://${prodPrimary}/api/webhooks/whatsapp`;
+function resolvePublicApiBase(reqHost?: string): string {
+  const fromEnv = (
+    process.env.PUBLIC_API_URL
+    ?? process.env.API_PUBLIC_URL
+    ?? process.env.META_DOMAIN_OVERRIDE
+    ?? ""
+  ).trim();
+  if (fromEnv) return fromEnv.startsWith("http") ? fromEnv.replace(/\/$/, "") : `https://${fromEnv.replace(/\/$/, "")}`;
 
-  const devDomain = process.env.REPLIT_DEV_DOMAIN ?? "";
-  if (devDomain) return `https://${devDomain}/api/webhooks/whatsapp`;
+  const apiHost = (process.env.API_HOST ?? process.env.RAILWAY_PUBLIC_DOMAIN ?? "").trim();
+  if (apiHost) return apiHost.startsWith("http") ? apiHost.replace(/\/$/, "") : `https://${apiHost.replace(/\/$/, "")}`;
 
-  const publicBase = process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "";
-  if (publicBase) return `${publicBase.replace(/\/$/, "")}/api/webhooks/whatsapp`;
+  const prodPrimary = (process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim();
+  if (prodPrimary) return `https://${prodPrimary}`;
 
-  if (reqHost) return `https://${reqHost}/api/webhooks/whatsapp`;
+  const devDomain = (process.env.REPLIT_DEV_DOMAIN ?? "").trim();
+  if (devDomain) return `https://${devDomain}`;
 
+  if (reqHost) return `https://${reqHost.split(":")[0]}`;
   return "";
+}
+
+function getPublicWebhookUrl(reqHost?: string): string {
+  const base = resolvePublicApiBase(reqHost);
+  return base ? `${base}/api/webhooks/whatsapp` : "";
+}
+
+function getUnifiedWebhookUrl(reqHost?: string): string {
+  const base = resolvePublicApiBase(reqHost);
+  return base ? `${base}/api/meta/webhook` : "";
 }
 
 async function getMetaAppSecret(): Promise<string> {
@@ -1482,7 +1498,7 @@ router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, re
         hasPhoneId: !!settings?.phoneNumberId,
         hasAppSecret: !!(settings?.appSecret || process.env.META_APP_SECRET),
         webhookUrl: getPublicWebhookUrl(),
-        unifiedWebhookUrl: `${process.env.PUBLIC_API_URL?.replace(/\/$/, "") || ""}/api/meta/webhook`,
+        unifiedWebhookUrl: getUnifiedWebhookUrl(),
       },
       metrics24h: {
         sent,
@@ -1607,7 +1623,7 @@ router.get("/admin/whatsapp/webhook-info", adminMiddleware as any, async (req, r
     const appSecret = await getMetaAppSecret();
     return res.json({
       webhookUrl,
-      unifiedWebhookUrl: `${(process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "").replace(/\/$/, "") || `https://${host}`}/api/meta/webhook`,
+      unifiedWebhookUrl: getUnifiedWebhookUrl(host),
       verifyToken: settings?.webhookVerifyToken ?? "kdfnuts_webhook_token",
       configured,
       isActive: settings?.isActive ?? false,
@@ -1623,9 +1639,14 @@ router.get("/admin/whatsapp/webhook-info", adminMiddleware as any, async (req, r
 /* ─── Admin: Test Webhook (self-verify) ──────────────── */
 router.post("/admin/whatsapp/test-webhook", adminMiddleware as any, async (req, res) => {
   try {
-    const webhookUrl = getPublicWebhookUrl();
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
+    const bodyUrl = typeof req.body?.webhookUrl === "string" ? req.body.webhookUrl.trim() : "";
+    const webhookUrl = bodyUrl || getPublicWebhookUrl(host);
     if (!webhookUrl) {
-      return res.json({ success: false, error: "No public domain available. Deploy the app to get a public HTTPS URL." });
+      return res.json({
+        success: false,
+        error: "No public API URL configured. Set PUBLIC_API_URL=https://api.khanbabadryfruits.com on api-server (Railway).",
+      });
     }
 
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
@@ -1648,10 +1669,11 @@ router.post("/admin/whatsapp/test-webhook", adminMiddleware as any, async (req, 
         : `Unexpected response (HTTP ${resp.status}): ${body.slice(0, 200)}`,
     });
   } catch (err: any) {
-    const webhookUrl = getPublicWebhookUrl();
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
+    const webhookUrl = getPublicWebhookUrl(host);
     return res.json({
       success: false,
-      webhookUrl,
+      webhookUrl: webhookUrl || undefined,
       error: err.name === "TimeoutError" ? "Request timed out — the server may not be publicly reachable." : err.message,
     });
   }
