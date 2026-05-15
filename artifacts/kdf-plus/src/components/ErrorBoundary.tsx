@@ -48,7 +48,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             <p style={{ color: "#a4c982", fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
               Please refresh the page to continue shopping.
             </p>
-            {msg ? (
+            {import.meta.env.DEV && msg ? (
               <p style={{ color: "#6b7280", fontSize: 10, marginBottom: 20, fontFamily: "monospace", wordBreak: "break-word" }}>
                 {msg}
               </p>

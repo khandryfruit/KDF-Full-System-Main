@@ -26,7 +26,7 @@ export default defineConfig(async ({ command }) => ({
   plugins: [
     react({ jsxRuntime: "automatic" }),
     tailwindcss(),
-    runtimeErrorOverlay(),
+    ...(process.env.NODE_ENV !== "production" ? [runtimeErrorOverlay()] : []),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -54,6 +54,7 @@ export default defineConfig(async ({ command }) => ({
       ? { legalComments: "none", drop: ["debugger"] as ("debugger")[] }
       : undefined,
   build: {
+    sourcemap: false,
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     target: "es2018",

@@ -6,9 +6,13 @@ import {
   adminRolePermissionsTable, adminUserRolesTable, adminActivityLogsTable,
 } from "@workspace/db";
 import {
-  hashPassword, comparePassword, signAdminUserToken,
+  hashPassword, comparePassword, signAdminUserToken, signMfaPendingToken, verifyMfaPendingToken,
   adminMiddleware, requirePermission, loadFreshPermissions, type AuthRequest,
 } from "../lib/auth.js";
+import { generateTotpSecret, verifyTotp, getTotpUri } from "../lib/totp.js";
+import { adminSessionsTable, adminControlAlertsTable, adminLoginHistoryTable } from "@workspace/db";
+import { createAdminSession } from "../lib/enterpriseAuth.js";
+import { IS_PRODUCTION } from "../lib/security.js";
 import { logger } from "../lib/logger.js";
 import {
   ALL_PERMISSIONS, ALL_PERMISSION_KEYS, SYSTEM_ROLES,
@@ -25,6 +29,23 @@ const SUPER_ADMIN_PERMS = ALL_PERMISSION_KEYS;
 async function logActivity(opts: Parameters<typeof writeAuditLog>[1] & { req: AuthRequest }) {
   const { req, ...entry } = opts;
   await writeAuditLog(req, entry);
+}
+
+async function notifyNewDeviceLogin(userId: number, email: string, req: AuthRequest) {
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "";
+  const ua = req.headers["user-agent"] ?? "";
+  const prior = await db.select().from(adminLoginHistoryTable)
+    .where(and(eq(adminLoginHistoryTable.userId, userId), eq(adminLoginHistoryTable.success, true)))
+    .limit(5).catch(() => []);
+  const knownIp = prior.some(r => r.ipAddress === ip);
+  if (knownIp && prior.length > 2) return;
+  await db.insert(adminControlAlertsTable).values({
+    type: "new_device_login",
+    severity: knownIp ? "info" : "warning",
+    title: `New login: ${email}`,
+    message: `IP ${ip} · ${ua.slice(0, 80)}`,
+    meta: { userId, ip },
+  }).catch(() => {});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -87,10 +108,18 @@ router.post("/admin-auth/login", authRateLimiter, async (req, res: Response): Pr
     await clearFailedLogin(user.id);
     await recordLoginAttempt({ userId: user.id, email: emailNorm, success: true, req });
 
+    if (user.totpEnabled && user.totpSecret) {
+      res.json({
+        ok: true,
+        requires2fa: true,
+        mfaToken: signMfaPendingToken(user.id),
+        message: "Enter the 6-digit code from your authenticator app",
+      });
+      return;
+    }
+
     const permissions = await getUserPermissions(user.id, user.isSuper);
 
-    /* Fetch roles for response — fault-tolerant: admin_roles/admin_user_roles may not
-       exist on older Railway DB instances that haven't applied migration 0004 yet. */
     const roles = await db
       .select({ id: adminRolesTable.id, name: adminRolesTable.name, slug: adminRolesTable.slug, color: adminRolesTable.color })
       .from(adminUserRolesTable)
@@ -103,7 +132,9 @@ router.post("/admin-auth/login", authRateLimiter, async (req, res: Response): Pr
 
     const token = signAdminUserToken({ adminUserId: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions });
 
-    /* Send response immediately — do NOT await lastLogin update so DB slowness can't block the response */
+    await createAdminSession(user.id, req).catch(() => {});
+    await notifyNewDeviceLogin(user.id, user.email, req).catch(() => {});
+
     res.json({
       ok: true,
       token,
@@ -130,8 +161,11 @@ router.post("/admin-auth/login", authRateLimiter, async (req, res: Response): Pr
 router.get("/admin-auth/me", adminMiddleware as any, loadFreshPermissions as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const u = req.user!;
-    /* If legacy token (no adminUserId) */
     if (!u.adminUserId) {
+      if (IS_PRODUCTION) {
+        res.status(401).json({ ok: false, error: "Session invalid" });
+        return;
+      }
       res.json({ ok: true, user: { id: u.id, name: "Administrator", email: "", isSuper: true, permissions: SUPER_ADMIN_PERMS, roles: [] } });
       return;
     }
@@ -144,6 +178,63 @@ router.get("/admin-auth/me", adminMiddleware as any, loadFreshPermissions as any
       .innerJoin(adminRolesTable, eq(adminUserRolesTable.roleId, adminRolesTable.id))
       .where(eq(adminUserRolesTable.userId, user.id));
     res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, phone: user.phone, avatarUrl: user.avatarUrl, isSuper: user.isSuper, permissions, roles, lastLoginAt: user.lastLoginAt } });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   2FA — POST /api/admin-auth/verify-2fa
+═══════════════════════════════════════════════════════════ */
+router.post("/admin-auth/verify-2fa", authRateLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { mfaToken, code } = req.body as { mfaToken: string; code: string };
+    if (!mfaToken || !code) { res.status(400).json({ ok: false, error: "mfaToken and code required" }); return; }
+    const pending = verifyMfaPendingToken(mfaToken);
+    if (!pending) { res.status(401).json({ ok: false, error: "MFA session expired — log in again" }); return; }
+    const [user] = await db.select().from(adminUsersTable).where(eq(adminUsersTable.id, pending.adminUserId)).limit(1);
+    if (!user?.totpSecret || !verifyTotp(user.totpSecret, code)) {
+      await recordLoginAttempt({ userId: user?.id, email: user?.email ?? "", success: false, failReason: "bad_2fa", req });
+      res.status(401).json({ ok: false, error: "Invalid authenticator code" }); return;
+    }
+    const permissions = await getUserPermissions(user.id, user.isSuper);
+    const roles = await db.select({ id: adminRolesTable.id, name: adminRolesTable.name, slug: adminRolesTable.slug, color: adminRolesTable.color })
+      .from(adminUserRolesTable).innerJoin(adminRolesTable, eq(adminUserRolesTable.roleId, adminRolesTable.id))
+      .where(eq(adminUserRolesTable.userId, user.id));
+    const token = signAdminUserToken({ adminUserId: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions });
+    await createAdminSession(user.id, req).catch(() => {});
+    await notifyNewDeviceLogin(user.id, user.email, req).catch(() => {});
+    res.json({ ok: true, token, user: { id: user.id, name: user.name, email: user.email, isSuper: user.isSuper, permissions, roles } });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/admin-auth/2fa/setup", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const u = req.user!;
+    if (!u.adminUserId) { res.status(400).json({ ok: false, error: "RBAC user required" }); return; }
+    const [user] = await db.select().from(adminUsersTable).where(eq(adminUsersTable.id, u.adminUserId)).limit(1);
+    if (!user) { res.status(404).json({ ok: false, error: "User not found" }); return; }
+    const secret = generateTotpSecret();
+    await db.update(adminUsersTable).set({ totpSecret: secret, updatedAt: new Date() }).where(eq(adminUsersTable.id, user.id));
+    res.json({ ok: true, secret, uri: getTotpUri(user.email, secret), message: "Scan with Google Authenticator, then enable with a code" });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post("/admin-auth/2fa/enable", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const u = req.user!;
+    const { code } = req.body as { code: string };
+    const [user] = await db.select().from(adminUsersTable).where(eq(adminUsersTable.id, u.adminUserId!)).limit(1);
+    if (!user?.totpSecret || !verifyTotp(user.totpSecret, code)) {
+      res.status(400).json({ ok: false, error: "Invalid code" }); return;
+    }
+    await db.update(adminUsersTable).set({ totpEnabled: true, updatedAt: new Date() }).where(eq(adminUsersTable.id, user.id));
+    await logActivity({ req, action: "2fa.enable", resource: "admin_users", resourceId: user.id, severity: "critical" });
+    res.json({ ok: true, message: "2FA enabled" });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -27,6 +27,29 @@ const router = Router();
 /* ═══════════════════════════════════════════════════════════
    OVERVIEW — GET /api/admin/control-center/overview
 ═══════════════════════════════════════════════════════════ */
+router.get("/admin/control-center/security-monitor", requireAnyPermission(["security.manage", "logs.security", "logs.view"]) as any, async (_req: AuthRequest, res: Response) => {
+  try {
+    const [failedLogins, recentAlerts, activeSessions, suspiciousLogins] = await Promise.all([
+      db.select().from(adminLoginHistoryTable).where(eq(adminLoginHistoryTable.success, false))
+        .orderBy(desc(adminLoginHistoryTable.createdAt)).limit(25),
+      db.select().from(adminControlAlertsTable).orderBy(desc(adminControlAlertsTable.createdAt)).limit(25),
+      db.select().from(adminSessionsTable).where(eq(adminSessionsTable.isActive, true))
+        .orderBy(desc(adminSessionsTable.lastSeenAt)).limit(50),
+      db.select().from(adminLoginHistoryTable).where(eq(adminLoginHistoryTable.isSuspicious, true))
+        .orderBy(desc(adminLoginHistoryTable.createdAt)).limit(15),
+    ]);
+    res.json({
+      ok: true,
+      failedLogins,
+      suspiciousLogins,
+      alerts: recentAlerts,
+      activeSessions,
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.get("/admin/control-center/overview", adminMiddleware as any, loadFreshPermissions as any, async (req: AuthRequest, res: Response) => {
   try {
     const u = req.user!;

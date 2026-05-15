@@ -18,6 +18,9 @@ export default function LoginPage() {
   const [loading, setLoad] = useState(false);
   const [showPwd, setShow] = useState(false);
   const [error, setError]  = useState("");
+  const [mfaToken, setMfaToken] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [needs2fa, setNeeds2fa] = useState(false);
 
   /** Fetch JSON safely — 15 s timeout; always targets api-server (apiPublicUrl), never bare /api on the static host. */
   const fetchJson = async (apiPath: string, init: RequestInit) => {
@@ -46,6 +49,32 @@ export default function LoginPage() {
     return { res, body };
   };
 
+  const finishLogin = (json: { token: string; user: { name: string } }) => {
+    localStorage.setItem("kdf_admin_token", json.token);
+    setUser(json.user as Parameters<typeof setUser>[0]);
+    toast({ title: `Welcome back, ${json.user.name}!` });
+    setLocation("/dashboard");
+  };
+
+  const handleVerify2fa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoad(true);
+    setError("");
+    try {
+      const { res, body: json } = await fetchJson("/api/admin-auth/verify-2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mfaToken, code: mfaCode }),
+      });
+      if (res.ok && json.ok) finishLogin(json);
+      else setError(json.error ?? "Invalid code");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setLoad(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError("Email and password are required"); return; }
@@ -59,15 +88,20 @@ export default function LoginPage() {
         body:    JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
-      if (res.ok && json.ok) {
-        localStorage.setItem("kdf_admin_token", json.token);
-        setUser(json.user);
-        toast({ title: `Welcome back, ${json.user.name}!` });
-        setLocation("/dashboard");
+      if (res.ok && json.ok && json.requires2fa) {
+        setMfaToken(json.mfaToken);
+        setNeeds2fa(true);
+        setLoad(false);
         return;
       }
 
-      /* ── Fallback: legacy storefront admin (users table) ── */
+      if (res.ok && json.ok && json.token) {
+        finishLogin(json);
+        return;
+      }
+
+      if (!import.meta.env.PROD) {
+      /* ── Fallback: legacy storefront admin (users table) — dev only ── */
       const { res: legacyRes, body: legacyJson } = await fetchJson("/api/auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,8 +118,9 @@ export default function LoginPage() {
         setLocation("/dashboard");
         return;
       }
+      }
 
-      setError(json.error ?? legacyJson?.error ?? "Invalid credentials. Please try again.");
+      setError(json.error ?? "Invalid credentials. Please try again.");
     } catch (err: any) {
       setError(err.message ?? "Network error — please try again.");
     } finally {
@@ -113,6 +148,26 @@ export default function LoginPage() {
             <CardDescription>Enter your admin credentials to continue</CardDescription>
           </CardHeader>
           <CardContent>
+            {needs2fa ? (
+              <form onSubmit={handleVerify2fa} className="space-y-4">
+                <p className="text-sm text-muted-foreground text-center">Enter the 6-digit code from your authenticator app</p>
+                <Input
+                  value={mfaCode}
+                  onChange={e => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  className="h-11 text-center text-lg tracking-widest"
+                  inputMode="numeric"
+                  autoFocus
+                />
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <Button type="submit" className="w-full h-11" disabled={loading || mfaCode.length !== 6}>
+                  {loading ? "Verifying…" : "Verify & Sign In"}
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={() => { setNeeds2fa(false); setMfaCode(""); }}>
+                  Back to login
+                </Button>
+              </form>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email Address</Label>
@@ -158,6 +213,7 @@ export default function LoginPage() {
                 {loading ? "Authenticating…" : "Sign In"}
               </Button>
             </form>
+            )}
           </CardContent>
         </Card>
 

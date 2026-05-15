@@ -10,7 +10,8 @@ import deliveryTrackRouter from "./routes/delivery-track";
 import { logger } from "./lib/logger";
 import {
   securityHeaders, apiRateLimiter, authRateLimiter, webhookRateLimiter,
-  sanitizeClientError, IS_PRODUCTION,
+  sanitizeClientError, IS_PRODUCTION, blockScannerPaths, adminHostGuard,
+  trackRateLimiter, geocodeRateLimiter, chatRateLimiter,
 } from "./lib/security";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
@@ -62,6 +63,8 @@ const app: Express = express();
 
 app.disable("x-powered-by");
 app.use(securityHeaders);
+app.use(blockScannerPaths);
+app.use(adminHostGuard);
 
 app.use(
   pinoHttp({
@@ -135,8 +138,12 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 app.use("/api/admin-auth/login", authRateLimiter);
+app.use("/api/admin-auth/verify-2fa", authRateLimiter);
 app.use("/api/auth/login", authRateLimiter);
 app.use("/api/admin-auth/bootstrap", authRateLimiter);
+app.use("/api/track", trackRateLimiter);
+app.use("/api/geocode", geocodeRateLimiter);
+app.use("/api/chat", chatRateLimiter);
 app.use((req, res, next) => {
   const p = req.path ?? req.url ?? "";
   if (p.includes("/webhook") || p.includes("/callback") || p.includes("/payment/")) {

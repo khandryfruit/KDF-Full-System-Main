@@ -61,6 +61,7 @@ export default function TrackOrderPage() {
 
   const [query, setQuery] = useState(qParam);
   const [input, setInput] = useState(qParam);
+  const [phoneLast4, setPhoneLast4] = useState("");
   const [result, setResult] = useState<TrackResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export default function TrackOrderPage() {
     setResult(null);
     setSearched(true);
     try {
-      const res = await fetch(`/api/track?q=${encodeURIComponent(q.trim())}`);
+      const res = await fetch(`/api/track?q=${encodeURIComponent(q.trim())}&phone=${encodeURIComponent(phoneLast4)}`);
       if (res.status === 404) { setError("No order found with that number or tracking ID."); return; }
       if (!res.ok) throw new Error("Something went wrong. Please try again.");
       const data = await res.json();
@@ -122,36 +123,42 @@ export default function TrackOrderPage() {
             </div>
             <h1 className="text-2xl sm:text-3xl font-black mb-2">Track Your Order</h1>
             <p className="text-white/70 text-sm sm:text-base mb-8">
-              Enter your order number or tracking ID to see live status
+              Enter your order number and last 4 digits of your phone
             </p>
 
             {/* Search box */}
-            <form onSubmit={handleSubmit} className="relative max-w-lg mx-auto">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
+            <form onSubmit={handleSubmit} className="relative max-w-lg mx-auto space-y-3">
+              <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
                     value={input}
                     onChange={e => setInput(e.target.value)}
-                    placeholder="e.g. KDF-2024-001 or TCS tracking ID"
+                    placeholder="Order number or tracking ID"
                     className="w-full h-12 pl-11 pr-4 rounded-xl text-sm text-gray-900 bg-white border-2 border-transparent focus:border-[#5FA800] outline-none transition-all shadow-lg placeholder:text-gray-400"
                     data-testid="input-track-query"
                     autoFocus={!qParam}
                   />
-                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={phoneLast4}
+                  onChange={e => setPhoneLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="Last 4 digits of phone"
+                  className="flex-1 h-12 px-4 rounded-xl text-sm text-gray-900 bg-white shadow-lg"
+                  data-testid="input-track-phone"
+                />
                 <button
                   type="submit"
-                  disabled={loading || !input.trim()}
+                  disabled={loading || !input.trim() || phoneLast4.length !== 4}
                   className="h-12 px-6 rounded-xl font-semibold text-sm transition-all shadow-lg disabled:opacity-50"
                   style={{ backgroundColor: "#5FA800", color: "white" }}
                   data-testid="button-track-submit"
                 >
-                  {loading ? (
-                    <RotateCcw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    "Track"
-                  )}
+                  {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : "Track"}
                 </button>
               </div>
             </form>

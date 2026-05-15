@@ -153,6 +153,73 @@ export async function verifyMetaWebhookOrReject(
   return true;
 }
 
+/** Block common scanner paths — do not reveal stack or admin. */
+const BLOCKED_PATHS = [
+  /^\/\.env/i, /^\/\.git/i, /^\/wp-admin/i, /^\/wp-login/i,
+  /^\/admin$/i, /^\/admin\/login/i, /^\/phpmyadmin/i, /^\/server-status/i,
+  /^\/api\/admin-auth\/bootstrap/i,
+];
+
+export function blockScannerPaths(req: Request, res: Response, next: NextFunction): void {
+  const path = req.path ?? req.url?.split("?")[0] ?? "";
+  if (BLOCKED_PATHS.some(p => p.test(path))) {
+    if (IS_PRODUCTION) {
+      res.status(404).json({ ok: false, error: "Not found" });
+      return;
+    }
+  }
+  next();
+}
+
+/** Admin routes only from admin subdomain or when explicitly allowed. */
+export function adminHostGuard(req: Request, res: Response, next: NextFunction): void {
+  if (!IS_PRODUCTION) { next(); return; }
+  const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
+  const allowed = (process.env.ADMIN_ALLOWED_HOSTS ?? "admin.khanbabadryfruits.com,admin.khandryfruit.com")
+    .split(",").map(h => h.trim().toLowerCase()).filter(Boolean);
+  const isAdminHost = host.startsWith("admin.") || allowed.includes(host);
+  const path = req.path ?? "";
+  const isAdminApi = path.startsWith("/api/admin-auth") || path.startsWith("/api/admin/");
+  if (isAdminApi && !isAdminHost && process.env.ADMIN_API_ALLOW_ANY_HOST !== "true") {
+    logger.warn({ host, path }, "Admin API blocked from non-admin host");
+    res.status(404).json({ ok: false, error: "Not found" });
+    return;
+  }
+  next();
+}
+
+export function adminIpAllowlist(req: Request, res: Response, next: NextFunction): void {
+  const raw = process.env.ADMIN_IP_ALLOWLIST?.trim();
+  if (!raw || !IS_PRODUCTION) { next(); return; }
+  const allowed = raw.split(",").map(s => s.trim()).filter(Boolean);
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? "";
+  if (!allowed.some(a => ip === a || ip.startsWith(a))) {
+    logger.warn({ ip }, "Admin request blocked by IP allowlist");
+    res.status(403).json({ ok: false, error: "Access denied" });
+    return;
+  }
+  next();
+}
+
+export const trackRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: IS_PRODUCTION ? 15 : 100,
+  keyFn: req => `track:${req.ip}`,
+  message: "Too many tracking lookups — try again later",
+});
+
+export const geocodeRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: IS_PRODUCTION ? 20 : 200,
+  keyFn: req => `geo:${req.ip}`,
+});
+
+export const chatRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: IS_PRODUCTION ? 30 : 300,
+  keyFn: req => `chat:${req.ip}`,
+});
+
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -160,6 +227,20 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   if (IS_PRODUCTION) {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+    res.setHeader("X-DNS-Prefetch-Control", "off");
   }
   next();
+}
+
+/** No default webhook verify tokens in production. */
+export function resolveWebhookVerifyToken(
+  dbToken: string | null | undefined,
+  fallbacks: string[],
+): string | null {
+  if (dbToken?.trim()) return dbToken.trim();
+  if (IS_PRODUCTION) return null;
+  for (const f of fallbacks) {
+    if (f?.trim()) return f.trim();
+  }
+  return null;
 }

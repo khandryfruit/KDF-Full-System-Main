@@ -59,8 +59,26 @@ export function signAdminUserToken(payload: {
       email:       payload.email,
     },
     SECRET,
-    { expiresIn: "30d" },
+    { expiresIn: process.env.ADMIN_JWT_EXPIRES ?? "8h" },
   );
+}
+
+export function signMfaPendingToken(adminUserId: number): string {
+  return jwt.sign(
+    { adminUserId, role: "admin", mfaPending: true },
+    SECRET,
+    { expiresIn: "5m" },
+  );
+}
+
+export function verifyMfaPendingToken(token: string): { adminUserId: number } | null {
+  try {
+    const p = jwt.verify(token, SECRET) as { adminUserId?: number; mfaPending?: boolean };
+    if (!p.mfaPending || !p.adminUserId) return null;
+    return { adminUserId: p.adminUserId };
+  } catch {
+    return null;
+  }
 }
 
 export function verifyToken(token: string): TokenPayload {

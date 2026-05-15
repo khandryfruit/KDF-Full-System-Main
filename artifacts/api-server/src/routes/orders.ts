@@ -74,49 +74,52 @@ router.get("/orders", authMiddleware as any, async (req: AuthRequest, res: Respo
   }
 });
 
-/* ── Public tracking endpoint ─────────────────────────── */
+/* ── Public tracking — requires order # + phone last 4 digits (anti-enumeration) ── */
 router.get("/track", async (req, res) => {
   try {
     const q = String(req.query.q ?? "").trim();
-    if (!q) { res.status(400).json({ error: "Query is required" }); return; }
+    const phoneLast4 = String(req.query.phone ?? req.query.phoneLast4 ?? "").trim().replace(/\D/g, "");
+    if (!q) { res.status(400).json({ error: "Order number is required" }); return; }
+    if (phoneLast4.length !== 4) {
+      res.status(400).json({ error: "Last 4 digits of phone number are required to verify your order" });
+      return;
+    }
 
     const [order] = await db.select().from(ordersTable).where(
       sql`lower(${ordersTable.orderNumber}) = lower(${q}) or lower(${ordersTable.trackingId}) = lower(${q})`
     ).limit(1);
 
-    if (!order) { res.status(404).json({ error: "Order not found. Check your order number or tracking ID." }); return; }
+    if (!order) {
+      res.status(404).json({ error: "Order not found. Check your order number and phone verification." });
+      return;
+    }
+
+    const addr = order.shippingAddress as { phone?: string } | null;
+    const orderPhone = String(addr?.phone ?? "").replace(/\D/g, "");
+    if (!orderPhone.endsWith(phoneLast4)) {
+      res.status(404).json({ error: "Order not found. Check your order number and phone verification." });
+      return;
+    }
 
     const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, order.id));
 
-    const addr = order.shippingAddress as any;
     res.json({
-      id: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
-      paymentStatus: order.paymentStatus,
-      paymentMethod: order.paymentMethod,
       courier: order.courier,
       trackingId: order.trackingId,
       deliveryType: order.deliveryType,
-      deliveryFee: order.deliveryFee,
-      subtotal: order.subtotal,
-      discount: order.discount,
-      total: order.total,
       createdAt: order.createdAt,
       confirmedAt: order.confirmedAt,
       packedAt: order.packedAt,
       shippedAt: order.shippedAt,
       outForDeliveryAt: order.outForDeliveryAt,
       deliveredAt: order.deliveredAt,
-      city: addr?.city ?? null,
-      country: addr?.country ?? null,
-      recipientName: addr?.name ? String(addr.name).split(" ")[0] : null,
+      city: (addr as { city?: string })?.city ?? null,
       items: items.map(i => ({
         name: i.name,
         variant: i.variant,
         qty: i.qty,
-        price: i.price,
-        gradient: i.gradient,
       })),
     });
   } catch (err) {
