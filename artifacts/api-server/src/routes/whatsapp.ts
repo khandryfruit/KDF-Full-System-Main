@@ -11,7 +11,7 @@ import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { verifyMetaWebhookSignatureAny, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
-import { persistInboundWaMessage } from "../lib/waInbound";
+import { getMetaAppSecrets, getMetaAppSecret } from "../lib/waSecrets";
 
 const router = Router();
 
@@ -88,25 +88,6 @@ function getPublicWebhookUrl(reqHost?: string): string {
 function getUnifiedWebhookUrl(reqHost?: string): string {
   const base = resolvePublicApiBase(reqHost);
   return base ? `${base}/api/meta/webhook` : "";
-}
-
-/** Env secret first (Railway), then DB — both tried on HMAC verify. */
-async function getMetaAppSecrets(): Promise<string[]> {
-  const secrets: string[] = [];
-  const env = process.env.META_APP_SECRET?.trim();
-  if (env) secrets.push(env);
-  const [settings] = await db.select({
-    appSecret: whatsappSettingsTable.appSecret,
-    webhookVerifyToken: whatsappSettingsTable.webhookVerifyToken,
-  }).from(whatsappSettingsTable).limit(1);
-  const db = settings?.appSecret?.trim();
-  if (db && db !== env) secrets.push(db);
-  return [...new Set(secrets)];
-}
-
-async function getMetaAppSecret(): Promise<string> {
-  const list = await getMetaAppSecrets();
-  return list[0] ?? "";
 }
 
 /* ─── Webhook Verification (Meta GET) ───────────────── */
@@ -318,6 +299,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             ?? (value.contacts?.[0]?.profile?.name as string | undefined)
             ?? null;
 
+          const { persistInboundWaMessage } = await import("../lib/waInbound.js");
           const { conversationId: waConvId } = await persistInboundWaMessage({
             phoneRaw,
             msgId,

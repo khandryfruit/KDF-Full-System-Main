@@ -1,7 +1,6 @@
 import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, whatsappConversationStatesTable } from "@workspace/db";
 import { eq, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
-import { persistWaOutboundMessage } from "./waInboxPersist";
 import { normalizePhone } from "./waPhone";
 export { normalizePhone } from "./waPhone";
 
@@ -18,6 +17,19 @@ export interface WASendOptions {
 export async function getSettings() {
   const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
   return settings ?? null;
+}
+
+/** Lazy import avoids circular init with waInboxPersist at bundle load time. */
+function mirrorOutboundToInbox(opts: {
+  phone: string;
+  content: string;
+  waMessageId?: string | null;
+  isBot?: boolean;
+  type?: string;
+  templateName?: string;
+  status?: string;
+}) {
+  void import("./waInboxPersist.js").then(({ persistWaOutboundMessage }) => persistWaOutboundMessage(opts)).catch(() => {});
 }
 
 async function log(opts: { userId?: number; phone: string; templateName?: string; message: string; status: string; response?: string; messageId?: string }) {
@@ -79,7 +91,7 @@ export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean>
     const messageId = data?.messages?.[0]?.id as string | undefined;
     if (res.ok && messageId) {
       await log({ ...opts, status: "sent", response: JSON.stringify(data), messageId });
-      void persistWaOutboundMessage({
+      mirrorOutboundToInbox({
         phone: opts.phone,
         content: opts.message,
         waMessageId: messageId,
@@ -137,7 +149,7 @@ export async function sendWhatsAppTemplate(opts: {
 
     if (res.ok && messageId) {
       await log({ phone: opts.phone, templateName: opts.templateName, message: `[template] ${opts.templateName}`, status: "sent", response: JSON.stringify(data), messageId, userId: opts.userId });
-      void persistWaOutboundMessage({
+      mirrorOutboundToInbox({
         phone: opts.phone,
         content: `[template] ${opts.templateName}`,
         waMessageId: messageId,
@@ -236,7 +248,7 @@ export async function sendInteractiveMenu(opts: {
 
     await log({ phone: opts.phone, templateName: "menu_sent", message: "[Interactive menu]", status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
     if (res.ok && messageId) {
-      void persistWaOutboundMessage({ phone: opts.phone, content: opts.greeting, waMessageId: messageId, isBot: true, type: "interactive", templateName: "menu_sent" });
+      mirrorOutboundToInbox({ phone: opts.phone, content: opts.greeting, waMessageId: messageId, isBot: true, type: "interactive", templateName: "menu_sent" });
     }
     return !!(res.ok && messageId);
   } catch (err) {
@@ -287,7 +299,7 @@ export async function sendInteractiveButtons(opts: {
 
     await log({ phone: opts.phone, templateName: opts.templateName ?? "interactive_buttons", message: opts.text.slice(0, 200), status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
     if (res.ok && messageId) {
-      void persistWaOutboundMessage({ phone: opts.phone, content: opts.text.slice(0, 500), waMessageId: messageId, isBot: true, type: "interactive", templateName: opts.templateName ?? "interactive_buttons" });
+      mirrorOutboundToInbox({ phone: opts.phone, content: opts.text.slice(0, 500), waMessageId: messageId, isBot: true, type: "interactive", templateName: opts.templateName ?? "interactive_buttons" });
     }
     if (!res.ok) logger.warn({ data }, "sendInteractiveButtons failed");
     return !!(res.ok && messageId);
