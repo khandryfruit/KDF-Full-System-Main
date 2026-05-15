@@ -10,6 +10,8 @@ export const branchProductsTable = pgTable("branch_products", {
   unit:               text("unit").notNull().default("KG"),
   category:           text("category"),
   purchasePrice:      numeric("purchase_price",       { precision: 12, scale: 2 }),
+  lastPurchasePrice:  numeric("last_purchase_price",  { precision: 12, scale: 2 }),
+  avgCost:            numeric("avg_cost",             { precision: 12, scale: 2 }),
   salePrice:          numeric("sale_price",           { precision: 12, scale: 2 }),
   stockQty:           numeric("stock_qty",            { precision: 12, scale: 3 }).notNull().default("0"),
   lowStockThreshold:  numeric("low_stock_threshold",  { precision: 12, scale: 3 }).default("1"),

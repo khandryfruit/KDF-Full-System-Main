@@ -74,6 +74,8 @@ import {
   ListChecks,
   Crown,
   Database,
+  Factory,
+  BarChart3,
 } from "lucide-react";
 import { useState, useEffect, useRef, type ElementType } from "react";
 import { motion } from "framer-motion";
@@ -111,6 +113,11 @@ const INVOICE_NAV_ITEMS = [
   { href: "/branches",                   label: "Branches",           icon: Building2      },
   { href: "/customers",                  label: "Customers",          icon: UserCheck      },
   { href: "/analytics",                  label: "Analytics",          icon: PieChart       },
+  { divider: true,                       label: "ERP & Accounting"                         },
+  { href: "/erp/suppliers",              label: "Suppliers",          icon: Factory        },
+  { href: "/erp/purchases",              label: "Smart Purchase",     icon: ClipboardList  },
+  { href: "/erp/transfers",              label: "Branch Transfers",   icon: ArrowRightLeft },
+  { href: "/erp/reports",                label: "ERP Reports",        icon: BarChart3      },
   { divider: true,                       label: "Stock"                                    },
   { href: "/stock/overview",             label: "Stock Overview",     icon: Boxes          },
   { href: "/stock/products",             label: "Products",           icon: Package        },
@@ -517,7 +524,7 @@ function SidebarContent({
   adminIamOpen, onToggleAdminIam,
 }: SidebarContentProps) {
   const { hasPermission, user: adminUser } = useAdminAuth();
-  const isInvoiceActive    = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings");
+  const isInvoiceActive    = location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/branch-login") || location.startsWith("/stock") || location.startsWith("/erp-settings") || location.startsWith("/erp/");
   const isShopifyActive    = location.startsWith("/shopify");
   const isPgActive         = location.startsWith("/payment-gateway");
   const isLogisticsActive  = location.startsWith("/logistics");
@@ -821,7 +828,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHovered,   setIsHovered]   = useState(false);
-  const [invoiceOpen,    setInvoiceOpen]    = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings"));
+  const [invoiceOpen,    setInvoiceOpen]    = useState(() => location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings") || location.startsWith("/erp/"));
   const [shopifyOpen,    setShopifyOpen]    = useState(() => location.startsWith("/shopify"));
   const [pgOpen,         setPgOpen]         = useState(() => location.startsWith("/payment-gateway"));
   const [logisticsOpen,  setLogisticsOpen]  = useState(() => location.startsWith("/logistics"));
@@ -842,7 +849,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setIsCollapsed(true);
     setIsHovered(false);
-    if (location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings")) setInvoiceOpen(true);
+    if (location.startsWith("/invoice") || location.startsWith("/branch-pos") || location.startsWith("/stock") || location.startsWith("/erp-settings") || location.startsWith("/erp/")) setInvoiceOpen(true);
     if (location.startsWith("/shopify") || location.startsWith("/admin/shopify"))         setShopifyOpen(true);
     if (location.startsWith("/payment-gateway")) setPgOpen(true);
     if (location.startsWith("/logistics"))       setLogisticsOpen(true);

@@ -84,6 +84,11 @@ const StockOverviewPage = lazy(() => import("@/pages/StockOverviewPage"));
 const StockProductsPage = lazy(() => import("@/pages/StockProductsPage"));
 const StockMovementPage = lazy(() => import("@/pages/StockMovementPage"));
 const StockAdjustmentPage = lazy(() => import("@/pages/StockAdjustmentPage"));
+const SuppliersPage = lazy(() => import("@/pages/SuppliersPage"));
+const ErpSupplierDetailPage = lazy(() => import("@/pages/ErpSupplierDetailPage"));
+const ErpPurchasesPage = lazy(() => import("@/pages/ErpPurchasesPage"));
+const BranchTransfersPage = lazy(() => import("@/pages/BranchTransfersPage"));
+const ErpReportsPage = lazy(() => import("@/pages/ErpReportsPage"));
 const ERPSettingsPage = lazy(() => import("@/pages/ERPSettingsPage"));
 const AdSensePage = lazy(() => import("@/pages/AdSensePage"));
 const RiderLiveMapPage = lazy(() => import("@/pages/RiderLiveMapPage"));
@@ -269,6 +274,13 @@ function Router() {
       <Route path="/stock/movement"><ProtectedRoute component={StockMovementPage} /></Route>
       <Route path="/stock/adjustment"><ProtectedRoute component={StockAdjustmentPage} /></Route>
       <Route path="/stock"><ProtectedRoute component={StockOverviewPage} /></Route>
+
+      {/* ── ERP (suppliers, purchases, transfers, reports) ── */}
+      <Route path="/erp/suppliers/:id"><ProtectedRoute component={ErpSupplierDetailPage} /></Route>
+      <Route path="/erp/suppliers"><ProtectedRoute component={SuppliersPage} /></Route>
+      <Route path="/erp/purchases"><ProtectedRoute component={ErpPurchasesPage} /></Route>
+      <Route path="/erp/transfers"><ProtectedRoute component={BranchTransfersPage} /></Route>
+      <Route path="/erp/reports"><ProtectedRoute component={ErpReportsPage} /></Route>
 
       {/* ── ERP Settings ── */}
       <Route path="/erp-settings/:section"><ProtectedRoute component={ERPSettingsPage} /></Route>
