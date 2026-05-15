@@ -6,7 +6,6 @@ import {
   sendWhatsAppTemplate,
   sendCtaUrlMessage,
   sendInteractiveButtons,
-  getApprovedTemplate,
   getSettings,
   normalizePhone,
 } from "./whatsapp.js";
@@ -79,7 +78,8 @@ async function sendPremiumText(
     return { success: false, error: "WhatsApp not configured" };
   }
 
-  const tpl = await getApprovedTemplate(templateName);
+  const { getApprovedTemplateForEvent } = await import("./waTemplateEvents.js");
+  const tpl = await getApprovedTemplateForEvent(templateName);
   if (tpl && tpl.paramCount >= 1) {
     const parts = message.split("\n").filter(Boolean).slice(0, tpl.paramCount);
     while (parts.length < tpl.paramCount) parts.push("—");
@@ -133,7 +133,7 @@ export async function sendPremiumOrderConfirmed(ctx: OrderWaContext): Promise<{ 
     `━━━━━━━━━━━━━━━━━━━\n` +
     `_Premium dry fruits & nuts — delivered with care_`;
 
-  return sendPremiumText(ctx.customerPhone, msg, "order_confirmed");
+  return sendPremiumText(ctx.customerPhone, msg, "order_confirmation");
 }
 
 export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
@@ -145,7 +145,7 @@ export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<
     `💰 *Amount:* ${formatMoney(Number(ctx.totalPrice ?? 0))}\n\n` +
     `Your order is now being prepared for dispatch. Thank you! 💚`;
 
-  return sendPremiumText(ctx.customerPhone, msg, "payment_confirmed");
+  return sendPremiumText(ctx.customerPhone, msg, "paid_order_message");
 }
 
 export async function sendPremiumOrderCancelled(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
@@ -156,7 +156,7 @@ export async function sendPremiumOrderCancelled(ctx: OrderWaContext): Promise<{ 
     `Your order *${ctx.orderNumber}* has been cancelled as requested.\n\n` +
     `If this was a mistake, reply here or call ${SUPPORT} and we will help you immediately.`;
 
-  return sendPremiumText(ctx.customerPhone, msg, "order_cancelled");
+  return sendPremiumText(ctx.customerPhone, msg, "cancel_order");
 }
 
 export async function sendPremiumRiderAssignedWithTracking(opts: {
@@ -282,13 +282,13 @@ export async function sendPremiumDeliveryStatus(
 ): Promise<{ success: boolean; error?: string }> {
   const builder = STATUS_BUILDERS[status] ?? STATUS_BUILDERS.picked;
   const templateMap: Record<string, string> = {
-    picked: "status_picked",
-    out_for_delivery: "status_out_for_delivery",
-    near_customer: "status_near",
-    delivered: "status_delivered",
-    delayed: "status_delayed",
-    failed: "status_failed",
-    returned: "status_returned",
+    picked: "order_processing",
+    out_for_delivery: "order_out_for_delivery",
+    near_customer: "order_out_for_delivery",
+    delivered: "order_delivered",
+    delayed: "order_processing",
+    failed: "order_failed_delivery",
+    returned: "shipment_return_update",
   };
   const msg = builder(ctx);
   const cta =

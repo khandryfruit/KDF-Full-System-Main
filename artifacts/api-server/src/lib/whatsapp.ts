@@ -20,6 +20,8 @@ export interface WASendOptions {
   message: string;
   templateName?: string;
   userId?: number;
+  triggerEvent?: string;
+  shopifyOrderId?: string;
 }
 
 export async function getSettings() {
@@ -40,17 +42,48 @@ function mirrorOutboundToInbox(opts: {
   void import("./waInboxPersist.js").then(({ persistWaOutboundMessage }) => persistWaOutboundMessage(opts)).catch(() => {});
 }
 
-async function log(opts: { userId?: number; phone: string; templateName?: string; message: string; status: string; response?: string; messageId?: string }) {
-  await db.insert(whatsappLogsTable).values({
-    userId: opts.userId ?? null,
-    phone: opts.phone,
-    templateName: opts.templateName ?? null,
-    message: opts.message,
-    status: opts.status,
-    response: opts.response ?? null,
-    messageId: opts.messageId ?? null,
-    deliveryStatus: opts.status === "sent" ? "sent" : null,
-  } as any).catch(() => {});
+async function log(opts: {
+  userId?: number;
+  phone: string;
+  templateName?: string;
+  triggerEvent?: string;
+  shopifyOrderId?: string;
+  message: string;
+  status: string;
+  response?: string;
+  messageId?: string;
+  failureReason?: string;
+}) {
+  const trigger = opts.triggerEvent ?? opts.templateName ?? null;
+  await db.execute(sql`
+    INSERT INTO whatsapp_logs (
+      user_id, phone, template_name, trigger_event, shopify_order_id,
+      message, status, response, message_id, delivery_status, failure_reason
+    ) VALUES (
+      ${opts.userId ?? null},
+      ${opts.phone},
+      ${opts.templateName ?? null},
+      ${trigger},
+      ${opts.shopifyOrderId ?? null},
+      ${opts.message},
+      ${opts.status},
+      ${opts.response ?? null},
+      ${opts.messageId ?? null},
+      ${opts.status === "sent" ? "sent" : null},
+      ${opts.failureReason ?? null}
+    )
+  `).catch(() => {
+    db.insert(whatsappLogsTable).values({
+      userId: opts.userId ?? null,
+      phone: opts.phone,
+      templateName: opts.templateName ?? null,
+      message: opts.message,
+      status: opts.status,
+      response: opts.response ?? null,
+      messageId: opts.messageId ?? null,
+      deliveryStatus: opts.status === "sent" ? "sent" : null,
+    } as any).catch(() => {});
+  });
 }
 
 /* ─── Sanitize template param value for Meta ───────────── */
@@ -64,14 +97,13 @@ function buildBodyComponents(paramValues: string[]): object[] {
   return [{ type: "body", parameters: paramValues.map(v => ({ type: "text", text: sanitizeParam(v) })) }];
 }
 
-/* ─── Get approved template for a trigger event ─────────── */
+/* ─── Get approved template for a trigger event (with aliases) ─────────── */
 export async function getApprovedTemplate(triggerEvent: string) {
-  const [tpl] = await db.select().from(whatsappTemplatesTable)
-    .where(eq(whatsappTemplatesTable.triggerEvent, triggerEvent))
-    .limit(1);
-  if (!tpl) return null;
-  if (tpl.approvalStatus === "approved" && tpl.submittedToMeta) return tpl;
-  return null;
+  const { getApprovedTemplateForEvent } = await import("./waTemplateEvents.js");
+  const resolved = await getApprovedTemplateForEvent(triggerEvent);
+  if (!resolved) return null;
+  const [tpl] = await db.select().from(whatsappTemplatesTable).where(eq(whatsappTemplatesTable.id, resolved.id)).limit(1);
+  return tpl ?? null;
 }
 
 /* ─── Send free-form text message ─────────────────────── */
@@ -529,7 +561,7 @@ export async function sendReturnRefundNotification(opts: {
   if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
 
   const name = opts.customerName ?? "Valued Customer";
-  const triggerEvent = `order_${opts.type}`;
+  const triggerEvent = opts.type === "return" ? "shipment_return_update" : `order_${opts.type}`;
   const tpl = await getApprovedTemplate(triggerEvent);
   if (tpl) {
     const params = [name, opts.orderNumber, opts.amount ?? ""].filter(Boolean).slice(0, tpl.paramCount);

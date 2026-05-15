@@ -613,11 +613,36 @@ export async function processShopifyWebhookPayload(
         break;
       }
 
-      case "orders/updated":
-      case "orders/fulfilled":
-      case "orders/cancelled":
+      case "orders/fulfilled": {
         await upsertOrder(store, payload);
-        if (topic === "orders/updated" && String(payload.financial_status ?? "").toLowerCase() === "paid") {
+        setImmediate(() =>
+          import("./shopifyOrderWa.js")
+            .then((m) => m.sendShopifyFulfilledWa(payload))
+            .catch((e) => logger.warn(e, "orders/fulfilled WA failed")),
+        );
+        break;
+      }
+
+      case "orders/cancelled": {
+        await upsertOrder(store, payload);
+        setImmediate(() =>
+          import("./shopifyOrderWa.js")
+            .then((m) => m.sendShopifyCancelledWa(payload))
+            .catch((e) => logger.warn(e, "orders/cancelled WA failed")),
+        );
+        break;
+      }
+
+      case "orders/updated": {
+        const prevFinancial = await db
+          .select({ financialStatus: shopifyOrdersTable.financialStatus })
+          .from(shopifyOrdersTable)
+          .where(eq(shopifyOrdersTable.shopifyOrderId, String(payload.id)))
+          .limit(1)
+          .then((r) => r[0]?.financialStatus)
+          .catch(() => undefined);
+        await upsertOrder(store, payload);
+        if (String(payload.financial_status ?? "").toLowerCase() === "paid") {
           try {
             const n = await markAbandonedRecoveredFromShopifyOrder(payload);
             if (n > 0) logger.info({ n, orderId: payload.id }, "Abandoned checkouts marked recovered (orders/updated paid)");
@@ -625,7 +650,13 @@ export async function processShopifyWebhookPayload(
             logger.warn({ err: e?.message, orderId: payload.id }, "markAbandonedRecoveredFromShopifyOrder failed");
           }
         }
+        setImmediate(() =>
+          import("./shopifyOrderWa.js")
+            .then((m) => m.sendShopifyReturnWaIfNeeded(payload, prevFinancial))
+            .catch((e) => logger.warn(e, "orders/updated return WA failed")),
+        );
         break;
+      }
 
       case "checkouts/create":
       case "checkouts/update": {

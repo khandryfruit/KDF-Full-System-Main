@@ -150,8 +150,15 @@ export async function runAbandonedCheckoutRecovery(): Promise<void> {
         let waSent = false;
         if (checkout.phone) {
           try {
-            await sendWhatsAppMessage({ phone: normalizePhone(checkout.phone), message: waMsg, templateName: "abandoned_cart_recovery", userId: checkout.userId ?? undefined });
-            waSent = true;
+            const { sendLifecycleWhatsApp } = await import("./waTemplateEvents.js");
+            const waRes = await sendLifecycleWhatsApp({
+              triggerEvent: "abandoned_cart_recovery",
+              phone: normalizePhone(checkout.phone),
+              bodyParams: [name, `PKR ${total}`],
+              fallbackText: waMsg,
+              userId: checkout.userId ?? undefined,
+            });
+            waSent = waRes.success;
           } catch (e) { logger.warn({ e, id: checkout.id }, "Step 1 WA failed"); }
         }
 
@@ -195,8 +202,15 @@ export async function runAbandonedCheckoutRecovery(): Promise<void> {
         let waSent = false;
         if (checkout.phone) {
           try {
-            await sendWhatsAppMessage({ phone: normalizePhone(checkout.phone), message: waMsg, userId: checkout.userId ?? undefined });
-            waSent = true;
+            const { sendLifecycleWhatsApp } = await import("./waTemplateEvents.js");
+            const waRes = await sendLifecycleWhatsApp({
+              triggerEvent: "abandoned_cart_recovery",
+              phone: normalizePhone(checkout.phone),
+              bodyParams: [name, `PKR ${total}`],
+              fallbackText: waMsg,
+              userId: checkout.userId ?? undefined,
+            });
+            waSent = waRes.success;
           } catch (e) { logger.warn({ e, id: checkout.id }, "Step 2 WA failed"); }
         }
 

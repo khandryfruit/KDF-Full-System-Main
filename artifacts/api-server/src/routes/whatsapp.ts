@@ -196,14 +196,22 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
         /* ── Delivery status updates ── */
         for (const s of (value.statuses ?? [])) {
           const deliveryStatus = s.status as string;
+          const failureReason =
+            deliveryStatus === "failed"
+              ? String(s.errors?.[0]?.message ?? s.errors?.[0]?.title ?? "delivery_failed").slice(0, 500)
+              : null;
           await db.execute(
-            sql`UPDATE whatsapp_logs SET delivery_status = ${deliveryStatus}, response = ${JSON.stringify(s)} WHERE message_id = ${s.id}`
+            sql`UPDATE whatsapp_logs SET
+              delivery_status = ${deliveryStatus},
+              response = ${JSON.stringify(s)},
+              failure_reason = COALESCE(${failureReason}, failure_reason),
+              status = CASE WHEN ${deliveryStatus} = 'failed' THEN 'failed' ELSE status END
+            WHERE message_id = ${s.id}`,
           ).catch(() => {});
-          /* Also sync status to waMessagesTable */
           await db.execute(
-            sql`UPDATE wa_messages SET status = ${deliveryStatus}, updated_at = NOW() WHERE wa_message_id = ${s.id}`
+            sql`UPDATE wa_messages SET status = ${deliveryStatus}, updated_at = NOW() WHERE wa_message_id = ${s.id}`,
           ).catch(() => {});
-          log?.info({ messageId: s.id, deliveryStatus, errors: s.errors }, "WhatsApp delivery status update");
+          log?.info({ messageId: s.id, deliveryStatus, errors: s.errors, failureReason }, "WhatsApp delivery status update");
 
           void import("../lib/deliveryWaPremium.js").then(({ markDeliveryWaFromWebhook }) =>
             markDeliveryWaFromWebhook(s.id, deliveryStatus),
@@ -285,11 +293,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               rawText = msg.type ?? "non-text";
           }
 
-          /* Deduplicate */
+          /* Deduplicate — prefer inbox row so retries still persist if audit log existed */
           if (msgId) {
-            const [dup] = await db.select({ id: whatsappLogsTable.id })
-              .from(whatsappLogsTable).where(eq(whatsappLogsTable.messageId, msgId)).limit(1);
-            if (dup) { log?.info({ msgId }, "Duplicate webhook message, skipping"); continue; }
+            const dupInbox = await db.execute(
+              sql`SELECT id FROM wa_messages WHERE wa_message_id = ${msgId} AND direction = 'in' LIMIT 1`,
+            ).catch(() => ({ rows: [] }));
+            if (dupInbox.rows.length) {
+              log?.info({ msgId }, "Duplicate inbound WA message, skipping");
+              continue;
+            }
           }
 
           /* Log incoming (whatsapp_logs — audit trail) */
@@ -841,20 +853,17 @@ async function handleProductCatalog(opts: {
 /* catalog_view_N and catalog_buy_N are handled by generic default in switch → show menu */
 
 /* ─── Helper: send a WhatsApp text via Graph API ────── */
-async function sendWaText(phone: string, message: string, waSettings: any): Promise<string | null> {
-  if (!waSettings?.isActive || !waSettings.accessToken || !waSettings.phoneNumberId) return null;
-  const normPhone = normalizePhone(phone);
-  const apiVersion = waSettings.apiVersion ?? "v18.0";
-  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", recipient_type: "individual", to: normPhone,
-      type: "text", text: { preview_url: false, body: message },
-    }),
-  });
-  const data = await res.json() as any;
-  return data?.messages?.[0]?.id ?? null;
+async function sendWaText(phone: string, message: string, _waSettings: any, templateName = "bot_reply"): Promise<string | null> {
+  const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
+  const ok = await sendWhatsAppMessage({ phone, message, templateName });
+  if (!ok) return null;
+  const [row] = await db
+    .select({ messageId: whatsappLogsTable.messageId })
+    .from(whatsappLogsTable)
+    .where(eq(whatsappLogsTable.phone, normalizePhone(phone)))
+    .orderBy(desc(whatsappLogsTable.createdAt))
+    .limit(1);
+  return row?.messageId ?? null;
 }
 
 /* ─── Helper: search products (DB + Shopify) ────────── */
@@ -1325,48 +1334,100 @@ async function handleAiReply(opts: {
 
     if (!reply) return;
 
-    /* Log + send final text reply */
-    const [replyRow] = await db.insert(whatsappLogsTable).values({
-      phone, templateName: "ai_reply", message: reply, status: "pending", response: null,
-    }).returning();
-
-    if (waSettings?.isActive && waSettings.accessToken && waSettings.phoneNumberId) {
-      const normPhone = normalizePhone(phone);
-      const apiVersion = waSettings.apiVersion ?? "v18.0";
-      const waRes = await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
-        body: JSON.stringify({
-          messaging_product: "whatsapp", recipient_type: "individual", to: normPhone,
-          type: "text", text: { preview_url: false, body: reply },
-        }),
-      });
-      const waData = await waRes.json() as any;
-      const sentStatus = waRes.ok && waData?.messages?.[0]?.id ? "sent" : "failed";
-      if (replyRow) {
-        await db.update(whatsappLogsTable)
-          .set({ status: sentStatus, response: JSON.stringify(waData), messageId: waData?.messages?.[0]?.id ?? null })
-          .where(eq(whatsappLogsTable.id, replyRow.id));
-      }
-    }
+    const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
+    await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
   } catch (aiErr) {
     log?.warn(aiErr, "AI auto-reply error");
     try {
-      if (chatbot?.fallbackMessage && waSettings?.isActive && waSettings.accessToken && waSettings.phoneNumberId) {
-        const normPhone = normalizePhone(phone);
-        const apiVersion = waSettings.apiVersion ?? "v18.0";
-        await fetch(`https://graph.facebook.com/${apiVersion}/${waSettings.phoneNumberId}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSettings.accessToken}` },
-          body: JSON.stringify({
-            messaging_product: "whatsapp", recipient_type: "individual", to: normPhone,
-            type: "text", text: { preview_url: false, body: chatbot.fallbackMessage },
-          }),
-        });
+      if (chatbot?.fallbackMessage) {
+        const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
+        await sendWa({ phone, message: chatbot.fallbackMessage, templateName: "ai_fallback" });
       }
     } catch { /* ignore fallback errors */ }
   }
 }
+
+/* ─── Admin: Template funnel (sent → delivered → read → failed) ─── */
+router.get("/admin/whatsapp/template-funnel", adminMiddleware as any, async (req, res) => {
+  try {
+    const hours = Math.min(168, parseInt(String(req.query.hours ?? "48"), 10) || 48);
+    const rows = await db.execute(sql`
+      SELECT
+        COALESCE(trigger_event, template_name, 'unknown') AS template,
+        COUNT(*)::int AS sent,
+        COUNT(*) FILTER (WHERE delivery_status = 'delivered')::int AS delivered,
+        COUNT(*) FILTER (WHERE delivery_status = 'read')::int AS read_count,
+        COUNT(*) FILTER (WHERE status = 'failed' OR delivery_status = 'failed')::int AS failed,
+        COUNT(*) FILTER (WHERE status = 'received')::int AS inbound_replies
+      FROM whatsapp_logs
+      WHERE created_at > NOW() - (${hours} || ' hours')::interval
+        AND template_name IS NOT NULL
+        AND template_name != 'incoming'
+      GROUP BY 1
+      ORDER BY sent DESC
+      LIMIT 40
+    `);
+    return res.json({ hours, funnel: rows.rows });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Funnel failed" });
+  }
+});
+
+/* ─── Admin: Message logs with delivery status ─── */
+router.get("/admin/whatsapp/message-logs", adminMiddleware as any, async (req, res) => {
+  try {
+    const status = String(req.query.status ?? "all");
+    const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
+    const rows =
+      status === "failed"
+        ? await db.select().from(whatsappLogsTable).where(eq(whatsappLogsTable.status, "failed")).orderBy(desc(whatsappLogsTable.createdAt)).limit(limit)
+        : status === "delivered"
+          ? await db.select().from(whatsappLogsTable).where(eq(whatsappLogsTable.deliveryStatus, "delivered")).orderBy(desc(whatsappLogsTable.createdAt)).limit(limit)
+          : await db.select().from(whatsappLogsTable).orderBy(desc(whatsappLogsTable.createdAt)).limit(limit);
+    return res.json(rows);
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Logs failed" });
+  }
+});
+
+/* ─── Admin: Retry failed WhatsApp message log ─── */
+router.post("/admin/whatsapp/message-logs/:id/retry", adminMiddleware as any, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [row] = await db.select().from(whatsappLogsTable).where(eq(whatsappLogsTable.id, id)).limit(1);
+    if (!row) return res.status(404).json({ error: "Log not found" });
+    if (!row.phone || !row.message) return res.status(400).json({ error: "Missing phone or message" });
+
+    const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
+    const { sendLifecycleWhatsApp } = await import("../lib/waTemplateEvents.js");
+    const trigger = (row as { trigger_event?: string }).trigger_event ?? row.templateName ?? "manual_retry";
+    let success = false;
+    if (trigger && trigger !== "incoming" && trigger !== "ai_reply") {
+      const r = await sendLifecycleWhatsApp({
+        triggerEvent: trigger,
+        phone: row.phone,
+        fallbackText: row.message,
+        bodyParams: row.message.split("\n").filter(Boolean).slice(0, 4),
+      });
+      success = r.success;
+    } else {
+      success = await sendWhatsAppMessage({
+        phone: row.phone,
+        message: row.message,
+        templateName: row.templateName ?? "manual_retry",
+      });
+    }
+
+    await db.execute(sql`
+      UPDATE whatsapp_logs SET retry_count = COALESCE(retry_count, 0) + 1
+      WHERE id = ${id}
+    `).catch(() => {});
+
+    return res.json({ ok: success, logId: id });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Retry failed" });
+  }
+});
 
 /* ─── Admin: Monitoring / debug dashboard aggregates ─── */
 router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, res) => {
@@ -1426,9 +1487,25 @@ router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, re
     const failed = Number(ls?.failed ?? 0);
     const inbound = Number(ls?.inbound ?? 0);
 
+    const templateFunnel = await db.execute(sql`
+      SELECT
+        COALESCE(trigger_event, template_name) AS template,
+        COUNT(*)::int AS sent,
+        COUNT(*) FILTER (WHERE delivery_status = 'delivered')::int AS delivered,
+        COUNT(*) FILTER (WHERE delivery_status = 'read')::int AS read_count,
+        COUNT(*) FILTER (WHERE status = 'failed' OR delivery_status = 'failed')::int AS failed
+      FROM whatsapp_logs
+      WHERE created_at >= ${since24h}
+        AND template_name IS NOT NULL AND template_name != 'incoming'
+      GROUP BY 1
+      ORDER BY sent DESC
+      LIMIT 15
+    `).catch(() => ({ rows: [] }));
+
     return res.json({
       generatedAt: new Date().toISOString(),
       serverIp,
+      templateFunnel: templateFunnel.rows,
       integration: {
         isActive: settings?.isActive ?? false,
         hasToken: !!settings?.accessToken,
@@ -3386,6 +3463,26 @@ router.post("/admin/whatsapp/templates/seed-all-templates", adminMiddleware as a
         name: "order_cancelled",
         messageBody: "❌ Your KDF NUTS order *#{{1}}* has been *cancelled*.\n\nIf you have any questions, please reply to this message or contact us on WhatsApp. We're happy to help! 🙏",
         paramCount: 1, triggerEvent: "order_cancelled", category: "UTILITY",
+      },
+      {
+        name: "cancel_order",
+        messageBody: "❌ Your KDF NUTS order *#{{1}}* has been *cancelled*.\n\nReply here if you need help placing a new order. 🙏",
+        paramCount: 1, triggerEvent: "cancel_order", category: "UTILITY",
+      },
+      {
+        name: "paid_order_message",
+        messageBody: "✅ Payment received for order *#{{1}}* — *{{2}}*.\n\nThank you! Your order is being prepared. 🥜",
+        paramCount: 2, triggerEvent: "paid_order_message", category: "UTILITY",
+      },
+      {
+        name: "shipment_return_update",
+        messageBody: "↩️ Update for order *#{{1}}*: return/refund is being processed.\n\nOur team will contact you shortly.",
+        paramCount: 1, triggerEvent: "shipment_return_update", category: "UTILITY",
+      },
+      {
+        name: "rider_assigned",
+        messageBody: "🛵 Your order *#{{1}}* is out for delivery with *{{2}}*.\n\nPlease keep your phone on. Track your order from the link we sent.",
+        paramCount: 2, triggerEvent: "rider_assigned", category: "UTILITY",
       },
       {
         name: "abandoned_cart_recovery",

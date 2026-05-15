@@ -43,6 +43,24 @@ export default function OrderAutomationDashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const { data: funnelData } = useQuery({
+    queryKey: ["wa-template-funnel", hours],
+    queryFn: () => api(`/admin/whatsapp/template-funnel?hours=${hours}`),
+    refetchInterval: 60_000,
+  });
+
+  const { data: failedLogs = [] } = useQuery({
+    queryKey: ["wa-message-logs-failed"],
+    queryFn: () => api("/admin/whatsapp/message-logs?status=failed&limit=30"),
+    refetchInterval: 60_000,
+  });
+
+  const retryWaLog = useMutation({
+    mutationFn: (logId: number) => api(`/admin/whatsapp/message-logs/${logId}/retry`, { method: "POST" }),
+    onSuccess: () => toast({ title: "WhatsApp retry sent" }),
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message }),
+  });
+
   const retryAll = useMutation({
     mutationFn: () => api("/admin/order-automation/retry-all", { method: "POST" }),
     onSuccess: (r) => {
@@ -169,6 +187,64 @@ export default function OrderAutomationDashboardPage() {
           </div>
         </div>
       </div>
+
+      <Section title="WhatsApp template funnel" count={(funnelData?.funnel ?? []).length}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Template</TableHead>
+              <TableHead>Sent</TableHead>
+              <TableHead>Delivered</TableHead>
+              <TableHead>Read</TableHead>
+              <TableHead>Failed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(funnelData?.funnel ?? []).length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No template sends in window</TableCell></TableRow>
+            ) : (funnelData.funnel as any[]).map((row: any) => (
+              <TableRow key={row.template}>
+                <TableCell className="font-mono text-xs">{row.template}</TableCell>
+                <TableCell>{row.sent}</TableCell>
+                <TableCell>{row.delivered}</TableCell>
+                <TableCell>{row.read_count}</TableCell>
+                <TableCell className={row.failed > 0 ? "text-red-600 font-medium" : ""}>{row.failed}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Section>
+
+      <Section title="Failed WhatsApp sends (retry)" count={Array.isArray(failedLogs) ? failedLogs.length : 0}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Phone</TableHead>
+              <TableHead>Template</TableHead>
+              <TableHead>Error</TableHead>
+              <TableHead>When</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {!Array.isArray(failedLogs) || failedLogs.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No failures</TableCell></TableRow>
+            ) : failedLogs.map((row: any) => (
+              <TableRow key={row.id}>
+                <TableCell className="font-mono text-xs">{row.phone}</TableCell>
+                <TableCell>{row.trigger_event ?? row.templateName ?? "—"}</TableCell>
+                <TableCell className="text-xs text-red-600 max-w-[200px] truncate">{row.failure_reason ?? row.response?.slice?.(0, 80) ?? "—"}</TableCell>
+                <TableCell className="text-xs">{fmt(row.createdAt)}</TableCell>
+                <TableCell className="text-right">
+                  <Button size="sm" variant="ghost" disabled={retryWaLog.isPending} onClick={() => retryWaLog.mutate(row.id)}>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Section>
 
       <Section title="Recent automation failures" count={failures.length}>
         <FailuresTable
