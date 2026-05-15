@@ -436,6 +436,14 @@
   --mobile-nav-h: 0px;
 }
 
+/* Variant picker portal: hide fixed chrome beneath sheet (all breakpoints) */
+html.kdf-variant-sheet-open .kdf-suppress-for-fullscreen-sheet {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
 @media (max-width: 639px) {
   :root {
     --mobile-nav-h: 68px;

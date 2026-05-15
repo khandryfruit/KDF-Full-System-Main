@@ -1292,7 +1292,7 @@ export function Header() {
       {/* ── Mobile bottom navigation (thumb-first; search stays in header) ── */}
       {!hideMobileBottomNav && (
         <nav
-          className="fixed bottom-0 left-0 right-0 z-[400] sm:hidden"
+          className="kdf-suppress-for-fullscreen-sheet fixed bottom-0 left-0 right-0 z-[400] sm:hidden"
           style={{
             background: "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.98) 40%, rgba(250,252,249,1) 100%)",
             backdropFilter: "blur(20px) saturate(1.2)",

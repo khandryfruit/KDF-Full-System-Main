@@ -896,7 +896,7 @@ export default function ProductDetailPage() {
       />
 
       {/* Sticky mobile CTA — compact premium */}
-      <div className="fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
+      <div className="kdf-suppress-for-fullscreen-sheet fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
         style={{ bottom: "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))" }}
       >
         {/* Price + name strip */}

@@ -20,7 +20,7 @@ export function WhatsAppButton() {
       href={waUrl}
       target="_blank"
       rel="noreferrer"
-      className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-[450] rounded-full shadow-xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+      className="kdf-suppress-for-fullscreen-sheet fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-[450] rounded-full shadow-xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
       style={{ backgroundColor: "#25D366", width: 56, height: 56 }}
       aria-label="Chat on WhatsApp"
     >

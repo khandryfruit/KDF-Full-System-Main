@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X, Plus, Minus, ShoppingCart, Check, PackageCheck } from "lucide-react";
 import type { Product, ProductVariant } from "@workspace/api-client-react";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -8,6 +9,9 @@ interface VariantPickerModalProps {
   product: Product;
   onClose: () => void;
 }
+
+const SHEET_Z = 100_000;
+const DRAG_DISMISS_PX = 96;
 
 function getGroups(variants: ProductVariant[]) {
   const order: string[] = [];
@@ -24,6 +28,12 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
   const [visible, setVisible] = useState(false);
   const [added, setAdded]     = useState(false);
   const [qty, setQty]         = useState(1);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [sheetTransition, setSheetTransition] = useState(true);
+
+  const dragStartY = useRef(0);
+  const dragPx = useRef(0);
+  const touchDragging = useRef(false);
 
   const groups = getGroups(product.variants ?? []);
 
@@ -36,16 +46,82 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
     return init;
   });
 
-  /* slide-in on mount */
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(t);
   }, []);
 
-  const handleClose = () => {
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const scrollY = window.scrollY;
+
+    html.classList.add("kdf-variant-sheet-open");
+    const prev = {
+      overflow: body.style.overflow,
+      touchAction: body.style.touchAction as string,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    };
+
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+
+    return () => {
+      html.classList.remove("kdf-variant-sheet-open");
+      body.style.overflow = prev.overflow;
+      body.style.touchAction = prev.touchAction;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setSheetTransition(true);
     setVisible(false);
+    setDragOffset(0);
+    dragPx.current = 0;
     setTimeout(onClose, 300);
-  };
+  }, [onClose]);
+
+  const onSheetTouchStart = useCallback((e: React.TouchEvent) => {
+    touchDragging.current = true;
+    setSheetTransition(false);
+    dragStartY.current = e.touches[0].clientY;
+    dragPx.current = 0;
+  }, []);
+
+  const onSheetTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchDragging.current) return;
+    const dy = e.touches[0].clientY - dragStartY.current;
+    const next = Math.max(0, dy);
+    dragPx.current = next;
+    setDragOffset(next);
+  }, []);
+
+  const onSheetTouchEnd = useCallback(() => {
+    if (!touchDragging.current) return;
+    touchDragging.current = false;
+    setSheetTransition(true);
+    if (dragPx.current > DRAG_DISMISS_PX) {
+      handleClose();
+    } else {
+      setDragOffset(0);
+      dragPx.current = 0;
+    }
+  }, [handleClose]);
 
   const selectedValues  = Object.values(selectedByGroup);
   const priceVariant    = selectedValues.find(v => v.price && parseFloat(v.price) > 0);
@@ -68,317 +144,271 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
 
   const imageUrl = getProductImageSrc(product.images?.[0]);
 
-  return (
-    <div
-      className="fixed inset-0 z-[700] flex items-end justify-center"
-      style={{ isolation: "isolate" }}
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 transition-opacity duration-300"
-        style={{
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(2px)",
-          opacity: visible ? 1 : 0,
-        }}
-        onClick={handleClose}
-      />
+  const sheetTransform = visible
+    ? `translate3d(0, ${dragOffset}px, 0)`
+    : "translate3d(0, 100%, 0)";
 
-      {/* Sheet */}
+  const portal =
+    typeof document !== "undefined" ? createPortal(
       <div
-        className="relative w-full bg-white flex flex-col"
-        style={{
-          borderRadius: "24px 24px 0 0",
-          maxHeight: "92dvh",
-          boxShadow: "0 -8px 40px rgba(0,0,0,0.18)",
-          transform: visible ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)",
-          maxWidth: "480px",
-          marginLeft: "auto",
-          marginRight: "auto",
-        }}
-        onClick={e => e.stopPropagation()}
+        className="fixed inset-0 flex items-end justify-center pointer-events-auto"
+        style={{ zIndex: SHEET_Z, isolation: "isolate" }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="variant-sheet-title"
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div style={{ width: 40, height: 4, borderRadius: 99, background: "#e2e8f0" }} />
-        </div>
+        <div
+          className="absolute inset-0 transition-opacity duration-300 ease-out will-change-[opacity]"
+          style={{
+            background: "rgba(0,0,0,0.52)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            opacity: visible ? 1 : 0,
+          }}
+          onClick={handleClose}
+          aria-hidden
+        />
 
-        {/* Header row */}
-        <div className="flex items-center justify-between px-5 pt-1 pb-3 flex-shrink-0">
-          <p className="font-bold text-gray-900" style={{ fontSize: 16 }}>Choose Options</p>
-          <button
-            onClick={handleClose}
+        <div
+          className="relative box-border flex w-full max-w-lg flex-col overflow-hidden rounded-t-[24px] shadow-[0_-12px_48px_rgba(0,0,0,0.22)] will-change-transform"
+          style={{
+            maxHeight: "min(100dvh, 100vh)",
+            height: "auto",
+            background: "rgba(255,255,255,0.96)",
+            backdropFilter: "blur(20px) saturate(1.15)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.15)",
+            transform: sheetTransform,
+            transition: sheetTransition ? "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)" : "none",
+            touchAction: "pan-y",
+            overscrollBehavior: "contain",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div
+            className="flex shrink-0 flex-col touch-none"
+            onTouchStart={onSheetTouchStart}
+            onTouchMove={onSheetTouchMove}
+            onTouchEnd={onSheetTouchEnd}
+            onTouchCancel={onSheetTouchEnd}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-slate-200" aria-hidden />
+            </div>
+            <div className="flex items-center justify-between px-5 pt-1 pb-3">
+              <p id="variant-sheet-title" className="text-base font-bold text-gray-900">
+                Choose Options
+              </p>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex h-8 w-8 items-center justify-center rounded-full border-0 cursor-pointer bg-slate-100 text-slate-500"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="mx-4 mb-4 flex shrink-0 gap-3 rounded-2xl p-3"
             style={{
-              width: 32, height: 32, borderRadius: 99,
-              background: "#f1f5f9",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg,#f0f7e6 0%,#e8f5d5 100%)",
+              alignItems: "center",
             }}
           >
-            <X style={{ width: 16, height: 16, color: "#64748b" }} />
-          </button>
-        </div>
-
-        {/* Product strip */}
-        <div
-          className="mx-4 mb-4 flex-shrink-0"
-          style={{
-            background: "linear-gradient(135deg,#f0f7e6 0%,#e8f5d5 100%)",
-            borderRadius: 16,
-            padding: "12px 14px",
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-          }}
-        >
-          <div style={{
-            width: 72, height: 72, borderRadius: 12,
-            overflow: "hidden", flexShrink: 0,
-            background: "#fff",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
-          }}>
-            {imageUrl
-              ? <img src={imageUrl} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 28, fontWeight: 900, color: "#5FA800", opacity: 0.3 }}>
+            <div
+              className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-white shadow-md"
+            >
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={product.name}
+                  className="h-full w-full object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="text-[28px] font-black text-[#5FA800]/30">
                     {product.name?.[0]?.toUpperCase()}
                   </span>
                 </div>
-            }
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{
-              fontSize: 14, fontWeight: 600, color: "#1a2e05",
-              overflow: "hidden", display: "-webkit-box",
-              WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-              lineHeight: 1.4, marginBottom: 4,
-            }}>
-              {product.name}
-            </p>
-            <p style={{ fontSize: 18, fontWeight: 800, color: "#5FA800", lineHeight: 1 }}>
-              Rs. {price.toLocaleString()}
-            </p>
-          </div>
-        </div>
-
-        {/* Scrollable body */}
-        <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-
-          {/* Variant groups */}
-          {groups.length > 0 && (
-            <div style={{ padding: "0 16px 8px" }}>
-              {groups.map(({ type, items }) => (
-                <div key={type} style={{ marginBottom: 20 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                      {type}
-                    </p>
-                    {selectedByGroup[type] && (
-                      <span style={{ fontSize: 12, color: "#5FA800", fontWeight: 600 }}>
-                        — {selectedByGroup[type].value}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {items.map((variant) => {
-                      const isSelected = selectedByGroup[type]?.id === variant.id;
-                      const oos        = variant.stock === 0;
-                      const vPrice     = variant.price ? parseFloat(variant.price) : null;
-                      const showPrice  = vPrice && vPrice > 0;
-
-                      return (
-                        <button
-                          key={variant.id}
-                          onClick={() => !oos && setSelectedByGroup(prev => ({ ...prev, [type]: variant }))}
-                          disabled={oos}
-                          style={{
-                            minWidth: showPrice ? 76 : 60,
-                            padding: showPrice ? "8px 12px" : "9px 14px",
-                            borderRadius: 12,
-                            border: isSelected ? "2px solid #5FA800" : "2px solid #e2e8f0",
-                            background: isSelected
-                              ? "linear-gradient(135deg,#5FA800 0%,#4a8500 100%)"
-                              : oos ? "#f8fafc" : "#fff",
-                            cursor: oos ? "not-allowed" : "pointer",
-                            opacity: oos ? 0.45 : 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: 2,
-                            position: "relative",
-                            boxShadow: isSelected ? "0 2px 12px rgba(95,168,0,0.30)" : "0 1px 3px rgba(0,0,0,0.06)",
-                            transition: "all 0.18s ease",
-                          }}
-                        >
-                          {/* color swatch */}
-                          {type === "Color" && variant.hex && (
-                            <span style={{
-                              width: 16, height: 16, borderRadius: "50%",
-                              background: variant.hex,
-                              border: "1.5px solid rgba(0,0,0,0.12)",
-                              display: "block",
-                            }} />
-                          )}
-                          <span style={{
-                            fontSize: oos ? 11 : 13,
-                            fontWeight: 700,
-                            color: isSelected ? "#fff" : oos ? "#94a3b8" : "#1e293b",
-                            textDecoration: oos ? "line-through" : "none",
-                            lineHeight: 1.2,
-                          }}>
-                            {variant.value}
-                          </span>
-                          {showPrice && (
-                            <span style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                              color: isSelected ? "rgba(255,255,255,0.85)" : "#5FA800",
-                              lineHeight: 1,
-                            }}>
-                              Rs.{vPrice!.toLocaleString()}
-                            </span>
-                          )}
-                          {isSelected && (
-                            <span style={{
-                              position: "absolute", top: 3, right: 3,
-                              width: 14, height: 14, borderRadius: "50%",
-                              background: "rgba(255,255,255,0.3)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                              <Check style={{ width: 9, height: 9, color: "#fff" }} />
-                            </span>
-                          )}
-                          {oos && (
-                            <span style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1 }}>Out of stock</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+              )}
             </div>
-          )}
-
-          {/* Divider */}
-          <div style={{ height: 1, background: "#f1f5f9", margin: "0 16px 16px" }} />
-
-          {/* Quantity */}
-          <div style={{ padding: "0 16px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>
-                Quantity
+            <div className="min-w-0 flex-1">
+              <p
+                className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-[#1a2e05]"
+              >
+                {product.name}
               </p>
-              <p style={{ fontSize: 12, color: "#64748b" }}>
-                {qty} × Rs.{price.toLocaleString()}
+              <p className="text-lg font-extrabold leading-none" style={{ color: "#5FA800" }}>
+                Rs. {price.toLocaleString()}
               </p>
             </div>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 0,
-              background: "#f8fafc", borderRadius: 14,
-              border: "1.5px solid #e2e8f0",
-              overflow: "hidden",
-            }}>
-              <button
-                onClick={() => setQty(q => Math.max(1, q - 1))}
-                style={{
-                  width: 44, height: 44,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "transparent", border: "none", cursor: "pointer",
-                  color: qty === 1 ? "#cbd5e1" : "#475569",
-                }}
-              >
-                <Minus style={{ width: 16, height: 16 }} />
-              </button>
-              <span style={{
-                width: 40, textAlign: "center",
-                fontSize: 16, fontWeight: 800, color: "#1e293b",
-              }}>
-                {qty}
-              </span>
-              <button
-                onClick={() => setQty(q => q + 1)}
-                style={{
-                  width: 44, height: 44,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "#5FA800", border: "none", cursor: "pointer",
-                  color: "#fff",
-                }}
-              >
-                <Plus style={{ width: 16, height: 16 }} />
-              </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
+            {groups.length > 0 && (
+              <div className="px-4 pb-2">
+                {groups.map(({ type, items }) => (
+                  <div key={type} className="mb-5">
+                    <div className="mb-2.5 flex items-center gap-1.5">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {type}
+                      </p>
+                      {selectedByGroup[type] && (
+                        <span className="text-xs font-semibold text-[#5FA800]">
+                          — {selectedByGroup[type].value}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {items.map((variant) => {
+                        const isSelected = selectedByGroup[type]?.id === variant.id;
+                        const oos        = variant.stock === 0;
+                        const vPrice     = variant.price ? parseFloat(variant.price) : null;
+                        const showPrice  = vPrice && vPrice > 0;
+
+                        return (
+                          <button
+                            key={variant.id}
+                            type="button"
+                            onClick={() => !oos && setSelectedByGroup(prev => ({ ...prev, [type]: variant }))}
+                            disabled={oos}
+                            className="relative flex flex-col items-center gap-0.5 rounded-xl border-2 transition-all disabled:cursor-not-allowed"
+                            style={{
+                              minWidth: showPrice ? 76 : 60,
+                              padding: showPrice ? "8px 12px" : "9px 14px",
+                              borderColor: isSelected ? "#5FA800" : "#e2e8f0",
+                              background: isSelected
+                                ? "linear-gradient(135deg,#5FA800 0%,#4a8500 100%)"
+                                : oos ? "#f8fafc" : "#fff",
+                              opacity: oos ? 0.45 : 1,
+                              boxShadow: isSelected ? "0 2px 12px rgba(95,168,0,0.30)" : "0 1px 3px rgba(0,0,0,0.06)",
+                            }}
+                          >
+                            {type === "Color" && variant.hex && (
+                              <span
+                                className="block h-4 w-4 rounded-full border border-black/10"
+                                style={{ background: variant.hex }}
+                              />
+                            )}
+                            <span
+                              className="text-center text-[13px] font-bold leading-tight"
+                              style={{
+                                color: isSelected ? "#fff" : oos ? "#94a3b8" : "#1e293b",
+                                textDecoration: oos ? "line-through" : "none",
+                              }}
+                            >
+                              {variant.value}
+                            </span>
+                            {showPrice && (
+                              <span
+                                className="text-[11px] font-semibold leading-none"
+                                style={{ color: isSelected ? "rgba(255,255,255,0.85)" : "#5FA800" }}
+                              >
+                                Rs.{vPrice!.toLocaleString()}
+                              </span>
+                            )}
+                            {isSelected && (
+                              <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/30">
+                                <Check className="h-2.5 w-2.5 text-white" />
+                              </span>
+                            )}
+                            {oos && (
+                              <span className="text-[9px] leading-none text-slate-400">Out of stock</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mx-4 mb-3 h-px bg-slate-100" />
+
+            <div className="flex items-center justify-between px-4 pb-4">
+              <div>
+                <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Quantity
+                </p>
+                <p className="text-xs text-slate-500">
+                  {qty} × Rs.{price.toLocaleString()}
+                </p>
+              </div>
+              <div className="flex items-center overflow-hidden rounded-2xl border-[1.5px] border-slate-200 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setQty(q => Math.max(1, q - 1))}
+                  className="flex h-11 w-11 items-center justify-center border-0 bg-transparent text-slate-600 disabled:text-slate-300"
+                  aria-label="Decrease quantity"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="w-10 text-center text-base font-extrabold text-slate-800">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => setQty(q => q + 1)}
+                  className="flex h-11 w-11 items-center justify-center border-0 bg-[#5FA800] text-white"
+                  aria-label="Increase quantity"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Fixed bottom CTA */}
-        <div style={{
-          flexShrink: 0,
-          padding: "12px 16px",
-          paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))",
-          background: "#fff",
-          borderTop: "1px solid #f1f5f9",
-        }}>
-          {/* Total row */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "#f8fafc", borderRadius: 12,
-            padding: "10px 14px", marginBottom: 10,
-          }}>
-            <span style={{ fontSize: 13, color: "#64748b", fontWeight: 500 }}>Total Amount</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: "#1e293b" }}>
-              Rs. {total.toLocaleString()}
-            </span>
-          </div>
-
-          {anyOOS && allSelected && (
-            <p style={{ fontSize: 12, color: "#ef4444", textAlign: "center", marginBottom: 8 }}>
-              Selected option is currently out of stock
-            </p>
-          )}
-
-          <button
-            onClick={handleAdd}
-            disabled={!canAdd}
+          <div
+            className="shrink-0 border-t border-slate-100 bg-white/95 px-4 pt-3 backdrop-blur-md"
             style={{
-              width: "100%",
-              height: 54,
-              borderRadius: 14,
-              border: "none",
-              cursor: canAdd ? "pointer" : "not-allowed",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              fontWeight: 800,
-              fontSize: 15,
-              color: "#fff",
-              background: added
-                ? "linear-gradient(135deg,#22c55e 0%,#16a34a 100%)"
-                : !canAdd
-                ? "#94a3b8"
-                : "linear-gradient(135deg,#5FA800 0%,#3d7000 100%)",
-              boxShadow: canAdd && !added ? "0 4px 16px rgba(95,168,0,0.35)" : "none",
-              transition: "all 0.25s ease",
-              letterSpacing: "0.01em",
+              paddingBottom: "max(16px, calc(12px + env(safe-area-inset-bottom, 0px)))",
             }}
           >
-            {added ? (
-              <>
-                <PackageCheck style={{ width: 20, height: 20 }} />
-                Added to Cart!
-              </>
-            ) : (
-              <>
-                <ShoppingCart style={{ width: 20, height: 20 }} />
-                Add to Cart · Rs. {total.toLocaleString()}
-              </>
+            <div className="mb-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5">
+              <span className="text-[13px] font-medium text-slate-500">Total Amount</span>
+              <span className="text-lg font-extrabold text-slate-900">
+                Rs. {total.toLocaleString()}
+              </span>
+            </div>
+
+            {anyOOS && allSelected && (
+              <p className="mb-2 text-center text-xs text-red-500">
+                Selected option is currently out of stock
+              </p>
             )}
-          </button>
+
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={!canAdd}
+              className="flex h-[54px] w-full items-center justify-center gap-2 rounded-[14px] border-0 text-[15px] font-extrabold text-white transition-all disabled:cursor-not-allowed"
+              style={{
+                background: added
+                  ? "linear-gradient(135deg,#22c55e 0%,#16a34a 100%)"
+                  : !canAdd
+                  ? "#94a3b8"
+                  : "linear-gradient(135deg,#5FA800 0%,#3d7000 100%)",
+                boxShadow: canAdd && !added ? "0 4px 16px rgba(95,168,0,0.35)" : "none",
+              }}
+            >
+              {added ? (
+                <>
+                  <PackageCheck className="h-5 w-5" />
+                  Added to Cart!
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-5 w-5" />
+                  Add to Cart · Rs. {total.toLocaleString()}
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
-  );
+      </div>,
+      document.body,
+    ) : null;
+
+  return portal;
 }

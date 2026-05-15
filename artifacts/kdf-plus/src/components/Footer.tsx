@@ -4,7 +4,7 @@ import {
   MapPin, Phone, Mail, Facebook, Instagram, ChevronRight,
   Youtube, Twitter, Shield, Truck, Package, Clock,
   ChevronUp, ArrowRight, Calendar, BookOpen, CheckCircle,
-  Sparkles, Zap, Heart, ExternalLink, X,
+  Sparkles, Zap, ExternalLink, X,
   Leaf, Bot, Headphones, BadgeCheck,
 } from "lucide-react";
 import {
@@ -268,7 +268,7 @@ function ScrollToTop() {
     <button
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-36 sm:bottom-28 right-4 z-[450] flex h-11 w-11 items-center justify-center rounded-full text-white shadow-[0_8px_32px_rgba(95,168,0,0.35)] ring-1 ring-white/10 transition-transform duration-200 hover:scale-105 active:scale-95 motion-reduce:transition-none"
+      className="kdf-suppress-for-fullscreen-sheet fixed bottom-36 sm:bottom-28 right-4 z-[450] flex h-11 w-11 items-center justify-center rounded-full text-white shadow-[0_8px_32px_rgba(95,168,0,0.35)] ring-1 ring-white/10 transition-transform duration-200 hover:scale-105 active:scale-95 motion-reduce:transition-none"
       style={{ background: `linear-gradient(145deg, ${GREEN}, #2d5a00)` }}
       aria-label="Scroll to top"
     >
@@ -614,9 +614,6 @@ export function Footer() {
     setSubState("done");
     setEmail("");
   };
-
-  const stickyLabel = premium.stickyCtaLabel ?? "Shop bestsellers";
-  const stickyHref  = premium.stickyCtaHref ?? "/products?sortBy=popular";
 
   const qrSrc = (appLinks?.qrImagePath as string | undefined)?.trim()
     ? ((appLinks!.qrImagePath as string).startsWith("http")
@@ -1023,15 +1020,6 @@ export function Footer() {
           </div>
         </div>
       </footer>
-
-      {/* Sticky mobile CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-[440] flex border-t border-white/[0.08] bg-[#020617]/95 px-3 py-2.5 backdrop-blur-xl sm:hidden">
-        <Link href={stickyHref} className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-white shadow-[0_0_24px_-8px_rgba(95,168,0,0.5)]" style={{ background: `linear-gradient(135deg, ${GREEN}, #2d5a00)` }}>
-          <Heart className="h-4 w-4" />
-          {stickyLabel}
-        </Link>
-      </div>
-      <div className="h-[52px] sm:hidden" aria-hidden />
 
       {lightbox && (
         <button
