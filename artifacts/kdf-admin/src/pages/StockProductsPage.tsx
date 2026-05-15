@@ -3,8 +3,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Package, Plus, Search, Edit2, Trash2, X, Save, Loader2,
   AlertTriangle, CheckCircle, TrendingDown, ChevronDown,
-  SlidersHorizontal, Download, RefreshCw, Store, ExternalLink,
+  SlidersHorizontal, Download, RefreshCw, Store, ExternalLink, FileSpreadsheet,
 } from "lucide-react";
+import { Link } from "wouter";
 import { apiPublicUrl } from "@/lib/apiBase";
 
 interface Product {
@@ -169,6 +170,10 @@ export default function StockProductsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={load} className="p-2 rounded-lg hover:bg-muted"><Loader2 className={`w-4 h-4 ${loading ? "animate-spin" : ""} text-muted-foreground`} /></button>
+          <Link href="/import-export"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-semibold hover:bg-primary/5 transition-colors">
+            <FileSpreadsheet className="w-4 h-4" /> Bulk CSV Import
+          </Link>
           <button onClick={() => setModal("import")}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors">
             <Store className="w-4 h-4" /> Import from Shopify

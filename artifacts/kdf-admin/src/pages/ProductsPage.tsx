@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Search, Edit, Trash2, Upload, X, ImageIcon, Loader2,
+  Plus, Search, Edit, Trash2, Upload, X, ImageIcon, Loader2, FileSpreadsheet,
   Tag, Package, Layers, DollarSign, Info, Palette, Sparkles,
   CheckCircle2, ExternalLink, Eye, ChevronDown, Globe,
   Star, RefreshCw, ZoomIn, ArrowUp, ArrowDown, ToggleLeft, ToggleRight,
@@ -27,8 +27,9 @@ import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription,
 } from "@/components/ui/dialog";
+import { ProductBulkUpload } from "@/components/products/ProductBulkUpload";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -680,6 +681,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [isOpen, setIsOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("basic");
   const [tagInput, setTagInput] = useState("");
@@ -842,9 +844,26 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold tracking-tight">Products</h1>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="flex-1 sm:flex-none">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Bulk Upload
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Bulk Upload Products</DialogTitle>
+                <DialogDescription>
+                  CSV/Excel import with preview — syncs website, branches, POS & invoices.
+                </DialogDescription>
+              </DialogHeader>
+              <ProductBulkUpload compact onSuccess={() => { setBulkOpen(false); invalidateProducts(); }} />
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenAdd} className="w-full sm:w-auto">
+            <Button onClick={handleOpenAdd} className="flex-1 sm:flex-none">
               <Plus className="w-4 h-4 mr-2" /> Add Product
             </Button>
           </DialogTrigger>

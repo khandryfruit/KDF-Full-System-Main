@@ -1,290 +1,215 @@
-import React, { useState, useRef } from "react";
-import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, FileDown, Info } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Download, FileSpreadsheet, Loader2, Package, TrendingUp, Boxes, Barcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { ProductBulkUpload } from "@/components/products/ProductBulkUpload";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
+const auth = () => ({ Authorization: `Bearer ${ADMIN_TOKEN()}` });
 
-const TEMPLATE_HEADERS = ["name","price","original_price","stock","description","category_id","images","variants","tags","weight","unit","featured"];
+const CATALOG_FIELDS = [
+  { col: "product_name", req: true, ex: "Premium Almonds", note: "Product title" },
+  { col: "sku", req: true, ex: "ALM001", note: "Unique code (Vyapar item code)" },
+  { col: "barcode", req: false, ex: "1234567890123", note: "Scannable barcode" },
+  { col: "category", req: false, ex: "Dry Fruits", note: "Category name" },
+  { col: "subcategory", req: false, ex: "Nuts", note: "Optional subcategory" },
+  { col: "purchase_price", req: false, ex: "1800", note: "Cost price PKR" },
+  { col: "sale_price", req: true, ex: "2200", note: "Selling price PKR" },
+  { col: "stock", req: false, ex: "50", note: "Quantity at branch" },
+  { col: "unit", req: false, ex: "KG", note: "KG, Pcs, Box, etc." },
+  { col: "branch", req: false, ex: "Lahore", note: "Branch name/city or 'all'" },
+  { col: "brand", req: false, ex: "KDF", note: "Brand name" },
+  { col: "description", req: false, ex: "Premium quality…", note: "Product description" },
+  { col: "tax", req: false, ex: "0", note: "Tax/VAT %" },
+  { col: "low_stock_alert", req: false, ex: "5", note: "Reorder alert level" },
+  { col: "images", req: false, ex: "https://…", note: "URL(s), pipe-separated" },
+];
 
-function downloadTemplate(format: "csv" | "xlsx") {
-  if (format === "csv") {
-    const csv = TEMPLATE_HEADERS.join(",") + "\n" + "Roasted Almonds,899,1099,50,Premium roasted almonds,,/objects/uploads/example.jpg,[],nuts,200g,g,false";
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "products-template.csv"; a.click();
-  }
-}
+function BulkFileAction({
+  title,
+  description,
+  endpoint,
+  acceptLabel,
+}: {
+  title: string;
+  description: string;
+  endpoint: string;
+  acceptLabel: string;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<{ successCount: number; failedCount: number; errors: string[] } | null>(null);
 
-interface ImportResult {
-  jobId: number;
-  totalItems: number;
-  successCount: number;
-  failedCount: number;
-  errors: string[];
+  const run = async () => {
+    if (!file) return;
+    setLoading(true);
+    setSummary(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(apiPublicUrl(endpoint), { method: "POST", headers: auth(), body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setSummary(data);
+      toast({ title: `${data.successCount} rows updated` });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border rounded-xl bg-card p-6 space-y-4">
+      <div>
+        <h3 className="font-semibold text-lg">{title}</h3>
+        <p className="text-sm text-muted-foreground mt-1">{description}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">{acceptLabel} — use columns: <code className="bg-muted px-1 rounded">sku</code>, <code className="bg-muted px-1 rounded">stock</code> or <code className="bg-muted px-1 rounded">sale_price</code>, optional <code className="bg-muted px-1 rounded">branch</code></p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
+          onChange={e => setFile(e.target.files?.[0] ?? null)} />
+        <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>
+          {file ? file.name : "Choose file"}
+        </Button>
+        <Button type="button" disabled={!file || loading} onClick={run}>
+          {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Apply update
+        </Button>
+      </div>
+      {summary && (
+        <p className="text-sm">
+          <span className="text-emerald-600 font-semibold">{summary.successCount} ok</span>
+          {summary.failedCount > 0 && <span className="text-red-500 ml-2">{summary.failedCount} failed</span>}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function ImportExportPage() {
   const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const handleFile = (file: File) => {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!["csv", "xlsx", "xls"].includes(ext ?? "")) {
-      toast({ variant: "destructive", title: "Unsupported file", description: "Please upload a CSV or Excel file (.csv, .xlsx, .xls)" });
-      return;
-    }
-    setSelectedFile(file);
-    setResult(null);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
-
-  const handleImport = async () => {
-    if (!selectedFile) return;
-    setImporting(true);
-    setResult(null);
-    try {
-      const form = new FormData();
-      form.append("file", selectedFile);
-      const res = await fetch("/api/admin/import/products", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${ADMIN_TOKEN()}` },
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Import failed");
-      setResult(data);
-      toast({ title: `Import complete: ${data.successCount} products added` });
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Import failed", description: err.message });
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const handleExport = async (format: "csv" | "xlsx") => {
     setExporting(true);
     try {
-      const res = await fetch(`/api/admin/export/products?format=${format}`, {
-        headers: { Authorization: `Bearer ${ADMIN_TOKEN()}` },
-      });
+      const res = await fetch(apiPublicUrl(`/api/admin/export/catalog?format=${format}`), { headers: auth() });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `products-${Date.now()}.${format}`;
+      a.download = `kdf-catalog-${Date.now()}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: `Products exported as .${format.toUpperCase()}` });
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Export failed", description: err.message });
+      toast({ title: "Catalog exported" });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Export failed" });
     } finally {
       setExporting(false);
     }
   };
 
+  const generateBarcodes = async () => {
+    try {
+      const res = await fetch(apiPublicUrl("/api/admin/import/generate-barcodes"), {
+        method: "POST",
+        headers: { ...auth(), "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `Generated ${data.count} barcodes` });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed" });
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-5xl">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Import / Export</h1>
-        <p className="text-muted-foreground text-sm mt-1">Bulk import products from CSV or Excel, or export your catalog</p>
+        <h1 className="text-3xl font-bold tracking-tight">Catalog Import / Export</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          One upload syncs <strong>POS</strong>, <strong>invoices</strong>, <strong>branch stock</strong>, and <strong>e-commerce</strong>.
+          Import from Vyapar, Excel, or KDF template.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Import Card */}
-        <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-border">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                <Upload className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-lg">Import Products</h2>
-                <p className="text-xs text-muted-foreground">Upload CSV or Excel (.xlsx) file</p>
-              </div>
-            </div>
-          </div>
+      <Tabs defaultValue="catalog" className="space-y-6">
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="catalog" className="gap-1.5"><Package className="w-3.5 h-3.5" /> Full catalog</TabsTrigger>
+          <TabsTrigger value="stock" className="gap-1.5"><Boxes className="w-3.5 h-3.5" /> Bulk stock</TabsTrigger>
+          <TabsTrigger value="price" className="gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Bulk price</TabsTrigger>
+          <TabsTrigger value="export" className="gap-1.5"><Download className="w-3.5 h-3.5" /> Export</TabsTrigger>
+        </TabsList>
 
-          <div className="p-6 space-y-4">
-            {/* Drop zone */}
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-                dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"
-              } ${selectedFile ? "border-green-400 bg-green-50" : ""}`}
-            >
-              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-              {selectedFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <FileSpreadsheet className="w-10 h-10 text-green-500" />
-                  <p className="font-semibold text-green-700">{selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB · Click to change</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <Upload className="w-10 h-10 opacity-40" />
-                  <p className="font-medium">Drop your file here or click to browse</p>
-                  <p className="text-xs">Supports .csv, .xlsx, .xls — max 10MB</p>
-                </div>
-              )}
-            </div>
+        <TabsContent value="catalog" className="space-y-6">
+          <ProductBulkUpload />
+        </TabsContent>
 
-            {/* Template Download */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-              <Info className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>Need a template?</span>
-              <button onClick={() => downloadTemplate("csv")} className="text-primary font-semibold hover:underline">Download CSV template</button>
-            </div>
+        <TabsContent value="stock">
+          <BulkFileAction
+            title="Bulk stock update"
+            description="Update quantities across branches without changing product names or prices."
+            endpoint="/api/admin/import/bulk-stock"
+            acceptLabel="CSV / Excel"
+          />
+        </TabsContent>
 
-            <Button onClick={handleImport} disabled={!selectedFile || importing} className="w-full h-11">
-              {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing...</> : <><Upload className="w-4 h-4 mr-2" />Import Products</>}
+        <TabsContent value="price">
+          <BulkFileAction
+            title="Bulk price update"
+            description="Update sale and purchase prices for existing SKUs on POS and website."
+            endpoint="/api/admin/import/bulk-price"
+            acceptLabel="CSV / Excel"
+          />
+        </TabsContent>
+
+        <TabsContent value="export" className="space-y-4">
+          <div className="border rounded-xl bg-card p-6 space-y-4">
+            <h3 className="font-semibold">Export full catalog</h3>
+            <p className="text-sm text-muted-foreground">Includes branch stock, SKUs, barcodes, and e-commerce-only products.</p>
+            <div className="grid grid-cols-2 gap-3 max-w-sm">
+              <Button variant="outline" disabled={exporting} onClick={() => handleExport("csv")}>CSV</Button>
+              <Button disabled={exporting} onClick={() => handleExport("xlsx")}>
+                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
+                Excel
+              </Button>
+            </div>
+            <Button type="button" variant="secondary" onClick={generateBarcodes} className="gap-2">
+              <Barcode className="w-4 h-4" /> Auto-generate missing barcodes
             </Button>
-
-            {/* Result */}
-            {result && (
-              <div className={`rounded-xl border p-4 space-y-3 ${result.failedCount === 0 ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
-                <div className="flex items-center gap-2">
-                  {result.failedCount === 0 ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                  )}
-                  <span className="font-semibold text-sm">Import Summary</span>
-                  <Badge variant="outline" className="ml-auto text-xs">Job #{result.jobId}</Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-white rounded-lg p-3 text-center border">
-                    <div className="text-2xl font-bold">{result.totalItems}</div>
-                    <div className="text-xs text-muted-foreground">Total Rows</div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 text-center border border-green-200">
-                    <div className="text-2xl font-bold text-green-600">{result.successCount}</div>
-                    <div className="text-xs text-muted-foreground">Imported</div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 text-center border border-red-200">
-                    <div className="text-2xl font-bold text-red-500">{result.failedCount}</div>
-                    <div className="text-xs text-muted-foreground">Failed</div>
-                  </div>
-                </div>
-                {result.errors.length > 0 && (
-                  <div className="bg-white rounded-lg border border-red-200 p-3 max-h-32 overflow-y-auto">
-                    <p className="text-xs font-semibold text-red-600 mb-1">Errors:</p>
-                    {result.errors.map((e, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-xs text-red-600 py-0.5">
-                        <XCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                        {e}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        </div>
+        </TabsContent>
+      </Tabs>
 
-        {/* Export Card */}
-        <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-border">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <Download className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-lg">Export Products</h2>
-                <p className="text-xs text-muted-foreground">Download your full product catalog</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-4">
-            <div className="bg-muted/30 rounded-xl p-5 space-y-2">
-              <p className="text-sm font-medium">What's included in the export:</p>
-              {["Product name, slug, description", "Price & original price", "Stock quantity", "Category ID", "Images (pipe-separated)", "Variants (JSON)", "Tags, weight, unit", "Featured, active status", "Ratings & review count", "Created date"].map((item, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                  {item}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" onClick={() => handleExport("csv")} disabled={exporting} className="h-12 flex flex-col gap-0.5">
-                <div className="flex items-center gap-1.5">
-                  <FileDown className="w-4 h-4" />
-                  <span className="font-semibold">CSV</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-normal">Universal format</span>
-              </Button>
-              <Button onClick={() => handleExport("xlsx")} disabled={exporting} className="h-12 flex flex-col gap-0.5">
-                <div className="flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span className="font-semibold">Excel</span>
-                </div>
-                <span className="text-[10px] opacity-70 font-normal">Opens in Excel</span>
-              </Button>
-            </div>
-
-            {exporting && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg p-3">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating export file...
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Field Reference */}
       <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h3 className="font-semibold">CSV / Excel Field Reference</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Column headers your import file must use</p>
+        <div className="p-4 border-b">
+          <h3 className="font-semibold">Template columns</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Example: Premium Almonds | ALM001 | 123456 | Dry Fruits | 1800 | 2200 | 50 | KG | Lahore | KDF | Premium quality almonds</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/30">
-                <th className="text-left px-4 py-2.5 font-semibold text-xs">Column</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-xs">Required</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-xs">Example</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-xs">Notes</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold">Column</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold">Required</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold">Example</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {[
-                { col: "name", req: true, ex: "Roasted Almonds", note: "Product title" },
-                { col: "price", req: true, ex: "899", note: "Selling price in PKR" },
-                { col: "original_price", req: false, ex: "1099", note: "For showing discount" },
-                { col: "stock", req: false, ex: "50", note: "Defaults to 0" },
-                { col: "description", req: false, ex: "Premium quality...", note: "Plain text" },
-                { col: "category_id", req: false, ex: "3", note: "Numeric category ID" },
-                { col: "images", req: false, ex: "/objects/uploads/abc.jpg", note: "Multiple: use | separator" },
-                { col: "variants", req: false, ex: '[]', note: "JSON array of variant objects" },
-                { col: "tags", req: false, ex: "nuts,premium", note: "Comma-separated" },
-                { col: "weight", req: false, ex: "200g", note: "Free-text" },
-                { col: "featured", req: false, ex: "true", note: "true or false" },
-              ].map(row => (
+              {CATALOG_FIELDS.map(row => (
                 <tr key={row.col} className="hover:bg-muted/20">
-                  <td className="px-4 py-2.5"><code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{row.col}</code></td>
-                  <td className="px-4 py-2.5">{row.req ? <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 text-xs">Required</Badge> : <span className="text-muted-foreground text-xs">Optional</span>}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs font-mono">{row.ex}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">{row.note}</td>
+                  <td className="px-4 py-2"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{row.col}</code></td>
+                  <td className="px-4 py-2 text-xs">{row.req ? "Yes" : "No"}</td>
+                  <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{row.ex}</td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{row.note}</td>
                 </tr>
               ))}
             </tbody>

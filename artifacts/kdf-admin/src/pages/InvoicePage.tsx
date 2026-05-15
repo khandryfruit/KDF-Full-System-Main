@@ -27,6 +27,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { apiPublicUrl } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════
    TYPES
@@ -327,7 +328,26 @@ const BLANK_ENTRY: PosEntry = {
   inputValue: "", gramsPerBox: 500, customPrice: "", discount: "",
 };
 
-interface ApiProduct { id: string; name: string; sku: string; pricePerKg: number; category: string; }
+interface ApiProduct {
+  id: string; name: string; sku: string; pricePerKg: number; category: string;
+  stockQty?: number; barcode?: string; unit?: string;
+}
+
+function mapStockToApi(p: Record<string, unknown>): ApiProduct {
+  const sale = parseFloat(String(p.salePrice ?? p.price ?? "0"));
+  const unit = String(p.unit ?? "KG").toUpperCase();
+  const pricePerKg = unit === "KG" || unit.includes("KG") ? sale : sale;
+  return {
+    id: String(p.id),
+    name: String(p.name ?? ""),
+    sku: String(p.itemCode ?? p.sku ?? p.id),
+    pricePerKg,
+    category: String(p.category ?? "Stock"),
+    stockQty: parseFloat(String(p.stockQty ?? p.stock ?? "0")) || 0,
+    barcode: p.barcode ? String(p.barcode) : undefined,
+    unit,
+  };
+}
 
 interface PosEntryBarProps {
   onAdd: (item: InvoiceItem) => void;
@@ -342,6 +362,7 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const valueRef  = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
@@ -355,53 +376,80 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
+  const fetchCatalog = useCallback(async (q: string) => {
+    const token = localStorage.getItem("kdf_admin_token") ?? "";
     setLoadingProducts(true);
-    fetch("/api/products?limit=300&active=true")
-      .then(r => r.json())
-      .then(data => {
-        if (data.items?.length) {
-          const mapped: ApiProduct[] = data.items.map((p: any) => {
-            const basePrice = parseFloat(p.price ?? "0");
-            const kgVariant = p.variants?.find((v: any) => v.value?.toLowerCase().includes("1kg") || v.value?.toLowerCase().includes("1 kg"));
-            const pricePerKg = kgVariant ? parseFloat(kgVariant.price ?? basePrice) : basePrice;
-            return {
-              id: String(p.id),
-              name: p.name,
-              sku: p.variants?.[0]?.id ? `SKU-${p.id}` : String(p.id),
-              pricePerKg: pricePerKg,
-              category: p.categoryId ? "Product" : "Other",
-            };
-          });
+    try {
+      const params = new URLSearchParams({ limit: "40" });
+      if (q.trim()) params.set("q", q.trim());
+      const res = await fetch(apiPublicUrl(`/api/admin/stock/products?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = (data.products ?? []).map((p: Record<string, unknown>) => mapStockToApi(p));
+        if (mapped.length) {
           setAllProducts(mapped);
+          setProdSuggestions(mapped.slice(0, 12));
+          return mapped;
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingProducts(false));
+      }
+      const web = await fetch(`/api/products?limit=80&active=true${q ? `&search=${encodeURIComponent(q)}` : ""}`);
+      const webData = await web.json();
+      const webMapped: ApiProduct[] = (webData.items ?? []).map((p: Record<string, unknown>) => {
+        const basePrice = parseFloat(String(p.price ?? "0"));
+        return {
+          id: String(p.id),
+          name: String(p.name),
+          sku: String((p.variants as { sku?: string }[])?.[0]?.sku ?? p.id),
+          pricePerKg: basePrice,
+          category: "Web",
+          stockQty: Number(p.stock ?? 0),
+        };
+      });
+      setAllProducts(webMapped);
+      setProdSuggestions(webMapped.slice(0, 12));
+      return webMapped;
+    } catch {
+      return [];
+    } finally {
+      setLoadingProducts(false);
+    }
   }, []);
+
+  useEffect(() => { void fetchCatalog(""); }, [fetchCatalog]);
 
   const preview = livePreview(entry);
   const canAdd = entry.name.trim() !== "" && parseFloat(entry.inputValue) > 0;
   const set = (patch: Partial<PosEntry>) => setEntry(e => ({ ...e, ...patch }));
   const modeLabel = MODE_LABELS[entry.sellingMode];
 
-  const handleSearch = (val: string) => {
-    set({ name: val, sku: "", pricePerKg: 0 });
-    if (!val.trim()) { setProdSuggestions([]); setShowDrop(false); return; }
-    const q = val.toLowerCase();
-    const matches = allProducts.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
-    ).slice(0, 12);
-    setProdSuggestions(matches);
-    setShowDrop(true);
-  };
-
   const pickProduct = (p: ApiProduct) => {
     set({ name: p.name, sku: p.sku, pricePerKg: p.pricePerKg });
     setProdSuggestions([]); setShowDrop(false);
     setTimeout(() => valueRef.current?.focus(), 50);
+  };
+
+  const handleSearch = (val: string) => {
+    set({ name: val, sku: "", pricePerKg: 0 });
+    if (!val.trim()) { setProdSuggestions([]); setShowDrop(false); return; }
+    const q = val.toLowerCase();
+    const local = allProducts.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode ?? "").toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    ).slice(0, 12);
+    setProdSuggestions(local);
+    setShowDrop(true);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => { void fetchCatalog(val); }, 280);
+  };
+
+  const tryBarcodePick = (raw: string) => {
+    const hit = allProducts.find(p => p.barcode && p.barcode === raw.trim());
+    if (hit) { pickProduct(hit); return true; }
+    return false;
   };
 
   const doAdd = () => {
@@ -423,7 +471,11 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") { e.preventDefault(); doAdd(); }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.currentTarget === searchRef.current && tryBarcodePick(entry.name)) return;
+      doAdd();
+    }
     if (e.key === "Escape") setShowDrop(false);
   };
 
@@ -451,7 +503,7 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search product or SKU…"
+            placeholder="Search name, SKU, or scan barcode…"
             className="pl-8 pr-2 h-9 text-sm bg-background border-border/60"
           />
           {entry.name && (
@@ -568,9 +620,14 @@ function PosEntryBar({ onAdd }: PosEntryBarProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{p.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{p.sku}</span>
                         <span className="text-[10px] text-muted-foreground">{p.category}</span>
+                        {p.stockQty != null && (
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${p.stockQty <= 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                            Stock: {p.stockQty} {p.unit ?? ""}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
