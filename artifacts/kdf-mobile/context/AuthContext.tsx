@@ -5,6 +5,8 @@ import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
+import { ensureRiderNotificationChannels } from "@/lib/riderNotifications";
+
 const PROD_API_FALLBACK = "https://api.khanbabadryfruits.com";
 
 /**
@@ -97,27 +99,7 @@ async function registerForPushNotifications(token: string): Promise<void> {
     }
     if (finalStatus !== "granted") return;
 
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("new_order", {
-        name: "New Orders",
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 400, 200, 400, 200, 400],
-        lightColor: "#00B85A",
-        sound: "default",
-        enableVibrate: true,
-        showBadge: true,
-        bypassDnd: true,
-      });
-      await Notifications.setNotificationChannelAsync("orders", {
-        name: "Order Updates",
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#00B85A",
-        sound: "default",
-        enableVibrate: true,
-        showBadge: true,
-      });
-    }
+    await ensureRiderNotificationChannels();
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: "f5433930-a95c-4ac1-857f-dfdafc2fe4d1",

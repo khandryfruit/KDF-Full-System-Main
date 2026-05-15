@@ -13,6 +13,7 @@ import {
   getSettings as getWaSettings,
 } from "./whatsapp";
 import { logger } from "./logger";
+import { RIDER_PUSH_CHANNEL_ID, RIDER_PUSH_SOUND } from "./riderPushConfig.js";
 
 /* ══════════════════════════════════════════════════════
    EXPO PUSH NOTIFICATION HELPER
@@ -24,13 +25,25 @@ export async function sendExpoPush(params: {
   title: string;
   body: string;
   data?: Record<string, unknown>;
-  sound?: "default" | null;
+  sound?: string | null;
   badge?: number;
   riderId?: number;
   deliveryId?: number;
   orderNumber?: string;
+  channelId?: string;
 }): Promise<boolean> {
-  const { expoPushToken, title, body, data, sound = "default", badge, riderId, deliveryId, orderNumber } = params;
+  const {
+    expoPushToken,
+    title,
+    body,
+    data,
+    sound = RIDER_PUSH_SOUND,
+    badge,
+    riderId,
+    deliveryId,
+    orderNumber,
+    channelId = RIDER_PUSH_CHANNEL_ID,
+  } = params;
   if (!expoPushToken || !expoPushToken.startsWith("ExponentPushToken")) return false;
 
   const MAX_ATTEMPTS = 3;
@@ -54,7 +67,7 @@ export async function sendExpoPush(params: {
           sound,
           ...(badge !== undefined ? { badge } : {}),
           priority: "high",
-          channelId: "new_order",
+          channelId,
         }),
       });
       const result = await res.json() as any;

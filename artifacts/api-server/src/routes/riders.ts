@@ -713,9 +713,10 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
                     to:    rider.expo_push_token,
                     title: "🚚 نیا آرڈر ملا!",
                     body:  `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
-                    sound: "default",
+                    sound: "new_order.wav",
                     priority: "high",
-                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number) },
+                    channelId: "new_order_alert",
+                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number), type: "new_order" },
                     badge: 1,
                   }),
                 });
@@ -1031,10 +1032,10 @@ router.post("/admin/riders/bulk-assign", adminMiddleware, async (req, res) => {
                     to: rider.expo_push_token,
                     title: "🚚 نیا آرڈر ملا!",
                     body: `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
-                    sound: "default",
+                    sound: "new_order.wav",
                     priority: "high",
-                    channelId: "new_order",
-                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number) },
+                    channelId: "new_order_alert",
+                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number), type: "new_order" },
                     badge: 1,
                   }),
                 }).catch(() => {});
@@ -2580,11 +2581,10 @@ router.post("/admin/riders/deliveries/reassign", adminMiddleware, async (req, re
         if (rider.expo_push_token) {
           const { sendExpoPush } = await import("../lib/ondriveEngine.js");
           await sendExpoPush({
-            to: rider.expo_push_token,
+            expoPushToken: rider.expo_push_token,
             title: `📦 ${result.rows.length} Order${result.rows.length !== 1 ? "s" : ""} Assigned`,
             body: `You have ${result.rows.length} new order${result.rows.length !== 1 ? "s" : ""} to deliver. Open app to view.`,
             data: { type: "new_order", count: result.rows.length },
-            channelId: "new_order",
           }).catch(() => {});
         }
 

@@ -18,6 +18,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { riderFetch, useAuth } from "@/context/AuthContext";
+import {
+  openNotificationAndBatterySettings,
+  presentNewOrderLocalNotification,
+  RIDER_ORDER_CHANNEL_ID,
+  RIDER_ORDER_SOUND,
+} from "@/lib/riderNotifications";
 
 const NAV_EXTRA = Platform.OS === "android" ? 96 : 108;
 
@@ -89,17 +95,9 @@ export default function ProfileScreen() {
     }
     setNotifState("sending");
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "🛵 نیا آرڈر آیا!",
-          body: "Order #TEST-001 — Rs. 2,500 COD — Test notification is working!",
-          sound: true,
-          data: { test: true },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 1,
-        },
+      await presentNewOrderLocalNotification({
+        title: "🛵 نیا آرڈر آیا!",
+        body: "Order #TEST-001 — Rs. 2,500 COD — Test notification is working!",
       });
       setNotifState("sent");
       setTimeout(() => setNotifState("idle"), 4000);
@@ -351,8 +349,32 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.notifInfoRow}>
             <Feather name="refresh-cw" size={13} color="#6B7280" />
-            <Text style={styles.notifInfoTxt}>Auto-poll every 12 seconds when app is open</Text>
+            <Text style={styles.notifInfoTxt}>Poll every 5s (3s when minimized) + background checks</Text>
           </View>
+          <View style={styles.notifInfoRow}>
+            <Feather name="smartphone" size={13} color="#6B7280" />
+            <Text style={styles.notifInfoTxt}>Channel: {RIDER_ORDER_CHANNEL_ID} · Sound: {RIDER_ORDER_SOUND}</Text>
+          </View>
+
+          {Platform.OS === "android" && (
+            <TouchableOpacity
+              style={[styles.testNotifBtn, { marginBottom: 10 }]}
+              onPress={() => {
+                Alert.alert(
+                  "Samsung / Xiaomi settings",
+                  "For reliable background alerts: allow notifications, disable battery restrictions for KDF Rider, and allow autostart if available.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Open settings", onPress: openNotificationAndBatterySettings },
+                  ],
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="battery-charging" size={16} color="#0D2137" />
+              <Text style={styles.testNotifTxt}>Fix background alerts (battery settings)</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Test button */}
           <TouchableOpacity

@@ -11,22 +11,38 @@ import * as Notifications from "expo-notifications";
 import { Redirect, Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NewOrderAlert, { NewOrderData } from "@/components/NewOrderAlert";
 import { AuthProvider, riderFetch, useAuth } from "@/context/AuthContext";
+import {
+  ensureRiderNotificationChannels,
+  isNewOrderPush,
+  playNewOrderChime,
+  startOnDutyForegroundGuard,
+  stopOnDutyForegroundGuard,
+} from "@/lib/riderNotifications";
+import {
+  registerAssignmentBackgroundTask,
+  unregisterAssignmentBackgroundTask,
+} from "@/tasks/assignmentBackgroundTask";
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert:  true,
-    shouldShowBanner: true,
-    shouldShowList:   true,
-    shouldPlaySound:  true,
-    shouldSetBadge:   true,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as Record<string, unknown> | undefined;
+    const isOrder = isNewOrderPush(data);
+    if (isOrder) void playNewOrderChime();
+    return {
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: isOrder,
+      shouldSetBadge: true,
+    };
+  },
 });
 
 SplashScreen.preventAutoHideAsync();
@@ -35,9 +51,13 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 20_000 } },
 });
 
+const POLL_ACTIVE_MS = 5_000;
+const POLL_BACKGROUND_MS = 3_000;
+
 async function registerPushToken(): Promise<string | null> {
   if (Platform.OS === "web") return null;
   try {
+    await ensureRiderNotificationChannels();
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
     if (existing !== "granted") {
@@ -49,32 +69,25 @@ async function registerPushToken(): Promise<string | null> {
       projectId: "f5433930-a95c-4ac1-857f-dfdafc2fe4d1",
     });
     return tokenData.data;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function NewOrderMonitor({ children }: { children: React.ReactNode }) {
-  const { token, rider } = useAuth();
-  const router           = useRouter();
-  const qc               = useQueryClient();
+  const { token, rider, isOnline } = useAuth();
+  const router = useRouter();
+  const qc = useQueryClient();
   const [alertOrder, setAlertOrder] = useState<NewOrderData | null>(null);
-  const knownIds    = useRef<Set<number>>(new Set());
+  const knownIds = useRef<Set<number>>(new Set());
   const initialized = useRef(false);
-  const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const acceptBusy  = useRef(false);
-  const checkRef    = useRef<() => Promise<void>>(async () => {});
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const acceptBusy = useRef(false);
+  const checkRef = useRef<() => Promise<void>>(async () => {});
+  const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
-    if (Platform.OS !== "android") return;
-    /* Channel id must match server Expo payload (`channelId: "new_order"`). Samsung/Xiaomi: verify
-       battery settings are not killing the Expo Go / standalone app; riders should disable aggressive
-       background restrictions for this app so high-priority notifications can wake the device. */
-    Notifications.setNotificationChannelAsync("new_order", {
-      name: "New delivery assignments",
-      importance: Notifications.AndroidImportance.MAX,
-      sound: "default",
-      vibrationPattern: [0, 250, 250, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    }).catch(() => {});
+    ensureRiderNotificationChannels().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -88,14 +101,30 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
         });
       } catch { /* non-critical */ }
     });
+    registerAssignmentBackgroundTask().catch(() => {});
+    return () => {
+      unregisterAssignmentBackgroundTask().catch(() => {});
+    };
   }, [token, !!rider]);
+
+  useEffect(() => {
+    if (!token || !rider) {
+      stopOnDutyForegroundGuard().catch(() => {});
+      return;
+    }
+    if (isOnline) {
+      startOnDutyForegroundGuard().catch(() => {});
+    } else {
+      stopOnDutyForegroundGuard().catch(() => {});
+    }
+  }, [token, !!rider, isOnline]);
 
   const checkNewOrders = useCallback(async () => {
     if (!token || !rider) return;
     try {
       const r = await riderFetch("/rider/deliveries?status=assigned&period=active", token);
       if (!r.ok) return;
-      const json       = await r.json();
+      const json = await r.json();
       const deliveries: any[] = json.deliveries ?? [];
       if (!initialized.current) {
         deliveries.forEach((d) => knownIds.current.add(d.id));
@@ -107,6 +136,7 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       newOnes.forEach((d) => knownIds.current.add(d.id));
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
+      void playNewOrderChime();
       const newest = newOnes[0];
       setAlertOrder({
         id: newest.id,
@@ -126,18 +156,31 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   }, [checkNewOrders]);
 
   useEffect(() => {
-    const sub = Notifications.addNotificationReceivedListener(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      if (isNewOrderPush(data)) void playNewOrderChime();
       void checkRef.current();
     });
     const tapSub = Notifications.addNotificationResponseReceivedListener((resp) => {
-      const data = resp.notification.request.content.data as any;
+      const data = resp.notification.request.content.data as Record<string, unknown> | undefined;
       if (data?.deliveryId) router.push(`/order/${data.deliveryId}` as any);
     });
-    return () => { sub.remove(); tapSub.remove(); };
+    return () => {
+      sub.remove();
+      tapSub.remove();
+    };
   }, [qc, router]);
+
+  const schedulePoll = useCallback(
+    (ms: number) => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(checkNewOrders, ms);
+    },
+    [checkNewOrders],
+  );
 
   useEffect(() => {
     if (!token || !rider) {
@@ -146,10 +189,27 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
-    const init = setTimeout(checkNewOrders, 3_000);
-    pollRef.current = setInterval(checkNewOrders, 5_000);
-    return () => { clearTimeout(init); if (pollRef.current) clearInterval(pollRef.current); };
-  }, [token, !!rider, checkNewOrders]);
+    const init = setTimeout(checkNewOrders, 2_000);
+    schedulePoll(POLL_ACTIVE_MS);
+
+    const appSub = AppState.addEventListener("change", (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (nextState === "active") {
+        schedulePoll(POLL_ACTIVE_MS);
+        void checkNewOrders();
+      } else if (prev === "active" && (nextState === "background" || nextState === "inactive")) {
+        schedulePoll(POLL_BACKGROUND_MS);
+        void checkNewOrders();
+      }
+    });
+
+    return () => {
+      clearTimeout(init);
+      if (pollRef.current) clearInterval(pollRef.current);
+      appSub.remove();
+    };
+  }, [token, !!rider, checkNewOrders, schedulePoll]);
 
   const handleAccept = async (id: number) => {
     if (acceptBusy.current) return;
@@ -173,7 +233,10 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       <NewOrderAlert
         order={alertOrder}
         onAccept={handleAccept}
-        onView={(id) => { setAlertOrder(null); router.push(`/order/${id}` as any); }}
+        onView={(id) => {
+          setAlertOrder(null);
+          router.push(`/order/${id}` as any);
+        }}
         onDismiss={() => setAlertOrder(null)}
       />
     </>
@@ -185,19 +248,12 @@ function RootLayoutNav() {
   if (loading) return null;
   return (
     <Stack>
-      <Stack.Screen name="(tabs)"     options={{ headerShown: false }} />
-      <Stack.Screen name="login"      options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
-}
-
-function RoleRedirect() {
-  const { rider, loading } = useAuth();
-  if (loading) return null;
-  if (rider) return <Redirect href="/(tabs)" />;
-  return <Redirect href="/login" />;
 }
 
 export default function RootLayout() {
