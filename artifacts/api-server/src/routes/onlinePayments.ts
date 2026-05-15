@@ -13,6 +13,7 @@
  */
 
 import { Router } from "express";
+import { adminMiddleware } from "../lib/auth.js";
 import { db, paymentGatewaysTable, ordersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import * as JazzCash  from "../lib/jazzcash";
@@ -243,7 +244,7 @@ router.get("/payments/easypaisa/return", async (req, res) => {
 });
 
 /* ── Admin: test gateway connection ───────────────────── */
-router.post("/admin/payments/test-gateway", async (req, res) => {
+router.post("/admin/payments/test-gateway", adminMiddleware, async (req, res) => {
   try {
     const { type } = req.body;
     const gw = await getGatewaySettings(type);

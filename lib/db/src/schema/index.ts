@@ -40,5 +40,6 @@ export * from "./videoBanners";
 export * from "./mobileReels";
 export * from "./googleIndexing";
 export * from "./adminManagement";
+export * from "./adminEnterprise";
 export * from "./googleMerchant";
 export * from "./saas";

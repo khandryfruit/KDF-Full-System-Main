@@ -17,6 +17,7 @@ interface AdminAuthCtx {
   user:             AdminUser | null;
   isLoaded:         boolean;
   hasPermission:    (key: string) => boolean;
+  hasAnyPermission: (keys: string[]) => boolean;
   setUser:          (u: AdminUser | null) => void;
   refreshMe:        () => Promise<void>;
   logout:           () => void;
@@ -24,7 +25,8 @@ interface AdminAuthCtx {
 
 const Ctx = createContext<AdminAuthCtx>({
   user: null, isLoaded: false,
-  hasPermission: () => true,
+  hasPermission: () => false,
+  hasAnyPermission: () => false,
   setUser: () => {},
   refreshMe: async () => {},
   logout: () => {},
@@ -84,14 +86,17 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasPermission = useCallback((key: string): boolean => {
-    /* No user in context → legacy token → treat as super (backward compat) */
-    if (!user) return true;
+    if (!isLoaded || !user) return false;
     if (user.isSuper) return true;
     return user.permissions.includes(key);
-  }, [user]);
+  }, [user, isLoaded]);
+
+  const hasAnyPermission = useCallback((keys: string[]): boolean => {
+    return keys.some(k => hasPermission(k));
+  }, [hasPermission]);
 
   return (
-    <Ctx.Provider value={{ user, isLoaded, hasPermission, setUser, refreshMe, logout }}>
+    <Ctx.Provider value={{ user, isLoaded, hasPermission, hasAnyPermission, setUser, refreshMe, logout }}>
       {children}
     </Ctx.Provider>
   );

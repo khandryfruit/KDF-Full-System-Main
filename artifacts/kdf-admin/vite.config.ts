@@ -61,6 +61,7 @@ export default defineConfig(async ({ command }) => ({
       ? { legalComments: "none", drop: ["debugger"] as ("debugger")[] }
       : undefined,
   build: {
+    sourcemap: false,
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     target: "es2018",

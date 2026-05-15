@@ -9,6 +9,7 @@ import {
 } from "../lib/meezan";
 import { sendWhatsAppMessage } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
+import { requireExternalPaymentKey } from "../lib/security.js";
 import type { Request, Response } from "express";
 
 /* ═══════════════════════════════════════════════════════════
@@ -825,7 +826,7 @@ router.get("/admin/meezan/stats", adminMiddleware as any, async (_req, res: Resp
    Called by Shopify / Laravel / Mobile apps to report payments
    into the central payment hub
 ═══════════════════════════════════════════════════════════ */
-router.post("/api/payment/external/receive", async (req, res: Response): Promise<void> => {
+router.post("/api/payment/external/receive", requireExternalPaymentKey, async (req, res: Response): Promise<void> => {
   try {
     const {
       platformSource, externalRef, amount, status,

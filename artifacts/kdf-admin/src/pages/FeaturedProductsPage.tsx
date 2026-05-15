@@ -49,7 +49,7 @@ export default function FeaturedProductsPage() {
       if (search) params.set("search", search);
       params.set("page", String(page));
       const res = await fetch(`/api/admin/shopify/products/featured?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("adminToken")}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token")}` },
       });
       if (!res.ok) throw new Error("Failed to load");
       return res.json() as Promise<{ products: ShopifyProduct[]; total: number; page: number; limit: number }>;
@@ -62,7 +62,7 @@ export default function FeaturedProductsPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("adminToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("kdf_admin_token")}`,
         },
         body: JSON.stringify(updates),
       });

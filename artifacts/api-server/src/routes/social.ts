@@ -512,6 +512,8 @@ router.get("/webhooks/instagram", async (req, res) => {
 
 /* Events — handles BOTH object:"instagram" and object:"page" (Meta sends to one URL) */
 router.post("/webhooks/instagram", async (req, res) => {
+  const { verifyMetaWebhookOrReject } = await import("../lib/security.js");
+  if (!(await verifyMetaWebhookOrReject(req, res))) return;
   res.sendStatus(200);
   try {
     const body = req.body as any;
@@ -550,6 +552,8 @@ router.get("/webhooks/facebook", async (req, res) => {
 
 /* Events — handles BOTH object:"page" and object:"instagram" */
 router.post("/webhooks/facebook", async (req, res) => {
+  const { verifyMetaWebhookOrReject } = await import("../lib/security.js");
+  if (!(await verifyMetaWebhookOrReject(req, res))) return;
   res.sendStatus(200);
   try {
     const body = req.body as any;
@@ -602,6 +606,11 @@ router.post("/meta/webhook", async (req, res) => {
   const body = req.body as { object?: string };
   const signature = req.headers["x-hub-signature-256"] as string | undefined;
   const rawBody = (req as { rawBody?: Buffer }).rawBody;
+
+  if (body?.object !== "whatsapp_business_account") {
+    const { verifyMetaWebhookOrReject } = await import("../lib/security.js");
+    if (!(await verifyMetaWebhookOrReject(req, res))) return;
+  }
 
   if (body?.object === "whatsapp_business_account") {
     const { verifyMetaWebhookSignatureAny } = await import("../lib/metaWebhookVerify.js");

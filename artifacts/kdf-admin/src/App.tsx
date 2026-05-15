@@ -92,6 +92,7 @@ const MobileReelsPage = lazy(() => import("@/pages/MobileReelsPage"));
 const GoogleIndexingPage = lazy(() => import("@/pages/GoogleIndexingPage"));
 const GoogleMerchantPage = lazy(() => import("@/pages/GoogleMerchantPage"));
 const ModulesPage = lazy(() => import("@/pages/ModulesPage"));
+const AdminControlCenterPage = lazy(() => import("@/pages/AdminControlCenterPage"));
 const SEODashboardPage = lazy(() => import("@/pages/SEODashboardPage"));
 const SEORedirectsPage = lazy(() => import("@/pages/SEORedirectsPage"));
 const SEOSchemaPage = lazy(() => import("@/pages/SEOSchemaPage"));
@@ -276,13 +277,12 @@ function Router() {
       <Route path="/video-banners"><ProtectedRoute component={VideoBannersPage} /></Route>
       <Route path="/mobile-reels"><ProtectedRoute component={MobileReelsPage} /></Route>
 
-      {/* ── Admin IAM (Users, Roles, Activity Logs) ── */}
-      <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} /></Route>
-      <Route path="/admin/roles"><ProtectedRoute component={AdminRolesPage} /></Route>
-      <Route path="/admin/activity-logs"><ProtectedRoute component={ActivityLogsPage} /></Route>
-
-      {/* ── Module Control ── */}
-      <Route path="/settings/modules"><ProtectedRoute component={ModulesPage} /></Route>
+      {/* ── Enterprise Admin Control Center ── */}
+      <Route path="/admin/control-center"><ProtectedRoute component={AdminControlCenterPage} /></Route>
+      <Route path="/admin/users"><ProtectedRoute component={AdminControlCenterPage} /></Route>
+      <Route path="/admin/roles"><ProtectedRoute component={AdminControlCenterPage} /></Route>
+      <Route path="/admin/activity-logs"><ProtectedRoute component={AdminControlCenterPage} /></Route>
+      <Route path="/settings/modules"><ProtectedRoute component={AdminControlCenterPage} /></Route>
 
       <Route path="/">
         <ProtectedRoute component={DashboardPage} />

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { adminMiddleware } from "../lib/auth.js";
+import { adminMiddleware, requirePermission } from "../lib/auth.js";
 
 const router = Router();
 
@@ -16,7 +16,7 @@ function broadcastModuleUpdate(module: any) {
 }
 
 /* ── GET all modules (admin) ── */
-router.get("/admin/modules", adminMiddleware, async (req, res) => {
+router.get("/admin/modules", requirePermission("modules.manage"), async (req, res) => {
   try {
     const rows = await db.execute(sql`SELECT * FROM system_modules ORDER BY sort_order`);
     res.json({ modules: rows.rows });
@@ -37,7 +37,7 @@ router.get("/modules/active", async (_req, res) => {
 });
 
 /* ── PUT toggle module ── */
-router.put("/admin/modules/:key/toggle", adminMiddleware, async (req, res) => {
+router.put("/admin/modules/:key/toggle", requirePermission("modules.manage"), async (req, res) => {
   try {
     const key = req.params["key"] as string;
     const rows = await db.execute(sql`
@@ -62,7 +62,7 @@ router.put("/admin/modules/:key/toggle", adminMiddleware, async (req, res) => {
 });
 
 /* ── PUT update module settings ── */
-router.put("/admin/modules/:key", adminMiddleware, async (req, res) => {
+router.put("/admin/modules/:key", requirePermission("modules.manage"), async (req, res) => {
   try {
     const key = req.params["key"] as string;
     const { module_name, description, app_visible, web_visible, sort_order, role_access } = req.body as any;
@@ -83,7 +83,7 @@ router.put("/admin/modules/:key", adminMiddleware, async (req, res) => {
 });
 
 /* ── SSE stream for live module updates ── */
-router.get("/admin/modules/events", adminMiddleware, (req, res) => {
+router.get("/admin/modules/events", requirePermission("modules.manage"), (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");

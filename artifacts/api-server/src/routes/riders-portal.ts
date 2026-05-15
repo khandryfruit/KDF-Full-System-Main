@@ -15,7 +15,10 @@ import {
 
 const router = Router();
 
-const JWT_SECRET = process.env.SESSION_SECRET || "kdf-rider-secret";
+const JWT_SECRET = process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("SESSION_SECRET is required for rider portal JWT signing");
+}
 
 /* ══════════════════════════════════════════════════════════
    SHOPIFY STATUS SYNC — delegated to lib/shopifySync.ts

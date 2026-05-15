@@ -2448,13 +2448,16 @@ router.post("/shopify/webhook", async (req, res) => {
       .where(ilike(shopifyStoresTable.shopDomain, shopDomain))
       .limit(1);
 
-    /* 2. HMAC verification (when webhookSecret is configured) */
+    /* 2. HMAC verification — mandatory in production */
+    const isProd = process.env.NODE_ENV === "production";
+    if (isProd && (!store?.webhookSecret || !rawBody || !hmacHeader)) {
+      return;
+    }
     if (store?.webhookSecret && rawBody && hmacHeader) {
       const valid = verifyShopifyHmac(store.webhookSecret, rawBody, hmacHeader);
       if (!valid) {
-        /* Log suspicious request but don't crash */
         await db.insert(shopifyWebhookLogsTable).values({
-          storeId: store.id,
+          storeId: store?.id ?? null,
           topic: `REJECTED:${topic}`,
           shopifyId: String(payload?.id ?? ""),
           payload: { reason: "HMAC mismatch" },
@@ -2463,6 +2466,8 @@ router.post("/shopify/webhook", async (req, res) => {
         }).catch(() => {});
         return;
       }
+    } else if (isProd) {
+      return;
     }
 
     /* 3. Log webhook receipt */

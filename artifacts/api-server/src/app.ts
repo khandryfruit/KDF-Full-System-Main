@@ -8,6 +8,10 @@ import router from "./routes";
 import publicInvoiceRouter from "./routes/public-invoice";
 import deliveryTrackRouter from "./routes/delivery-track";
 import { logger } from "./lib/logger";
+import {
+  securityHeaders, apiRateLimiter, authRateLimiter, webhookRateLimiter,
+  sanitizeClientError, IS_PRODUCTION,
+} from "./lib/security";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
 import { resolveApiPublicDir, resolveSpaDistDir, spaDistReady } from "./lib/resolveStaticDist";
@@ -55,6 +59,9 @@ const adminAppStatic = express.static(adminAppDist, staticOpts);
 const mainStatic     = express.static(mainDist,     staticOpts);
 
 const app: Express = express();
+
+app.disable("x-powered-by");
+app.use(securityHeaders);
 
 app.use(
   pinoHttp({
@@ -108,11 +115,12 @@ app.use(
     maxAge: 86400, // preflight cache 24 h
   })
 );
-/** Confirms in DevTools / curl that this response came from Express api-server, not a static host. */
-app.use((_req: Request, res: Response, next: NextFunction) => {
-  res.setHeader("X-KDF-Backend", "api-server");
-  next();
-});
+if (!IS_PRODUCTION) {
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("X-KDF-Backend", "api-server");
+    next();
+  });
+}
 // Tell Express it sits behind Railway's TLS-terminating proxy so that
 // req.secure / req.ip / X-Forwarded-* work correctly.
 app.set("trust proxy", 1);
@@ -125,6 +133,22 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+
+app.use("/api/admin-auth/login", authRateLimiter);
+app.use("/api/auth/login", authRateLimiter);
+app.use("/api/admin-auth/bootstrap", authRateLimiter);
+app.use((req, res, next) => {
+  const p = req.path ?? req.url ?? "";
+  if (p.includes("/webhook") || p.includes("/callback") || p.includes("/payment/")) {
+    webhookRateLimiter(req, res, next);
+    return;
+  }
+  if (p.startsWith("/api/")) {
+    apiRateLimiter(req, res, next);
+    return;
+  }
+  next();
+});
 
 /**
  * ── /admin/api/* → /api/* rewrite ──────────────────────────────────────────
@@ -477,9 +501,8 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 
   const status = typeof err?.status === "number" ? err.status :
                  typeof err?.statusCode === "number" ? err.statusCode : 500;
-  const message = err?.message ?? "Internal server error";
+  const message = sanitizeClientError(err);
 
-  /* Log at appropriate level — 5xx as error, 4xx as warn */
   if (status >= 500) {
     (req as any).log?.error({ err, status }, "Unhandled error");
   } else {

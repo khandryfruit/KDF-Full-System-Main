@@ -153,8 +153,12 @@ router.post("/webhooks/whatsapp", async (req, res) => {
     if (matchedIndex > 0) {
       req.log?.info("WA webhook HMAC matched fallback secret — update App Secret in WA Settings to match Meta App Secret");
     }
+  } else if (process.env.NODE_ENV === "production") {
+    req.log?.warn("META app secret not configured — rejecting webhook in production");
+    res.sendStatus(403);
+    return;
   } else {
-    req.log?.warn("META app secret not configured (DB appSecret or META_APP_SECRET) — accepting webhook without signature verification");
+    req.log?.warn("META app secret not configured — accepting webhook without signature verification (dev only)");
   }
 
   res.sendStatus(200);

@@ -9,7 +9,7 @@
     "build:railway": "node ./scripts/railway-build.mjs",
     "railway:build": "pnpm run build:railway",
     "railway:start": "pnpm run start",
-    "start": "node --enable-source-maps --max-http-header-size=65536 ./dist/index.mjs",
+    "start": "node --max-http-header-size=65536 ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

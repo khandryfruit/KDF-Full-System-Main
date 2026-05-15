@@ -224,10 +224,11 @@ const BRANCHES_NAV_ITEMS: SidebarNavLeaf[] = [
 ];
 
 const ADMIN_IAM_NAV_ITEMS: SidebarNavLeaf[] = [
-  { href: "/admin/users",         label: "Admin Users",     icon: UserCog      },
-  { href: "/admin/roles",         label: "Roles & Perms",   icon: ShieldCheck  },
-  { href: "/admin/activity-logs", label: "Activity Logs",   icon: ListChecks   },
-  { href: "/settings/modules",    label: "Module Controls", icon: SlidersHorizontal },
+  { href: "/admin/control-center",           label: "Control Center",  icon: Crown,          isNew: true, badgeColor: "#6366f1" },
+  { href: "/admin/control-center?tab=users", label: "Admin Users",     icon: UserCog        },
+  { href: "/admin/control-center?tab=roles", label: "Roles & Perms",   icon: ShieldCheck    },
+  { href: "/admin/control-center?tab=audit", label: "Audit Logs",      icon: ListChecks     },
+  { href: "/admin/control-center?tab=modules", label: "Module Controls", icon: SlidersHorizontal },
 ];
 
 const LOGISTICS_NAV_ITEMS = [
@@ -683,8 +684,8 @@ function SidebarContent({
         )}
 
         {/* ── Admin IAM (Users / Roles / Logs) ── */}
-        {(hasPermission("users.view") || hasPermission("roles.manage") || hasPermission("logs.view") || hasPermission("modules.manage")) && (
-          <SidebarSection label="Admin Panel" icon={ShieldCheck}
+        {(hasPermission("users.view") || hasPermission("roles.view") || hasPermission("roles.manage") || hasPermission("logs.view") || hasPermission("modules.manage") || hasPermission("security.manage")) && (
+          <SidebarSection label="Control Center" icon={ShieldCheck}
             accentColor="#dc2626" activeBg="bg-red-600/10" activeText="text-red-700" badgeLetter="A"
             isActive={location.startsWith("/admin/") || location.startsWith("/settings/modules")} expanded={expanded} open={adminIamOpen} onToggle={onToggleAdminIam}
             items={ADMIN_IAM_NAV_ITEMS} location={location} onNavClick={onNavClick} />

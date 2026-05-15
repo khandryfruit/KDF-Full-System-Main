@@ -6,6 +6,22 @@ import type { Response } from "express";
 
 const router = Router();
 
+const GATEWAY_PATCH_KEYS = new Set([
+  "displayName", "description", "apiKey", "secretKey", "webhookSecret",
+  "isActive", "isDefault", "sortOrder", "config", "type",
+]);
+
+function maskGateway<T extends Record<string, unknown>>(g: T): T {
+  const out = { ...g };
+  for (const k of ["apiKey", "secretKey", "webhookSecret"] as const) {
+    const v = out[k];
+    if (typeof v === "string" && v.length > 4) {
+      (out as Record<string, unknown>)[k] = `••••${v.slice(-4)}`;
+    }
+  }
+  return out;
+}
+
 /* ─── Public: list active payment gateways ───────────── */
 router.get("/payment-gateways/active", async (req, res) => {
   try {
@@ -35,7 +51,7 @@ router.get("/payment-gateways/active", async (req, res) => {
 router.get("/admin/payment-gateways", adminMiddleware as any, async (req: AuthRequest, res: Response) => {
   try {
     const gateways = await db.select().from(paymentGatewaysTable).orderBy(asc(paymentGatewaysTable.sortOrder));
-    res.json(gateways);
+    res.json(gateways.map(g => maskGateway(g as Record<string, unknown>)));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to fetch payment gateways" });
@@ -84,7 +100,10 @@ router.post("/admin/payment-gateways", adminMiddleware as any, async (req: AuthR
 router.patch("/admin/payment-gateways/:id", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string);
-    const updates = req.body;
+    const updates: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
+      if (GATEWAY_PATCH_KEYS.has(k)) updates[k] = v;
+    }
 
     if (updates.isDefault === true) {
       await db.update(paymentGatewaysTable).set({ isDefault: false });
