@@ -1,19 +1,22 @@
 /**
- * Premium human-like WhatsApp messages for order lifecycle (Khan Dry Fruits).
+ * Premium WhatsApp copy for order lifecycle — Khan Dry Fruits.
  */
 import {
   sendWhatsAppMessage,
   sendWhatsAppTemplate,
   sendCtaUrlMessage,
-  sendInteractiveButtons,
   getSettings,
   normalizePhone,
 } from "./whatsapp.js";
-import { buildInvoiceSnapshot, createTrackingToken, getTrackingPublicBase } from "./deliveryWaPremium.js";
-import { logger } from "./logger.js";
+import { createTrackingToken } from "./deliveryWaPremium.js";
+import { parseShippingAddress } from "./lahoreShipping.js";
 
 const BRAND = "Khan Dry Fruits";
-const SUPPORT = "0300-1234567";
+const STORE_URL = (process.env.PUBLIC_STORE_URL ?? "https://khanbabadryfruits.com").replace(/\/$/, "");
+const SUPPORT =
+  process.env.WHATSAPP_SUPPORT_PHONE?.trim() ||
+  process.env.SUPPORT_PHONE?.trim() ||
+  "0300-1234567";
 
 export type OrderWaContext = {
   orderNumber: string;
@@ -34,43 +37,92 @@ export type OrderWaContext = {
 };
 
 function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || "Customer";
+  const n = name.trim().split(/\s+/)[0];
+  return n ? n.charAt(0).toUpperCase() + n.slice(1) : "Customer";
 }
 
 function formatMoney(n: number): string {
   return `Rs. ${Math.round(n).toLocaleString("en-PK")}`;
 }
 
-function buildItemsList(items: unknown[], max = 8): string {
+function buildItemsList(items: unknown[], max = 6): string {
   try {
     const arr = Array.isArray(items) ? items : [];
-    return arr
-      .slice(0, max)
-      .map((li: Record<string, unknown>) => {
-        const title = String(li.title ?? li.name ?? "Item");
-        const qty = Number(li.quantity ?? 1);
-        const price = Number(li.price ?? 0);
-        const line = price > 0 ? ` — ${formatMoney(price * qty)}` : "";
-        return `• ${qty}× ${title}${line}`;
-      })
-      .join("\n");
+    const lines = arr.slice(0, max).map((li: Record<string, unknown>) => {
+      const title = String(li.title ?? li.name ?? "Item");
+      const qty = Number(li.quantity ?? 1);
+      return `• ${qty} × ${title}`;
+    });
+    if (arr.length > max) lines.push(`• +${arr.length - max} more item(s)`);
+    return lines.join("\n");
   } catch {
-    return "• See your order summary online";
+    return "• As per your checkout";
   }
 }
 
-function paymentLine(ctx: OrderWaContext): string {
+function paymentSummary(ctx: OrderWaContext): string {
   const paid = ctx.isPaid || ctx.financialStatus === "paid";
-  if (paid) return "💳 *Payment:* Paid online ✅";
+  if (paid) return "Paid online";
   const cod = ctx.codAmount ?? Number(ctx.totalPrice ?? 0);
-  return `💵 *Payment:* Cash on delivery — ${formatMoney(cod)}`;
+  return `Cash on delivery (${formatMoney(cod)})`;
+}
+
+function deliveryCity(ctx: OrderWaContext): string {
+  try {
+    const { city } = parseShippingAddress(ctx.shippingAddress);
+    return city || "Pakistan";
+  } catch {
+    return "Pakistan";
+  }
+}
+
+function brandFooter(): string {
+  return `\n—\n*${BRAND}*\n${STORE_URL}\nSupport: ${SUPPORT}`;
+}
+
+/** Meta template body parameters (clean, single-line values). */
+function buildTemplateParams(trigger: string, ctx: OrderWaContext): string[] {
+  const name = firstName(ctx.customerName);
+  const total = formatMoney(Number(ctx.totalPrice ?? ctx.codAmount ?? 0));
+  const orderNo = ctx.orderNumber;
+
+  switch (trigger) {
+    case "order_confirmation":
+      return [name, orderNo, total, paymentSummary(ctx)];
+    case "paid_order_message":
+      return [name, orderNo, total];
+    case "cancel_order":
+      return [name, orderNo];
+    case "order_shipped":
+      return [name, orderNo, "Tracking shared separately"];
+    case "order_delivered":
+      return [name, orderNo];
+    case "order_out_for_delivery":
+      return [name, orderNo];
+    case "order_processing":
+      return [name, orderNo];
+    case "rider_assigned":
+      return [name, orderNo, ctx.rider?.name ?? "Assigned rider", ctx.etaLabel ?? "30–45 min"];
+    case "shipment_return_update":
+      return [name, orderNo];
+    case "order_failed_delivery":
+      return [name, orderNo];
+    case "abandoned_cart_recovery":
+      return [name, total];
+    default:
+      return [name, orderNo];
+  }
 }
 
 async function sendPremiumText(
   phone: string,
   message: string,
   templateName: string,
-  cta?: { buttonText: string; url: string },
+  opts?: {
+    cta?: { buttonText: string; url: string };
+    ctx?: OrderWaContext;
+    templateParams?: string[];
+  },
 ): Promise<{ success: boolean; error?: string }> {
   const norm = normalizePhone(phone);
   const settings = await getSettings();
@@ -80,29 +132,39 @@ async function sendPremiumText(
 
   const { getApprovedTemplateForEvent } = await import("./waTemplateEvents.js");
   const tpl = await getApprovedTemplateForEvent(templateName);
-  if (tpl && tpl.paramCount >= 1) {
-    const parts = message.split("\n").filter(Boolean).slice(0, tpl.paramCount);
-    while (parts.length < tpl.paramCount) parts.push("—");
+
+  if (tpl) {
+    const params =
+      opts?.templateParams ??
+      (opts?.ctx ? buildTemplateParams(templateName, opts.ctx) : []);
+    const bodyParams = params.length ? params : [message.slice(0, 900)];
+    while (bodyParams.length < tpl.paramCount) bodyParams.push("—");
+
     const tplRes = await sendWhatsAppTemplate({
       phone: norm,
       templateName: tpl.name,
       languageCode: tpl.language,
-      components: [
-        {
-          type: "body",
-          parameters: parts.slice(0, tpl.paramCount).map((t) => ({ type: "text" as const, text: t.slice(0, 900) })),
-        },
-      ],
+      components:
+        tpl.paramCount > 0
+          ? [
+              {
+                type: "body",
+                parameters: bodyParams
+                  .slice(0, tpl.paramCount)
+                  .map((t) => ({ type: "text" as const, text: String(t).slice(0, 900) })),
+              },
+            ]
+          : [],
     });
     if (tplRes.success) return { success: true };
   }
 
-  if (cta) {
+  if (opts?.cta) {
     const ok = await sendCtaUrlMessage({
       phone: norm,
       text: message.slice(0, 1020),
-      buttonText: cta.buttonText,
-      url: cta.url,
+      buttonText: opts.cta.buttonText,
+      url: opts.cta.url,
       settings,
       templateName,
     });
@@ -113,50 +175,61 @@ async function sendPremiumText(
   return { success: Boolean(textOk), error: textOk ? undefined : "Send failed" };
 }
 
-/** Order placed — premium confirmation (all cities including Lahore). */
+/** New order — order_confirmation */
 export async function sendPremiumOrderConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
   const name = firstName(ctx.customerName);
   const items = buildItemsList(ctx.lineItems);
   const total = formatMoney(Number(ctx.totalPrice ?? ctx.codAmount ?? 0));
-  const msg =
-    `✅ *Order Confirmed — ${BRAND}*\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `Assalam o Alaikum *${name}*,\n\n` +
-    `Thank you for shopping with ${BRAND} 💚\n\n` +
-    `Your order *${ctx.orderNumber}* has been confirmed successfully.\n\n` +
-    `*🧾 Order summary*\n` +
-    `${items || "• Items as per checkout"}\n\n` +
-    `💰 *Total:* *${total}*\n` +
-    `${paymentLine(ctx)}\n\n` +
-    `🚚 We will update you at every step of your delivery.\n\n` +
-    `📞 Support: ${SUPPORT}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
-    `_Premium dry fruits & nuts — delivered with care_`;
+  const city = deliveryCity(ctx);
 
-  return sendPremiumText(ctx.customerPhone, msg, "order_confirmation");
+  const msg =
+    `*Order Confirmed*\n` +
+    `*${BRAND}*\n\n` +
+    `Assalam o Alaikum *${name}*,\n\n` +
+    `Thank you for choosing *${BRAND}*. Your order has been received and is now being prepared with care.\n\n` +
+    `*Order reference*\n${ctx.orderNumber}\n\n` +
+    `*Your items*\n${items}\n\n` +
+    `*Order total*\n${total}\n` +
+    `*Payment*\n${paymentSummary(ctx)}\n` +
+    `*Delivery city*\n${city}\n\n` +
+    `We will notify you on WhatsApp when your order is dispatched and out for delivery.\n` +
+    `For any change or question, reply to this chat — our team is here to help.` +
+    brandFooter();
+
+  return sendPremiumText(ctx.customerPhone, msg, "order_confirmation", { ctx });
 }
 
 export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
   const name = firstName(ctx.customerName);
-  const msg =
-    `✅ *Payment Received — ${BRAND}*\n\n` +
-    `Assalam o Alaikum *${name}*,\n\n` +
-    `We have received your payment for order *${ctx.orderNumber}*.\n\n` +
-    `💰 *Amount:* ${formatMoney(Number(ctx.totalPrice ?? 0))}\n\n` +
-    `Your order is now being prepared for dispatch. Thank you! 💚`;
+  const total = formatMoney(Number(ctx.totalPrice ?? 0));
 
-  return sendPremiumText(ctx.customerPhone, msg, "paid_order_message");
+  const msg =
+    `*Payment Received*\n` +
+    `*${BRAND}*\n\n` +
+    `Assalam o Alaikum *${name}*,\n\n` +
+    `We have successfully received your payment.\n\n` +
+    `*Order*\n${ctx.orderNumber}\n` +
+    `*Amount paid*\n${total}\n\n` +
+    `Your order is confirmed and will be prepared for dispatch shortly. ` +
+    `You will receive further updates on this chat.` +
+    brandFooter();
+
+  return sendPremiumText(ctx.customerPhone, msg, "paid_order_message", { ctx });
 }
 
 export async function sendPremiumOrderCancelled(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
   const name = firstName(ctx.customerName);
+
   const msg =
-    `❌ *Order Cancelled — ${BRAND}*\n\n` +
+    `*Order Cancelled*\n` +
+    `*${BRAND}*\n\n` +
     `Assalam o Alaikum *${name}*,\n\n` +
     `Your order *${ctx.orderNumber}* has been cancelled as requested.\n\n` +
-    `If this was a mistake, reply here or call ${SUPPORT} and we will help you immediately.`;
+    `If you cancelled by mistake or would like to place a new order, ` +
+    `reply here and our team will assist you promptly.` +
+    brandFooter();
 
-  return sendPremiumText(ctx.customerPhone, msg, "cancel_order");
+  return sendPremiumText(ctx.customerPhone, msg, "cancel_order", { ctx });
 }
 
 export async function sendPremiumRiderAssignedWithTracking(opts: {
@@ -166,39 +239,37 @@ export async function sendPremiumRiderAssignedWithTracking(opts: {
   rider: Record<string, unknown> | null;
   etaMinutes?: number;
 }): Promise<{ success: boolean; error?: string; trackingUrl?: string }> {
-  const { ctx, order, delivery, rider } = opts;
+  const { ctx, rider } = opts;
   if (!ctx.deliveryId || !ctx.shopifyOrderDbId) {
     return { success: false, error: "Missing delivery id" };
   }
 
   const { url: trackingUrl } = await createTrackingToken(ctx.deliveryId, ctx.shopifyOrderDbId);
-  const invoice = buildInvoiceSnapshot(order, delivery);
   const name = firstName(ctx.customerName);
-  const riderName = rider?.name ? String(rider.name) : "your delivery rider";
-  const eta = ctx.etaLabel ?? "30–45 minutes";
+  const riderName = rider?.name ? String(rider.name) : "Your delivery partner";
+  const eta = ctx.etaLabel ?? "within 30–45 minutes";
 
   const msg =
-    `🛵 *Rider Assigned — ${BRAND}*\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
+    `*Out for Delivery*\n` +
+    `*${BRAND}*\n\n` +
     `Assalam o Alaikum *${name}*,\n\n` +
-    `Great news! Your order *${ctx.orderNumber}* is out for Lahore delivery.\n\n` +
-    `👤 *Rider:* ${riderName}\n` +
-    `⏱️ *ETA:* ${eta}\n` +
-    `${paymentLine(ctx)}\n\n` +
-    `📍 *Live tracking:*\n${trackingUrl}\n\n` +
-    `📞 Support: ${SUPPORT}\n` +
-    `━━━━━━━━━━━━━━━━━━━`;
+    `Your order *${ctx.orderNumber}* has been assigned to our delivery team.\n\n` +
+    `*Rider*\n${riderName}\n` +
+    `*Estimated arrival*\n${eta}\n` +
+    `*Payment*\n${paymentSummary(ctx)}\n\n` +
+    `Track your order in real time using the link below.` +
+    brandFooter();
 
   const res = await sendPremiumText(ctx.customerPhone, msg, "rider_assigned", {
-    buttonText: "Track Live 📍",
-    url: trackingUrl,
+    ctx: { ...ctx, rider: { name: riderName, phone: rider?.phone as string }, etaLabel: eta, trackingUrl },
+    cta: { buttonText: "Track order", url: trackingUrl },
   });
 
   const settings = await getSettings();
   if (settings && rider?.phone) {
     await sendWhatsAppMessage({
       phone: normalizePhone(ctx.customerPhone),
-      message: `📞 Rider contact: ${rider.phone}`,
+      message: `*Rider contact*\n${String(rider.phone)}\n\nPlease call only for delivery-related queries.`,
       templateName: "rider_contact",
     }).catch(() => {});
   }
@@ -210,68 +281,65 @@ const STATUS_BUILDERS: Record<string, (ctx: OrderWaContext) => string> = {
   picked: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `📦 *Order Picked Up — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `Your order *${ctx.orderNumber}* has been picked up and is on the way to you.\n\n` +
-      (ctx.trackingUrl ? `📍 Track: ${ctx.trackingUrl}\n\n` : "") +
-      `${paymentLine(ctx)}`
+      `*Order Update — Packed*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, your order *${ctx.orderNumber}* has been packed and handed to our delivery team.\n` +
+      (ctx.trackingUrl ? `\nTrack: ${ctx.trackingUrl}\n` : "\n") +
+      `*Payment:* ${paymentSummary(ctx)}`
     );
   },
   out_for_delivery: (ctx) => {
     const n = firstName(ctx.customerName);
     const rider = ctx.rider?.name ?? "our rider";
     return (
-      `🚚 *Out for Delivery — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `Your order *${ctx.orderNumber}* is on the way! 🛵\n\n` +
-      `👤 *Rider:* ${rider}\n` +
-      (ctx.etaLabel ? `⏱️ *ETA:* ${ctx.etaLabel}\n` : "") +
-      (ctx.trackingUrl ? `\n📍 *Live track:* ${ctx.trackingUrl}\n` : "") +
-      `\nPlease keep your phone reachable.\n${paymentLine(ctx)}`
+      `*Out for Delivery*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, your order *${ctx.orderNumber}* is on the way.\n\n` +
+      `*Rider:* ${rider}\n` +
+      (ctx.etaLabel ? `*ETA:* ${ctx.etaLabel}\n` : "") +
+      (ctx.trackingUrl ? `*Track:* ${ctx.trackingUrl}\n` : "") +
+      `\nPlease keep your phone available for a smooth handover.\n` +
+      `*Payment:* ${paymentSummary(ctx)}`
     );
   },
   near_customer: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `📍 *Rider is Near You — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `Your rider is almost at your location for order *${ctx.orderNumber}*.\n\n` +
-      `Please be available. ${paymentLine(ctx)}`
+      `*Rider Nearby*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, our rider is approaching your location for order *${ctx.orderNumber}*.\n` +
+      `Please be available to receive your package.\n` +
+      `*Payment:* ${paymentSummary(ctx)}`
     );
   },
   delivered: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `✅ *Delivered — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `Your order *${ctx.orderNumber}* has been delivered successfully.\n\n` +
-      `Thank you for choosing ${BRAND} 🌰💚\nWe hope to serve you again soon!`
+      `*Delivered Successfully*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, your order *${ctx.orderNumber}* has been delivered.\n\n` +
+      `Thank you for trusting us with your order. ` +
+      `We would love to serve you again — visit ${STORE_URL} anytime.`
     );
   },
   delayed: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `⏳ *Delivery Update — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `Your order *${ctx.orderNumber}* is slightly delayed due to high demand.\n\n` +
-      `We are prioritizing your delivery. Sorry for the inconvenience.\n📞 ${SUPPORT}`
+      `*Delivery Update*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, order *${ctx.orderNumber}* is experiencing a short delay due to high order volume.\n` +
+      `We are prioritising your delivery and will update you shortly. Thank you for your patience.`
     );
   },
   failed: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `⚠️ *Delivery Attempt — ${BRAND}*\n\n` +
-      `Assalam o Alaikum *${n}*,\n\n` +
-      `We could not complete delivery for order *${ctx.orderNumber}* today.\n\n` +
-      `Our team will contact you shortly. 📞 ${SUPPORT}`
+      `*Delivery Attempt Unsuccessful*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, we were unable to complete delivery for order *${ctx.orderNumber}* today.\n` +
+      `Our team will contact you to arrange the next attempt. Reply here if you need immediate assistance.`
     );
   },
   returned: (ctx) => {
     const n = firstName(ctx.customerName);
     return (
-      `↩️ *Return Update — ${BRAND}*\n\n` +
-      `Hi *${n}*, order *${ctx.orderNumber}* has been marked as returned.\n\n` +
-      `For refunds or redelivery, contact us: ${SUPPORT}`
+      `*Return / Refund Update*\n*${BRAND}*\n\n` +
+      `Dear *${n}*, we have recorded a return update for order *${ctx.orderNumber}*.\n` +
+      `Our support team will follow up regarding refund or redelivery. Reply to this chat for help.`
     );
   },
 };
@@ -290,12 +358,13 @@ export async function sendPremiumDeliveryStatus(
     failed: "order_failed_delivery",
     returned: "shipment_return_update",
   };
-  const msg = builder(ctx);
+  const trigger = templateMap[status] ?? "order_processing";
+  const msg = builder(ctx) + brandFooter();
   const cta =
     ctx.trackingUrl && status !== "delivered"
-      ? { buttonText: "Track Order", url: ctx.trackingUrl }
+      ? { buttonText: "Track order", url: ctx.trackingUrl }
       : undefined;
-  return sendPremiumText(ctx.customerPhone, msg, templateMap[status] ?? "status_update", cta);
+  return sendPremiumText(ctx.customerPhone, msg, trigger, { ctx, cta });
 }
 
 export async function resolveTrackingUrlForDelivery(

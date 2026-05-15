@@ -61,11 +61,11 @@ export async function sendShopifyFulfilledWa(payload: Record<string, unknown>): 
 
   const name = buildCtxFromPayload(payload, phone).customerName.split(/\s+/)[0];
   const fallback =
-    `🚚 *Order Shipped — Khan Dry Fruits*\n\n` +
+    `*Order Shipped*\n*Khan Dry Fruits*\n\n` +
     `Assalam o Alaikum *${name}*,\n\n` +
-    `Your order *${orderNum}* has been shipped!` +
-    (tracking ? `\n\n📦 Tracking: *${tracking}*` : "") +
-    `\n\nThank you for shopping with us 🌰`;
+    `Your order *${orderNum}* has left our facility and is on its way to you.` +
+    (tracking ? `\n\n*Tracking reference*\n${tracking}` : "") +
+    `\n\nYou will receive further updates on this chat.`;
 
   const res = await sendLifecycleWhatsApp({
     triggerEvent: "order_shipped",

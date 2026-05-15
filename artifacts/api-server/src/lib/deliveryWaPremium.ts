@@ -205,28 +205,29 @@ function buildPremiumMessage(opts: {
     timeZone: "Asia/Karachi",
   });
 
+  const first = invoice.customerName.split(" ")[0] || "Customer";
+  const payLine = invoice.isPaid ? "Paid online" : `Cash on delivery (${formatMoney(invoice.codAmount)})`;
+
   return (
-    `✅ *Order Confirmed — ${BRAND}*\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `Hello *${invoice.customerName.split(" ")[0]}*! 👋\n\n` +
+    `*Out for Delivery*\n` +
+    `*${BRAND}*\n\n` +
+    `Assalam o Alaikum *${first}*,\n\n` +
     `${progressIcon} *${STATUS_LABELS[progress]}*\n\n` +
-    `🧾 *Order ID:* ${invoice.orderNumber}\n` +
-    `📅 *Placed:* ${orderTime}\n` +
-    `📍 *Deliver to:* ${invoice.addressMasked}\n\n` +
-    `*🛵 Rider Assigned*\n` +
-    `👤 ${riderName}\n` +
-    (riderPhone ? `📞 ${riderPhone}\n` : "") +
-    `🛵 Vehicle: ${vehicle}\n\n` +
-    `⏱️ *Expected delivery:*\n${eta.label}\n\n` +
-    `*🧾 Order Summary*\n` +
-    `${itemLines || "• See invoice on tracking page"}\n` +
+    `*Order*\n${invoice.orderNumber}\n` +
+    `*Placed*\n${orderTime}\n` +
+    `*Delivery address*\n${invoice.addressMasked}\n\n` +
+    `*Your delivery partner*\n${riderName}\n` +
+    (riderPhone ? `*Contact*\n${riderPhone}\n` : "") +
+    `*Vehicle*\n${vehicle}\n\n` +
+    `*Estimated arrival*\n${eta.label}\n\n` +
+    `*Order summary*\n` +
+    `${itemLines || "• View full details on tracking page"}\n` +
     `${discountLine}${deliveryLine}\n` +
-    `💰 *Total:* *${formatMoney(invoice.total)}*\n` +
-    `💳 *Payment:* ${invoice.isPaid ? "Paid ✅" : `COD — ${formatMoney(invoice.codAmount)}`}\n\n` +
-    `📍 *Live tracking:*\n${trackingUrl}\n` +
-    (mapUrl ? `🗺️ *Map:* ${mapUrl}\n` : "") +
-    `\n━━━━━━━━━━━━━━━━━━━\n` +
-    `Thank you for choosing *${BRAND}* 🌰`
+    `*Total*\n${formatMoney(invoice.total)}\n` +
+    `*Payment*\n${payLine}\n\n` +
+    `*Live tracking*\n${trackingUrl}\n` +
+    (mapUrl ? `*Map*\n${mapUrl}\n` : "") +
+    `\n—\nThank you for choosing *${BRAND}*.`
   ).slice(0, 3800);
 }
 

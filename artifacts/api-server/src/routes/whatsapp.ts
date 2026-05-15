@@ -3436,7 +3436,7 @@ router.post("/admin/whatsapp/templates/seed-all-templates", adminMiddleware as a
     }> = [
       {
         name: "order_confirmation",
-        messageBody: "Hello {{1}}, 👋\nThank you for your order with KDF NUTS 🥜\n\n🧾 Order ID: {{2}}\n💰 Total Amount: {{3}}\n📍 Delivery Address: {{4}}\n\nYour order has been successfully received and is now being processed.\n\nWe will notify you once your order is shipped 🚚\n\nThank you for shopping with us ❤️",
+        messageBody: "Assalam o Alaikum {{1}},\n\nThank you for your order with Khan Dry Fruits. We have received order {{2}}.\n\nOrder total: {{3}}\nPayment: {{4}}\n\nYour order is being prepared. We will notify you on WhatsApp when it ships.\n\nReply to this message for any assistance.",
         paramCount: 4, triggerEvent: "order_confirmation", category: "UTILITY",
       },
       {
