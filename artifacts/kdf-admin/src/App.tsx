@@ -1,4 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { lazyPage } from "@/lib/lazyPage";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -14,94 +15,94 @@ import { Layout } from "@/components/Layout";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/LoginPage";
 
-const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
-const ProductsPage = lazy(() => import("@/pages/ProductsPage"));
-const CategoriesPage = lazy(() => import("@/pages/CategoriesPage"));
-const OrdersPage = lazy(() => import("@/pages/OrdersPage"));
-const CustomersPage = lazy(() => import("@/pages/CustomersPage"));
-const BannersPage = lazy(() => import("@/pages/BannersPage"));
-const CouponsPage = lazy(() => import("@/pages/CouponsPage"));
-const WalletPage = lazy(() => import("@/pages/WalletPage"));
-const LoyaltyPage = lazy(() => import("@/pages/LoyaltyPage"));
-const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
-const ImportExportPage = lazy(() => import("@/pages/ImportExportPage"));
-const IntegrationsPage = lazy(() => import("@/pages/IntegrationsPage"));
-const SyncJobsPage = lazy(() => import("@/pages/SyncJobsPage"));
-const CouriersPage = lazy(() => import("@/pages/CouriersPage"));
-const PaymentsPage = lazy(() => import("@/pages/PaymentsPage"));
-const LocationSettingsPage = lazy(() => import("@/pages/LocationSettingsPage"));
-const WhatsAppPage = lazy(() => import("@/pages/WhatsAppPage"));
-const LogoManagementPage = lazy(() => import("@/pages/LogoManagementPage"));
-const BlogPostsPage = lazy(() => import("@/pages/BlogPostsPage"));
-const SEOSettingsPage = lazy(() => import("@/pages/SEOSettingsPage"));
-const AbandonedCheckoutsPage = lazy(() => import("@/pages/AbandonedCheckoutsPage"));
-const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
-const AdminProfilePage = lazy(() => import("@/pages/AdminProfilePage"));
-const AnnouncementsPage = lazy(() => import("@/pages/AnnouncementsPage"));
-const FooterPage = lazy(() => import("@/pages/FooterPage"));
-const AIContentPage = lazy(() => import("@/pages/AIContentPage"));
-const FailedOrdersPage = lazy(() => import("@/pages/FailedOrdersPage"));
-const CitiesPage = lazy(() => import("@/pages/CitiesPage"));
-const ReviewsPage = lazy(() => import("@/pages/ReviewsPage"));
-const ChatConversationsPage = lazy(() => import("@/pages/ChatConversationsPage"));
-const ChatLeadsPage = lazy(() => import("@/pages/ChatLeadsPage"));
-const EmailSettingsPage = lazy(() => import("@/pages/EmailSettingsPage"));
-const ImageOptimizationPage = lazy(() => import("@/pages/ImageOptimizationPage"));
-const SameDayDeliveryPage = lazy(() => import("@/pages/SameDayDeliveryPage"));
-const ShippingRulesPage = lazy(() => import("@/pages/ShippingRulesPage"));
-const HeaderBuilderPage = lazy(() => import("@/pages/HeaderBuilderPage"));
-const BiddingPage = lazy(() => import("@/pages/BiddingPage"));
-const RestockPage = lazy(() => import("@/pages/RestockPage"));
-const ShopifyDashboardPage = lazy(() => import("@/pages/ShopifyDashboardPage"));
-const ShopifyOrdersPage = lazy(() => import("@/pages/ShopifyOrdersPage"));
-const LogisticsAutomationPage = lazy(() => import("@/pages/LogisticsAutomationPage"));
-const WaOrderConfirmationsPage = lazy(() => import("@/pages/WaOrderConfirmationsPage"));
-const LahoreDeliveriesPage = lazy(() => import("@/pages/LahoreDeliveriesPage"));
-const RidersPage = lazy(() => import("@/pages/RidersPage"));
-const DeliveryProofsPage = lazy(() => import("@/pages/DeliveryProofsPage"));
-const ShopifyCustomersPage = lazy(() => import("@/pages/ShopifyCustomersPage"));
-const ShopifyProductsPage = lazy(() => import("@/pages/ShopifyProductsPage"));
-const FeaturedProductsPage = lazy(() => import("@/pages/FeaturedProductsPage"));
-const ShopifyCampaignsPage = lazy(() => import("@/pages/ShopifyCampaignsPage"));
-const ShopifyEmailCampaignsPage = lazy(() => import("@/pages/ShopifyEmailCampaignsPage"));
-const ShopifyMarketingPage = lazy(() => import("@/pages/ShopifyMarketingPage"));
-const ShopifyWidgetPage = lazy(() => import("@/pages/ShopifyWidgetPage"));
-const WaInboxPage = lazy(() => import("@/pages/WaInboxPage"));
-const WaChatPage = lazy(() => import("@/pages/WaChatPage"));
-const WaChatSettingsPage = lazy(() => import("@/pages/WaChatSettingsPage"));
-const SocialAIPage = lazy(() => import("@/pages/SocialAIPage"));
-const IntelligencePage = lazy(() => import("@/pages/IntelligencePage"));
-const InvoicePage = lazy(() => import("@/pages/InvoicePage"));
-const PaymentGatewayPage = lazy(() => import("@/pages/PaymentGatewayPage"));
-const BranchesPage = lazy(() => import("@/pages/BranchesPage"));
-const BranchLoginPage = lazy(() => import("@/pages/BranchLoginPage"));
-const BranchPosPage = lazy(() => import("@/pages/BranchPosPage"));
-const AdminPOSPage = lazy(() => import("@/pages/AdminPOSPage"));
-const AdminUsersPage = lazy(() => import("@/pages/AdminUsersPage"));
-const AdminRolesPage = lazy(() => import("@/pages/AdminRolesPage"));
-const ActivityLogsPage = lazy(() => import("@/pages/ActivityLogsPage"));
-const StockOverviewPage = lazy(() => import("@/pages/StockOverviewPage"));
-const StockProductsPage = lazy(() => import("@/pages/StockProductsPage"));
-const StockMovementPage = lazy(() => import("@/pages/StockMovementPage"));
-const StockAdjustmentPage = lazy(() => import("@/pages/StockAdjustmentPage"));
-const SuppliersPage = lazy(() => import("@/pages/SuppliersPage"));
-const ErpSupplierDetailPage = lazy(() => import("@/pages/ErpSupplierDetailPage"));
-const ErpPurchasesPage = lazy(() => import("@/pages/ErpPurchasesPage"));
-const BranchTransfersPage = lazy(() => import("@/pages/BranchTransfersPage"));
-const ErpReportsPage = lazy(() => import("@/pages/ErpReportsPage"));
-const ERPSettingsPage = lazy(() => import("@/pages/ERPSettingsPage"));
-const AdSensePage = lazy(() => import("@/pages/AdSensePage"));
-const RiderLiveMapPage = lazy(() => import("@/pages/RiderLiveMapPage"));
-const VideoBannersPage = lazy(() => import("@/pages/VideoBannersPage"));
-const MobileReelsPage = lazy(() => import("@/pages/MobileReelsPage"));
-const GoogleIndexingPage = lazy(() => import("@/pages/GoogleIndexingPage"));
-const GoogleMerchantPage = lazy(() => import("@/pages/GoogleMerchantPage"));
-const ModulesPage = lazy(() => import("@/pages/ModulesPage"));
-const AdminControlCenterPage = lazy(() => import("@/pages/AdminControlCenterPage"));
-const SEODashboardPage = lazy(() => import("@/pages/SEODashboardPage"));
-const SEORedirectsPage = lazy(() => import("@/pages/SEORedirectsPage"));
-const SEOSchemaPage = lazy(() => import("@/pages/SEOSchemaPage"));
-const SEOAIWriterPage = lazy(() => import("@/pages/SEOAIWriterPage"));
+const DashboardPage = lazyPage(() => import("@/pages/DashboardPage"));
+const ProductsPage = lazyPage(() => import("@/pages/ProductsPage"));
+const CategoriesPage = lazyPage(() => import("@/pages/CategoriesPage"));
+const OrdersPage = lazyPage(() => import("@/pages/OrdersPage"));
+const CustomersPage = lazyPage(() => import("@/pages/CustomersPage"));
+const BannersPage = lazyPage(() => import("@/pages/BannersPage"));
+const CouponsPage = lazyPage(() => import("@/pages/CouponsPage"));
+const WalletPage = lazyPage(() => import("@/pages/WalletPage"));
+const LoyaltyPage = lazyPage(() => import("@/pages/LoyaltyPage"));
+const NotificationsPage = lazyPage(() => import("@/pages/NotificationsPage"));
+const ImportExportPage = lazyPage(() => import("@/pages/ImportExportPage"));
+const IntegrationsPage = lazyPage(() => import("@/pages/IntegrationsPage"));
+const SyncJobsPage = lazyPage(() => import("@/pages/SyncJobsPage"));
+const CouriersPage = lazyPage(() => import("@/pages/CouriersPage"));
+const PaymentsPage = lazyPage(() => import("@/pages/PaymentsPage"));
+const LocationSettingsPage = lazyPage(() => import("@/pages/LocationSettingsPage"));
+const WhatsAppPage = lazyPage(() => import("@/pages/WhatsAppPage"));
+const LogoManagementPage = lazyPage(() => import("@/pages/LogoManagementPage"));
+const BlogPostsPage = lazyPage(() => import("@/pages/BlogPostsPage"));
+const SEOSettingsPage = lazyPage(() => import("@/pages/SEOSettingsPage"));
+const AbandonedCheckoutsPage = lazyPage(() => import("@/pages/AbandonedCheckoutsPage"));
+const AnalyticsPage = lazyPage(() => import("@/pages/AnalyticsPage"));
+const AdminProfilePage = lazyPage(() => import("@/pages/AdminProfilePage"));
+const AnnouncementsPage = lazyPage(() => import("@/pages/AnnouncementsPage"));
+const FooterPage = lazyPage(() => import("@/pages/FooterPage"));
+const AIContentPage = lazyPage(() => import("@/pages/AIContentPage"));
+const FailedOrdersPage = lazyPage(() => import("@/pages/FailedOrdersPage"));
+const CitiesPage = lazyPage(() => import("@/pages/CitiesPage"));
+const ReviewsPage = lazyPage(() => import("@/pages/ReviewsPage"));
+const ChatConversationsPage = lazyPage(() => import("@/pages/ChatConversationsPage"));
+const ChatLeadsPage = lazyPage(() => import("@/pages/ChatLeadsPage"));
+const EmailSettingsPage = lazyPage(() => import("@/pages/EmailSettingsPage"));
+const ImageOptimizationPage = lazyPage(() => import("@/pages/ImageOptimizationPage"));
+const SameDayDeliveryPage = lazyPage(() => import("@/pages/SameDayDeliveryPage"));
+const ShippingRulesPage = lazyPage(() => import("@/pages/ShippingRulesPage"));
+const HeaderBuilderPage = lazyPage(() => import("@/pages/HeaderBuilderPage"));
+const BiddingPage = lazyPage(() => import("@/pages/BiddingPage"));
+const RestockPage = lazyPage(() => import("@/pages/RestockPage"));
+const ShopifyDashboardPage = lazyPage(() => import("@/pages/ShopifyDashboardPage"));
+const ShopifyOrdersPage = lazyPage(() => import("@/pages/ShopifyOrdersPage"));
+const LogisticsAutomationPage = lazyPage(() => import("@/pages/LogisticsAutomationPage"));
+const WaOrderConfirmationsPage = lazyPage(() => import("@/pages/WaOrderConfirmationsPage"));
+const LahoreDeliveriesPage = lazyPage(() => import("@/pages/LahoreDeliveriesPage"));
+const RidersPage = lazyPage(() => import("@/pages/RidersPage"));
+const DeliveryProofsPage = lazyPage(() => import("@/pages/DeliveryProofsPage"));
+const ShopifyCustomersPage = lazyPage(() => import("@/pages/ShopifyCustomersPage"));
+const ShopifyProductsPage = lazyPage(() => import("@/pages/ShopifyProductsPage"));
+const FeaturedProductsPage = lazyPage(() => import("@/pages/FeaturedProductsPage"));
+const ShopifyCampaignsPage = lazyPage(() => import("@/pages/ShopifyCampaignsPage"));
+const ShopifyEmailCampaignsPage = lazyPage(() => import("@/pages/ShopifyEmailCampaignsPage"));
+const ShopifyMarketingPage = lazyPage(() => import("@/pages/ShopifyMarketingPage"));
+const ShopifyWidgetPage = lazyPage(() => import("@/pages/ShopifyWidgetPage"));
+const WaInboxPage = lazyPage(() => import("@/pages/WaInboxPage"));
+const WaChatPage = lazyPage(() => import("@/pages/WaChatPage"));
+const WaChatSettingsPage = lazyPage(() => import("@/pages/WaChatSettingsPage"));
+const SocialAIPage = lazyPage(() => import("@/pages/SocialAIPage"));
+const IntelligencePage = lazyPage(() => import("@/pages/IntelligencePage"));
+const InvoicePage = lazyPage(() => import("@/pages/InvoicePage"));
+const PaymentGatewayPage = lazyPage(() => import("@/pages/PaymentGatewayPage"));
+const BranchesPage = lazyPage(() => import("@/pages/BranchesPage"));
+const BranchLoginPage = lazyPage(() => import("@/pages/BranchLoginPage"));
+const BranchPosPage = lazyPage(() => import("@/pages/BranchPosPage"));
+const AdminPOSPage = lazyPage(() => import("@/pages/AdminPOSPage"));
+const AdminUsersPage = lazyPage(() => import("@/pages/AdminUsersPage"));
+const AdminRolesPage = lazyPage(() => import("@/pages/AdminRolesPage"));
+const ActivityLogsPage = lazyPage(() => import("@/pages/ActivityLogsPage"));
+const StockOverviewPage = lazyPage(() => import("@/pages/StockOverviewPage"));
+const StockProductsPage = lazyPage(() => import("@/pages/StockProductsPage"));
+const StockMovementPage = lazyPage(() => import("@/pages/StockMovementPage"));
+const StockAdjustmentPage = lazyPage(() => import("@/pages/StockAdjustmentPage"));
+const SuppliersPage = lazyPage(() => import("@/pages/SuppliersPage"));
+const ErpSupplierDetailPage = lazyPage(() => import("@/pages/ErpSupplierDetailPage"));
+const ErpPurchasesPage = lazyPage(() => import("@/pages/ErpPurchasesPage"));
+const BranchTransfersPage = lazyPage(() => import("@/pages/BranchTransfersPage"));
+const ErpReportsPage = lazyPage(() => import("@/pages/ErpReportsPage"));
+const ERPSettingsPage = lazyPage(() => import("@/pages/ERPSettingsPage"));
+const AdSensePage = lazyPage(() => import("@/pages/AdSensePage"));
+const RiderLiveMapPage = lazyPage(() => import("@/pages/RiderLiveMapPage"));
+const VideoBannersPage = lazyPage(() => import("@/pages/VideoBannersPage"));
+const MobileReelsPage = lazyPage(() => import("@/pages/MobileReelsPage"));
+const GoogleIndexingPage = lazyPage(() => import("@/pages/GoogleIndexingPage"));
+const GoogleMerchantPage = lazyPage(() => import("@/pages/GoogleMerchantPage"));
+const ModulesPage = lazyPage(() => import("@/pages/ModulesPage"));
+const AdminControlCenterPage = lazyPage(() => import("@/pages/AdminControlCenterPage"));
+const SEODashboardPage = lazyPage(() => import("@/pages/SEODashboardPage"));
+const SEORedirectsPage = lazyPage(() => import("@/pages/SEORedirectsPage"));
+const SEOSchemaPage = lazyPage(() => import("@/pages/SEOSchemaPage"));
+const SEOAIWriterPage = lazyPage(() => import("@/pages/SEOAIWriterPage"));
 
 /* Orval / React Query: relative `/api/...` → prepend API origin (never empty in production). */
 const adminApiBase = getEffectiveApiOrigin();
@@ -146,7 +147,7 @@ function AdminRouteSpinner() {
 }
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const isAuthenticated = !!localStorage.getItem("kdf_admin_token");
 
   useEffect(() => {
@@ -155,7 +156,9 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     }
   }, [isAuthenticated, setLocation]);
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated) {
+    return <AdminRouteSpinner />;
+  }
 
   return (
     <Layout>
@@ -170,7 +173,7 @@ function RedirectToShopifyWidget() {
   useEffect(() => {
     setLocation("/shopify/widget");
   }, [setLocation]);
-  return null;
+  return <AdminRouteSpinner />;
 }
 
 function Router() {
@@ -306,6 +309,10 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    sessionStorage.removeItem("kdf_admin_chunk_reload_v1");
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider

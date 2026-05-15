@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,11 @@ export default function LoginPage() {
   const [mfaToken, setMfaToken] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [needs2fa, setNeeds2fa] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("kdf_admin_token");
+    if (token) setLocation("/dashboard");
+  }, [setLocation]);
 
   /** Fetch JSON safely — 15 s timeout; always targets api-server (apiPublicUrl), never bare /api on the static host. */
   const fetchJson = async (apiPath: string, init: RequestInit) => {

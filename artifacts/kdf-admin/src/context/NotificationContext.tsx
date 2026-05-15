@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { apiPublicUrl } from "@/lib/apiBase";
+import { safeJsonParse } from "@/lib/safeJson";
 
 /* ═══════════════════════════════════════════════════════════
    TYPES
@@ -265,66 +266,68 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       /* ── WA message (inbound) ── */
       es.addEventListener("wa_message", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         if (d.direction !== "in") return;
 
         setWaUnread(n => n + 1);
         playSound("wa_message");
 
-        const name = d.contactName || d.phone || "Customer";
-        const preview = d.content ? (d.content.length > 50 ? d.content.slice(0, 50) + "…" : d.content) : "New message";
+        const name = String(d.contactName ?? d.phone ?? "Customer");
+        const content = typeof d.content === "string" ? d.content : "";
+        const preview = content ? (content.length > 50 ? content.slice(0, 50) + "…" : content) : "New message";
+        const conversationId = typeof d.conversationId === "number" ? d.conversationId : undefined;
 
         addToast({
           type: "wa_message",
           title: `💬 ${name}`,
           message: preview,
           link: "/wa-inbox",
-          conversationId: d.conversationId,
+          conversationId,
         });
         sendPush(`WhatsApp: ${name}`, preview, "/wa-inbox");
       });
 
       /* ── WA unread count sync ── */
       es.addEventListener("wa_unread_count", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<{ total?: number }>(e.data, {});
         setWaUnread(d.total ?? 0);
       });
 
       /* ── New order ── */
       es.addEventListener("new_order", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         setOrderUnread(n => n + 1);
         playSound("new_order");
 
         addToast({
           type: "new_order",
           title: `🛒 New Order!`,
-          message: d.message || `Order #${d.orderId} received`,
+          message: String(d.message ?? `Order #${d.orderId} received`),
           link: "/orders",
-          orderId: d.orderId,
+          orderId: typeof d.orderId === "number" ? d.orderId : undefined,
         });
-        sendPush("New Order Received!", d.message || `Order #${d.orderId}`, "/orders");
+        sendPush("New Order Received!", String(d.message ?? `Order #${d.orderId}`), "/orders");
       });
 
       /* ── Shopify new order ── */
       es.addEventListener("new_shopify_order", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         setOrderUnread(n => n + 1);
         playSound("new_order");
 
         addToast({
           type: "new_order",
           title: `🛒 Shopify Order!`,
-          message: d.message || `Order ${d.orderName || d.orderId} received`,
+          message: String(d.message ?? `Order ${d.orderName ?? d.orderId} received`),
           link: "/shopify/orders",
-          orderId: d.orderId,
+          orderId: typeof d.orderId === "number" ? d.orderId : undefined,
         });
-        sendPush("New Shopify Order!", d.message || `Order ${d.orderName}`, "/shopify/orders");
+        sendPush("New Shopify Order!", String(d.message ?? `Order ${d.orderName}`), "/shopify/orders");
       });
 
       /* ── Rider update ── */
       es.addEventListener("rider_status_update", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         playSound("rider_update");
 
         addToast({
@@ -338,7 +341,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       /* ── Payment confirmed ── */
       es.addEventListener("payment_confirmed", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         playSound("payment");
 
         addToast({
@@ -352,7 +355,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       /* ── Order delivered ── */
       es.addEventListener("order_delivered", (e: MessageEvent) => {
-        const d = JSON.parse(e.data);
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         playSound("delivered");
 
         addToast({

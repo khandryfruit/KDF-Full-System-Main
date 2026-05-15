@@ -299,6 +299,29 @@ function handler(req, res) {
     return;
   }
 
+  /* Canonical URLs: app is built with base /admin/ — bare /dashboard or / breaks wouter routing (black screen). */
+  if (basePrefix) {
+    const search = requestUrl.search || "";
+    if (pathname === "/" || pathname === "") {
+      res.writeHead(302, {
+        Location: `${basePrefix}/${search}`,
+        "Cache-Control": "no-store",
+      }).end();
+      return;
+    }
+    const isAsset =
+      /\.[a-z0-9]+$/i.test(pathname) ||
+      pathname.startsWith("/assets/") ||
+      pathname.includes("/assets/");
+    if (!isAsset && !pathname.startsWith(basePrefix)) {
+      res.writeHead(302, {
+        Location: `${basePrefix}${pathname}${search}`,
+        "Cache-Control": "no-store",
+      }).end();
+      return;
+    }
+  }
+
   if (pathname === "/healthz" || pathname === "/ready") {
     res
       .writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" })
