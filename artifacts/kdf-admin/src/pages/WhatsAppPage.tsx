@@ -3185,9 +3185,19 @@ export default function WhatsAppPage() {
                 </div>
               )}
               {(waMonitoring?.webhookFailures?.length ?? 0) > 0 && (
-                <div className="mt-4 border border-red-200 rounded-lg bg-red-50/50 px-3 py-2">
-                  <p className="text-xs font-semibold text-red-800 mb-1">Recent webhook failures ({waMonitoring.webhookFailures.length})</p>
-                  <ul className="text-xs text-red-700 space-y-1 max-h-24 overflow-y-auto">
+                <div className="mt-4 border border-red-300 rounded-lg bg-red-50 px-4 py-3 space-y-2">
+                  <p className="text-sm font-semibold text-red-900">Customer messages blocked — invalid_hmac_signature</p>
+                  <p className="text-xs text-red-800 leading-relaxed">
+                    Webhook connect ho gaya (Test pass) lekin customer replies reject ho rahi hain kyunki <strong>App Secret</strong> galat hai.
+                    Verify Token (<code className="bg-red-100 px-1 rounded">kdfnuts_webhook_token</code>) alag cheez hai — App Secret Meta App → Settings → Basic se copy karein.
+                  </p>
+                  <ol className="text-xs text-red-800 list-decimal pl-4 space-y-1">
+                    <li><a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="underline font-medium">developers.facebook.com</a> → App → Settings → Basic → <strong>App Secret</strong> → Show → Copy</li>
+                    <li>Admin → WhatsApp → API Settings → <strong>App Secret</strong> field mein paste → Save</li>
+                    <li>Railway api-server par <code className="bg-red-100 px-1 rounded">META_APP_SECRET</code> bhi same value set karein → Redeploy</li>
+                    <li>Customer se dubara reply karwayein — Debug Panel mein <strong>Inbound (1h)</strong> 1+ hona chahiye</li>
+                  </ol>
+                  <ul className="text-xs text-red-700 space-y-1 max-h-20 overflow-y-auto border-t border-red-200 pt-2">
                     {waMonitoring.webhookFailures.slice(0, 5).map((f: { id: number; error: string; createdAt: string }) => (
                       <li key={f.id}>{f.error} — {new Date(f.createdAt).toLocaleString()}</li>
                     ))}

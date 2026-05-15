@@ -604,10 +604,14 @@ router.post("/meta/webhook", async (req, res) => {
   const rawBody = (req as { rawBody?: Buffer }).rawBody;
 
   if (body?.object === "whatsapp_business_account") {
-    const { verifyMetaWebhookSignature } = await import("../lib/metaWebhookVerify.js");
+    const { verifyMetaWebhookSignatureAny } = await import("../lib/metaWebhookVerify.js");
     const [waRow] = await db.select({ appSecret: whatsappSettingsTable.appSecret }).from(whatsappSettingsTable).limit(1);
-    const appSecret = (waRow?.appSecret?.trim() || process.env.META_APP_SECRET?.trim() || "");
-    if (appSecret && (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret))) {
+    const secrets = [
+      process.env.META_APP_SECRET?.trim(),
+      waRow?.appSecret?.trim(),
+    ].filter((s): s is string => !!s);
+    const unique = [...new Set(secrets)];
+    if (unique.length > 0 && (!signature || !rawBody || !verifyMetaWebhookSignatureAny(rawBody, signature, unique).ok)) {
       logger.warn({ signature: signature ? "present" : "missing" }, "Meta unified webhook: invalid WA HMAC — rejected");
       await db.insert(waWebhookFailuresTable).values({
         payload: req.body as Record<string, unknown>,

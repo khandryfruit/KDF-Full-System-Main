@@ -10,7 +10,7 @@ import type OpenAI from "openai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
-import { verifyMetaWebhookSignature, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
+import { verifyMetaWebhookSignatureAny, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
 import { persistInboundWaMessage } from "../lib/waInbound";
 
 const router = Router();
@@ -74,9 +74,23 @@ function getUnifiedWebhookUrl(reqHost?: string): string {
   return base ? `${base}/api/meta/webhook` : "";
 }
 
+/** Env secret first (Railway), then DB — both tried on HMAC verify. */
+async function getMetaAppSecrets(): Promise<string[]> {
+  const secrets: string[] = [];
+  const env = process.env.META_APP_SECRET?.trim();
+  if (env) secrets.push(env);
+  const [settings] = await db.select({
+    appSecret: whatsappSettingsTable.appSecret,
+    webhookVerifyToken: whatsappSettingsTable.webhookVerifyToken,
+  }).from(whatsappSettingsTable).limit(1);
+  const db = settings?.appSecret?.trim();
+  if (db && db !== env) secrets.push(db);
+  return [...new Set(secrets)];
+}
+
 async function getMetaAppSecret(): Promise<string> {
-  const [settings] = await db.select({ appSecret: whatsappSettingsTable.appSecret }).from(whatsappSettingsTable).limit(1);
-  return (settings?.appSecret?.trim() || process.env.META_APP_SECRET?.trim() || "");
+  const list = await getMetaAppSecrets();
+  return list[0] ?? "";
 }
 
 /* ─── Webhook Verification (Meta GET) ───────────────── */
@@ -118,13 +132,17 @@ router.get("/admin/whatsapp/webhook-logs", adminMiddleware as any, (req, res) =>
 
 /* ─── Webhook: incoming message handler ──────────────── */
 router.post("/webhooks/whatsapp", async (req, res) => {
-  const appSecret = await getMetaAppSecret();
+  const secrets = await getMetaAppSecrets();
   const signature = req.headers["x-hub-signature-256"] as string | undefined;
   const rawBody = req.rawBody;
 
-  if (appSecret) {
-    if (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
-      req.log?.warn({ signature: signature ? "present" : "missing" }, "WhatsApp webhook rejected: invalid HMAC signature");
+  if (secrets.length > 0) {
+    const { ok, matchedIndex } = verifyMetaWebhookSignatureAny(rawBody ?? Buffer.alloc(0), signature, secrets);
+    if (!ok) {
+      req.log?.warn(
+        { signature: signature ? "present" : "missing", rawBodyLen: rawBody?.length ?? 0, secretCount: secrets.length },
+        "WhatsApp webhook rejected: invalid HMAC — App Secret must match Meta Developer → App → Basic → App Secret",
+      );
       await db.insert(waWebhookFailuresTable).values({
         payload: req.body as Record<string, unknown>,
         error: "invalid_hmac_signature",
@@ -132,6 +150,9 @@ router.post("/webhooks/whatsapp", async (req, res) => {
       }).catch(() => {});
       res.sendStatus(403);
       return;
+    }
+    if (matchedIndex > 0) {
+      req.log?.info("WA webhook HMAC matched fallback secret — update App Secret in WA Settings to match Meta App Secret");
     }
   } else {
     req.log?.warn("META app secret not configured (DB appSecret or META_APP_SECRET) — accepting webhook without signature verification");
@@ -1531,7 +1552,12 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
     const since1h = new Date(Date.now() - 60 * 60 * 1000);
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
-    const appSecret = await getMetaAppSecret();
+    const secrets = await getMetaAppSecrets();
+    const envSecret = !!process.env.META_APP_SECRET?.trim();
+    const dbSecret = !!settings?.appSecret?.trim();
+    const verifyToken = settings?.webhookVerifyToken ?? "kdfnuts_webhook_token";
+    const dbSecretLooksLikeVerifyToken =
+      !!settings?.appSecret?.trim() && settings.appSecret.trim() === verifyToken;
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
     const dedicatedUrl = getPublicWebhookUrl(host);
     const publicBase = (process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "").replace(/\/$/, "");
@@ -1563,11 +1589,18 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
       .limit(5);
 
     const issues: string[] = [];
-    if (!appSecret) {
+    if (!secrets.length) {
       issues.push("App Secret not set — webhooks accepted without HMAC (set in WA Settings or META_APP_SECRET).");
     }
+    if (dbSecretLooksLikeVerifyToken) {
+      issues.push(
+        "CRITICAL: App Secret field contains the Verify Token — they are different. Use Meta App → Settings → Basic → App Secret (not kdfnuts_webhook_token).",
+      );
+    }
     if (hmacCount > 0) {
-      issues.push(`${hmacCount} webhook(s) rejected in 24h due to invalid HMAC — App Secret in Meta must match DB/env exactly.`);
+      issues.push(
+        `${hmacCount} customer message webhook(s) REJECTED (invalid HMAC). Fix: Meta Developer → Your App → Settings → Basic → copy App Secret → paste in WA API Settings → App Secret OR Railway env META_APP_SECRET. Then redeploy.`,
+      );
     }
     if (Number(is?.inbound_24h ?? 0) === 0 && Number(is?.inbound_1h ?? 0) === 0) {
       issues.push("No inbound messages logged in 24h — Meta may not be delivering webhooks (check Callback URL + subscribe to messages field).");
@@ -1579,11 +1612,17 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
       issues.push("PUBLIC_API_URL not set — webhook URL may be wrong in Meta Developer Console.");
     }
 
-    const healthy = issues.length === 0 && Number(is?.inbound_24h ?? 0) > 0;
+    const healthy = hmacCount === 0 && !dbSecretLooksLikeVerifyToken && Number(is?.inbound_1h ?? 0) > 0;
 
     return res.json({
       healthy,
       issues,
+      appSecret: {
+        envConfigured: envSecret,
+        dbConfigured: dbSecret,
+        secretCount: secrets.length,
+        dbLooksLikeVerifyToken: dbSecretLooksLikeVerifyToken,
+      },
       webhookUrls: {
         dedicated: dedicatedUrl || null,
         unified: unifiedUrl,
@@ -1592,7 +1631,7 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
       metaSetup: {
         subscribeFields: ["messages", "message_deliveries", "message_reads"],
         verifyToken: settings?.webhookVerifyToken ?? "kdfnuts_webhook_token",
-        hasAppSecret: !!appSecret,
+        hasAppSecret: secrets.length > 0,
         phoneNumberId: settings?.phoneNumberId ?? null,
         isActive: settings?.isActive ?? false,
       },

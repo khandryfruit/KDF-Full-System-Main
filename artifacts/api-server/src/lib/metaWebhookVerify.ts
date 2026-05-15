@@ -18,6 +18,22 @@ export function verifyMetaWebhookSignature(
   }
 }
 
+/** Try env secret first, then DB — fixes mismatch when DB has stale/wrong secret. */
+export function verifyMetaWebhookSignatureAny(
+  rawBody: Buffer,
+  signature: string | undefined,
+  secrets: string[],
+): { ok: boolean; matchedIndex: number } {
+  if (!signature?.startsWith("sha256=") || !rawBody?.length) return { ok: false, matchedIndex: -1 };
+  const unique = [...new Set(secrets.map((s) => s.trim()).filter(Boolean))];
+  for (let i = 0; i < unique.length; i++) {
+    if (verifyMetaWebhookSignature(rawBody, signature, unique[i]!)) {
+      return { ok: true, matchedIndex: i };
+    }
+  }
+  return { ok: false, matchedIndex: -1 };
+}
+
 /** Accept any configured verify token (WA settings + social settings). */
 export function isValidMetaWebhookVerifyToken(
   token: string | undefined,
