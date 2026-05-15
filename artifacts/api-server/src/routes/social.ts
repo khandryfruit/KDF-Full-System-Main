@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable, whatsappSettingsTable } from "@workspace/db";
+import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable, whatsappSettingsTable, waWebhookFailuresTable } from "@workspace/db";
 import { eq, desc, sql, and, asc } from "drizzle-orm";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import { logger } from "../lib/logger";
@@ -608,7 +608,12 @@ router.post("/meta/webhook", async (req, res) => {
     const [waRow] = await db.select({ appSecret: whatsappSettingsTable.appSecret }).from(whatsappSettingsTable).limit(1);
     const appSecret = (waRow?.appSecret?.trim() || process.env.META_APP_SECRET?.trim() || "");
     if (appSecret && (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret))) {
-      logger.warn("Meta unified webhook: invalid WA HMAC — rejected");
+      logger.warn({ signature: signature ? "present" : "missing" }, "Meta unified webhook: invalid WA HMAC — rejected");
+      await db.insert(waWebhookFailuresTable).values({
+        payload: req.body as Record<string, unknown>,
+        error: "invalid_hmac_signature",
+        signature: signature ?? null,
+      }).catch(() => {});
       return res.sendStatus(403);
     }
   }

@@ -1060,6 +1060,11 @@ export default function WhatsAppPage() {
     refetchInterval: 60_000,
     enabled: tab === "debug",
   });
+  const { data: waDiagnostics, refetch: refetchWaDiagnostics, isFetching: diagnosticsLoading } = useQuery({
+    queryKey: ["/api/admin/whatsapp/webhook-diagnostics"],
+    queryFn: () => apiFetch("/api/admin/whatsapp/webhook-diagnostics"),
+    enabled: tab === "debug",
+  });
   const [form, setForm] = useState({
     accessToken: "", phoneNumberId: "", businessAccountId: "",
     webhookVerifyToken: "kdfnuts_webhook_token", isActive: false,
@@ -3185,6 +3190,59 @@ export default function WhatsAppPage() {
                     ))}
                   </ul>
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Inbound webhook health ── */}
+          <div className={`rounded-xl border overflow-hidden ${waDiagnostics?.healthy ? "border-green-200 bg-green-50/30" : "border-amber-300 bg-amber-50/40"}`}>
+            <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between gap-3">
+              <h3 className="font-semibold flex items-center gap-2 text-sm">
+                {waDiagnostics?.healthy ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                Inbound replies health check
+              </h3>
+              <Button variant="outline" size="sm" onClick={() => refetchWaDiagnostics()} disabled={diagnosticsLoading} className="gap-1.5 shrink-0">
+                <RefreshCw className={`w-3.5 h-3.5 ${diagnosticsLoading ? "animate-spin" : ""}`} />Run check
+              </Button>
+            </div>
+            <div className="px-5 py-4 space-y-3 text-sm">
+              {!waDiagnostics ? (
+                <p className="text-muted-foreground flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Checking webhook…</p>
+              ) : (
+                <>
+                  <p className={waDiagnostics.healthy ? "text-green-800 font-medium" : "text-amber-900 font-medium"}>
+                    {waDiagnostics.healthy
+                      ? "Inbound webhooks are reaching the server."
+                      : "Inbound replies may be blocked — fix the issues below."}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-lg bg-white/80 border px-2.5 py-2">
+                      <span className="text-muted-foreground">Inbound (1h)</span>
+                      <p className="font-bold text-lg tabular-nums">{waDiagnostics.inbound?.last1h ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/80 border px-2.5 py-2">
+                      <span className="text-muted-foreground">Inbound (24h)</span>
+                      <p className="font-bold text-lg tabular-nums">{waDiagnostics.inbound?.last24h ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/80 border px-2.5 py-2">
+                      <span className="text-muted-foreground">HMAC rejected (24h)</span>
+                      <p className={`font-bold text-lg tabular-nums ${(waDiagnostics.webhookFailures24h?.hmacRejected ?? 0) > 0 ? "text-red-600" : ""}`}>
+                        {waDiagnostics.webhookFailures24h?.hmacRejected ?? 0}
+                      </p>
+                    </div>
+                  </div>
+                  {(waDiagnostics.issues?.length ?? 0) > 0 && (
+                    <ul className="list-disc pl-5 space-y-1 text-amber-900 text-xs">
+                      {waDiagnostics.issues.map((issue: string) => <li key={issue}>{issue}</li>)}
+                    </ul>
+                  )}
+                  {waDiagnostics.webhookUrls && (
+                    <div className="text-xs space-y-1 font-mono break-all text-muted-foreground">
+                      <p><span className="font-sans font-semibold text-foreground">Dedicated:</span> {waDiagnostics.webhookUrls.dedicated ?? "—"}</p>
+                      <p><span className="font-sans font-semibold text-foreground">Unified:</span> {waDiagnostics.webhookUrls.unified}</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

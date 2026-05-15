@@ -11,6 +11,7 @@ import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { verifyMetaWebhookSignature, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
+import { persistInboundWaMessage } from "../lib/waInbound";
 
 const router = Router();
 
@@ -125,7 +126,12 @@ router.post("/webhooks/whatsapp", async (req, res) => {
     const body = req.body as any;
     recentWebhookPayloads.unshift({ ts: new Date().toISOString(), body });
     if (recentWebhookPayloads.length > 50) recentWebhookPayloads.pop();
-    if (body?.object !== "whatsapp_business_account") return;
+    if (body?.object !== "whatsapp_business_account") {
+      req.log?.debug({ object: body?.object }, "WA webhook ignored: not whatsapp_business_account");
+      return;
+    }
+    const msgCount = (body.entry ?? []).reduce((n: number, e: { changes?: unknown[] }) => n + (e.changes?.length ?? 0), 0);
+    req.log?.info({ entries: body.entry?.length ?? 0, changes: msgCount }, "WA webhook POST accepted, processing");
     await processWaWebhookBody(body, req.log ?? logger);
   } catch (err) {
     req.log?.error(err, "Webhook event processing error");
@@ -175,9 +181,13 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           }
         }
 
-        /* ── Incoming messages ── */
+        /* ── Incoming messages (field must be "messages" for customer replies) ── */
+        if (change?.field && change.field !== "messages") {
+          log?.debug({ field: change.field }, "WA webhook change ignored (not messages field)");
+        }
         for (const msg of (value.messages ?? [])) {
-          const phone = msg.from ?? "unknown";
+          const phoneRaw = msg.from ?? "unknown";
+          const phone = phoneRaw === "unknown" ? phoneRaw : normalizePhone(phoneRaw);
           const msgId = msg.id as string | undefined;
 
           /* Extract text — works for plain text AND interactive replies */
@@ -238,7 +248,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             if (dup) { log?.info({ msgId }, "Duplicate webhook message, skipping"); continue; }
           }
 
-          /* Log incoming */
+          /* Log incoming (whatsapp_logs — audit trail) */
           await db.insert(whatsappLogsTable).values({
             phone,
             messageId: msgId ?? null,
@@ -246,46 +256,33 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             message: rawText,
             status: "received",
             response: JSON.stringify(msg),
-          }).catch(() => {});
+          }).catch((err) => log?.warn({ err, phone, msgId }, "WA inbound whatsapp_logs insert failed"));
 
           if (phone === "unknown") continue;
 
-          /* ── Upsert WA Conversation & store message ── */
-          const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) ?? null;
-          const [waConv] = await db.insert(waConversationsTable).values({
-            contactPhone: phone,
-            contactName: contactName ?? undefined,
-            contactWaId: phone,
-            lastMessage: rawText.slice(0, 120),
-            lastMessageAt: new Date(),
-            unreadCount: 1,
-            botMode: "auto",
-            status: "open",
-          }).onConflictDoUpdate({
-            target: waConversationsTable.contactPhone,
-            set: {
-              contactName: sql`COALESCE(EXCLUDED.contact_name, ${waConversationsTable.contactName})`,
-              lastMessage: rawText.slice(0, 120),
-              lastMessageAt: new Date(),
-              unreadCount: sql`${waConversationsTable.unreadCount} + 1`,
-              updatedAt: new Date(),
-            },
-          }).returning().catch(() => []);
+          const contactName =
+            (value.contacts?.find((c: { wa_id?: string }) => c.wa_id === phoneRaw || c.wa_id === phone)?.profile?.name as string | undefined)
+            ?? (value.contacts?.[0]?.profile?.name as string | undefined)
+            ?? null;
 
-          const waConvId = (waConv as any)?.id;
-          if (waConvId) {
-            await db.execute(sql`
-              INSERT INTO wa_messages (conversation_id, wa_message_id, direction, type, content, media_url, caption, reaction, status, is_bot, created_at)
-              VALUES (${waConvId}, ${msgId ?? null}, 'in', ${msgType}, ${rawText}, ${mediaUrl}, ${mediaCaption}, ${reactionEmoji}, 'received', false, NOW())
-            `).catch(() => {});
-            broadcastSSE("wa_message", { conversationId: waConvId, direction: "in", content: rawText, phone, msgType, mediaUrl, mediaCaption, reactionEmoji });
+          const { conversationId: waConvId } = await persistInboundWaMessage({
+            phoneRaw,
+            msgId,
+            msgType,
+            rawText,
+            mediaUrl,
+            mediaCaption,
+            reactionEmoji,
+            contactName,
+            metadata: value.metadata,
+          }, log);
 
-            /* Broadcast updated total unread count so header badge updates instantly */
-            db.execute(sql`SELECT COALESCE(SUM(unread_count), 0)::int AS total FROM wa_conversations`)
-              .then((r: any) => {
-                const total = (r.rows ?? r)[0]?.total ?? 0;
-                broadcastSSE("wa_unread_count", { total });
-              }).catch(() => {});
+          const [waConv] = waConvId
+            ? await db.select().from(waConversationsTable).where(eq(waConversationsTable.id, waConvId)).limit(1)
+            : [];
+
+          if (!waConvId) {
+            log?.error({ phone, msgId }, "WA inbound not in inbox — check DB / wa_conversations table");
           }
 
           /* ── Intent detection + save in conversation ── */
@@ -1512,18 +1509,109 @@ router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, re
   }
 });
 
+/* ─── Admin: Webhook diagnostics (inbound health) ─────── */
+router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async (req, res) => {
+  try {
+    const since1h = new Date(Date.now() - 60 * 60 * 1000);
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
+    const appSecret = await getMetaAppSecret();
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
+    const dedicatedUrl = getPublicWebhookUrl(host);
+    const publicBase = (process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "").replace(/\/$/, "");
+    const unifiedUrl = publicBase ? `${publicBase}/api/meta/webhook` : `https://${host}/api/meta/webhook`;
+
+    const inboundStats = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'received' AND created_at >= ${since1h})::int AS inbound_1h,
+        COUNT(*) FILTER (WHERE status = 'received' AND created_at >= ${since24h})::int AS inbound_24h,
+        MAX(created_at) FILTER (WHERE status = 'received') AS last_inbound_at
+      FROM whatsapp_logs
+      WHERE template_name = 'incoming'
+    `);
+    const is = (inboundStats.rows ?? inboundStats)[0] as Record<string, unknown>;
+
+    const hmacFailures = await db.execute(sql`
+      SELECT COUNT(*)::int AS n FROM wa_webhook_failures
+      WHERE error = 'invalid_hmac_signature' AND created_at >= ${since24h}
+    `);
+    const hmacCount = Number((hmacFailures.rows ?? hmacFailures)[0]?.n ?? 0);
+
+    const recentInbound = await db.select({
+      phone: whatsappLogsTable.phone,
+      message: whatsappLogsTable.message,
+      createdAt: whatsappLogsTable.createdAt,
+    }).from(whatsappLogsTable)
+      .where(eq(whatsappLogsTable.status, "received"))
+      .orderBy(desc(whatsappLogsTable.createdAt))
+      .limit(5);
+
+    const issues: string[] = [];
+    if (!appSecret) {
+      issues.push("App Secret not set — webhooks accepted without HMAC (set in WA Settings or META_APP_SECRET).");
+    }
+    if (hmacCount > 0) {
+      issues.push(`${hmacCount} webhook(s) rejected in 24h due to invalid HMAC — App Secret in Meta must match DB/env exactly.`);
+    }
+    if (Number(is?.inbound_24h ?? 0) === 0 && Number(is?.inbound_1h ?? 0) === 0) {
+      issues.push("No inbound messages logged in 24h — Meta may not be delivering webhooks (check Callback URL + subscribe to messages field).");
+    }
+    if (!settings?.phoneNumberId) {
+      issues.push("phone_number_id not configured in WhatsApp settings.");
+    }
+    if (!dedicatedUrl && !publicBase) {
+      issues.push("PUBLIC_API_URL not set — webhook URL may be wrong in Meta Developer Console.");
+    }
+
+    const healthy = issues.length === 0 && Number(is?.inbound_24h ?? 0) > 0;
+
+    return res.json({
+      healthy,
+      issues,
+      webhookUrls: {
+        dedicated: dedicatedUrl || null,
+        unified: unifiedUrl,
+        recommended: "Use ONE URL in Meta — prefer unified /api/meta/webhook if IG/FB also use it",
+      },
+      metaSetup: {
+        subscribeFields: ["messages", "message_deliveries", "message_reads"],
+        verifyToken: settings?.webhookVerifyToken ?? "kdfnuts_webhook_token",
+        hasAppSecret: !!appSecret,
+        phoneNumberId: settings?.phoneNumberId ?? null,
+        isActive: settings?.isActive ?? false,
+      },
+      inbound: {
+        last1h: Number(is?.inbound_1h ?? 0),
+        last24h: Number(is?.inbound_24h ?? 0),
+        lastReceivedAt: is?.last_inbound_at ?? null,
+        recentSamples: recentInbound,
+      },
+      webhookFailures24h: {
+        hmacRejected: hmacCount,
+      },
+      livePayloadCount: recentWebhookPayloads.length,
+    });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
+  }
+});
+
 /* ─── Admin: Webhook Info ────────────────────────────── */
 router.get("/admin/whatsapp/webhook-info", adminMiddleware as any, async (req, res) => {
   try {
-    const webhookUrl = getPublicWebhookUrl();
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
+    const webhookUrl = getPublicWebhookUrl(host);
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
     const configured = !!(settings?.accessToken && settings?.phoneNumberId && settings?.webhookVerifyToken);
     const isProd = !!(process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim();
+    const appSecret = await getMetaAppSecret();
     return res.json({
       webhookUrl,
+      unifiedWebhookUrl: `${(process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "").replace(/\/$/, "") || `https://${host}`}/api/meta/webhook`,
       verifyToken: settings?.webhookVerifyToken ?? "kdfnuts_webhook_token",
       configured,
       isActive: settings?.isActive ?? false,
+      hasAppSecret: !!appSecret,
       isProd,
       urlAvailable: !!webhookUrl,
     });
@@ -2116,9 +2204,14 @@ router.get("/admin/whatsapp/conversations", adminMiddleware as any, async (req, 
 /* ─── Admin: Single Conversation messages ─────────────── */
 router.get("/admin/whatsapp/conversations/:phone", adminMiddleware as any, async (req, res) => {
   try {
-    const phone = req.params.phone;
+    const phoneParam = req.params.phone;
+    const phone = normalizePhone(phoneParam);
     /* Try wa_messages first (rich data), fall back to whatsapp_logs */
-    const convResult = await db.execute(sql`SELECT id FROM wa_conversations WHERE contact_phone = ${phone} LIMIT 1`);
+    const convResult = await db.execute(sql`
+      SELECT id FROM wa_conversations
+      WHERE contact_phone = ${phone} OR contact_phone = ${phoneParam} OR contact_wa_id = ${phoneParam}
+      LIMIT 1
+    `);
     const conv = (convResult.rows ?? convResult as any)[0];
     const convId = (conv as any)?.id;
     if (convId) {

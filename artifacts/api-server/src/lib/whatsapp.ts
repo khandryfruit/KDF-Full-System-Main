@@ -1,5 +1,5 @@
 import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, whatsappConversationStatesTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { persistWaOutboundMessage } from "./waInboxPersist";
 
@@ -350,22 +350,27 @@ export async function sendCtaUrlMessage(opts: {
 
 /* ─── Conversation State Machine ──────────────────────── */
 export async function getConversationState(phone: string) {
+  const normalized = normalizePhone(phone);
   const [row] = await db.select().from(whatsappConversationStatesTable)
-    .where(eq(whatsappConversationStatesTable.phone, phone)).limit(1);
+    .where(or(
+      eq(whatsappConversationStatesTable.phone, normalized),
+      eq(whatsappConversationStatesTable.phone, phone),
+    )).limit(1);
   return row ?? null;
 }
 
 export async function setConversationState(phone: string, state: string, stateData?: Record<string, unknown>) {
+  const normalized = normalizePhone(phone);
   const existing = await getConversationState(phone);
   const values = {
-    phone,
+    phone: normalized,
     state,
     stateData: stateData ? JSON.stringify(stateData) : null,
     updatedAt: new Date(),
   };
   if (existing) {
     await db.update(whatsappConversationStatesTable)
-      .set(values).where(eq(whatsappConversationStatesTable.phone, phone));
+      .set(values).where(eq(whatsappConversationStatesTable.phone, existing.phone));
   } else {
     await db.insert(whatsappConversationStatesTable).values(values).catch(() => {});
   }
