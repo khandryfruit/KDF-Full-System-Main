@@ -9,9 +9,14 @@ import { apiPublicUrl } from "@/lib/apiBase";
 const ADMIN_TOKEN = () => localStorage.getItem("kdf_admin_token") ?? "";
 const auth = () => ({ Authorization: `Bearer ${ADMIN_TOKEN()}` });
 
+const VYAPAR_COLUMNS = [
+  "Item Name", "Item Code", "Category", "Sale Price", "Purchase Price",
+  "Opening Stock", "Unit", "GST(%)", "Description", "Barcode",
+];
+
 const CATALOG_FIELDS = [
-  { col: "product_name", req: true, ex: "Premium Almonds", note: "Product title" },
-  { col: "sku", req: true, ex: "ALM001", note: "Unique code (Vyapar item code)" },
+  { col: "product_name", req: true, ex: "Premium Almonds", note: "Product title (Vyapar: Item Name)" },
+  { col: "sku", req: true, ex: "ALM001", note: "Unique code (Vyapar: Item Code)" },
   { col: "barcode", req: false, ex: "1234567890123", note: "Scannable barcode" },
   { col: "category", req: false, ex: "Dry Fruits", note: "Category name" },
   { col: "subcategory", req: false, ex: "Nuts", note: "Optional subcategory" },
@@ -188,9 +193,17 @@ export default function ImportExportPage() {
         </TabsContent>
       </Tabs>
 
+      <div className="border rounded-xl bg-muted/30 p-4 text-sm space-y-2">
+        <h3 className="font-semibold">Vyapar export columns (auto-detected)</h3>
+        <p className="text-muted-foreground text-xs">
+          Export items from Vyapar as Excel/CSV. These headers map automatically:
+        </p>
+        <p className="text-xs font-mono break-words">{VYAPAR_COLUMNS.join(" · ")}</p>
+      </div>
+
       <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
         <div className="p-4 border-b">
-          <h3 className="font-semibold">Template columns</h3>
+          <h3 className="font-semibold">KDF template columns</h3>
           <p className="text-xs text-muted-foreground mt-0.5">Example: Premium Almonds | ALM001 | 123456 | Dry Fruits | 1800 | 2200 | 50 | KG | Lahore | KDF | Premium quality almonds</p>
         </div>
         <div className="overflow-x-auto">

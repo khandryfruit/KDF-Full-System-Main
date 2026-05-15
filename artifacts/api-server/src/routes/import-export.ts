@@ -15,7 +15,14 @@ import {
   bulkUpdatePrices,
   ensureBarcodes,
   clearImportCaches,
+  buildImportPreview,
+  dedupeValidRows,
+  emptyRollbackSnapshot,
+  IMPORT_BATCH_SIZE,
+  type ImportRollbackSnapshot,
 } from "../lib/unifiedProductImport.js";
+import { rollbackImport } from "../lib/productImportRollback.js";
+import { buildProductSeo } from "../lib/productImportSeo.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -70,12 +77,28 @@ export function worksheetToRows(worksheet: ExcelJS.Worksheet): Record<string, st
     const obj: Record<string, string> = {};
     row.eachCell((cell, colNum) => {
       const header = headers[colNum - 1];
-      if (header) obj[header] = String(cell.value ?? "").trim();
+      if (header) {
+        const v = cell.value;
+        if (v == null) obj[header] = "";
+        else if (typeof v === "object" && "text" in (v as object)) obj[header] = String((v as { text: string }).text).trim();
+        else if (v instanceof Date) obj[header] = v.toISOString();
+        else obj[header] = String(v).trim();
+      }
     });
+    const name = obj["product_name"] ?? obj["Product Name"] ?? obj["Item Name"] ?? obj["name"] ?? "";
+    if (/example|delete before import|—/i.test(name)) return;
     if (Object.values(obj).some(v => v)) rows.push(obj);
   });
 
   return rows;
+}
+
+function extractHeaders(worksheet: ExcelJS.Worksheet): string[] {
+  const headers: string[] = [];
+  worksheet.getRow(1).eachCell((cell, colNum) => {
+    headers[colNum - 1] = String(cell.value ?? "").trim();
+  });
+  return headers.filter(Boolean);
 }
 
 async function buildWorkbookFromCatalog(format: string) {
@@ -127,24 +150,40 @@ router.post("/admin/import/catalog/preview", adminMiddleware as any, upload.sing
   if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
   try {
     const { worksheet } = await parseWorksheet(req.file.buffer, req.file.originalname);
+    const headers = extractHeaders(worksheet);
     const rawRows = worksheetToRows(worksheet);
-    const { valid, invalid } = validateRows(rawRows);
-    const dryResults = await syncCatalogRows(valid, { dryRun: true });
+    const summary = await buildImportPreview(rawRows, headers);
+
     res.json({
-      totalRows: rawRows.length,
-      validCount: valid.length,
-      invalidCount: invalid.length,
-      preview: valid.slice(0, 50).map(v => ({
-        rowNum: v.rowNum,
-        productName: v.data!.productName,
-        sku: v.data!.sku,
-        salePrice: v.data!.salePrice,
-        stock: v.data!.stock,
-        branch: v.data!.branch || "all branches",
-        unit: v.data!.unit,
-      })),
-      invalid: invalid.map(v => ({ rowNum: v.rowNum, errors: v.errors })),
-      dryRun: dryResults.slice(0, 20),
+      totalRows: summary.totalRows,
+      validCount: summary.validCount,
+      invalidCount: summary.invalidCount,
+      warningCount: summary.warningCount,
+      vyaparDetected: summary.vyaparDetected,
+      duplicateSkuInFile: summary.duplicateSkuInFile,
+      newCategories: summary.newCategories,
+      newBrands: summary.newBrands,
+      preview: summary.valid.slice(0, 80).map(v => {
+        const seo = v.data ? buildProductSeo(v.data) : null;
+        return {
+          rowNum: v.rowNum,
+          productName: v.data!.productName,
+          sku: v.data!.sku,
+          category: v.data!.category,
+          brand: v.data!.brand,
+          salePrice: v.data!.salePrice,
+          purchasePrice: v.data!.purchasePrice,
+          stock: v.data!.stock,
+          branch: v.data!.branch || "all branches",
+          unit: v.data!.unit,
+          tax: v.data!.tax,
+          barcode: v.data!.barcode,
+          metaTitle: seo?.metaTitle,
+          slug: seo?.slug,
+        };
+      }),
+      invalid: summary.invalid.map(v => ({ rowNum: v.rowNum, errors: v.errors })),
+      warnings: summary.warnings.slice(0, 100),
     });
   } catch (err: unknown) {
     req.log.error(err);
@@ -158,23 +197,59 @@ router.post("/admin/import/catalog/preview", adminMiddleware as any, upload.sing
 router.post("/admin/import/catalog", adminMiddleware as any, upload.single("file"), async (req, res) => {
   if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
 
+  const body = (req.body ?? {}) as Record<string, string>;
+  const syncEcommerce = body.syncEcommerce !== "false";
+  const syncBranches = body.syncBranches !== "false";
+  const skipDuplicates = body.skipDuplicates === "true";
+  const autoCreateCategories = body.autoCreateCategories !== "false";
+  const generateSeo = body.generateSeo !== "false";
+
   const [job] = await db.insert(syncJobsTable).values({
     integrationType: "catalog_import",
     status: "running",
     logs: [`Catalog import: ${req.file.originalname}`],
-    meta: { filename: req.file.originalname },
+    meta: { filename: req.file.originalname, canRollback: true },
   }).returning();
+
+  const rollback = emptyRollbackSnapshot();
 
   try {
     const { worksheet, sheetName } = await parseWorksheet(req.file.buffer, req.file.originalname);
+    const headers = extractHeaders(worksheet);
     const rawRows = worksheetToRows(worksheet);
-    const { valid, invalid } = validateRows(rawRows);
-    const results = await syncCatalogRows(valid, {
-      syncEcommerce: true,
-      syncBranches: true,
-      recordMovements: true,
-    });
+    const preview = await buildImportPreview(rawRows, headers);
+    const valid = dedupeValidRows(preview.valid);
+    const invalid = preview.invalid;
 
+    const results: Awaited<ReturnType<typeof syncCatalogRows>> = [];
+    for (let i = 0; i < valid.length; i += IMPORT_BATCH_SIZE) {
+      const chunk = valid.slice(i, i + IMPORT_BATCH_SIZE);
+      const chunkResults = await syncCatalogRows(chunk, {
+        syncEcommerce,
+        syncBranches,
+        recordMovements: true,
+        autoCreateCategories,
+        generateSeo,
+        vyaparSource: preview.vyaparDetected,
+        skipDuplicates,
+        rollback,
+      });
+      results.push(...chunkResults);
+
+      await db.update(syncJobsTable).set({
+        successCount: results.filter(r => r.ok).length,
+        failedCount: invalid.length + results.filter(r => !r.ok).length,
+        totalItems: rawRows.length,
+        logs: [
+          `Processing "${sheetName}"…`,
+          `Batch ${Math.floor(i / IMPORT_BATCH_SIZE) + 1}: ${results.length}/${valid.length} rows`,
+        ],
+      }).where(eq(syncJobsTable.id, job!.id));
+    }
+
+    const createdCount = results.filter(r => r.action === "created").length;
+    const updatedCount = results.filter(r => r.action === "updated").length;
+    const skippedCount = results.filter(r => r.action === "skipped").length;
     const successCount = results.filter(r => r.ok).length;
     const failedCount = invalid.length + results.filter(r => !r.ok).length;
     const errors = [
@@ -183,12 +258,22 @@ router.post("/admin/import/catalog", adminMiddleware as any, upload.single("file
     ];
 
     await db.update(syncJobsTable).set({
-      status: failedCount === rawRows.length ? "failed" : "completed",
-      logs: [`Sheet "${sheetName}": ${successCount} ok, ${failedCount} failed`, ...errors.slice(0, 100)],
+      status: failedCount === rawRows.length && successCount === 0 ? "failed" : "completed",
+      logs: [
+        `Sheet "${sheetName}": ${successCount} ok, ${failedCount} failed`,
+        `Created: ${createdCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`,
+        ...errors.slice(0, 80),
+      ],
       totalItems: rawRows.length,
       successCount,
       failedCount,
       completedAt: new Date(),
+      meta: {
+        filename: req.file.originalname,
+        vyaparDetected: preview.vyaparDetected,
+        canRollback: true,
+        rollback,
+      },
     }).where(eq(syncJobsTable.id, job!.id));
 
     res.json({
@@ -196,6 +281,11 @@ router.post("/admin/import/catalog", adminMiddleware as any, upload.single("file
       totalItems: rawRows.length,
       successCount,
       failedCount,
+      createdCount,
+      updatedCount,
+      skippedCount,
+      vyaparDetected: preview.vyaparDetected,
+      canRollback: true,
       errors: errors.slice(0, 200),
       results: results.slice(0, 500),
     });
@@ -209,6 +299,46 @@ router.post("/admin/import/catalog", adminMiddleware as any, upload.single("file
     res.status(500).json({ error: "Import failed" });
   } finally {
     clearImportCaches();
+  }
+});
+
+/* ─── Import job status (progress polling) ─── */
+router.get("/admin/import/catalog/job/:id", adminMiddleware as any, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const [job] = await db.select().from(syncJobsTable).where(eq(syncJobsTable.id, id)).limit(1);
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  const meta = (job.meta ?? {}) as Record<string, unknown>;
+  res.json({
+    id: job.id,
+    status: job.status,
+    totalItems: job.totalItems,
+    successCount: job.successCount,
+    failedCount: job.failedCount,
+    logs: job.logs,
+    canRollback: Boolean(meta.canRollback && meta.rollback),
+    completedAt: job.completedAt,
+  });
+});
+
+/* ─── Rollback a completed import ─── */
+router.post("/admin/import/catalog/rollback/:jobId", adminMiddleware as any, async (req, res) => {
+  const jobId = parseInt(req.params.jobId, 10);
+  const [job] = await db.select().from(syncJobsTable).where(eq(syncJobsTable.id, jobId)).limit(1);
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  const meta = job.meta as { rollback?: ImportRollbackSnapshot; rolledBack?: boolean };
+  if (meta?.rolledBack) { res.status(400).json({ error: "Import already rolled back" }); return; }
+  if (!meta?.rollback) { res.status(400).json({ error: "No rollback snapshot for this job" }); return; }
+
+  try {
+    const result = await rollbackImport(meta.rollback);
+    await db.update(syncJobsTable).set({
+      meta: { ...meta, rolledBack: true, rollbackResult: result, rolledBackAt: new Date().toISOString() },
+      logs: [...(job.logs ?? []), `Rolled back at ${new Date().toISOString()}`],
+    }).where(eq(syncJobsTable.id, jobId));
+    res.json({ ok: true, jobId, ...result });
+  } catch (err: unknown) {
+    req.log.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Rollback failed" });
   }
 });
 

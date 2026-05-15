@@ -1,6 +1,13 @@
 import { db, productsTable, categoriesTable, branchesTable, branchProductsTable, stockMovementsTable } from "@workspace/db";
 import { eq, and, or, ilike, sql } from "drizzle-orm";
-import { generateSlugFromName } from "./slugify.js";
+import { generateSlugFromName, ensureUniqueSlug } from "./slugify.js";
+import { buildProductSeo, tagsWithSeoKeywords } from "./productImportSeo.js";
+import {
+  emptyRollbackSnapshot,
+  type ImportRollbackSnapshot,
+  type EcommerceProductSnapshot,
+  type BranchProductSnapshot,
+} from "./productImportRollback.js";
 
 /** Canonical export/import columns */
 export const CATALOG_COLUMNS = [
@@ -41,26 +48,51 @@ export type ImportRowResult = {
   productName: string;
   sku: string;
   branchesUpdated: string[];
+  action?: "created" | "updated" | "skipped";
   error?: string;
+};
+
+export type PreviewSummary = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  warningCount: number;
+  duplicateSkuInFile: string[];
+  newCategories: string[];
+  newBrands: string[];
+  vyaparDetected: boolean;
+  valid: RowValidation[];
+  invalid: RowValidation[];
+  warnings: { rowNum: number; sku: string; messages: string[] }[];
 };
 
 const HEADER_ALIASES: Record<string, keyof CatalogRow | "raw"> = {
   product_name: "productName", name: "productName", "product name": "productName", title: "productName",
-  sku: "sku", item_code: "sku", "item code": "sku", code: "sku",
-  barcode: "barcode", upc: "barcode", ean: "barcode",
-  category: "category", cat: "category",
+  item_name: "productName", "item name": "productName", "itemname": "productName",
+  sku: "sku", item_code: "sku", "item code": "sku", code: "sku", "item id": "sku", item_id: "sku",
+  barcode: "barcode", upc: "barcode", ean: "barcode", "bar code": "barcode",
+  category: "category", cat: "category", "item category": "category", product_category: "category",
   subcategory: "subcategory", "sub category": "subcategory", sub_category: "subcategory",
   purchase_price: "purchasePrice", "purchase price": "purchasePrice", cost: "purchasePrice", buy_price: "purchasePrice",
+  "cost price": "purchasePrice", cost_price: "purchasePrice",
   sale_price: "salePrice", price: "salePrice", "sale price": "salePrice", selling_price: "salePrice",
+  mrp: "salePrice", "selling rate": "salePrice", selling_rate: "salePrice", rate: "salePrice",
   stock: "stock", quantity: "stock", stock_qty: "stock", qty: "stock",
-  unit: "unit", uom: "unit",
-  branch: "branch", branch_name: "branch", location: "branch",
-  brand: "brand", manufacturer: "brand",
-  description: "description", desc: "description",
-  tax: "tax", vat: "tax", gst: "tax",
+  "stock qty": "stock", "stock quantity": "stock", opening_stock: "stock", "opening stock": "stock",
+  "current stock": "stock", available_qty: "stock",
+  unit: "unit", uom: "unit", "base unit": "unit",
+  branch: "branch", branch_name: "branch", location: "branch", godown: "branch", warehouse: "branch",
+  brand: "brand", manufacturer: "brand", company: "brand",
+  description: "description", desc: "description", details: "description", remarks: "description",
+  tax: "tax", vat: "tax", gst: "tax", "gst(%)": "tax", "gst %": "tax", "tax %": "tax",
   low_stock_alert: "lowStockAlert", low_stock: "lowStockAlert", "low stock": "lowStockAlert", reorder_level: "lowStockAlert",
-  images: "images", image: "images", image_url: "images", photos: "images",
+  images: "images", image: "images", image_url: "images", photos: "images", "image link": "images",
+  hsn: "raw", hsn_code: "raw",
 };
+
+const VYAPAR_HEADER_HINTS = [
+  "item name", "item code", "sale price", "purchase price", "opening stock", "gst",
+];
 
 function normHeader(h: string): string {
   return h.trim().toLowerCase().replace(/\s+/g, " ");
@@ -135,6 +167,12 @@ export function mapRawRow(row: Record<string, string>, rowNum: number): RowValid
   return { rowNum, valid: errors.length === 0, errors, data: errors.length === 0 ? data : undefined };
 }
 
+export function detectVyaparExport(headers: string[]): boolean {
+  const normalized = headers.map(normHeader);
+  const hits = VYAPAR_HEADER_HINTS.filter((h) => normalized.some((n) => n.includes(h) || h.includes(n)));
+  return hits.length >= 2;
+}
+
 export function validateRows(rows: Record<string, string>[]): { valid: RowValidation[]; invalid: RowValidation[] } {
   const valid: RowValidation[] = [];
   const invalid: RowValidation[] = [];
@@ -144,6 +182,88 @@ export function validateRows(rows: Record<string, string>[]): { valid: RowValida
     else invalid.push(v);
   });
   return { valid, invalid };
+}
+
+/** Full preview with duplicate SKU detection, category/brand warnings, Vyapar detection. */
+export async function buildImportPreview(
+  rows: Record<string, string>[],
+  headers: string[],
+): Promise<PreviewSummary> {
+  clearImportCaches();
+  const { valid, invalid } = validateRows(rows);
+  const vyaparDetected = detectVyaparExport(headers);
+
+  const skuOccurrences = new Map<string, number[]>();
+  for (const v of valid) {
+    const sku = v.data!.sku.toLowerCase();
+    if (!skuOccurrences.has(sku)) skuOccurrences.set(sku, []);
+    skuOccurrences.get(sku)!.push(v.rowNum);
+  }
+  const duplicateSkuInFile = [...skuOccurrences.entries()]
+    .filter(([, nums]) => nums.length > 1)
+    .map(([sku]) => sku);
+
+  const cats = await loadCategories();
+  const catNames = new Set(cats.map((c) => c.name.toLowerCase()));
+  const newCategories = new Set<string>();
+  const newBrands = new Set<string>();
+  const warnings: PreviewSummary["warnings"] = [];
+
+  const existingSkus = new Set<string>();
+  if (valid.length) {
+    const skuList = [...new Set(valid.map((v) => v.data!.sku))].slice(0, 500);
+    for (const sku of skuList) {
+      const hit = await db
+        .select({ externalId: productsTable.externalId })
+        .from(productsTable)
+        .where(eq(productsTable.externalId, sku))
+        .limit(1);
+      if (hit.length) existingSkus.add(sku.toLowerCase());
+    }
+  }
+
+  for (const v of valid) {
+    if (!v.data) continue;
+    const rowWarnings: string[] = [];
+    const d = v.data;
+
+    if (duplicateSkuInFile.includes(d.sku.toLowerCase())) {
+      rowWarnings.push("Duplicate SKU in file (last row wins on import)");
+    }
+    if (existingSkus.has(d.sku.toLowerCase())) {
+      rowWarnings.push("SKU exists — will update existing product");
+    }
+    if (!d.category) rowWarnings.push("No category — product will be uncategorized");
+    else if (!catNames.has(d.category.toLowerCase()) && !catNames.has(`${d.category} / ${d.subcategory}`.toLowerCase())) {
+      newCategories.add(d.subcategory ? `${d.category} / ${d.subcategory}` : d.category);
+      rowWarnings.push(`Category "${d.category}" will be auto-created`);
+    }
+    if (!d.brand) rowWarnings.push("No brand — stored in tags only if provided later");
+    else newBrands.add(d.brand);
+    if (!d.description) rowWarnings.push("No description — SEO text will be auto-generated");
+    if (!d.images.length) rowWarnings.push("No images");
+    if (d.purchasePrice != null && d.purchasePrice > d.salePrice) {
+      rowWarnings.push("Purchase price higher than sale price");
+    }
+
+    if (rowWarnings.length) {
+      warnings.push({ rowNum: v.rowNum, sku: d.sku, messages: rowWarnings });
+    }
+  }
+
+  return {
+    totalRows: rows.length,
+    validCount: valid.length,
+    invalidCount: invalid.length,
+    warningCount: warnings.length,
+    duplicateSkuInFile,
+    newCategories: [...newCategories],
+    newBrands: [...newBrands],
+    vyaparDetected,
+    valid,
+    invalid,
+    warnings,
+  };
 }
 
 let branchCache: { id: number; name: string; city: string; slug: string }[] | null = null;
@@ -204,69 +324,190 @@ async function resolveCategoryId(category: string, subcategory: string): Promise
   return hit?.id;
 }
 
+async function ensureCategoryId(
+  category: string,
+  subcategory: string,
+  autoCreate: boolean,
+  rollback: ImportRollbackSnapshot,
+): Promise<number | undefined> {
+  if (!category) return undefined;
+  const existing = await resolveCategoryId(category, subcategory);
+  if (existing) return existing;
+  if (!autoCreate) return undefined;
+
+  const name = subcategory ? `${category} / ${subcategory}` : category;
+  const slug = await ensureUniqueSlug(generateSlugFromName(name));
+  const [created] = await db
+    .insert(categoriesTable)
+    .values({
+      name,
+      slug,
+      metaTitle: `${name} | Khan Dry Fruits`,
+      metaDescription: `Shop ${name} — premium dry fruits and nuts at Khan Dry Fruits.`,
+      active: true,
+    })
+    .onConflictDoNothing({ target: categoriesTable.slug })
+    .returning({ id: categoriesTable.id });
+
+  if (created) {
+    rollback.createdCategoryIds.push(created.id);
+    categoryCache = null;
+    return created.id;
+  }
+
+  return resolveCategoryId(category, subcategory);
+}
+
 function buildTags(row: CatalogRow): string[] {
   const tags: string[] = [];
   if (row.brand) tags.push(row.brand);
   if (row.tax) tags.push(`tax:${row.tax}`);
   if (row.subcategory) tags.push(row.subcategory);
+  if (row.barcode) tags.push(`barcode:${row.barcode}`);
   return tags;
 }
 
-async function upsertEcommerceProduct(row: CatalogRow): Promise<number> {
-  const slug = generateSlugFromName(row.productName);
-  const categoryId = await resolveCategoryId(row.category, row.subcategory);
-  const tags = buildTags(row);
+/** Keep last row per SKU when file has duplicates. */
+export function dedupeValidRows(valid: RowValidation[]): RowValidation[] {
+  const map = new Map<string, RowValidation>();
+  for (const v of valid) {
+    if (v.data) map.set(v.data.sku.toLowerCase(), v);
+  }
+  return [...map.values()];
+}
+
+async function findEcommerceBySku(sku: string, productName: string) {
+  const [bySku] = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.externalId, sku))
+    .limit(1);
+  if (bySku) return bySku;
+
+  const baseSlug = generateSlugFromName(productName);
+  const [bySlug] = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.slug, baseSlug))
+    .limit(1);
+  return bySlug ?? null;
+}
+
+async function upsertEcommerceProduct(
+  row: CatalogRow,
+  opts: {
+    autoCreateCategories: boolean;
+    generateSeo: boolean;
+    source: "csv" | "vyapar";
+    rollback: ImportRollbackSnapshot;
+    skipDuplicates?: boolean;
+  },
+): Promise<{ id: number; action: "created" | "updated" | "skipped" }> {
+  const existing = await findEcommerceBySku(row.sku, row.productName);
+  if (existing && opts.skipDuplicates) {
+    return { id: existing.id, action: "skipped" };
+  }
+
+  const categoryId = await ensureCategoryId(
+    row.category,
+    row.subcategory,
+    opts.autoCreateCategories,
+    opts.rollback,
+  );
+  const baseTags = buildTags(row);
+  const seo = opts.generateSeo ? buildProductSeo(row) : null;
+  const slug = existing
+    ? existing.slug
+    : await ensureUniqueSlug(seo?.slug ?? generateSlugFromName(row.productName));
+  const tags = opts.generateSeo && seo
+    ? tagsWithSeoKeywords(baseTags, seo.focusKeywords)
+    : baseTags;
   const variants = row.sku
     ? [{ id: row.sku, name: "Default", value: row.unit, price: String(row.salePrice), stock: row.stock, sku: row.sku }]
     : [];
 
-  const [existing] = await db.select({ id: productsTable.id }).from(productsTable)
-    .where(or(eq(productsTable.slug, slug), eq(productsTable.externalId, row.sku))).limit(1);
-
-  if (existing) {
-    await db.update(productsTable).set({
-      name: row.productName,
-      price: String(row.salePrice),
-      originalPrice: row.purchasePrice != null ? String(row.purchasePrice) : undefined,
-      stock: Math.round(row.stock),
-      description: row.description || undefined,
-      categoryId,
-      images: row.images.length ? row.images : undefined,
-      unit: row.unit,
-      tags,
-      variants,
-      active: true,
-      source: "csv",
-      externalId: row.sku,
-      updatedAt: new Date(),
-    }).where(eq(productsTable.id, existing.id));
-    return existing.id;
-  }
-
-  const [inserted] = await db.insert(productsTable).values({
+  const payload = {
     name: row.productName,
-    slug,
     price: String(row.salePrice),
     originalPrice: row.purchasePrice != null ? String(row.purchasePrice) : undefined,
     stock: Math.round(row.stock),
     description: row.description || undefined,
     categoryId,
-    images: row.images,
+    images: row.images.length ? row.images : undefined,
     unit: row.unit,
     tags,
     variants,
     active: true,
-    source: "csv",
+    source: opts.source,
     externalId: row.sku,
-  }).returning({ id: productsTable.id });
-  return inserted!.id;
+    metaTitle: seo?.metaTitle,
+    metaDescription: seo?.metaDescription,
+    altText: seo?.altText,
+    updatedAt: new Date(),
+  };
+
+  if (existing) {
+    opts.rollback.updatedEcommerce.push(snapshotEcommerceProduct(existing));
+    await db.update(productsTable).set(payload).where(eq(productsTable.id, existing.id));
+    return { id: existing.id, action: "updated" };
+  }
+
+  const [inserted] = await db
+    .insert(productsTable)
+    .values({ ...payload, slug, images: row.images })
+    .returning({ id: productsTable.id });
+  opts.rollback.createdEcommerceIds.push(inserted!.id);
+  return { id: inserted!.id, action: "created" };
+}
+
+function snapshotEcommerceProduct(p: typeof productsTable.$inferSelect): EcommerceProductSnapshot {
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    categoryId: p.categoryId,
+    description: p.description,
+    price: p.price,
+    originalPrice: p.originalPrice,
+    stock: p.stock,
+    images: (p.images as string[]) ?? [],
+    unit: p.unit,
+    tags: (p.tags as string[]) ?? [],
+    variants: p.variants,
+    metaTitle: p.metaTitle,
+    metaDescription: p.metaDescription,
+    altText: p.altText,
+    active: p.active,
+    externalId: p.externalId,
+    source: p.source,
+  };
+}
+
+function snapshotBranchProduct(p: typeof branchProductsTable.$inferSelect): BranchProductSnapshot {
+  return {
+    id: p.id,
+    branchId: p.branchId,
+    itemCode: p.itemCode,
+    name: p.name,
+    unit: p.unit,
+    category: p.category,
+    purchasePrice: p.purchasePrice,
+    salePrice: p.salePrice,
+    stockQty: p.stockQty,
+    barcode: p.barcode,
+    description: p.description,
+    imageUrl: p.imageUrl,
+    tags: (p.tags as string[]) ?? [],
+    isActive: p.isActive,
+  };
 }
 
 async function upsertBranchProduct(
   row: CatalogRow,
   branchId: number,
   recordMovement: boolean,
-): Promise<void> {
+  rollback: ImportRollbackSnapshot,
+): Promise<"created" | "updated"> {
   const conditions = [
     eq(branchProductsTable.itemCode, row.sku),
     or(eq(branchProductsTable.branchId, branchId), sql`${branchProductsTable.branchId} is null`)!,
@@ -278,6 +519,7 @@ async function upsertBranchProduct(
   const balAfter = row.stock;
 
   if (existing) {
+    rollback.updatedBranchProducts.push(snapshotBranchProduct(existing));
     await db.update(branchProductsTable).set({
       branchId,
       name: row.productName,
@@ -306,7 +548,7 @@ async function upsertBranchProduct(
         notes: `Import sync — ${row.productName}`,
       });
     }
-    return;
+    return "updated";
   }
 
   const [created] = await db.insert(branchProductsTable).values({
@@ -338,6 +580,8 @@ async function upsertBranchProduct(
       notes: `Initial stock — ${row.productName}`,
     });
   }
+  rollback.createdBranchProductIds.push(created!.id);
+  return "created";
 }
 
 export type SyncOptions = {
@@ -346,7 +590,14 @@ export type SyncOptions = {
   syncAllBranchesIfEmpty?: boolean;
   recordMovements?: boolean;
   dryRun?: boolean;
+  autoCreateCategories?: boolean;
+  generateSeo?: boolean;
+  vyaparSource?: boolean;
+  skipDuplicates?: boolean;
+  rollback?: ImportRollbackSnapshot;
 };
+
+export const IMPORT_BATCH_SIZE = 75;
 
 /** Import one validated row across e-commerce + branch inventory */
 export async function syncCatalogRow(row: CatalogRow, opts: SyncOptions = {}): Promise<ImportRowResult> {
@@ -356,6 +607,11 @@ export async function syncCatalogRow(row: CatalogRow, opts: SyncOptions = {}): P
     syncAllBranchesIfEmpty = true,
     recordMovements = true,
     dryRun = false,
+    autoCreateCategories = true,
+    generateSeo = true,
+    vyaparSource = false,
+    skipDuplicates = false,
+    rollback = emptyRollbackSnapshot(),
   } = opts;
 
   try {
@@ -383,22 +639,34 @@ export async function syncCatalogRow(row: CatalogRow, opts: SyncOptions = {}): P
       };
     }
 
-    if (syncEcommerce) await upsertEcommerceProduct(row);
+    let action: ImportRowResult["action"] = "updated";
+
+    if (syncEcommerce) {
+      const ec = await upsertEcommerceProduct(row, {
+        autoCreateCategories,
+        generateSeo,
+        source: vyaparSource ? "vyapar" : "csv",
+        rollback,
+        skipDuplicates,
+      });
+      action = ec.action;
+    }
 
     if (syncBranches) {
       const targets = branchIds.length ? branchIds : [];
       if (targets.length === 0 && syncAllBranchesIfEmpty) {
         const all = await loadBranches();
-        for (const b of all) await upsertBranchProduct(row, b.id, recordMovements);
+        for (const b of all) await upsertBranchProduct(row, b.id, recordMovements, rollback);
         return {
           rowNum: row.rowNum,
           ok: true,
           productName: row.productName,
           sku: row.sku,
           branchesUpdated: all.map(b => b.name),
+          action,
         };
       }
-      for (const bid of targets) await upsertBranchProduct(row, bid, recordMovements);
+      for (const bid of targets) await upsertBranchProduct(row, bid, recordMovements, rollback);
     }
 
     return {
@@ -407,6 +675,7 @@ export async function syncCatalogRow(row: CatalogRow, opts: SyncOptions = {}): P
       productName: row.productName,
       sku: row.sku,
       branchesUpdated: labels,
+      action,
     };
   } catch (err: unknown) {
     return {
@@ -425,13 +694,21 @@ export async function syncCatalogRows(
   opts: SyncOptions = {},
 ): Promise<ImportRowResult[]> {
   clearImportCaches();
+  const rollback = opts.rollback ?? emptyRollbackSnapshot();
+  const mergedOpts = { ...opts, rollback };
   const results: ImportRowResult[] = [];
-  for (const v of validations) {
-    if (!v.data) continue;
-    results.push(await syncCatalogRow(v.data, opts));
+
+  for (let i = 0; i < validations.length; i += IMPORT_BATCH_SIZE) {
+    const chunk = validations.slice(i, i + IMPORT_BATCH_SIZE);
+    for (const v of chunk) {
+      if (!v.data) continue;
+      results.push(await syncCatalogRow(v.data, mergedOpts));
+    }
   }
   return results;
 }
+
+export { emptyRollbackSnapshot, type ImportRollbackSnapshot };
 
 /** Export merged catalog for download */
 export async function fetchCatalogForExport(): Promise<Record<string, string | number>[]> {
@@ -506,7 +783,7 @@ export async function bulkUpdateStock(rows: Record<string, string>[]): Promise<I
       continue;
     }
     try {
-      for (const bid of ids) await upsertBranchProduct({ ...row, branch: "" }, bid, true);
+      for (const bid of ids) await upsertBranchProduct({ ...row, branch: "" }, bid, true, emptyRollbackSnapshot());
       const [p] = await db.select({ id: productsTable.id }).from(productsTable)
         .where(or(eq(productsTable.externalId, row.sku), ilike(productsTable.slug, `%${generateSlugFromName(row.productName)}%`))).limit(1);
       if (p) await db.update(productsTable).set({ stock: Math.round(row.stock), updatedAt: new Date() }).where(eq(productsTable.id, p.id));
