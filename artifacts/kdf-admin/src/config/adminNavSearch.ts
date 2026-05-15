@@ -64,6 +64,7 @@ export const ADMIN_NAV_SEARCH: { href: string; label: string; keywords?: string 
   { href: "/shopify/wa-inbox", label: "Shopify WA Inbox" },
   { href: "/wa-chat/settings", label: "WA Payment Links" },
   { href: "/logistics/live-map", label: "Live Rider Map" },
+  { href: "/logistics/delivery-proofs", label: "Delivery proofs", keywords: "rider photo gps dispute cod" },
   { href: "/logistics/lahore", label: "Lahore Deliveries" },
   { href: "/logistics/riders", label: "Riders & Accounting" },
   { href: "/logistics/confirmations", label: "WA Confirmations" },

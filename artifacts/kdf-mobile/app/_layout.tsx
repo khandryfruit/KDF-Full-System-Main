@@ -61,6 +61,21 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false);
   const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const acceptBusy  = useRef(false);
+  const checkRef    = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    /* Channel id must match server Expo payload (`channelId: "new_order"`). Samsung/Xiaomi: verify
+       battery settings are not killing the Expo Go / standalone app; riders should disable aggressive
+       background restrictions for this app so high-priority notifications can wake the device. */
+    Notifications.setNotificationChannelAsync("new_order", {
+      name: "New delivery assignments",
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "default",
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!token || !rider) return;
@@ -74,19 +89,6 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       } catch { /* non-critical */ }
     });
   }, [token, !!rider]);
-
-  useEffect(() => {
-    const sub = Notifications.addNotificationReceivedListener(() => {
-      qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
-      qc.invalidateQueries({ queryKey: ["rider-stats"] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    });
-    const tapSub = Notifications.addNotificationResponseReceivedListener((resp) => {
-      const data = resp.notification.request.content.data as any;
-      if (data?.deliveryId) router.push(`/order/${data.deliveryId}` as any);
-    });
-    return () => { sub.remove(); tapSub.remove(); };
-  }, []);
 
   const checkNewOrders = useCallback(async () => {
     if (!token || !rider) return;
@@ -117,7 +119,25 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
         assigned_at: newest.assigned_at ?? new Date().toISOString(),
       });
     } catch { /* silent */ }
-  }, [token, !!rider]);
+  }, [token, !!rider, qc]);
+
+  useEffect(() => {
+    checkRef.current = checkNewOrders;
+  }, [checkNewOrders]);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener(() => {
+      qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
+      qc.invalidateQueries({ queryKey: ["rider-stats"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      void checkRef.current();
+    });
+    const tapSub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const data = resp.notification.request.content.data as any;
+      if (data?.deliveryId) router.push(`/order/${data.deliveryId}` as any);
+    });
+    return () => { sub.remove(); tapSub.remove(); };
+  }, [qc, router]);
 
   useEffect(() => {
     if (!token || !rider) {
@@ -127,7 +147,7 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       return;
     }
     const init = setTimeout(checkNewOrders, 3_000);
-    pollRef.current = setInterval(checkNewOrders, 12_000);
+    pollRef.current = setInterval(checkNewOrders, 5_000);
     return () => { clearTimeout(init); if (pollRef.current) clearInterval(pollRef.current); };
   }, [token, !!rider, checkNewOrders]);
 

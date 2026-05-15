@@ -58,6 +58,7 @@ const LogisticsAutomationPage = lazy(() => import("@/pages/LogisticsAutomationPa
 const WaOrderConfirmationsPage = lazy(() => import("@/pages/WaOrderConfirmationsPage"));
 const LahoreDeliveriesPage = lazy(() => import("@/pages/LahoreDeliveriesPage"));
 const RidersPage = lazy(() => import("@/pages/RidersPage"));
+const DeliveryProofsPage = lazy(() => import("@/pages/DeliveryProofsPage"));
 const ShopifyCustomersPage = lazy(() => import("@/pages/ShopifyCustomersPage"));
 const ShopifyProductsPage = lazy(() => import("@/pages/ShopifyProductsPage"));
 const FeaturedProductsPage = lazy(() => import("@/pages/FeaturedProductsPage"));
@@ -234,6 +235,7 @@ function Router() {
       <Route path="/logistics/automation"><ProtectedRoute component={LogisticsAutomationPage} /></Route>
       <Route path="/logistics/confirmations"><ProtectedRoute component={WaOrderConfirmationsPage} /></Route>
       <Route path="/logistics/lahore"><ProtectedRoute component={LahoreDeliveriesPage} /></Route>
+      <Route path="/logistics/delivery-proofs"><ProtectedRoute component={DeliveryProofsPage} /></Route>
       <Route path="/logistics/riders"><ProtectedRoute component={RidersPage} /></Route>
       <Route path="/logistics/live-map"><ProtectedRoute component={RiderLiveMapPage} /></Route>
       <Route path="/shopify"><ProtectedRoute component={ShopifyDashboardPage} /></Route>

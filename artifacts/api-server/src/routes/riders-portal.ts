@@ -6,6 +6,12 @@ import jwt from "jsonwebtoken";
 import { adminMiddleware } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
+import { hasImageMagicBytes } from "../lib/imageMagicBytes.js";
+import {
+  uploadBufferToCloudinary,
+  isCloudinaryConfigured,
+  cloudinaryDeliveryThumbnailUrl,
+} from "../lib/cloudinaryStorage.js";
 
 const router = Router();
 
@@ -37,6 +43,45 @@ function riderMiddleware(req: any, res: Response, next: NextFunction): void {
   } catch {
     res.status(401).json({ error: "Invalid token" }); return;
   }
+}
+
+function decodePhotoBase64(raw: string): Buffer | null {
+  try {
+    const s = String(raw).replace(/^data:image\/\w+;base64,/, "").trim();
+    if (!s) return null;
+    const buf = Buffer.from(s, "base64");
+    return buf.length ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Server-side rule: Cloudinary proofs require GPS; legacy base64-only rows remain valid without coords. */
+function proofRowAllowsDelivered(row: Record<string, unknown> | undefined): boolean {
+  if (!row) return false;
+  const imgUrl = row.image_url as string | null | undefined;
+  const b64 = row.photo_base64 as string | null | undefined;
+  const hasImg = Boolean(imgUrl) || (b64 != null && String(b64).length > 500);
+  if (!hasImg) return false;
+  if (imgUrl) {
+    const lat = row.latitude;
+    const lng = row.longitude;
+    return lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+  }
+  return true;
+}
+
+async function riderDeliveryEventInsert(params: {
+  deliveryId: number | null;
+  riderId: number;
+  eventType: string;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  const payloadJson = JSON.stringify(params.payload ?? {});
+  await db.execute(sql`
+    INSERT INTO rider_delivery_events (delivery_id, rider_id, event_type, payload)
+    VALUES (${params.deliveryId}, ${params.riderId}, ${params.eventType}, ${payloadJson}::jsonb)
+  `).catch((e: unknown) => logger.warn({ e }, "rider_delivery_events insert failed"));
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -102,6 +147,19 @@ router.post("/rider/auth/login", async (req: any, res) => {
       JWT_SECRET,
       { expiresIn: "30d" }
     );
+
+    setImmediate(() => {
+      ensureDeliveryProofSchema()
+        .then(() =>
+          riderDeliveryEventInsert({
+            deliveryId: null,
+            riderId: rider.id,
+            eventType: "rider_login",
+            payload: { phone: normalised },
+          }),
+        )
+        .catch(() => {});
+    });
 
     res.json({
       ok: true,
@@ -430,6 +488,7 @@ router.get("/rider/deliveries/:id", riderMiddleware, async (req: any, res) => {
 
 router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res) => {
   try {
+    await ensureDeliveryProofSchema();
     const riderId = req.rider.id;
     const id = parseInt(req.params["id"] as string);
     const { status, notes } = req.body;
@@ -439,8 +498,32 @@ router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res
       res.status(400).json({ error: `Status must be one of: ${valid.join(", ")}` }); return;
     }
 
-    const check = await db.execute(sql`SELECT id FROM rider_deliveries WHERE id = ${id} AND rider_id = ${riderId} LIMIT 1`);
+    const check = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${id} AND rider_id = ${riderId} LIMIT 1`);
     if (!check.rows.length) { res.status(404).json({ error: "Delivery not found" }); return; }
+    const beforeRow = check.rows[0] as any;
+
+    if (status === "delivered") {
+      const proofRows = await db.execute(sql`
+        SELECT image_url, photo_base64, latitude, longitude, location_accuracy_m, created_at
+        FROM delivery_verifications WHERE delivery_id = ${id} LIMIT 1
+      `);
+      const proof = proofRows.rows[0] as Record<string, unknown> | undefined;
+      if (!proofRowAllowsDelivered(proof)) {
+        await riderDeliveryEventInsert({
+          deliveryId: id,
+          riderId,
+          eventType: "delivery_blocked_no_proof",
+          payload: { reason: "missing_or_invalid_proof", had_row: Boolean(proof) },
+        });
+        res.status(409).json({
+          error: "Delivery proof required",
+          code: "PROOF_REQUIRED",
+          detail:
+            "Upload a delivery photo with GPS from the app before marking delivered. Legacy base64-only proofs without Cloudinary URL still work if the image was stored before this update.",
+        });
+        return;
+      }
+    }
 
     if (status === "picked") {
       await db.execute(sql`
@@ -471,6 +554,29 @@ router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res
     const updated = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${id} LIMIT 1`);
     const updatedDelivery = updated.rows[0] as any;
     res.json({ ok: true, delivery: updatedDelivery });
+
+    const eventMap: Record<string, string> = {
+      picked: "status_picked",
+      out_for_delivery: "status_out_for_delivery",
+      delivered: "status_delivered",
+      failed: "status_failed",
+      returned: "status_returned",
+    };
+    const ev = eventMap[status];
+    if (ev) {
+      await riderDeliveryEventInsert({
+        deliveryId: id,
+        riderId,
+        eventType: ev,
+        payload: {
+          from_status: beforeRow?.status ?? null,
+          to_status: status,
+          notes: notes ?? null,
+          cod_amount: updatedDelivery?.cod_amount ?? null,
+          is_paid: updatedDelivery?.is_paid ?? null,
+        },
+      });
+    }
 
     /* ── Async: sync rider status back to Shopify via unified engine ── */
     if (updatedDelivery) {
@@ -667,72 +773,193 @@ router.get("/rider/deliveries/:id/invoice", async (req: any, res): Promise<void>
 });
 
 /* ═══════════════════════════════════════════════════════
-   DELIVERY VERIFICATIONS (Proof Photos)
+   DELIVERY VERIFICATIONS (Proof Photos) + audit events
 ═══════════════════════════════════════════════════════ */
 
-/* Ensure table exists on first use */
-async function ensureVerificationsTable() {
+async function ensureDeliveryProofSchema(): Promise<void> {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS delivery_verifications (
       id            SERIAL PRIMARY KEY,
       delivery_id   INTEGER NOT NULL,
       rider_id      INTEGER NOT NULL,
-      photo_base64  TEXT NOT NULL,
+      photo_base64  TEXT,
       mime_type     TEXT NOT NULL DEFAULT 'image/jpeg',
       notes         TEXT,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS image_url text`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS thumbnail_url text`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS latitude double precision`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS longitude double precision`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS location_accuracy_m double precision`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS device_json jsonb DEFAULT '{}'::jsonb`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS cod_collected_snapshot numeric(12, 2)`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS payment_status_snapshot text`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS admin_review_status text DEFAULT 'pending'`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS admin_review_notes text`);
+  await db.execute(sql`ALTER TABLE delivery_verifications ADD COLUMN IF NOT EXISTS admin_reviewed_at timestamptz`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS rider_delivery_events (
+      id bigserial PRIMARY KEY,
+      delivery_id integer,
+      rider_id integer NOT NULL,
+      event_type text NOT NULL,
+      payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS rider_delivery_events_delivery_idx
+      ON rider_delivery_events (delivery_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS rider_delivery_events_rider_idx
+      ON rider_delivery_events (rider_id, created_at DESC)
+  `);
 }
-ensureVerificationsTable().catch((e) => logger.warn({ e }, "delivery_verifications table init"));
+ensureDeliveryProofSchema().catch((e) => logger.warn({ e }, "delivery proof schema init"));
 
-/* POST /api/rider/deliveries/:id/verification — upload proof photo */
+/* POST /api/rider/deliveries/:id/verification — upload proof (Cloudinary + metadata; no long-term base64) */
 router.post("/rider/deliveries/:id/verification", riderMiddleware, async (req: any, res) => {
   try {
+    await ensureDeliveryProofSchema();
     const riderId    = req.rider.id;
-    const deliveryId = parseInt(req.params.id);
-    const { photo_base64, mime_type, notes } = req.body;
+    const deliveryId = parseInt(req.params.id, 10);
+    const {
+      photo_base64,
+      mime_type,
+      notes,
+      latitude,
+      longitude,
+      location_accuracy_m,
+      device,
+    } = req.body ?? {};
 
     if (!photo_base64) { res.status(400).json({ error: "photo_base64 required" }); return; }
+    if (latitude == null || longitude == null) {
+      res.status(400).json({ error: "latitude and longitude required (enable location for delivery proof)" }); return;
+    }
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      res.status(400).json({ error: "Invalid GPS coordinates" }); return;
+    }
+    let acc: number | null = null;
+    if (location_accuracy_m != null) {
+      acc = Number(location_accuracy_m);
+      if (!Number.isFinite(acc) || acc < 0 || acc > 50_000) acc = null;
+    }
 
-    /* Verify the delivery belongs to this rider */
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({ error: "Proof storage is not configured (Cloudinary). Contact operations." }); return;
+    }
+
+    const buf = decodePhotoBase64(String(photo_base64));
+    if (!buf || buf.length < 400) {
+      res.status(400).json({ error: "Invalid or empty image data" }); return;
+    }
+    if (buf.length > 14 * 1024 * 1024) {
+      res.status(413).json({ error: "Image too large" }); return;
+    }
+    if (!hasImageMagicBytes(buf)) {
+      res.status(400).json({ error: "File must be a supported image format" }); return;
+    }
+
     const check = await db.execute(sql`
-      SELECT id FROM rider_deliveries WHERE id = ${deliveryId} AND rider_id = ${riderId} LIMIT 1
+      SELECT id, cod_amount, is_paid, customer_name, shopify_order_number
+      FROM rider_deliveries WHERE id = ${deliveryId} AND rider_id = ${riderId} LIMIT 1
     `);
     if (!check.rows.length) { res.status(403).json({ error: "Not authorized" }); return; }
+    const del = check.rows[0] as any;
 
-    /* Upsert — one verification per delivery */
-    await db.execute(sql`
-      INSERT INTO delivery_verifications (delivery_id, rider_id, photo_base64, mime_type, notes)
-      VALUES (${deliveryId}, ${riderId}, ${photo_base64}, ${mime_type ?? "image/jpeg"}, ${notes ?? null})
-      ON CONFLICT DO NOTHING
-    `);
+    let imageUrl: string;
+    try {
+      imageUrl = await uploadBufferToCloudinary(buf, "delivery-proofs");
+    } catch (e: any) {
+      logger.warn({ e: e?.message, deliveryId }, "delivery proof Cloudinary upload failed");
+      await riderDeliveryEventInsert({
+        deliveryId,
+        riderId,
+        eventType: "proof_upload_failed",
+        payload: { reason: String(e?.message ?? e) },
+      });
+      res.status(502).json({ error: "Proof upload failed. Try again or contact support." }); return;
+    }
 
-    /* If a row already exists, update it */
+    const thumb = cloudinaryDeliveryThumbnailUrl(imageUrl) ?? null;
+    const paymentSnap = del.is_paid ? "paid" : "cod";
+    const devicePayload =
+      device && typeof device === "object"
+        ? { ...device, server_received_at: new Date().toISOString() }
+        : { server_received_at: new Date().toISOString() };
+    const deviceJson = JSON.stringify(devicePayload);
+
     const existing = await db.execute(sql`
       SELECT id FROM delivery_verifications WHERE delivery_id = ${deliveryId} LIMIT 1
     `);
+
     if (existing.rows.length) {
       await db.execute(sql`
-        UPDATE delivery_verifications
-        SET photo_base64 = ${photo_base64}, mime_type = ${mime_type ?? "image/jpeg"},
-            notes = ${notes ?? null}, created_at = NOW()
+        UPDATE delivery_verifications SET
+          rider_id = ${riderId},
+          photo_base64 = NULL,
+          mime_type = ${mime_type ?? "image/jpeg"},
+          notes = ${notes ?? null},
+          image_url = ${imageUrl},
+          thumbnail_url = ${thumb},
+          latitude = ${lat},
+          longitude = ${lng},
+          location_accuracy_m = ${acc},
+          device_json = ${deviceJson}::jsonb,
+          cod_collected_snapshot = ${del.cod_amount ?? null},
+          payment_status_snapshot = ${paymentSnap},
+          created_at = NOW()
         WHERE delivery_id = ${deliveryId}
+      `);
+    } else {
+      await db.execute(sql`
+        INSERT INTO delivery_verifications (
+          delivery_id, rider_id, photo_base64, mime_type, notes,
+          image_url, thumbnail_url, latitude, longitude, location_accuracy_m,
+          device_json, cod_collected_snapshot, payment_status_snapshot
+        ) VALUES (
+          ${deliveryId}, ${riderId}, NULL, ${mime_type ?? "image/jpeg"}, ${notes ?? null},
+          ${imageUrl}, ${thumb}, ${lat}, ${lng}, ${acc},
+          ${deviceJson}::jsonb,
+          ${del.cod_amount ?? null},
+          ${paymentSnap}
+        )
       `);
     }
 
-    res.json({ ok: true });
+    await riderDeliveryEventInsert({
+      deliveryId,
+      riderId,
+      eventType: "proof_uploaded",
+      payload: {
+        image_url: imageUrl,
+        thumbnail_url: thumb,
+        latitude: lat,
+        longitude: lng,
+        location_accuracy_m: acc,
+        payment_status_snapshot: paymentSnap,
+      },
+    });
+
+    res.json({ ok: true, image_url: imageUrl, thumbnail_url: thumb });
   } catch (err: any) {
     req.log?.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-/* GET /api/rider/deliveries/:id/verification — get proof photo for this rider */
+/* GET /api/rider/deliveries/:id/verification */
 router.get("/rider/deliveries/:id/verification", riderMiddleware, async (req: any, res) => {
   try {
+    await ensureDeliveryProofSchema();
     const riderId    = req.rider.id;
-    const deliveryId = parseInt(req.params.id);
+    const deliveryId = parseInt(req.params.id, 10);
 
     const rows = await db.execute(sql`
       SELECT dv.* FROM delivery_verifications dv
@@ -743,8 +970,8 @@ router.get("/rider/deliveries/:id/verification", riderMiddleware, async (req: an
 
     if (!rows.rows.length) { res.status(404).json({ error: "No verification found" }); return; }
 
-    /* Don't return the full base64 in the list — just metadata */
-    const v = rows.rows[0] as any;
+    const v = { ...(rows.rows[0] as any) };
+    if (v.image_url) delete v.photo_base64;
     res.json({ verification: v });
   } catch (err: any) {
     req.log?.error(err);
@@ -752,10 +979,11 @@ router.get("/rider/deliveries/:id/verification", riderMiddleware, async (req: an
   }
 });
 
-/* GET /api/admin/riders/deliveries/:id/verification — admin view of proof photo */
+/* GET /api/admin/riders/deliveries/:id/verification — admin view */
 router.get("/admin/riders/deliveries/:id/verification", adminMiddleware, async (req: any, res) => {
   try {
-    const deliveryId = parseInt(req.params.id);
+    await ensureDeliveryProofSchema();
+    const deliveryId = parseInt(req.params.id, 10);
 
     const rows = await db.execute(sql`
       SELECT dv.*, r.name AS rider_name, rd.shopify_order_number, rd.customer_name
@@ -775,23 +1003,144 @@ router.get("/admin/riders/deliveries/:id/verification", adminMiddleware, async (
   }
 });
 
-/* GET /api/admin/riders/verifications — list all verifications */
+/* PATCH /api/admin/riders/deliveries/:id/verification — dispute / verification review */
+router.patch("/admin/riders/deliveries/:id/verification", adminMiddleware, async (req: any, res) => {
+  try {
+    await ensureDeliveryProofSchema();
+    const deliveryId = parseInt(req.params.id, 10);
+    const { admin_review_status, admin_review_notes } = req.body ?? {};
+    const allowed = new Set(["pending", "verified", "disputed", "rejected"]);
+    if (!admin_review_status || !allowed.has(String(admin_review_status))) {
+      res.status(400).json({ error: "admin_review_status must be pending | verified | disputed | rejected" }); return;
+    }
+    const notes = admin_review_notes != null ? String(admin_review_notes).slice(0, 4000) : null;
+
+    const up = await db.execute(sql`
+      UPDATE delivery_verifications
+      SET admin_review_status = ${String(admin_review_status)},
+          admin_review_notes = ${notes},
+          admin_reviewed_at = NOW()
+      WHERE delivery_id = ${deliveryId}
+      RETURNING *
+    `);
+    if (!up.rows.length) { res.status(404).json({ error: "No verification found" }); return; }
+    res.json({ ok: true, verification: up.rows[0] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function csvEscape(s: unknown): string {
+  const t = s == null ? "" : String(s);
+  if (/[",\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
+  return t;
+}
+
+/* GET /api/admin/riders/verifications — list (URLs + metadata; no base64) */
 router.get("/admin/riders/verifications", adminMiddleware, async (req: any, res) => {
   try {
-    const { date, rider_id } = req.query;
+    await ensureDeliveryProofSchema();
+    const rider_id = req.query.rider_id ? parseInt(String(req.query.rider_id), 10) : NaN;
+    const orderRaw = req.query.order ? String(req.query.order).trim().slice(0, 32) : "";
+    const orderDigits = orderRaw.replace(/[^0-9]/g, "").slice(0, 20);
+    const from = req.query.from ? String(req.query.from).trim() : "";
+    const to = req.query.to ? String(req.query.to).trim() : "";
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+
+    let where = sql`TRUE`;
+    if (Number.isFinite(rider_id) && rider_id > 0) {
+      where = sql`${where} AND dv.rider_id = ${rider_id}`;
+    }
+    if (orderDigits) {
+      const pat = `%${orderDigits}%`;
+      where = sql`${where} AND CAST(rd.shopify_order_number AS TEXT) LIKE ${pat}`;
+    }
+    if (from && !Number.isNaN(Date.parse(from))) {
+      where = sql`${where} AND dv.created_at >= ${new Date(from).toISOString()}::timestamptz`;
+    }
+    if (to && !Number.isNaN(Date.parse(to))) {
+      where = sql`${where} AND dv.created_at <= ${new Date(to).toISOString()}::timestamptz`;
+    }
 
     const rows = await db.execute(sql`
       SELECT dv.id, dv.delivery_id, dv.rider_id, dv.mime_type, dv.notes, dv.created_at,
+             dv.image_url, dv.thumbnail_url, dv.latitude, dv.longitude, dv.location_accuracy_m,
+             dv.device_json, dv.cod_collected_snapshot, dv.payment_status_snapshot,
+             dv.admin_review_status, dv.admin_review_notes, dv.admin_reviewed_at,
              r.name AS rider_name, rd.shopify_order_number, rd.customer_name, rd.is_paid, rd.status AS delivery_status
       FROM delivery_verifications dv
       JOIN rider_deliveries rd ON rd.id = dv.delivery_id
       JOIN riders r ON r.id = dv.rider_id
-      ${rider_id ? sql`WHERE dv.rider_id = ${parseInt(String(rider_id))}` : sql``}
+      WHERE ${where}
       ORDER BY dv.created_at DESC
-      LIMIT 100
+      LIMIT ${limit}
     `);
 
     res.json({ verifications: rows.rows ?? [] });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/riders/verifications/export.csv */
+router.get("/admin/riders/verifications/export.csv", adminMiddleware, async (req: any, res) => {
+  try {
+    await ensureDeliveryProofSchema();
+    const rider_id = req.query.rider_id ? parseInt(String(req.query.rider_id), 10) : NaN;
+    const orderRaw = req.query.order ? String(req.query.order).trim().slice(0, 32) : "";
+    const orderDigits = orderRaw.replace(/[^0-9]/g, "").slice(0, 20);
+    const from = req.query.from ? String(req.query.from).trim() : "";
+    const to = req.query.to ? String(req.query.to).trim() : "";
+
+    let where = sql`TRUE`;
+    if (Number.isFinite(rider_id) && rider_id > 0) {
+      where = sql`${where} AND dv.rider_id = ${rider_id}`;
+    }
+    if (orderDigits) {
+      const pat = `%${orderDigits}%`;
+      where = sql`${where} AND CAST(rd.shopify_order_number AS TEXT) LIKE ${pat}`;
+    }
+    if (from && !Number.isNaN(Date.parse(from))) {
+      where = sql`${where} AND dv.created_at >= ${new Date(from).toISOString()}::timestamptz`;
+    }
+    if (to && !Number.isNaN(Date.parse(to))) {
+      where = sql`${where} AND dv.created_at <= ${new Date(to).toISOString()}::timestamptz`;
+    }
+
+    const rows = await db.execute(sql`
+      SELECT dv.delivery_id, dv.rider_id, r.name AS rider_name, rd.shopify_order_number, rd.customer_name,
+             dv.created_at, dv.latitude, dv.longitude, dv.location_accuracy_m,
+             dv.image_url, dv.thumbnail_url, dv.payment_status_snapshot, dv.cod_collected_snapshot,
+             dv.admin_review_status, dv.admin_review_notes
+      FROM delivery_verifications dv
+      JOIN rider_deliveries rd ON rd.id = dv.delivery_id
+      JOIN riders r ON r.id = dv.rider_id
+      WHERE ${where}
+      ORDER BY dv.created_at DESC
+      LIMIT 5000
+    `);
+
+    const header = [
+      "delivery_id", "rider_id", "rider_name", "order_number", "customer_name", "created_at",
+      "latitude", "longitude", "location_accuracy_m", "image_url", "thumbnail_url",
+      "payment_status", "cod_snapshot", "admin_review_status", "admin_review_notes",
+    ].join(",");
+    const lines = (rows.rows as any[]).map((r) =>
+      [
+        r.delivery_id, r.rider_id, csvEscape(r.rider_name), csvEscape(r.shopify_order_number),
+        csvEscape(r.customer_name), csvEscape(r.created_at),
+        r.latitude, r.longitude, r.location_accuracy_m,
+        csvEscape(r.image_url), csvEscape(r.thumbnail_url),
+        csvEscape(r.payment_status_snapshot), r.cod_collected_snapshot,
+        csvEscape(r.admin_review_status), csvEscape(r.admin_review_notes),
+      ].join(","),
+    );
+    const body = [header, ...lines].join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"delivery-proofs.csv\"");
+    res.send(body);
   } catch (err: any) {
     req.log?.error(err);
     res.status(500).json({ error: err.message });

@@ -103,3 +103,12 @@ export async function uploadBufferToCloudinary(
     stream.end(buffer);
   });
 }
+
+/** Cloudinary delivery URL → on-the-fly thumbnail (no extra upload). */
+export function cloudinaryDeliveryThumbnailUrl(fullUrl: string): string | null {
+  if (!fullUrl || typeof fullUrl !== "string") return null;
+  const marker = "/upload/";
+  const i = fullUrl.indexOf(marker);
+  if (i === -1) return null;
+  return `${fullUrl.slice(0, i + marker.length)}c_limit,w_320,h_320,q_auto,f_auto/${fullUrl.slice(i + marker.length)}`;
+}

@@ -4,6 +4,9 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -145,18 +148,44 @@ export default function OrderDetailScreen() {
       });
       if (result.canceled || !result.assets?.[0]?.base64) return;
 
+      const locPerm = await Location.requestForegroundPermissionsAsync();
+      if (locPerm.status !== "granted") {
+        Alert.alert("Location required", "Turn on location so delivery proof includes GPS for dispute protection.");
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+
       setProofUri(result.assets[0].uri);
       setUploading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const device = {
+        brand: Device.brand ?? undefined,
+        modelName: Device.modelName ?? undefined,
+        osName: Device.osName,
+        osVersion: Device.osVersion,
+        appVersion: Constants.expoConfig?.version ?? undefined,
+      };
 
       const r = await riderFetch(`/rider/deliveries/${id}/verification`, token, {
         method: "POST",
         body:   JSON.stringify({
           photo_base64: result.assets[0].base64,
           mime_type:    "image/jpeg",
+          latitude:     pos.coords.latitude,
+          longitude:    pos.coords.longitude,
+          location_accuracy_m: pos.coords.accuracy ?? null,
+          device,
         }),
       });
-      if (!r.ok) throw new Error("Upload failed");
+      if (!r.ok) {
+        let msg = "Upload failed";
+        try {
+          const j = await r.json();
+          msg = (j as any).error ?? msg;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       refetchVer();
@@ -185,7 +214,14 @@ export default function OrderDetailScreen() {
         method: "PUT",
         body: JSON.stringify({ status }),
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
+      if (!r.ok) {
+        let msg = "Failed";
+        try {
+          const e = await r.json() as { error?: string; detail?: string };
+          msg = e.error ?? e.detail ?? msg;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
       return r.json();
     },
     onSuccess: () => {
