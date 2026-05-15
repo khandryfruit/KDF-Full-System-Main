@@ -731,6 +731,14 @@ router.get("/rider/deliveries/:id/invoice", async (req: any, res): Promise<void>
         <div class="info-box-label">Delivery Address</div>
         <div class="info-box-value">${addr || "—"}</div>
       </div>
+      <div class="info-box">
+        <div class="info-box-label">Payment Method</div>
+        <div class="info-box-value">${isPaid ? "Paid online (Shopify)" : "Cash on Delivery (COD)"}</div>
+      </div>
+      <div class="info-box">
+        <div class="info-box-label">Amount Due</div>
+        <div class="info-box-value">${isPaid ? "Rs. 0 — already paid" : `Rs. ${cod.toLocaleString()} COD`}</div>
+      </div>
     </div>
 
     ${items.length > 0 ? `

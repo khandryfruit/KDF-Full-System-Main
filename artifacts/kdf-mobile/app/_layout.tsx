@@ -16,7 +16,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import NewOrderAlert, { NewOrderData } from "@/components/NewOrderAlert";
+import NewOrderAlert from "@/components/NewOrderAlert";
+import { deliveryRowToAlert, pushDataToAlert } from "@/lib/newOrderAlert";
 import { AuthProvider, riderFetch, useAuth } from "@/context/AuthContext";
 import {
   ensureRiderNotificationChannels,
@@ -78,7 +79,7 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
   const { token, rider, isOnline } = useAuth();
   const router = useRouter();
   const qc = useQueryClient();
-  const [alertOrder, setAlertOrder] = useState<NewOrderData | null>(null);
+  const [alertOrder, setAlertOrder] = useState<ReturnType<typeof deliveryRowToAlert> | null>(null);
   const knownIds = useRef<Set<number>>(new Set());
   const initialized = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -137,17 +138,7 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
       void playNewOrderChime();
-      const newest = newOnes[0];
-      setAlertOrder({
-        id: newest.id,
-        shopify_order_number: newest.shopify_order_number ?? String(newest.id),
-        customer_name: newest.customer_name ?? "Customer",
-        customer_phone: newest.customer_phone ?? "",
-        cod_amount: Number(newest.cod_amount ?? 0),
-        is_paid: newest.is_paid ?? false,
-        delivery_address: newest.delivery_address ?? "",
-        assigned_at: newest.assigned_at ?? new Date().toISOString(),
-      });
+      setAlertOrder(deliveryRowToAlert(newOnes[0] as Record<string, unknown>));
     } catch { /* silent */ }
   }, [token, !!rider, qc]);
 
@@ -161,7 +152,14 @@ function NewOrderMonitor({ children }: { children: React.ReactNode }) {
       qc.invalidateQueries({ queryKey: ["rider-deliveries"] });
       qc.invalidateQueries({ queryKey: ["rider-stats"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      if (isNewOrderPush(data)) void playNewOrderChime();
+      if (isNewOrderPush(data)) {
+        void playNewOrderChime();
+        const fromPush = data ? pushDataToAlert(data) : null;
+        if (fromPush && !knownIds.current.has(fromPush.id)) {
+          knownIds.current.add(fromPush.id);
+          setAlertOrder(fromPush);
+        }
+      }
       void checkRef.current();
     });
     const tapSub = Notifications.addNotificationResponseReceivedListener((resp) => {
@@ -251,6 +249,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="order/invoice" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

@@ -521,72 +521,18 @@ export async function processShopifyWebhookPayload(
           /* ── Auto-assign Lahore orders to available riders ── */
           setImmediate(async () => {
             try {
-              const addrObj = (() => {
-                try {
-                  return typeof savedOrder.shippingAddress === "string"
-                    ? JSON.parse(savedOrder.shippingAddress) : (savedOrder.shippingAddress ?? {});
-                } catch { return {}; }
-              })();
-              if (!/lahore/i.test(addrObj.city ?? "")) return;
-
-              /* Already assigned? */
-              const existing = await db.execute(sql`
-                SELECT id FROM rider_deliveries WHERE shopify_order_db_id = ${savedOrder.id} LIMIT 1
-              `);
-              if (existing.rows.length) return;
-
-              /* Pick rider with fewest active deliveries (prefer online) */
-              const riderRes = await db.execute(sql`
-                SELECT r.id, r.name, r.phone, r.whatsapp_number, r.expo_push_token
-                FROM riders r
-                LEFT JOIN rider_deliveries d ON d.rider_id = r.id
-                  AND d.status NOT IN ('delivered','returned','failed')
-                WHERE r.status = 'active'
-                GROUP BY r.id
-                ORDER BY r.is_online DESC, COUNT(d.id) ASC
-                LIMIT 1
-              `);
-              if (!riderRes.rows.length) return;
-              const rider = riderRes.rows[0] as any;
-
-              const fullAddr = [addrObj.address1, addrObj.address2, addrObj.city].filter(Boolean).join(", ");
-              const isPaid   = savedOrder.financialStatus === "paid";
-              const codAmt   = isPaid ? 0 : Number(savedOrder.totalPrice ?? 0);
-
-              await db.execute(sql`
-                INSERT INTO rider_deliveries
-                  (rider_id, shopify_order_db_id, shopify_order_id, shopify_order_number,
-                   customer_name, customer_phone, delivery_address, city,
-                   cod_amount, is_paid, order_items, status, assigned_at)
-                VALUES (
-                  ${rider.id}, ${savedOrder.id},
-                  ${savedOrder.shopifyOrderId ?? null}, ${savedOrder.orderNumber ?? null},
-                  ${savedOrder.customerName ?? null}, ${savedOrder.customerPhone ?? null},
-                  ${fullAddr}, 'Lahore',
-                  ${codAmt}, ${isPaid},
-                  ${JSON.stringify(savedOrder.lineItems ?? [])},
-                  'assigned', NOW()
-                )
-                ON CONFLICT DO NOTHING
-              `);
-
-              logger.info({ orderId: savedOrder.id, riderName: rider.name }, "Lahore order auto-assigned on creation");
-
-              /* Notify rider via Expo push */
-              if (rider.expo_push_token) {
-                const { sendExpoPush } = await import("./ondriveEngine.js");
-                const codText = isPaid ? "PAID ✅" : `COD Rs.${codAmt.toLocaleString()}`;
-                await sendExpoPush({
-                  expoPushToken: rider.expo_push_token,
-                  title: `🚚 نیا آرڈر! ${savedOrder.orderNumber ?? ""}`,
-                  body: `${savedOrder.customerName ?? "Customer"} · ${addrObj.city ?? "Lahore"} · ${codText}`,
-                  data: { orderId: String(savedOrder.id), orderNumber: String(savedOrder.orderNumber ?? ""), screen: "order_detail" },
-                  sound: "default",
-                  badge: 1,
-                  riderId: rider.id,
-                  orderNumber: String(savedOrder.orderNumber ?? ""),
-                }).catch(() => {});
-              }
+              const { autoAssignLahoreOrder } = await import("./riderLahoreAutoAssign.js");
+              await autoAssignLahoreOrder({
+                id: savedOrder.id,
+                shopify_order_id: savedOrder.shopifyOrderId,
+                order_number: savedOrder.orderNumber,
+                customer_name: savedOrder.customerName,
+                customer_phone: savedOrder.customerPhone,
+                shipping_address: savedOrder.shippingAddress,
+                total_price: savedOrder.totalPrice,
+                financial_status: savedOrder.financialStatus,
+                line_items: savedOrder.lineItems,
+              });
             } catch (autoErr) {
               logger.warn({ autoErr }, "Lahore auto-assign on new order failed (non-critical)");
             }

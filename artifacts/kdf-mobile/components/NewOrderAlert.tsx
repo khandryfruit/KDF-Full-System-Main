@@ -25,6 +25,7 @@ export interface NewOrderData {
   cod_amount: number;
   is_paid: boolean;
   delivery_address: string;
+  city?: string;
   assigned_at: string;
 }
 
@@ -156,11 +157,18 @@ export default function NewOrderAlert({ order, onAccept, onView, onDismiss }: Pr
               </View>
             </View>
 
-            {/* Address */}
-            {!!order.delivery_address && (
+            {/* Area + address */}
+            {(!!order.city || !!order.delivery_address) && (
               <View style={styles.addrRow}>
                 <Feather name="map-pin" size={12} color="rgba(0,229,114,0.7)" />
-                <Text style={styles.addrTxt} numberOfLines={2}>{order.delivery_address}</Text>
+                <View style={{ flex: 1 }}>
+                  {!!order.city && (
+                    <Text style={styles.areaTxt}>📍 {order.city}</Text>
+                  )}
+                  {!!order.delivery_address && (
+                    <Text style={styles.addrTxt} numberOfLines={2}>{order.delivery_address}</Text>
+                  )}
+                </View>
               </View>
             )}
 
@@ -297,6 +305,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
+  },
+  areaTxt: {
+    color: "#00E572",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 2,
   },
   addrTxt: {
     flex: 1,

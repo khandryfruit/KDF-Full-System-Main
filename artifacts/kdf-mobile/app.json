@@ -2,7 +2,7 @@
   "expo": {
     "name": "KDF RIDER LAHORE",
     "slug": "kdf-mobile",
-    "version": "3.0.2",
+    "version": "3.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kdf-mobile",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.kdfnuts.rider",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "KDF Rider needs your location for delivery navigation.",
         "NSLocationAlwaysUsageDescription": "KDF Rider uses your location to track deliveries."
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.kdfnuts.rider",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D2137"

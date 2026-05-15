@@ -706,17 +706,27 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
             /* ── Expo Push Notification to Rider App ── */
             if (rider.expo_push_token) {
               try {
+                const codAmt = Number(delivery.cod_amount ?? 0);
+                const isPaidDel = Boolean(delivery.is_paid);
                 const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", Accept: "application/json" },
                   body: JSON.stringify({
                     to:    rider.expo_push_token,
                     title: "🚚 نیا آرڈر ملا!",
-                    body:  `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
+                    body:  `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!isPaidDel ? ` — COD Rs.${codAmt.toLocaleString()}` : " — PAID"}`,
                     sound: "new_order.wav",
                     priority: "high",
                     channelId: "new_order_alert",
-                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number), type: "new_order" },
+                    data: {
+                      type: "new_order",
+                      deliveryId: String(delivery.id),
+                      orderNumber: String(delivery.shopify_order_number ?? ""),
+                      customerName: delivery.customer_name ?? "",
+                      delivery_address: delivery.delivery_address ?? "",
+                      cod_amount: codAmt,
+                      is_paid: isPaidDel,
+                    },
                     badge: 1,
                   }),
                 });
@@ -861,13 +871,17 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
               expoPushToken: snap.rider.expo_push_token,
               title: `🚚 نیا آرڈر! #${snap.order.order_number}`,
               body:  `${snap.order.customer_name ?? "Customer"} · ${snap.addr} · ${codText}`,
-              data:  {
-                deliveryId:  String(snap.deliveryId ?? ""),
-                orderId:     String(snap.order.id),
+              data: {
+                type: "new_order",
+                deliveryId: String(snap.deliveryId ?? ""),
+                orderId: String(snap.order.id),
                 orderNumber: String(snap.order.order_number ?? ""),
-                screen:      "order_detail",
+                customerName: snap.order.customer_name ?? "",
+                delivery_address: snap.addr,
+                cod_amount: snap.codAmount,
+                is_paid: snap.isPaid,
+                screen: "order_detail",
               },
-              sound:       "default",
               badge:       1,
               riderId:     snap.rider.id,
               deliveryId:  snap.deliveryId,
@@ -1025,17 +1039,27 @@ router.post("/admin/riders/bulk-assign", adminMiddleware, async (req, res) => {
               }
               /* Expo push to rider */
               if (rider.expo_push_token) {
+                const codAmt = Number(delivery.cod_amount ?? 0);
+                const isPaidDel = Boolean(delivery.is_paid);
                 await fetch("https://exp.host/--/api/v2/push/send", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", Accept: "application/json" },
                   body: JSON.stringify({
                     to: rider.expo_push_token,
                     title: "🚚 نیا آرڈر ملا!",
-                    body: `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!delivery.is_paid ? ` — COD Rs.${Number(delivery.cod_amount ?? 0).toLocaleString()}` : " — PAID"}`,
+                    body: `Order #${delivery.shopify_order_number} — ${delivery.customer_name}${!isPaidDel ? ` — COD Rs.${codAmt.toLocaleString()}` : " — PAID"}`,
                     sound: "new_order.wav",
                     priority: "high",
                     channelId: "new_order_alert",
-                    data: { deliveryId: String(delivery.id), orderId: String(delivery.shopify_order_number), type: "new_order" },
+                    data: {
+                      type: "new_order",
+                      deliveryId: String(delivery.id),
+                      orderNumber: String(delivery.shopify_order_number ?? ""),
+                      customerName: delivery.customer_name ?? "",
+                      delivery_address: delivery.delivery_address ?? "",
+                      cod_amount: codAmt,
+                      is_paid: isPaidDel,
+                    },
                     badge: 1,
                   }),
                 }).catch(() => {});

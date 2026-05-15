@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Location from "expo-location";
@@ -27,11 +26,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BASE_URL, riderFetch, useAuth } from "@/context/AuthContext";
 import colors, { getStatusColor, getStatusBg, getStatusLabel } from "@/constants/colors";
 import { PriorityBanner } from "@/components/PriorityTimer";
+import {
+  buildInvoiceWhatsAppMessage,
+  buildRiderInvoiceUrl,
+  whatsAppUrlForPhone,
+} from "@/lib/invoiceShare";
 
 const C = colors.light;
-
-/* Production domain for clean invoice URLs */
-const PROD_DOMAIN = "https://khanbabadryfruits.com";
 
 const WORKFLOW: Array<{ status: string; label: string; icon: string; color: string }> = [
   { status: "picked",           label: "Picked Up",  icon: "archive",      color: C.statusPicked    },
@@ -259,11 +260,19 @@ export default function OrderDetailScreen() {
     } catch { return []; }
   })();
 
-  /* ── Invoice URL (clean, no token) ── */
-  const orderNum = delivery?.shopify_order_number ?? delivery?.id ?? "";
-  const invoiceUrl = orderNum
-    ? `${PROD_DOMAIN}/invoice/${String(orderNum).replace(/^#/, "")}`
-    : `${BASE_URL}/api/rider/deliveries/${id}/invoice?token=${token}`;
+  const invoiceUrl = token && id ? buildRiderInvoiceUrl(BASE_URL, id, token) : "";
+
+  const invoiceSharePayload = {
+    orderNumber: String(delivery?.shopify_order_number ?? id ?? ""),
+    customerName: delivery?.customer_name,
+    customerPhone: delivery?.customer_phone,
+    address: addr,
+    items,
+    codAmount: Number(delivery?.cod_amount ?? 0),
+    isPaid: Boolean(delivery?.is_paid),
+    deliveryCharge: Number(delivery?.delivery_charge ?? 0),
+    invoiceUrl,
+  };
 
   /* ── Actions ── */
   const navigate      = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); smartNavigate(addr); };
@@ -279,28 +288,32 @@ export default function OrderDetailScreen() {
     Linking.openURL(`https://wa.me/${intl}?text=${msg}`);
   };
 
-  const openInvoice = async () => {
-    await WebBrowser.openBrowserAsync(invoiceUrl, {
-      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-      toolbarColor: "#0D1F3C",
-    });
+  const openInvoice = () => {
+    if (!id || !token) return;
+    const waMsg = encodeURIComponent(buildInvoiceWhatsAppMessage(invoiceSharePayload));
+    router.push({
+      pathname: "/order/invoice",
+      params: {
+        deliveryId: String(id),
+        customerPhone: delivery?.customer_phone ?? "",
+        waMessage: waMsg,
+      },
+    } as any);
   };
 
   const shareInvoice = async () => {
-    const itemsStr = items.slice(0, 5).map((i: any) =>
-      `  • ${i.quantity ?? 1}× ${i.title ?? i.name ?? "Item"}${i.variant_title ? ` (${i.variant_title})` : ""}`
-    ).join("\n");
-    const msg = `*KDF NUTS — Order Invoice*\n\nOrder: #${delivery?.shopify_order_number}\nCustomer: ${delivery?.customer_name}\nPhone: ${delivery?.customer_phone}\nAddress: ${addr}\n\n*Items:*\n${itemsStr}\n\n*Payment:* ${delivery?.is_paid ? "PAID" : `COD Rs. ${Number(delivery?.cod_amount ?? 0).toLocaleString()}`}\n\n*Invoice Link:* ${invoiceUrl}`;
+    const msg = buildInvoiceWhatsAppMessage(invoiceSharePayload);
     Share.share({ message: msg, title: `KDF Invoice #${delivery?.shopify_order_number}` });
   };
 
-  const waInvoice = () => {
-    const ph = String(delivery?.customer_phone ?? "").replace(/\D/g, "");
-    const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
-    const msg = encodeURIComponent(
-      `السلام علیکم ${delivery?.customer_name}!\n\n*آپ کا KDF NUTS Invoice:*\n${invoiceUrl}\n\nکوئی سوال ہو تو بتائیں۔ شکریہ! 🌟`
-    );
-    Linking.openURL(`https://wa.me/${intl}?text=${msg}`);
+  const sendInvoiceWhatsApp = () => {
+    const ph = delivery?.customer_phone;
+    if (!ph) {
+      Alert.alert("No phone", "Customer phone number is missing.");
+      return;
+    }
+    const msg = buildInvoiceWhatsAppMessage(invoiceSharePayload);
+    Linking.openURL(whatsAppUrlForPhone(ph, msg));
   };
 
   const confirmStatus = (status: string) => {
@@ -602,9 +615,9 @@ export default function OrderDetailScreen() {
               <Feather name="file-text" size={18} color="#1565C0" />
               <Text style={[styles.invBtnTxt, { color: "#1565C0" }]}>View Invoice</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.invBtn, { backgroundColor: "#E8F5E9" }]} onPress={waInvoice}>
+            <TouchableOpacity style={[styles.invBtn, { backgroundColor: "#E8F5E9" }]} onPress={sendInvoiceWhatsApp}>
               <Feather name="message-circle" size={18} color="#075E54" />
-              <Text style={[styles.invBtnTxt, { color: "#075E54" }]}>WA Invoice</Text>
+              <Text style={[styles.invBtnTxt, { color: "#075E54" }]}>Send Invoice (WA)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.invBtn, { backgroundColor: C.primaryLight }]} onPress={shareInvoice}>
               <Feather name="share-2" size={18} color={C.primaryDark} />
