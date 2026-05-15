@@ -17,6 +17,8 @@
  * Env:
  *   MEEZAN_HTTP_USER_AGENT — optional override for outbound API User-Agent
  *   MEEZAN_LIVE_REST_BASE / MEEZAN_SANDBOX_REST_BASE — optional override (no trailing slash)
+ *   MEEZAN_KNOWN_CHECKOUT_EGRESS_IP — public IP (ipify) of server where checkout+register.do works; if this API host differs, diagnose lists both for Meezan whitelist
+ *   MEEZAN_WHITELIST_ALL_IPS — comma-separated extra NAT/LB IPs for whitelist bundle
  */
 
 import { logger } from "./logger";
@@ -717,6 +719,56 @@ export async function getServerIp(): Promise<string> {
     }
   } catch { /* fallback */ }
   return _cachedIp ?? "unknown";
+}
+
+/**
+ * Egress context for "hosted acquiring page works but securepayment REST fails" —
+ * usually two different outbound IPs; Meezan must whitelist every IP that calls register.do.
+ */
+export interface MeezanEgressContext {
+  detectedOutboundIp: string;
+  /** ipify result from the server where checkout already succeeds (set env on THIS host to compare) */
+  knownCheckoutEgressIp: string | null;
+  matchesKnownCheckout: boolean | null;
+  /** De-duplicated list: this host + known checkout + extras — email this bundle to Meezan */
+  whitelistBundleIps: string[];
+  liveRestBase: string;
+  sandboxRestBase: string;
+  flowNote: string;
+}
+
+export async function getMeezanEgressContext(): Promise<MeezanEgressContext> {
+  const detectedOutboundIp = await getServerIp();
+  const knownRaw = process.env.MEEZAN_KNOWN_CHECKOUT_EGRESS_IP?.trim();
+  const knownCheckoutEgressIp = knownRaw && knownRaw.length > 0 ? knownRaw : null;
+  const matchesKnownCheckout =
+    knownCheckoutEgressIp === null ? null : knownCheckoutEgressIp === detectedOutboundIp;
+
+  const extras =
+    process.env.MEEZAN_WHITELIST_ALL_IPS?.split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0) ?? [];
+
+  const whitelistBundleIps = [
+    ...new Set(
+      [detectedOutboundIp, ...(knownCheckoutEgressIp ? [knownCheckoutEgressIp] : []), ...extras].filter(
+        (ip) => ip && ip !== "unknown",
+      ),
+    ),
+  ];
+
+  return {
+    detectedOutboundIp,
+    knownCheckoutEgressIp,
+    matchesKnownCheckout,
+    whitelistBundleIps,
+    liveRestBase: LIVE_BASE,
+    sandboxRestBase: SANDBOX_BASE,
+    flowNote:
+      "Customer browser opens acquiring.meezanbank.com (hosted pay page). " +
+      "Your backend calls securepayment.meezanbank.com/payment/rest/register.do — different edge; " +
+      "HTTP 301 to site / usually means this outbound IP is not allowed for REST until Meezan whitelists it.",
+  };
 }
 
 /* ──────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { shopifyStoresTable, shopifyOrdersTable } from "@workspace/db/schema";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import {
   buildMeezanClient, generateOrderRef, generateInvoiceNumber, isPaid,
-  probeMeezanConnectivity, getServerIp, ORDER_STATUS_LABELS,
+  probeMeezanConnectivity, getServerIp, getMeezanEgressContext, ORDER_STATUS_LABELS,
 } from "../lib/meezan";
 import { sendWhatsAppMessage } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
@@ -310,6 +310,7 @@ router.get("/admin/meezan/diagnose", adminMiddleware as any, async (req: AuthReq
     ]);
 
     const serverIp = await getServerIp();
+    const egressContext = await getMeezanEgressContext();
 
     /* Determine overall diagnosis */
     const probe = (withCreds ?? anonymous) as any;
@@ -338,8 +339,13 @@ router.get("/admin/meezan/diagnose", adminMiddleware as any, async (req: AuthReq
       recommendation =
         `Meezan nginx returned HTTP 301 to https://securepayment.meezanbank.com/ for /payment/rest/* — ` +
         `the REST path is not being served to this egress IP (${serverIp}). ` +
-        `Ask Meezan Bank to whitelist ${serverIp} and enable REST for your merchant. ` +
+        `Ask Meezan Bank to whitelist ALL of: ${egressContext.whitelistBundleIps.join(", ")} for REST (register.do). ` +
         `If they issued a different REST base URL, set server env MEEZAN_LIVE_REST_BASE (no trailing slash).`;
+      if (egressContext.matchesKnownCheckout === false && egressContext.knownCheckoutEgressIp) {
+        recommendation +=
+          ` EGRESS_MISMATCH: this host (${egressContext.detectedOutboundIp}) ≠ MEEZAN_KNOWN_CHECKOUT_EGRESS_IP (${egressContext.knownCheckoutEgressIp}) — ` +
+          "hosted acquiring page can still work from the other server; REST must be whitelisted per outbound IP.";
+      }
     } else if (
       probe?.reachable === false ||
       credErr.includes("Network error reaching") ||
@@ -371,6 +377,7 @@ router.get("/admin/meezan/diagnose", adminMiddleware as any, async (req: AuthReq
       diagnosis,
       recommendation,
       serverIp,
+      egressContext,
       environment:         isLive ? "live" : "sandbox",
       hasCredentials:      !!epg,
       probeWithCredentials: withCreds,
@@ -378,19 +385,21 @@ router.get("/admin/meezan/diagnose", adminMiddleware as any, async (req: AuthReq
       orderStatusLabels:    ORDER_STATUS_LABELS,
       whitelistRequest: {
         ip:          serverIp,
-        message:     `Please whitelist IP ${serverIp} for merchant ${settings?.liveUsername ?? settings?.sandboxUsername ?? "your account"} in the Meezan Bank payment gateway.`,
+        allIps:      egressContext.whitelistBundleIps,
+        message:     `Please whitelist ALL of the following IPs for REST (register.do) for merchant ${settings?.liveUsername ?? settings?.sandboxUsername ?? "your account"}: ${egressContext.whitelistBundleIps.join(", ")}`,
         emailTemplate: [
           `To: Meezan Bank Tech Support`,
-          `Subject: IP Whitelist Request for EPG Merchant Account`,
+          `Subject: IP Whitelist Request for EPG Merchant Account (REST register.do)`,
           ``,
           `Dear Meezan Bank Tech Support,`,
           ``,
-          `Please whitelist the following server IP for our EPG merchant account:`,
-          `  IP Address: ${serverIp}`,
-          `  Merchant Username: ${settings?.liveUsername ?? settings?.sandboxUsername ?? "[your username]"}`,
-          `  Environment: ${isLive ? "Production" : "Sandbox"}`,
+          `Please whitelist the following server IP(s) for our EPG merchant REST API (securepayment.meezanbank.com/payment/rest/*):`,
+          ...egressContext.whitelistBundleIps.map((ip) => `  - ${ip}`),
           ``,
-          `This is for our e-commerce backend server that calls register.do, getOrderStatusExtended.do, and refund.do.`,
+          `Merchant Username: ${settings?.liveUsername ?? settings?.sandboxUsername ?? "[your username]"}`,
+          `Environment: ${isLive ? "Production" : "Sandbox"}`,
+          ``,
+          `Our hosted payment page on acquiring.meezanbank.com works; REST returns HTTP 301 to / until all outbound IPs are allowed.`,
           ``,
           `Thank you.`,
         ].join("\n"),
@@ -421,6 +430,8 @@ router.get("/admin/meezan/domain-info", adminMiddleware as any, async (req: Auth
     }
   } catch { /* non-critical — IP check is best-effort */ }
 
+  const egressContext = await getMeezanEgressContext();
+
   res.json({
     baseUrl:         base,
     returnUrl:       urls.returnUrl,
@@ -432,6 +443,7 @@ router.get("/admin/meezan/domain-info", adminMiddleware as any, async (req: Auth
     isProduction:    !!process.env.REPLIT_DOMAINS,
     replitDomains:   process.env.REPLIT_DOMAINS || null,
     serverPublicIp,  /* IP that Meezan Bank must whitelist for live mode */
+    egressContext,
   });
 });
 
