@@ -316,7 +316,35 @@ router.get("/admin/meezan/diagnose", adminMiddleware as any, async (req: AuthReq
     let diagnosis = "UNKNOWN";
     let recommendation = "";
 
-    if (!probe?.reachable) {
+    const credErr =
+      withCreds && typeof (withCreds as { error?: string }).error === "string"
+        ? (withCreds as { error: string }).error
+        : "";
+    const anonErr =
+      anonymous && typeof (anonymous as { error?: string }).error === "string"
+        ? (anonymous as { error: string }).error
+        : "";
+    const redirect301Root =
+      [credErr, anonErr].some(
+        (e) =>
+          e.includes("301") &&
+          e.includes("redirect") &&
+          (e.includes("securepayment.meezanbank.com/") || e.includes("Location: https://securepayment.meezanbank.com/")),
+      );
+
+    if (redirect301Root) {
+      diagnosis =
+        "MEEZAN_REST_301_TO_SITE_ROOT";
+      recommendation =
+        `Meezan nginx returned HTTP 301 to https://securepayment.meezanbank.com/ for /payment/rest/* — ` +
+        `the REST path is not being served to this egress IP (${serverIp}). ` +
+        `Ask Meezan Bank to whitelist ${serverIp} and enable REST for your merchant. ` +
+        `If they issued a different REST base URL, set server env MEEZAN_LIVE_REST_BASE (no trailing slash).`;
+    } else if (
+      probe?.reachable === false ||
+      credErr.includes("Network error reaching") ||
+      anonErr.includes("Network error reaching")
+    ) {
       diagnosis      = "UNREACHABLE";
       recommendation = `Server (IP: ${serverIp}) cannot connect to Meezan Bank API. ` +
         "Possible causes: (1) Meezan firewall blocking your IP — ask them to whitelist it. " +

@@ -8,22 +8,55 @@
  *   Sandbox : https://test-securepayment.meezanbank.com/payment/rest
  *   Live    : https://securepayment.meezanbank.com/payment/rest
  *
+ * Observed: egress that is not yet approved by Meezan often receives HTTP 301 with
+ * Location: https://securepayment.meezanbank.com/ (nginx) for any /payment/rest/* URL —
+ * the REST API path is not served until IP whitelist / merchant REST access is enabled.
+ *
  * Currency : PKR = ISO 586, amounts sent in paisa (× 100)
  *
  * Env:
  *   MEEZAN_HTTP_USER_AGENT — optional override for outbound API User-Agent
+ *   MEEZAN_LIVE_REST_BASE / MEEZAN_SANDBOX_REST_BASE — optional override (no trailing slash)
  */
 
 import { logger } from "./logger";
 
-const SANDBOX_BASE = "https://test-securepayment.meezanbank.com:9716/payment/rest";
-const LIVE_BASE    = "https://securepayment.meezanbank.com/payment/rest";
+const SANDBOX_BASE = (
+  process.env.MEEZAN_SANDBOX_REST_BASE || "https://test-securepayment.meezanbank.com:9716/payment/rest"
+).replace(/\/$/, "");
+const LIVE_BASE = (
+  process.env.MEEZAN_LIVE_REST_BASE || "https://securepayment.meezanbank.com/payment/rest"
+).replace(/\/$/, "");
 
 /** Do not auto-follow redirects — a 302 to an HTML login/WAF page would become HTTP 200 + HTML and hide the root cause. */
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 const DEFAULT_MEEZAN_UA =
   "KDF-Meezan-EPG/1.0 (https://www.kdfnuts.com; integration@kdfnuts.com)";
+
+/** Extra hint when Meezan nginx sends REST clients to site root (whitelist / path not served). */
+function meezanRedirectHint(status: number, location: string, requestUrl: string): string {
+  const loc = (location || "").trim();
+  if (!REDIRECT_STATUSES.has(status) || !loc) return "";
+  try {
+    const req = new URL(requestUrl);
+    const tgt = new URL(loc, requestUrl);
+    const toRoot =
+      tgt.pathname === "/" &&
+      req.pathname.includes("/payment/rest");
+    if (toRoot) {
+      return (
+        " Meezan-specific: 301/302 to the site root for /payment/rest/* usually means this " +
+        "server IP is not yet whitelisted for REST, or REST is not enabled on the merchant profile — " +
+        "confirm with Meezan Bank tech support (send them your outbound IP from diagnose). " +
+        "If they issued a different REST base host, set env MEEZAN_LIVE_REST_BASE."
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
 
 /* ──────────────────────────────────────────────────────
    TYPES
@@ -135,10 +168,12 @@ async function rawPost(
     if (REDIRECT_STATUSES.has(res.status)) {
       const text = await res.text();
       const loc  = res.headers.get("location") || "";
+      const hint = meezanRedirectHint(res.status, loc, url);
       throw new Error(
         `Meezan API HTTP ${res.status} redirect (not auto-followed). Location: ${loc || "(missing)"}. ` +
-        `Often indicates WAF, session gate, or wrong host — verify IP whitelist and REST base URL. ` +
-        `Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
+        `Often indicates WAF, session gate, or wrong host — verify IP whitelist and REST base URL.` +
+        hint +
+        ` Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
       );
     }
 
@@ -164,7 +199,8 @@ async function rawGet(
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const qs  = new URLSearchParams(params).toString();
-    const res = await fetch(`${url}?${qs}`, {
+    const fullUrl = `${url}?${qs}`;
+    const res = await fetch(fullUrl, {
       method:   "GET",
       redirect: "manual",
       headers: {
@@ -177,9 +213,11 @@ async function rawGet(
     if (REDIRECT_STATUSES.has(res.status)) {
       const text = await res.text();
       const loc  = res.headers.get("location") || "";
+      const hint = meezanRedirectHint(res.status, loc, fullUrl);
       throw new Error(
-        `Meezan API HTTP ${res.status} redirect on GET (not auto-followed). Location: ${loc || "(missing)"}. ` +
-        `Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
+        `Meezan API HTTP ${res.status} redirect on GET (not auto-followed). Location: ${loc || "(missing)"}.` +
+        hint +
+        ` Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
       );
     }
 
