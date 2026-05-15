@@ -10,6 +10,7 @@
 # Related: Dockerfile.kdf-plus, Dockerfile.api-server
 #
 # Runtime: pnpm railway:serve → scripts/railway-static-server.mjs (reads Railway PORT at start; no Vite preview)
+# Redeploy: Phase A delivery proofs admin UI (/logistics/delivery-proofs)
 
 FROM node:22-bookworm AS builder
 WORKDIR /app
