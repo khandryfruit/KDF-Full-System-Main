@@ -60,11 +60,10 @@ async function processQueue() {
 
       try {
         if (msg.campaignType === "whatsapp" && msg.phone) {
-          await sendWhatsAppMessage({
+          success = await sendWhatsAppMessage({
             phone: normalizePhone(msg.phone),
             message: msg.message ?? "",
           });
-          success = true;
         } else if (msg.campaignType === "email" && msg.email) {
           const conn = await getMailTransport();
           if (conn) {

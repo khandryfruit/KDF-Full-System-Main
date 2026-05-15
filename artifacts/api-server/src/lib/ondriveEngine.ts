@@ -272,19 +272,23 @@ export async function sendOrderConfirmationWA(params: {
 
     const branding = await getOnDriveBranding();
 
-    /* ── Primary: approved template "order_confromd_" (4 params: orderNo, name, total, payment) ── */
+    /* ── Primary: DB-approved order_confirmation template, else legacy Meta name ── */
     const paymentLabel = isPaid ? "Paid Online ✅" : `COD Rs. ${Number(codAmount).toLocaleString()}`;
+    const { getApprovedTemplate } = await import("./whatsapp.js");
+    const tpl = await getApprovedTemplate("order_confirmation");
+    const templateName = tpl?.name ?? "order_confromd_";
     const templateResult = await sendWhatsAppTemplate({
       phone: normalizedPhone,
-      templateName: "order_confromd_",
+      templateName,
+      languageCode: tpl?.language ?? "en_US",
       components: [
         {
           type: "body",
           parameters: [
-            { type: "text", text: orderNumber },                           /* {{1}} order number */
-            { type: "text", text: name },                                  /* {{2}} customer name */
-            { type: "text", text: `Rs. ${Number(total).toLocaleString()}` }, /* {{3}} total amount */
-            { type: "text", text: paymentLabel },                          /* {{4}} payment method */
+            { type: "text", text: orderNumber },
+            { type: "text", text: name },
+            { type: "text", text: `Rs. ${Number(total).toLocaleString()}` },
+            { type: "text", text: paymentLabel },
           ],
         },
       ],
@@ -295,7 +299,7 @@ export async function sendOrderConfirmationWA(params: {
 
     /* ── Fallback: interactive buttons (works within 24h session window) ── */
     if (!success) {
-      logger.warn({ orderNumber, templateError: templateResult.error }, "order_confromd_ template failed — trying interactive fallback");
+      logger.warn({ orderNumber, templateName, templateError: templateResult.error }, "Order confirmation template failed — trying interactive fallback");
       const msgText = `📦 *New Order Received!*\n\n` +
         `Hello *${name}*! 👋\n\n` +
         `Your order has been placed at *Khan Dry Fruits* 🥜\n\n` +

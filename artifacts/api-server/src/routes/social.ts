@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable } from "@workspace/db";
+import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable, whatsappSettingsTable } from "@workspace/db";
 import { eq, desc, sql, and, asc } from "drizzle-orm";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import { logger } from "../lib/logger";
@@ -583,27 +583,48 @@ router.get("/meta/webhook", async (req, res) => {
   const mode      = req.query["hub.mode"]         as string | undefined;
   const token     = req.query["hub.verify_token"] as string | undefined;
   const challenge = req.query["hub.challenge"]    as string | undefined;
-  const [settings] = await db.select({ token: socialSettingsTable.webhookVerifyToken }).from(socialSettingsTable).limit(1);
-  const expected = settings?.token ?? "kdfnuts_social_token";
-  logger.info({ mode, tokenMatch: token === expected }, "Meta webhook verification attempt");
-  if (mode === "subscribe" && token === expected) return res.status(200).send(challenge);
+  const [social] = await db.select({ token: socialSettingsTable.webhookVerifyToken }).from(socialSettingsTable).limit(1);
+  const [wa] = await db.select({ token: whatsappSettingsTable.webhookVerifyToken }).from(whatsappSettingsTable).limit(1);
+  const { isValidMetaWebhookVerifyToken } = await import("../lib/metaWebhookVerify.js");
+  const tokenOk = isValidMetaWebhookVerifyToken(token, [
+    social?.token,
+    wa?.token,
+    "kdfnuts_social_token",
+    "kdfnuts_webhook_token",
+  ]);
+  logger.info({ mode, tokenMatch: tokenOk }, "Meta webhook verification attempt");
+  if (mode === "subscribe" && tokenOk) return res.status(200).send(challenge);
   return res.status(403).json({ error: "Forbidden — verify token mismatch" });
 });
 
 /* POST — unified event handler (all IG + FB events come here) */
 router.post("/meta/webhook", async (req, res) => {
+  const body = req.body as { object?: string };
+  const signature = req.headers["x-hub-signature-256"] as string | undefined;
+  const rawBody = (req as { rawBody?: Buffer }).rawBody;
+
+  if (body?.object === "whatsapp_business_account") {
+    const { verifyMetaWebhookSignature } = await import("../lib/metaWebhookVerify.js");
+    const [waRow] = await db.select({ appSecret: whatsappSettingsTable.appSecret }).from(whatsappSettingsTable).limit(1);
+    const appSecret = (waRow?.appSecret?.trim() || process.env.META_APP_SECRET?.trim() || "");
+    if (appSecret && (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret))) {
+      logger.warn("Meta unified webhook: invalid WA HMAC — rejected");
+      return res.sendStatus(403);
+    }
+  }
+
   /* Must respond 200 immediately before processing — Meta times out in 20s */
   res.sendStatus(200);
   try {
-    const body = req.body as any;
-    recentSocialPayloads.unshift({ ts: new Date().toISOString(), platform: `meta-hook(${body.object ?? "?"})`, body });
+    const payload = req.body as any;
+    recentSocialPayloads.unshift({ ts: new Date().toISOString(), platform: `meta-hook(${payload.object ?? "?"})`, body: payload });
     if (recentSocialPayloads.length > 50) recentSocialPayloads.pop();
-    logger.info({ object: body.object, entries: body.entry?.length ?? 0 }, "Meta unified webhook received");
+    logger.info({ object: payload.object, entries: payload.entry?.length ?? 0 }, "Meta unified webhook received");
 
     /* ── WhatsApp Business Account — route to WA processor (bypasses social settings) ── */
-    if (body.object === "whatsapp_business_account") {
+    if (payload.object === "whatsapp_business_account") {
       const { processWaWebhookBody } = await import("./whatsapp.js");
-      await processWaWebhookBody(body, logger);
+      await processWaWebhookBody(payload, logger);
       return;
     }
 
@@ -613,11 +634,11 @@ router.post("/meta/webhook", async (req, res) => {
       return;
     }
 
-    if (body.object === "instagram") {
-      await processIgWebhookBody(body, settings);
+    if (payload.object === "instagram") {
+      await processIgWebhookBody(payload, settings);
     } else {
       /* object === "page" (Facebook) */
-      await processFbWebhookBody(body, settings);
+      await processFbWebhookBody(payload, settings);
     }
   } catch (err) {
     logger.warn({ err }, "Meta webhook processing error");

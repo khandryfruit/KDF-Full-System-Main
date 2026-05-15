@@ -1,6 +1,7 @@
 import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, whatsappConversationStatesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { persistWaOutboundMessage } from "./waInboxPersist";
 
 const WA_API_VERSION = "v22.0";
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
@@ -50,7 +51,7 @@ function buildBodyComponents(paramValues: string[]): object[] {
 }
 
 /* ─── Get approved template for a trigger event ─────────── */
-async function getApprovedTemplate(triggerEvent: string) {
+export async function getApprovedTemplate(triggerEvent: string) {
   const [tpl] = await db.select().from(whatsappTemplatesTable)
     .where(eq(whatsappTemplatesTable.triggerEvent, triggerEvent))
     .limit(1);
@@ -84,6 +85,14 @@ export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean>
     const messageId = data?.messages?.[0]?.id as string | undefined;
     if (res.ok && messageId) {
       await log({ ...opts, status: "sent", response: JSON.stringify(data), messageId });
+      void persistWaOutboundMessage({
+        phone: opts.phone,
+        content: opts.message,
+        waMessageId: messageId,
+        isBot: !opts.userId,
+        templateName: opts.templateName,
+        status: "sent",
+      });
       return true;
     } else {
       logger.warn({ data }, "WhatsApp message failed");
@@ -134,6 +143,15 @@ export async function sendWhatsAppTemplate(opts: {
 
     if (res.ok && messageId) {
       await log({ phone: opts.phone, templateName: opts.templateName, message: `[template] ${opts.templateName}`, status: "sent", response: JSON.stringify(data), messageId, userId: opts.userId });
+      void persistWaOutboundMessage({
+        phone: opts.phone,
+        content: `[template] ${opts.templateName}`,
+        waMessageId: messageId,
+        isBot: !opts.userId,
+        templateName: opts.templateName,
+        type: "template",
+        status: "sent",
+      });
       return { success: true, messageId };
     } else {
       const errMsg = data?.error?.message ?? `HTTP ${res.status}`;
@@ -223,6 +241,9 @@ export async function sendInteractiveMenu(opts: {
     const messageId = data?.messages?.[0]?.id as string | undefined;
 
     await log({ phone: opts.phone, templateName: "menu_sent", message: "[Interactive menu]", status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
+    if (res.ok && messageId) {
+      void persistWaOutboundMessage({ phone: opts.phone, content: opts.greeting, waMessageId: messageId, isBot: true, type: "interactive", templateName: "menu_sent" });
+    }
     return !!(res.ok && messageId);
   } catch (err) {
     logger.error(err, "sendInteractiveMenu error");
@@ -271,6 +292,9 @@ export async function sendInteractiveButtons(opts: {
     const messageId = data?.messages?.[0]?.id as string | undefined;
 
     await log({ phone: opts.phone, templateName: opts.templateName ?? "interactive_buttons", message: opts.text.slice(0, 200), status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
+    if (res.ok && messageId) {
+      void persistWaOutboundMessage({ phone: opts.phone, content: opts.text.slice(0, 500), waMessageId: messageId, isBot: true, type: "interactive", templateName: opts.templateName ?? "interactive_buttons" });
+    }
     if (!res.ok) logger.warn({ data }, "sendInteractiveButtons failed");
     return !!(res.ok && messageId);
   } catch (err) {

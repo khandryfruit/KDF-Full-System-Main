@@ -8,7 +8,7 @@ import {
   Phone, Settings, AlertTriangle, Clock, RotateCcw, Ticket,
   Copy, Wifi, WifiOff, ExternalLink, ShieldCheck, Bot,
   ChevronRight, User, Sparkles, Info, ShoppingBag, Zap, RotateCw,
-  Megaphone, Bug, Play, Users, Filter, TimerIcon, TrendingUp,
+  Megaphone, Bug, Play, Users, Filter, TimerIcon,   TrendingUp, Activity,
   CheckSquare, Globe, QrCode, Download, MessageSquare, Tag,
   ArrowUp, ArrowDown, Edit2, GitBranch, CalendarClock, Search,
 } from "lucide-react";
@@ -1053,6 +1053,12 @@ export default function WhatsAppPage() {
     queryKey: ["/api/admin/whatsapp/webhook-info"],
     queryFn: () => apiFetch("/api/admin/whatsapp/webhook-info"),
     refetchOnWindowFocus: false,
+  });
+  const { data: waMonitoring, refetch: refetchWaMonitoring, isFetching: monitoringLoading } = useQuery({
+    queryKey: ["/api/admin/whatsapp/monitoring"],
+    queryFn: () => apiFetch("/api/admin/whatsapp/monitoring"),
+    refetchInterval: 60_000,
+    enabled: tab === "debug",
   });
   const [form, setForm] = useState({
     accessToken: "", phoneNumberId: "", businessAccountId: "",
@@ -3121,6 +3127,66 @@ export default function WhatsAppPage() {
           <div>
             <h2 className="text-lg font-bold">Debug Panel</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Diagnose WhatsApp API connection issues and inspect error logs</p>
+          </div>
+
+          {/* ── 24h monitoring snapshot ── */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#25D366]" /> Live monitoring (24h)
+              </h3>
+              <Button variant="outline" size="sm" onClick={() => refetchWaMonitoring()} disabled={monitoringLoading} className="gap-1.5">
+                <RefreshCw className={`w-3.5 h-3.5 ${monitoringLoading ? "animate-spin" : ""}`} />Refresh
+              </Button>
+            </div>
+            <div className="px-5 py-4">
+              {waMonitoring ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Sent", value: waMonitoring.metrics24h?.sent ?? 0 },
+                    { label: "Failed", value: waMonitoring.metrics24h?.failed ?? 0, warn: (waMonitoring.metrics24h?.failed ?? 0) > 0 },
+                    { label: "Inbound", value: waMonitoring.metrics24h?.inbound ?? 0 },
+                    { label: "Delivered %", value: `${waMonitoring.metrics24h?.deliveryRate ?? 0}%` },
+                    { label: "Templates sent", value: waMonitoring.metrics24h?.templatesSent ?? 0 },
+                    { label: "Templates failed", value: waMonitoring.metrics24h?.templatesFailed ?? 0, warn: (waMonitoring.metrics24h?.templatesFailed ?? 0) > 0 },
+                    { label: "Automation fired", value: waMonitoring.metrics24h?.automationFired ?? 0 },
+                    { label: "Open inbox", value: waMonitoring.metrics24h?.openConversations ?? 0 },
+                  ].map((m) => (
+                    <div key={m.label} className={`rounded-lg border px-3 py-2.5 ${m.warn ? "border-red-200 bg-red-50/50" : "border-border bg-muted/30"}`}>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</p>
+                      <p className="text-lg font-bold tabular-nums">{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading metrics…
+                </div>
+              )}
+              {waMonitoring?.integration && (
+                <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                  <span className={`px-2 py-1 rounded-full ${waMonitoring.integration.isActive ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                    {waMonitoring.integration.isActive ? "Integration active" : "Integration inactive"}
+                  </span>
+                  <span className={`px-2 py-1 rounded-full ${waMonitoring.integration.hasAppSecret ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                    {waMonitoring.integration.hasAppSecret ? "App secret configured" : "No app secret — webhooks unverified"}
+                  </span>
+                  {waMonitoring.serverIp && (
+                    <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground font-mono">Server IP: {waMonitoring.serverIp}</span>
+                  )}
+                </div>
+              )}
+              {(waMonitoring?.webhookFailures?.length ?? 0) > 0 && (
+                <div className="mt-4 border border-red-200 rounded-lg bg-red-50/50 px-3 py-2">
+                  <p className="text-xs font-semibold text-red-800 mb-1">Recent webhook failures ({waMonitoring.webhookFailures.length})</p>
+                  <ul className="text-xs text-red-700 space-y-1 max-h-24 overflow-y-auto">
+                    {waMonitoring.webhookFailures.slice(0, 5).map((f: { id: number; error: string; createdAt: string }) => (
+                      <li key={f.id}>{f.error} — {new Date(f.createdAt).toLocaleString()}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── Webhook Setup Guide ── */}

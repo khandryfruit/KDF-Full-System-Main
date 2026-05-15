@@ -185,13 +185,23 @@ async function runInactiveCustomerRule(rule: any, settings: any) {
 
   const rows = await db.execute(sql`
     SELECT DISTINCT ON ((shipping_address->>'phone'))
-      id, order_number, shipping_address, MAX(created_at) AS last_order_at
+      id,
+      order_number,
+      shipping_address,
+      created_at AS last_order_at
     FROM orders
     WHERE status != 'cancelled'
-    GROUP BY id, order_number, shipping_address
-    HAVING MAX(created_at) <= ${cutoff.toISOString()} AND MAX(created_at) >= ${windowEnd.toISOString()}
-    LIMIT 50
-  `);
+      AND (shipping_address->>'phone') IS NOT NULL
+      AND (shipping_address->>'phone') != ''
+    ORDER BY (shipping_address->>'phone'), created_at DESC
+  `).then((r) => ({
+    rows: (r.rows as Array<{ id: number; order_number: string; shipping_address: unknown; last_order_at: Date }>)
+      .filter((o) => {
+        const t = new Date(o.last_order_at).getTime();
+        return t <= cutoff.getTime() && t >= windowEnd.getTime();
+      })
+      .slice(0, 50),
+  }));
 
   for (const order of rows.rows as any[]) {
     const addr = order.shipping_address;

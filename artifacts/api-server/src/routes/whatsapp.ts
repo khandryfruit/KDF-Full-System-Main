@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable } from "@workspace/db";
+import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
@@ -10,6 +10,7 @@ import type OpenAI from "openai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
+import { verifyMetaWebhookSignature, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
 
 const router = Router();
 
@@ -40,17 +41,25 @@ router.get("/whatsapp/chat-config", async (req, res) => {
 });
 
 /* ─── Public: Webhook URL info ──────────────────────── */
-function getPublicWebhookUrl(): string {
-  // REPLIT_DOMAINS is set in production deployments (comma-separated list)
+function getPublicWebhookUrl(reqHost?: string): string {
   const prodDomains = process.env.REPLIT_DOMAINS ?? "";
   const prodPrimary = prodDomains.split(",")[0]?.trim();
   if (prodPrimary) return `https://${prodPrimary}/api/webhooks/whatsapp`;
 
-  // REPLIT_DEV_DOMAIN is the publicly-accessible dev URL for this repl
   const devDomain = process.env.REPLIT_DEV_DOMAIN ?? "";
   if (devDomain) return `https://${devDomain}/api/webhooks/whatsapp`;
 
+  const publicBase = process.env.PUBLIC_API_URL ?? process.env.API_PUBLIC_URL ?? "";
+  if (publicBase) return `${publicBase.replace(/\/$/, "")}/api/webhooks/whatsapp`;
+
+  if (reqHost) return `https://${reqHost}/api/webhooks/whatsapp`;
+
   return "";
+}
+
+async function getMetaAppSecret(): Promise<string> {
+  const [settings] = await db.select({ appSecret: whatsappSettingsTable.appSecret }).from(whatsappSettingsTable).limit(1);
+  return (settings?.appSecret?.trim() || process.env.META_APP_SECRET?.trim() || "");
 }
 
 /* ─── Webhook Verification (Meta GET) ───────────────── */
@@ -65,13 +74,19 @@ router.get("/webhooks/whatsapp", async (req, res) => {
     }
 
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
-    const expectedToken = settings?.webhookVerifyToken ?? "kdfnuts_webhook_token";
+    const [social] = await db.select({ token: socialSettingsTable.webhookVerifyToken }).from(socialSettingsTable).limit(1);
+    const tokenOk = isValidMetaWebhookVerifyToken(token, [
+      settings?.webhookVerifyToken,
+      social?.token,
+      "kdfnuts_webhook_token",
+      "kdfnuts_social_token",
+    ]);
 
-    if (mode === "subscribe" && token === expectedToken) {
+    if (mode === "subscribe" && tokenOk) {
       req.log?.info("WhatsApp webhook verified successfully");
       return res.status(200).send(challenge);
     }
-    req.log?.warn({ mode, receivedToken: token, expectedToken }, "WhatsApp webhook verification failed");
+    req.log?.warn({ mode, receivedToken: token }, "WhatsApp webhook verification failed");
     return res.status(403).json({ error: "Forbidden: token mismatch" });
   } catch (err) {
     req.log?.error(err, "Webhook verification error");
@@ -84,39 +99,25 @@ router.get("/admin/whatsapp/webhook-logs", adminMiddleware as any, (req, res) =>
   res.json(recentWebhookPayloads.slice(0, 30));
 });
 
-/* ─── Helper: verify Meta webhook HMAC-SHA256 signature ─ */
-function verifyMetaWebhookSignature(rawBody: Buffer, signature: string, secret: string): boolean {
-  try {
-    if (!signature.startsWith("sha256=")) return false;
-    const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-    const received = signature.slice(7);
-    if (expected.length !== received.length) return false;
-    const result: boolean = crypto.timingSafeEqual(
-      Buffer.from(expected, "hex"),
-      Buffer.from(received, "hex"),
-    );
-    return result;
-  } catch {
-    return false;
-  }
-}
-
 /* ─── Webhook: incoming message handler ──────────────── */
 router.post("/webhooks/whatsapp", async (req, res) => {
-  const appSecret = process.env.META_APP_SECRET;
+  const appSecret = await getMetaAppSecret();
   const signature = req.headers["x-hub-signature-256"] as string | undefined;
   const rawBody = req.rawBody;
 
-  if (!appSecret) {
-    req.log?.error("META_APP_SECRET is not configured — rejecting WhatsApp webhook to prevent unauthenticated processing");
-    res.sendStatus(403);
-    return;
-  }
-
-  if (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
-    req.log?.warn({ signature: signature ? "present" : "missing" }, "WhatsApp webhook rejected: invalid HMAC signature");
-    res.sendStatus(403);
-    return;
+  if (appSecret) {
+    if (!signature || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, appSecret)) {
+      req.log?.warn({ signature: signature ? "present" : "missing" }, "WhatsApp webhook rejected: invalid HMAC signature");
+      await db.insert(waWebhookFailuresTable).values({
+        payload: req.body as Record<string, unknown>,
+        error: "invalid_hmac_signature",
+        signature: signature ?? null,
+      }).catch(() => {});
+      res.sendStatus(403);
+      return;
+    }
+  } else {
+    req.log?.warn("META app secret not configured (DB appSecret or META_APP_SECRET) — accepting webhook without signature verification");
   }
 
   res.sendStatus(200);
@@ -137,6 +138,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
     for (const entry of (body.entry ?? [])) {
       for (const change of (entry.changes ?? [])) {
         const value = change?.value ?? {};
+
+        if (Array.isArray(value.errors) && value.errors.length > 0) {
+          log?.warn({ errors: value.errors }, "WhatsApp webhook value.errors from Meta");
+          await db.insert(waWebhookFailuresTable).values({
+            payload: { errors: value.errors, metadata: value.metadata },
+            error: "meta_webhook_value_errors",
+          }).catch(() => {});
+        }
 
         /* ── Delivery status updates ── */
         for (const s of (value.statuses ?? [])) {
@@ -190,6 +199,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               break;
             case "interactive":
               rawText = interactionTitle ?? interactionId ?? "";
+              break;
+            case "button":
+              rawText = msg.button?.text ?? msg.button?.payload ?? "[Button reply]";
               break;
             case "image":
             case "video":
@@ -1405,6 +1417,100 @@ async function handleAiReply(opts: {
     } catch { /* ignore fallback errors */ }
   }
 }
+
+/* ─── Admin: Monitoring / debug dashboard aggregates ─── */
+router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, res) => {
+  try {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
+    const serverIp = await import("../lib/meezan.js").then((m) => m.getServerIp()).catch(() => "unknown");
+
+    const logStats = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'sent' AND created_at >= ${since24h})::int AS sent,
+        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= ${since24h})::int AS failed,
+        COUNT(*) FILTER (WHERE status = 'received' AND created_at >= ${since24h})::int AS inbound,
+        COUNT(*) FILTER (WHERE delivery_status = 'delivered' AND created_at >= ${since24h})::int AS delivered,
+        COUNT(*) FILTER (WHERE delivery_status = 'read' AND created_at >= ${since24h})::int AS read_count,
+        COUNT(*) FILTER (WHERE template_name LIKE 'automation:%' AND status = 'sent' AND created_at >= ${since24h})::int AS automation_sent,
+        COUNT(*) FILTER (WHERE template_name LIKE '[template]%' AND status = 'sent' AND created_at >= ${since24h})::int AS templates_sent,
+        COUNT(*) FILTER (WHERE template_name LIKE '[template]%' AND status = 'failed' AND created_at >= ${since24h})::int AS templates_failed
+      FROM whatsapp_logs
+    `);
+
+    const automationStats = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'sent' AND created_at >= ${since24h})::int AS fired,
+        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= ${since24h})::int AS automation_failed,
+        COUNT(*) FILTER (WHERE status = 'skipped' AND created_at >= ${since24h})::int AS skipped
+      FROM wa_automation_logs
+    `);
+
+    const inboxStats = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS open_conversations,
+        COALESCE(SUM(unread_count), 0)::int AS unread_total
+      FROM wa_conversations
+      WHERE status = 'open'
+    `);
+
+    const recentFailures = await db.select().from(whatsappLogsTable)
+      .where(eq(whatsappLogsTable.status, "failed"))
+      .orderBy(desc(whatsappLogsTable.createdAt))
+      .limit(20);
+
+    const recentInbound = await db.select().from(whatsappLogsTable)
+      .where(eq(whatsappLogsTable.status, "received"))
+      .orderBy(desc(whatsappLogsTable.createdAt))
+      .limit(20);
+
+    const webhookFailures = await db.select().from(waWebhookFailuresTable)
+      .orderBy(desc(waWebhookFailuresTable.createdAt))
+      .limit(15);
+
+    const ls = (logStats.rows ?? logStats)[0] as Record<string, number>;
+    const as = (automationStats.rows ?? automationStats)[0] as Record<string, number>;
+    const is = (inboxStats.rows ?? inboxStats)[0] as Record<string, number>;
+
+    const sent = Number(ls?.sent ?? 0);
+    const failed = Number(ls?.failed ?? 0);
+    const inbound = Number(ls?.inbound ?? 0);
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      serverIp,
+      integration: {
+        isActive: settings?.isActive ?? false,
+        hasToken: !!settings?.accessToken,
+        hasPhoneId: !!settings?.phoneNumberId,
+        hasAppSecret: !!(settings?.appSecret || process.env.META_APP_SECRET),
+        webhookUrl: getPublicWebhookUrl(),
+        unifiedWebhookUrl: `${process.env.PUBLIC_API_URL?.replace(/\/$/, "") || ""}/api/meta/webhook`,
+      },
+      metrics24h: {
+        sent,
+        failed,
+        inbound,
+        delivered: Number(ls?.delivered ?? 0),
+        read: Number(ls?.read_count ?? 0),
+        deliveryRate: sent > 0 ? Math.round((Number(ls?.delivered ?? 0) / sent) * 100) : 0,
+        replyRate: sent > 0 ? Math.round((inbound / sent) * 100) : 0,
+        automationFired: Number(as?.fired ?? 0),
+        automationFailed: Number(as?.automation_failed ?? 0),
+        templatesSent: Number(ls?.templates_sent ?? 0),
+        templatesFailed: Number(ls?.templates_failed ?? 0),
+        openConversations: Number(is?.open_conversations ?? 0),
+        unreadTotal: Number(is?.unread_total ?? 0),
+      },
+      recentWebhookPayloads: recentWebhookPayloads.slice(0, 10),
+      recentFailures,
+      recentInbound,
+      webhookFailures,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
 
 /* ─── Admin: Webhook Info ────────────────────────────── */
 router.get("/admin/whatsapp/webhook-info", adminMiddleware as any, async (req, res) => {
