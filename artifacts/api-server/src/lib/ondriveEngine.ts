@@ -780,185 +780,38 @@ export async function triggerNewOrderAutomation(params: {
     shippingAddress, totalPrice, financialStatus, lineItems,
   } = params;
 
-  const addr = (typeof shippingAddress === "string" ? JSON.parse(shippingAddress) : shippingAddress) ?? {};
-  const city = (addr.city ?? "").toLowerCase().trim();
   const phone = customerPhone ? normalizePhone(customerPhone) : null;
-  const isLahore = city.includes("lahore");
+  const { isLahoreShippingAddress } = await import("./lahoreShipping.js");
+  const isLahore = isLahoreShippingAddress(shippingAddress);
   const isPaid = ["paid", "partially_paid"].includes(financialStatus ?? "");
 
-  logger.info({ shopifyOrderId, city, isLahore, phone: !!phone }, "triggerNewOrderAutomation");
+  logger.info({ shopifyOrderId, isLahore, phone: !!phone }, "triggerNewOrderAutomation");
 
-  /* ── LAHORE → assign local rider + send WA to rider ── */
+  /* ── LAHORE → unified assign + rider/customer notifications ── */
   if (isLahore) {
-    /* Check auto_delivery_mode toggle before proceeding */
     try {
-      const settingsRow = await db.execute(sql`SELECT auto_delivery_mode FROM rider_delivery_settings WHERE id = 1 LIMIT 1`).catch(() => ({ rows: [] }));
-      const autoMode = (settingsRow.rows?.[0] as any)?.auto_delivery_mode ?? true;
-      if (!autoMode) {
-        logger.info({ shopifyOrderId }, "auto_delivery_mode disabled — skipping Lahore rider auto-assignment");
-        return { routed: "skipped", message: "Auto delivery mode is disabled" };
+      const { assignLahoreOrderWithNotifications } = await import("./lahoreOrderAssign.js");
+      const result = await assignLahoreOrderWithNotifications({
+        shopifyOrderDbId,
+        shopifyOrderId,
+        orderNumber,
+        customerPhone: phone,
+        customerName,
+        shippingAddress,
+        totalPrice,
+        financialStatus,
+        lineItems,
+      });
+      if (result.assigned) {
+        return {
+          routed: "lahore_rider",
+          message: result.message,
+        };
       }
-    } catch {}
-
-    try {
-      /* Already assigned? skip */
-      const existCheck = await db.execute(sql`
-        SELECT id FROM rider_deliveries WHERE shopify_order_db_id = ${shopifyOrderDbId} LIMIT 1
-      `).catch(() => ({ rows: [] }));
-      if ((existCheck.rows ?? []).length > 0) {
-        return { routed: "skipped", message: "Rider already assigned" };
+      if (result.deliveryId) {
+        return { routed: "lahore_rider", message: result.message };
       }
-
-      /* Pick best rider — prefer ONLINE riders first, then fewest active deliveries */
-      const buildRiderPick = (onlineOnly: boolean) => db.execute(sql`
-        SELECT r.id, r.name, r.whatsapp_number, r.phone, r.expo_push_token, r.is_online,
-          COUNT(d.id) FILTER (WHERE d.status NOT IN ('delivered','returned','failed','cancelled')) AS active_count
-        FROM riders r
-        LEFT JOIN rider_deliveries d ON d.rider_id = r.id
-        WHERE r.status = 'active'
-          ${onlineOnly ? sql`AND r.is_online = true` : sql``}
-        GROUP BY r.id
-        ORDER BY active_count ASC
-        LIMIT 1
-      `).catch(() => ({ rows: [] }));
-
-      let riderRows = await buildRiderPick(true);
-      if (!(riderRows.rows ?? []).length) riderRows = await buildRiderPick(false);
-      const rider = (riderRows.rows ?? [])[0] as any;
-
-      const deliveryAddr = [addr.address1, addr.address2, addr.city].filter(Boolean).join(", ");
-      const codAmount = isPaid ? 0 : Number(totalPrice ?? 0);
-
-      /* Insert delivery record */
-      const delRows = await db.execute(sql`
-        INSERT INTO rider_deliveries
-          (rider_id, shopify_order_db_id, shopify_order_id, shopify_order_number,
-           customer_name, customer_phone, delivery_address, city,
-           cod_amount, is_paid, order_items, status, assigned_at)
-        VALUES (
-          ${rider?.id ?? null},
-          ${shopifyOrderDbId},
-          ${shopifyOrderId},
-          ${orderNumber},
-          ${customerName ?? null},
-          ${phone ?? null},
-          ${deliveryAddr},
-          'Lahore',
-          ${codAmount},
-          ${isPaid},
-          ${JSON.stringify(lineItems)},
-          ${rider ? 'assigned' : 'pending'},
-          ${rider ? sql`NOW()` : sql`NULL`}
-        )
-        ON CONFLICT DO NOTHING
-        RETURNING id
-      `).catch(() => ({ rows: [] }));
-
-      /* Send WhatsApp to rider if one was assigned */
-      if (rider) {
-        const waPhone = rider.whatsapp_number || rider.phone;
-        const itemsList = lineItems.slice(0, 4).map((i: any) => `• ${i.name ?? i.title ?? "Product"} × ${i.quantity ?? 1}`).join("\n");
-        const codLine = isPaid ? "PAID ✅ (No collection needed)" : `PKR ${codAmount.toLocaleString()} — cash on delivery`;
-        const msg = `🚚 *NEW DELIVERY — Khan Dry Fruits*\n\n` +
-          `📦 *Order:* ${orderNumber}\n` +
-          `👤 *Customer:* ${customerName ?? "Customer"}\n` +
-          `📞 *Phone:* ${phone ?? "—"}\n` +
-          `📍 *Address:* ${deliveryAddr}\n\n` +
-          `🛒 *Items:*\n${itemsList || "See order"}\n\n` +
-          `💰 *Payment:* ${codLine}\n\n` +
-          `━━━━━━━━━━━━━━━━━━━\n` +
-          `Reply *PICKED* when collected, *DONE* when delivered.\n` +
-          `━━━━━━━━━━━━━━━━━━━\n` +
-          `_Khan Dry Fruits — Lahore Delivery_`;
-
-        await sendWhatsAppMessage({ phone: waPhone, message: msg }).catch(() => {});
-
-        /* Mark WA sent timestamp */
-        const delId = (delRows.rows?.[0] as any)?.id;
-        if (delId) {
-          await db.execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW() WHERE id = ${delId}`).catch(() => {});
-        }
-
-        /* ── Send Expo Push Notification to rider app ── */
-        try {
-          /* Use token from query (already fetched) or fallback DB fetch */
-          const expoPushToken = rider.expo_push_token
-            ?? ((await db.execute(sql`SELECT expo_push_token FROM riders WHERE id = ${rider.id} LIMIT 1`).catch(() => ({ rows: [] }))).rows?.[0] as any)?.expo_push_token;
-          if (expoPushToken) {
-            const codText = isPaid ? "PAID ✅" : `COD Rs.${codAmount.toLocaleString()}`;
-            await sendExpoPush({
-              expoPushToken,
-              title: `🚚 نیا آرڈر! ${orderNumber}`,
-              body:  `${customerName ?? "Customer"} · ${deliveryAddr} · ${codText}`,
-              data: {
-                deliveryId:  String(delId ?? ""),
-                orderId:     String(shopifyOrderDbId),
-                orderNumber: String(orderNumber),
-                screen:      "order_detail",
-              },
-              sound:       "default",
-              badge:       1,
-              riderId:     rider.id,
-              deliveryId:  delId ?? undefined,
-              orderNumber: String(orderNumber),
-            });
-          }
-        } catch (pushErr) {
-          logger.warn(pushErr, "Expo push failed for rider (non-critical)");
-        }
-
-        logger.info({ orderNumber, rider: rider.name, delivery: delId }, "Lahore order: rider assigned + WA sent");
-
-        /* ── SSE broadcast to admin panel ── */
-        try {
-          const { broadcastSSE } = await import("./sse.js");
-          broadcastSSE("rider_assigned", {
-            deliveryId: delId,
-            orderNumber,
-            shopifyOrderId,
-            riderName: rider.name,
-            riderId: rider.id,
-            assignedAt: new Date().toISOString(),
-          });
-        } catch {}
-
-        /* Premium customer delivery WA (invoice + live track) */
-        if (delId && phone) {
-          try {
-            const { sendPremiumRiderAssignedNotification } = await import("./deliveryWaPremium.js");
-            const orderRow = await db.execute(sql`
-              SELECT * FROM shopify_orders WHERE id = ${shopifyOrderDbId} LIMIT 1
-            `);
-            const delRow = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${delId} LIMIT 1`);
-            await sendPremiumRiderAssignedNotification({
-              deliveryId: delId,
-              shopifyOrderDbId,
-              order: (orderRow.rows[0] as Record<string, unknown>) ?? {
-                order_number: orderNumber,
-                customer_phone: phone,
-                line_items: lineItems,
-                total_price: totalPrice,
-                financial_status: financialStatus,
-              },
-              delivery: (delRow.rows[0] as Record<string, unknown>) ?? {
-                id: delId,
-                shopify_order_db_id: shopifyOrderDbId,
-                customer_phone: phone,
-                customer_name: customerName,
-              },
-              rider,
-            });
-          } catch (waErr) {
-            logger.warn(waErr, "Premium customer WA on Lahore assign failed (non-critical)");
-          }
-        }
-
-        return { routed: "lahore_rider", message: `Assigned to rider ${rider.name} + WA sent` };
-      }
-
-      logger.warn({ orderNumber }, "Lahore order: no active riders — delivery pending");
-      return { routed: "lahore_rider", message: "Delivery record created — no active riders available" };
-
+      return { routed: "skipped", message: result.message };
     } catch (err) {
       logger.error(err, "triggerNewOrderAutomation Lahore error");
       return { routed: "skipped", message: `Lahore routing error: ${err}` };

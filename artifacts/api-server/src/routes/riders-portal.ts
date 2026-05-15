@@ -586,7 +586,7 @@ router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res
       });
     }
 
-    /* ── Async: sync rider status back to Shopify via unified engine ── */
+    /* ── Async: Shopify sync + customer WhatsApp on status change ── */
     if (updatedDelivery) {
       setImmediate(async () => {
         try {
@@ -594,6 +594,12 @@ router.put("/rider/deliveries/:id/status", riderMiddleware, async (req: any, res
           const rider = riderRows.rows[0] as any;
           await syncDeliveryToShopify(buildSyncPayload(status as SyncAction, updatedDelivery, rider, notes));
         } catch {}
+        try {
+          const { notifyCustomerOnDeliveryStatus } = await import("../lib/customerDeliveryWa.js");
+          await notifyCustomerOnDeliveryStatus(id, status);
+        } catch (waErr) {
+          req.log?.warn(waErr, "customer WA on rider status failed");
+        }
       });
     }
   } catch (err: any) {

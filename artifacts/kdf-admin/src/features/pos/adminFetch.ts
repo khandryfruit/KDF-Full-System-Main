@@ -21,8 +21,9 @@ export function adminFetch(path: string, opts: RequestInit = {}): Promise<unknow
     },
   }).then((r) => {
     if (!r.ok)
-      return r.json().then((e: { error?: string }) => {
-        throw new Error(e.error ?? r.statusText);
+      return r.json().then((e: { error?: string; detail?: string }) => {
+        const msg = [e.error, e.detail].filter(Boolean).join(" — ");
+        throw new Error(msg || r.statusText);
       });
     return r.json();
   });

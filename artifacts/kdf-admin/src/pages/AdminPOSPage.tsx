@@ -22,7 +22,8 @@ import type { CartRow, Customer, PosDraftV1, PosHoldV1, Product } from "@/featur
 import { isWeightLikeUnit } from "@/features/pos/weightMoney";
 import { adminFetch } from "@/features/pos/adminFetch";
 import { calcRow, fmtRs, uid } from "@/features/pos/calc";
-import { printBill } from "@/features/pos/printBill";
+import type { ReceiptContext } from "@/features/pos/invoiceActions";
+import { recordFrequentProduct, pickFrequentProducts } from "@/features/pos/frequentProducts";
 import { getCachedProductSearch, setCachedProductSearch } from "@/features/pos/productSearchCache";
 import { clearDraft, readDraft, writeDraft } from "@/features/pos/draftStorage";
 import { listHolds, pushHold, removeHoldById } from "@/features/pos/holdsStorage";
@@ -35,6 +36,7 @@ import {
   ItemDiscModal,
   QtyModal,
   RemarksModal,
+  PostSaleActionsModal,
   SaveBillModal,
   SellByRsModal,
   UnitModal,
@@ -113,8 +115,39 @@ export default function AdminPOSPage() {
   const [sellRsCtx, setSellRsCtx] = useState<SellRsCtx | null>(null);
   const [recentCust, setRecentCust] = useState<Customer[]>(() => readRecentCustomers());
   const [posNight, setPosNight] = useState(false);
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const [branchLabel, setBranchLabel] = useState("");
+  const [postSale, setPostSale] = useState<ReceiptContext | null>(null);
+  const [catalogSeed, setCatalogSeed] = useState<Product[]>([]);
 
   const draftRestored = useRef(false);
+
+  useEffect(() => {
+    if (!token) return;
+    adminFetch("/api/admin/branches")
+      .then((d) => {
+        const branches = (d as { branches?: { id: number; name: string; isHeadOffice?: boolean }[] }).branches ?? [];
+        const stored = parseInt(localStorage.getItem("kdf_pos_branch_id") ?? "", 10);
+        const pick =
+          branches.find((b) => b.id === stored) ??
+          branches.find((b) => b.isHeadOffice) ??
+          branches[0];
+        if (pick) {
+          setBranchId(pick.id);
+          setBranchLabel(pick.name);
+          localStorage.setItem("kdf_pos_branch_id", String(pick.id));
+        }
+      })
+      .catch(() => {});
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(apiPublicUrl("/api/products?limit=80"))
+      .then((r) => r.json())
+      .then((d: { items?: Product[] }) => setCatalogSeed(d.items ?? []))
+      .catch(() => {});
+  }, [token]);
 
   /* Restore draft once when logged in */
   useEffect(() => {
@@ -441,61 +474,93 @@ export default function AdminPOSPage() {
     );
   }, [billDisc, billDiscFixedRs, billNo, cart, customer, internalNotes, packingCharge, remarks, selectedRow, shippingCharge]);
 
+  const finishPostSale = useCallback(() => {
+    setPostSale(null);
+    clearDraft();
+    resetSaleState();
+    searchRef.current?.focus();
+  }, [resetSaleState]);
+
   const saveBill = async (payMethod: string, received: number, splitNote?: string | null) => {
     if (cart.length === 0) return;
+    if (!branchId) {
+      toast({
+        title: "No branch selected",
+        description: "Add a branch in Admin → Branches, then reload POS.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const items = cart.map((r) => ({
         name: r.name,
         sku: r.sku,
-        qty: r.qty,
+        qty: Number.isFinite(r.qty) ? r.qty : 0,
         unit: r.unit,
-        pricePerUnit: r.pricePerUnit,
-        discount: r.discount,
-        lineTotal: r.total,
+        pricePerUnit: Number.isFinite(r.pricePerUnit) ? r.pricePerUnit : 0,
+        discount: Number.isFinite(r.discount) ? r.discount : 0,
+        lineTotal: Number.isFinite(r.total) ? r.total : 0,
       }));
       const noteParts = [remarks?.trim(), splitNote?.trim()].filter(Boolean);
       if (packingCharge > 0) noteParts.unshift(`Packing: Rs ${packingCharge.toFixed(0)}`);
       if (internalNotes?.trim()) noteParts.push(`[Internal] ${internalNotes.trim()}`);
       const fullNotes = noteParts.length ? noteParts.join("\n---\n") : remarks;
       if (customer && !isWalkingCustomer(customer)) touchRecentCustomer(customer);
+      cart.forEach((r) => {
+        if (r.productId) recordFrequentProduct(r.productId);
+      });
       const discountPctReport = subtotal > 0 ? Math.round((discAmt / subtotal) * 10000) / 100 : 0;
+      const safeSub = Number.isFinite(subtotal) ? subtotal : 0;
+      const safeGrand = Number.isFinite(grandTotal) ? grandTotal : 0;
+      const safeReceived = Number.isFinite(received) ? received : safeGrand;
+
       await adminFetch("/api/admin/branch-invoices", {
         method: "POST",
         body: JSON.stringify({
           invoiceNo: billNo,
-          type: "pos",
+          type: "invoice",
           status: "completed",
           customerName: customer?.name ?? undefined,
           customerPhone: isWalkingCustomer(customer) ? undefined : customer?.phone,
           items,
-          subtotal,
+          subtotal: safeSub,
           discountPct: discountPctReport,
           discountAmt: discAmt,
           shipping: shippingCharge,
-          grandTotal,
+          grandTotal: safeGrand,
           paymentMethod: payMethod.toLowerCase().replace(/ /g, "_"),
-          paymentStatus: received >= grandTotal ? "paid" : "partial",
-          paidAmount: received,
+          paymentStatus: safeReceived >= safeGrand ? "paid" : "partial",
+          paidAmount: safeReceived,
           notes: fullNotes || undefined,
-          branchId: 1,
+          branchId,
         }),
       });
-      printBill(cart, subtotal, grandTotal, customer, payMethod, received, billNo, fullNotes ?? remarks, {
-        billDiscPct: billDisc,
-        billDiscFixedRs,
-        discAmt,
-        packingRs: packingCharge,
-        shippingRs: shippingCharge,
-        internalNotes,
-      });
+
       setRecentCust(readRecentCustomers());
-      clearDraft();
-      resetSaleState();
-      searchRef.current?.focus();
+      setModal(null);
+      setPostSale({
+        rows: cart.map((r) => ({ ...r })),
+        subtotal: safeSub,
+        grand: safeGrand,
+        customer,
+        payMethod,
+        amtReceived: safeReceived,
+        billNo,
+        orderRemarks: fullNotes ?? remarks,
+        meta: {
+          billDiscPct: billDisc,
+          billDiscFixedRs,
+          discAmt,
+          packingRs: packingCharge,
+          shippingRs: shippingCharge,
+          internalNotes,
+        },
+      });
+      toast({ title: "Bill saved", description: billNo });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to save bill";
-      alert(msg);
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
     }
     setSaving(false);
   };
@@ -721,7 +786,10 @@ export default function AdminPOSPage() {
       <div className="flex min-w-0 items-center gap-2">
         <ShoppingCart className="hidden h-5 w-5 shrink-0 text-amber-200/90 sm:block" />
         <span className="truncate text-sm font-extrabold tracking-wide sm:text-[15px]">KDF NUTS — POS</span>
-        <span className="hidden truncate text-[11px] text-white/60 sm:inline">{billNo}</span>
+        <span className="hidden truncate text-[11px] text-white/60 sm:inline">
+          {billNo}
+          {branchLabel ? ` · ${branchLabel}` : ""}
+        </span>
       </div>
       <div className="flex-1" />
       <button
@@ -1151,8 +1219,13 @@ export default function AdminPOSPage() {
     </div>
   );
 
+  const frequentHits = pickFrequentProducts(
+    [...catalogSeed, ...products].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i),
+    8,
+  );
+
   const mobileQuickStrip = (
-    <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-3 py-2.5">
+    <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-white/10 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-2 py-1.5">
       {(
         [
           { label: "Customer", on: () => setMobileSheet("customer"), dis: false },
@@ -1170,7 +1243,7 @@ export default function AdminPOSPage() {
           type="button"
           disabled={x.dis}
           onClick={x.on}
-          className={`shrink-0 rounded-full px-4 py-2.5 text-xs font-bold shadow-sm transition active:scale-[0.97] ${
+          className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold shadow-sm transition active:scale-[0.97] ${
             x.dis ? "cursor-not-allowed opacity-40" : "bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/20"
           }`}
         >
@@ -1180,8 +1253,25 @@ export default function AdminPOSPage() {
     </div>
   );
 
+  const mobileFrequentStrip =
+    frequentHits.length > 0 && !query.trim() ? (
+      <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-white/10 bg-slate-900/80 px-2 py-1.5">
+        <span className="shrink-0 self-center text-[10px] font-bold uppercase text-white/50">Fast</span>
+        {frequentHits.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => addProduct(p)}
+            className="max-w-[120px] shrink-0 truncate rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/10 active:scale-[0.98]"
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
   const mobileCartCards = (
-    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-40 pt-3 sm:pb-36">
+    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-32 pt-2 sm:pb-28">
       {cart.length === 0 ? (
         <div
           className={`mx-auto mt-6 flex max-w-sm flex-col items-center rounded-3xl border px-6 py-14 text-center shadow-inner ${
@@ -1207,7 +1297,7 @@ export default function AdminPOSPage() {
                 setSelected(row.rowId);
               }
             }}
-            className={`relative overflow-hidden rounded-2xl border text-left shadow-md transition-all active:scale-[0.99] ${
+            className={`relative overflow-hidden rounded-xl border text-left shadow-sm transition-all active:scale-[0.99] ${
               row.rowId === selectedRow
                 ? "border-indigo-500 bg-gradient-to-br from-indigo-50 to-white ring-2 ring-indigo-400/40"
                 : posNight
@@ -1216,11 +1306,11 @@ export default function AdminPOSPage() {
             }`}
           >
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-500 opacity-90" />
-            <div className="p-4 pt-5">
-              <div className="flex items-start justify-between gap-3">
+            <div className="p-3 pt-4">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-neutral-400">Line {i + 1}</span>
-                  <div className={`truncate text-lg font-bold ${posNight ? "text-slate-50" : "text-indigo-950"}`}>{row.name}</div>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">Line {i + 1}</span>
+                  <div className={`truncate text-base font-bold ${posNight ? "text-slate-50" : "text-indigo-950"}`}>{row.name}</div>
                   <div className="mt-0.5 text-xs text-neutral-500">{row.sku}</div>
                   {row.discount > 0 && (
                     <span className="mt-2 inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
@@ -1231,20 +1321,20 @@ export default function AdminPOSPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase text-emerald-700">Line total</div>
-                  <div className="text-xl font-black text-emerald-800">{fmtRs(row.total)}</div>
+                  <div className="text-lg font-black text-emerald-800">{fmtRs(row.total)}</div>
                   <div className="text-[11px] text-neutral-500">{fmtRs(row.pricePerUnit)} / {row.unit}</div>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap items-stretch gap-2">
+              <div className="mt-2 flex flex-wrap items-stretch gap-1.5">
                 <div
-                  className={`flex min-h-[48px] flex-1 items-center gap-2 rounded-xl border px-3 ${
+                  className={`flex min-h-[40px] flex-1 items-center gap-2 rounded-lg border px-2 ${
                     posNight ? "border-slate-600 bg-slate-900/60" : "border-neutral-200 bg-neutral-50/80"
                   }`}
                 >
                   <span className="text-xs font-bold text-neutral-500">Qty</span>
                   <input
                     type="number"
-                    className="min-w-0 flex-1 bg-transparent text-center text-xl font-black outline-none"
+                    className="min-w-0 flex-1 bg-transparent text-center text-lg font-black outline-none"
                     value={row.qty}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => updateRow(row.rowId, { qty: parseFloat(e.target.value) || 0 })}
@@ -1254,7 +1344,7 @@ export default function AdminPOSPage() {
                 {isWeightLikeUnit(row.unit) && (
                   <button
                     type="button"
-                    className="flex min-h-[48px] items-center justify-center rounded-xl bg-amber-500 px-4 text-xs font-black uppercase tracking-wide text-white shadow-md shadow-amber-500/25 active:scale-95"
+                    className="flex min-h-[40px] items-center justify-center rounded-lg bg-amber-500 px-3 text-[10px] font-black uppercase tracking-wide text-white shadow active:scale-95"
                     onClick={(e) => {
                       e.stopPropagation();
                       goSellRsCart(row.rowId);
@@ -1265,7 +1355,7 @@ export default function AdminPOSPage() {
                 )}
                 <button
                   type="button"
-                  className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 active:scale-95"
+                  className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 active:scale-95"
                   title="Remove line"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1393,21 +1483,22 @@ export default function AdminPOSPage() {
           className={`flex min-h-0 flex-1 flex-col overflow-hidden ${posNight ? "bg-gradient-to-b from-slate-950 to-slate-900" : "bg-gradient-to-b from-slate-50 via-white to-slate-100"}`}
         >
           {mobileQuickStrip}
+          {mobileFrequentStrip}
           {searchBar}
           {mobileCartCards}
-          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-            <div className="pointer-events-auto flex w-full max-w-lg items-stretch gap-2 rounded-2xl border border-white/20 bg-slate-900/92 p-2.5 shadow-[0_-8px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl ring-1 ring-white/10">
+          <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-40 flex justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+            <div className="pointer-events-auto flex w-full max-w-lg items-stretch gap-1.5 rounded-xl border border-white/20 bg-slate-900/95 p-2 shadow-[0_-6px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl ring-1 ring-white/10">
               <button
                 type="button"
-                className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15 transition active:scale-95"
+                className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-white/10 text-white ring-1 ring-white/15 transition active:scale-95"
                 onClick={() => setMobileSheet("customer")}
               >
-                <User className="h-6 w-6" />
-                <span className="mt-0.5 text-[9px] font-bold uppercase text-white/70">Cust</span>
+                <User className="h-5 w-5" />
+                <span className="mt-0.5 text-[8px] font-bold uppercase text-white/70">Cust</span>
               </button>
-              <div className="min-w-0 flex-1 rounded-xl bg-gradient-to-br from-indigo-600/90 to-violet-700/90 px-3 py-2 text-white shadow-inner">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/70">Total payable</div>
-                <div className="truncate text-2xl font-black leading-tight tracking-tight">{fmtRs(grandTotal)}</div>
+              <div className="min-w-0 flex-1 rounded-lg bg-gradient-to-br from-indigo-600/90 to-violet-700/90 px-2.5 py-1.5 text-white shadow-inner">
+                <div className="text-[9px] font-bold uppercase tracking-wide text-white/70">Total</div>
+                <div className="truncate text-xl font-black leading-tight tracking-tight">{fmtRs(grandTotal)}</div>
                 {cart.length > 0 && (
                   <div className="truncate text-[10px] font-semibold text-white/60">
                     {cart.length} lines · sub {fmtRs(subtotal)}
@@ -1418,9 +1509,9 @@ export default function AdminPOSPage() {
                 type="button"
                 disabled={cart.length === 0}
                 onClick={() => setModal("save")}
-                className="flex min-w-[108px] shrink-0 flex-col items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-600/30 transition enabled:active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:shadow-none"
+                className="flex min-w-[92px] shrink-0 flex-col items-center justify-center rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black uppercase tracking-wide text-white shadow-md shadow-emerald-600/30 transition enabled:active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:shadow-none"
               >
-                <Printer className="mb-0.5 h-5 w-5" />
+                <Printer className="mb-0.5 h-4 w-4" />
                 Pay
               </button>
             </div>
@@ -1588,6 +1679,7 @@ export default function AdminPOSPage() {
         );
       })()}
       {modal === "holds" && <HoldsModal holds={holds} onClose={() => setModal(null)} onResume={resumeHold} />}
+      {postSale && <PostSaleActionsModal receipt={postSale} onDone={finishPostSale} />}
 
       <PosShortcutsOverlay open={showHelp} onClose={() => setShowHelp(false)} />
     </div>

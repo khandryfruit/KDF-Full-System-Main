@@ -8,6 +8,7 @@ import { startShopifyAutoSync, autoRegisterWebhooksOnStartup } from "./lib/shopi
 import { startWaAutomationEngine } from "./lib/waAutomationEngine";
 import { startWaSendRetryProcessor } from "./lib/waSendRetry";
 import { processFailedDeliveryWaRetries } from "./lib/deliveryWaPremium.js";
+import { retryPendingLahoreAssignments } from "./lib/lahoreOrderAssign.js";
 import { startRiderReportScheduler } from "./lib/riderDailyReport.js";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -95,6 +96,7 @@ warmUpDb()
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
       startWaSendRetryProcessor(); /* retry failed WA text sends */
       setInterval(() => void processFailedDeliveryWaRetries(), 90_000); /* premium delivery WA retries */
+      setInterval(() => void retryPendingLahoreAssignments(), 120_000); /* pending Lahore rider assign */
       startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
     });
     server.on("error", (err) => {

@@ -2,6 +2,15 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { CartRow, LineDiscountMode, PosHoldV1 } from "./types";
 import { fmtRs } from "./calc";
+import {
+  downloadReceiptHtml,
+  printReceipt,
+  printThermalEscPos,
+  saveReceiptAsPdf,
+  shareReceiptEmail,
+  shareReceiptWhatsApp,
+  type ReceiptContext,
+} from "./invoiceActions";
 import { formatWeightFromKg, pricePerKgFromRow, qtyKgFromRupees } from "./weightMoney";
 
 export function Overlay({ children, onClose }: { children: ReactNode; onClose: () => void }) {
@@ -592,7 +601,7 @@ export function SaveBillModal({
   return (
     <Overlay onClose={onClose}>
       <div className="pos-modal max-w-[440px]">
-        <h3 className="pos-modal-title">💳 Save & Print Bill</h3>
+        <h3 className="pos-modal-title">💳 Save bill</h3>
         <div className="pos-modal-body space-y-3">
           <div className="space-y-1 rounded-xl bg-gray-50 p-3 text-sm">
             <div className="flex justify-between">
@@ -758,7 +767,7 @@ export function SaveBillModal({
               onSave(`${method}+${methodB}`, splitSum, note);
             }}
           >
-            {saving ? "Saving…" : "🖨 Save & Print [Enter]"}
+            {saving ? "Saving…" : "Save bill [Enter]"}
           </button>
         </div>
       </div>
@@ -809,6 +818,79 @@ export function HoldsModal({
         <div className="pos-modal-footer">
           <button type="button" className="pos-btn-ghost" onClick={onClose}>
             Close [Esc]
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+export function PostSaleActionsModal({
+  receipt,
+  onDone,
+}: {
+  receipt: ReceiptContext;
+  onDone: () => void;
+}) {
+  const [thermalMsg, setThermalMsg] = useState<string | null>(null);
+  const [copies, setCopies] = useState(1);
+
+  return (
+    <Overlay onClose={onDone}>
+      <div className="pos-modal max-w-[420px]">
+        <h3 className="pos-modal-title">Bill saved — {receipt.billNo}</h3>
+        <p className="px-5 pb-2 text-center text-sm text-muted-foreground">
+          Total {fmtRs(receipt.grand)} · choose how to deliver the receipt
+        </p>
+        <div className="pos-modal-body grid grid-cols-2 gap-2 px-5 pb-2">
+          <button type="button" className="pos-btn-primary col-span-2 py-3" onClick={() => printReceipt(receipt, copies)}>
+            Print {copies > 1 ? `(${copies}×)` : ""}
+          </button>
+          <button type="button" className="rounded-lg border border-border py-2.5 text-sm font-semibold" onClick={() => saveReceiptAsPdf(receipt)}>
+            PDF / Save
+          </button>
+          <button type="button" className="rounded-lg border border-border py-2.5 text-sm font-semibold" onClick={() => downloadReceiptHtml(receipt)}>
+            Download HTML
+          </button>
+          <button type="button" className="rounded-lg border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-900" onClick={() => shareReceiptWhatsApp(receipt)}>
+            WhatsApp
+          </button>
+          <button type="button" className="rounded-lg border border-border py-2.5 text-sm font-semibold" onClick={() => shareReceiptEmail(receipt)}>
+            Email
+          </button>
+          <button
+            type="button"
+            className="col-span-2 rounded-lg border border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-950"
+            onClick={async () => {
+              try {
+                const msg = await printThermalEscPos(receipt);
+                setThermalMsg(msg);
+              } catch (e) {
+                setThermalMsg(e instanceof Error ? e.message : "Thermal print failed");
+              }
+            }}
+          >
+            Thermal (USB / Serial)
+          </button>
+          <label className="col-span-2 flex items-center justify-center gap-2 text-xs font-semibold text-slate-600">
+            Copies
+            <select
+              value={copies}
+              onChange={(e) => setCopies(parseInt(e.target.value, 10) || 1)}
+              className="rounded border border-border px-2 py-1"
+            >
+              {[1, 2, 3].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          {thermalMsg && <p className="col-span-2 text-center text-xs text-slate-600">{thermalMsg}</p>}
+        </div>
+        <div className="pos-modal-footer">
+          <button type="button" className="pos-btn-primary w-full" onClick={onDone}>
+            New sale
           </button>
         </div>
       </div>

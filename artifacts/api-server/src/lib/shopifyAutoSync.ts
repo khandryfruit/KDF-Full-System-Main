@@ -515,28 +515,25 @@ export async function processShopifyWebhookPayload(
               totalPrice:        savedOrder.totalPrice,
               financialStatus:   savedOrder.financialStatus,
               lineItems:         Array.isArray(savedOrder.lineItems) ? savedOrder.lineItems : [],
-            }).catch(e => logger.error(e, "triggerNewOrderAutomation failed")),
+            }).then((r) => {
+              if (logId) {
+                db
+                  .update(shopifyWebhookLogsTable)
+                  .set({ processed: true, error: r.message?.slice(0, 500) ?? null })
+                  .where(eq(shopifyWebhookLogsTable.id, logId))
+                  .catch(() => {});
+              }
+            }).catch((e) => {
+              logger.error(e, "triggerNewOrderAutomation failed");
+              if (logId) {
+                db
+                  .update(shopifyWebhookLogsTable)
+                  .set({ processed: false, error: String(e).slice(0, 500) })
+                  .where(eq(shopifyWebhookLogsTable.id, logId))
+                  .catch(() => {});
+              }
+            }),
           );
-
-          /* ── Auto-assign Lahore orders to available riders ── */
-          setImmediate(async () => {
-            try {
-              const { autoAssignLahoreOrder } = await import("./riderLahoreAutoAssign.js");
-              await autoAssignLahoreOrder({
-                id: savedOrder.id,
-                shopify_order_id: savedOrder.shopifyOrderId,
-                order_number: savedOrder.orderNumber,
-                customer_name: savedOrder.customerName,
-                customer_phone: savedOrder.customerPhone,
-                shipping_address: savedOrder.shippingAddress,
-                total_price: savedOrder.totalPrice,
-                financial_status: savedOrder.financialStatus,
-                line_items: savedOrder.lineItems,
-              });
-            } catch (autoErr) {
-              logger.warn({ autoErr }, "Lahore auto-assign on new order failed (non-critical)");
-            }
-          });
         }
         break;
       }

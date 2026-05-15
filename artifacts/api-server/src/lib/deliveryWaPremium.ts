@@ -38,8 +38,18 @@ export function getPublicSiteBase(): string {
   const raw =
     process.env.PUBLIC_STORE_URL?.trim() ||
     process.env.PUBLIC_API_URL?.trim() ||
-    "https://www.khandryfruit.com";
+    "https://khanbabadryfruits.com";
   return raw.replace(/\/$/, "");
+}
+
+/** Live tracking pages are served by api-server (`/track/live/:token`). */
+export function getTrackingPublicBase(): string {
+  let raw = process.env.PUBLIC_API_URL?.trim() || process.env.API_PUBLIC_URL?.trim();
+  if (!raw && process.env.RAILWAY_PUBLIC_DOMAIN) {
+    const host = process.env.RAILWAY_PUBLIC_DOMAIN.replace(/^https?:\/\//, "");
+    raw = `https://${host}`;
+  }
+  return (raw || "https://api.khanbabadryfruits.com").replace(/\/$/, "");
 }
 
 export function mapDeliveryStatus(status: string): DeliveryProgressStatus {
@@ -148,7 +158,7 @@ export async function createTrackingToken(deliveryId: number, shopifyOrderDbId: 
     INSERT INTO delivery_track_tokens (token, delivery_id, shopify_order_db_id, expires_at)
     VALUES (${token}, ${deliveryId}, ${shopifyOrderDbId}, ${expiresAt.toISOString()})
   `);
-  const url = `${getPublicSiteBase()}/track/live/${token}`;
+  const url = `${getTrackingPublicBase()}/track/live/${token}`;
   return { token, url };
 }
 
