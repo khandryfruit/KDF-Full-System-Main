@@ -2,6 +2,8 @@ import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, w
 import { eq, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { persistWaOutboundMessage } from "./waInboxPersist";
+import { normalizePhone } from "./waPhone";
+export { normalizePhone } from "./waPhone";
 
 const WA_API_VERSION = "v22.0";
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
@@ -29,14 +31,6 @@ async function log(opts: { userId?: number; phone: string; templateName?: string
     messageId: opts.messageId ?? null,
     deliveryStatus: opts.status === "sent" ? "sent" : null,
   } as any).catch(() => {});
-}
-
-/* ─── Normalize phone to international format ─────────── */
-export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("92")) return digits;
-  if (digits.startsWith("0")) return "92" + digits.slice(1);
-  return "92" + digits;
 }
 
 /* ─── Sanitize template param value for Meta ───────────── */

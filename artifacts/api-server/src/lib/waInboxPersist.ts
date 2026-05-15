@@ -1,6 +1,6 @@
 import { db, waConversationsTable, waMessagesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { normalizePhone } from "./whatsapp";
+import { normalizePhone } from "./waPhone";
 import { broadcastSSE } from "./sse";
 import { logger } from "./logger";
 
