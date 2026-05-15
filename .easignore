@@ -4,6 +4,9 @@
 # Keep: pnpm-lock.yaml, root package.json, pnpm-workspace.yaml, and workspace package.json trees
 # so `pnpm install` can resolve the graph. Do not list whole sibling apps here unless install is changed.
 
+# Git history — not used on EAS builders; often the largest part of the archive (100–300MB+).
+.git/
+
 # Large tracked media / dumps not used by the mobile app (~100MB+)
 attached_assets/
 
