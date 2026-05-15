@@ -97,13 +97,10 @@ function buildBodyComponents(paramValues: string[]): object[] {
   return [{ type: "body", parameters: paramValues.map(v => ({ type: "text", text: sanitizeParam(v) })) }];
 }
 
-/* ─── Get approved template for a trigger event (with aliases) ─────────── */
+/* ─── Get approved template for a trigger event (DB + Meta sync, name or trigger) ─────────── */
 export async function getApprovedTemplate(triggerEvent: string) {
-  const { getApprovedTemplateForEvent } = await import("./waTemplateEvents.js");
-  const resolved = await getApprovedTemplateForEvent(triggerEvent);
-  if (!resolved) return null;
-  const [tpl] = await db.select().from(whatsappTemplatesTable).where(eq(whatsappTemplatesTable.id, resolved.id)).limit(1);
-  return tpl ?? null;
+  const { getSyncedApprovedTemplate } = await import("./metaTemplateSync.js");
+  return getSyncedApprovedTemplate(triggerEvent);
 }
 
 /* ─── Send free-form text message ─────────────────────── */

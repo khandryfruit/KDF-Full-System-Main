@@ -737,9 +737,19 @@ function SmartTestMessage() {
   };
 
   const handleForceSync = async () => {
-    qc.removeQueries({ queryKey: ["/api/admin/whatsapp/meta-templates"] });
-    await refetch();
-    toast({ title: "Templates synced from Meta" });
+    try {
+      const r = await apiFetch("/api/admin/whatsapp/sync-meta-templates", { method: "POST" });
+      qc.removeQueries({ queryKey: ["/api/admin/whatsapp/meta-templates"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates/approved"] });
+      await refetch();
+      toast({
+        title: "Synced from Meta",
+        description: `${r.total ?? 0} templates — ${r.created ?? 0} new, ${r.updated ?? 0} updated`,
+      });
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: "Sync failed", description: e instanceof Error ? e.message : "Unknown error" });
+    }
   };
 
   const headerComp  = selectedTpl ? _getComp(selectedTpl, "HEADER")  : null;
@@ -1158,8 +1168,17 @@ export default function WhatsAppPage() {
     try {
       const r = await apiFetch("/api/admin/whatsapp/sync-meta-templates", { method: "POST" });
       if (r.error) setMetaSyncError(r.error);
-      else setMetaTemplates(r.templates ?? []);
-    } catch (e: any) { setMetaSyncError(e.message); }
+      else {
+        setMetaTemplates(r.templates ?? []);
+        qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates"] });
+        qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates/approved"] });
+        qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates/by-event"] });
+        toast({
+          title: "Templates synced to dashboard",
+          description: `${r.total ?? 0} from Meta — ${r.created ?? 0} new, ${r.updated ?? 0} updated`,
+        });
+      }
+    } catch (e: unknown) { setMetaSyncError(e instanceof Error ? e.message : "Sync failed"); }
     finally { setIsSyncingMeta(false); }
   };
   const handleLoadWebhookLogs = async () => {

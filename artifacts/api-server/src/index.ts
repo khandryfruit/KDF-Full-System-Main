@@ -9,6 +9,7 @@ import { startWaAutomationEngine } from "./lib/waAutomationEngine";
 import { startWaSendRetryProcessor } from "./lib/waSendRetry";
 import { processOrderAutomationRetries } from "./lib/orderAutomationRetry.js";
 import { startRiderReportScheduler } from "./lib/riderDailyReport.js";
+import { startMetaTemplateSyncScheduler } from "./lib/metaTemplateSync.js";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -96,6 +97,7 @@ warmUpDb()
       startWaSendRetryProcessor(); /* retry failed WA text sends */
       setInterval(() => void processOrderAutomationRetries(), 90_000); /* WA retries + Lahore pending assign */
       startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
+      startMetaTemplateSyncScheduler(30); /* Meta → DB template sync every 30 min */
     });
     server.on("error", (err) => {
       logger.error({ err }, "HTTP server listen error");

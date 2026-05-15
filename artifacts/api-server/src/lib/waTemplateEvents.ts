@@ -1,8 +1,6 @@
 /**
  * Canonical Meta template trigger events + aliases for approved templates in DB.
  */
-import { db, whatsappTemplatesTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
 import {
   sendWhatsAppMessage,
   sendWhatsAppTemplate,
@@ -37,27 +35,16 @@ export type ApprovedTemplate = {
 export async function getApprovedTemplateForEvent(
   triggerEvent: string,
 ): Promise<ApprovedTemplate | null> {
-  const keys = TEMPLATE_TRIGGER_ALIASES[triggerEvent] ?? [triggerEvent];
-  const rows = await db
-    .select()
-    .from(whatsappTemplatesTable)
-    .where(inArray(whatsappTemplatesTable.triggerEvent, keys));
-
-  for (const key of keys) {
-    const tpl = rows.find(
-      (r) => r.triggerEvent === key && r.approvalStatus === "approved" && r.submittedToMeta,
-    );
-    if (tpl) {
-      return {
-        id: tpl.id,
-        name: tpl.name,
-        language: tpl.language,
-        paramCount: tpl.paramCount,
-        triggerEvent: tpl.triggerEvent,
-      };
-    }
-  }
-  return null;
+  const { getSyncedApprovedTemplate } = await import("./metaTemplateSync.js");
+  const tpl = await getSyncedApprovedTemplate(triggerEvent);
+  if (!tpl) return null;
+  return {
+    id: tpl.id,
+    name: tpl.name,
+    language: tpl.language,
+    paramCount: tpl.paramCount,
+    triggerEvent: tpl.triggerEvent,
+  };
 }
 
 function sanitizeParam(v: string): string {

@@ -27,13 +27,18 @@ const LANGUAGES = [
   { code: "ur", label: "Urdu" },
 ];
 const TRIGGER_EVENTS = [
-  { value: "order_confirmation", label: "Order Confirmed" },
+  { value: "order_confirmation", label: "Order Confirmation" },
+  { value: "paid_order_message", label: "Payment Received" },
   { value: "order_processing", label: "Order Processing" },
-  { value: "order_shipped", label: "Order Shipped" },
+  { value: "order_shipped", label: "Shipment Update" },
   { value: "order_out_for_delivery", label: "Out for Delivery" },
-  { value: "order_delivered", label: "Order Delivered" },
-  { value: "order_cancelled", label: "Order Cancelled" },
-  { value: "abandoned_cart_recovery", label: "Abandoned Cart Recovery" },
+  { value: "order_delivered", label: "Delivered" },
+  { value: "cancel_order", label: "Cancel Order" },
+  { value: "order_cancelled", label: "Order Cancelled (legacy)" },
+  { value: "shipment_return_update", label: "Return / Refund Update" },
+  { value: "abandoned_cart_recovery", label: "Abandoned Cart" },
+  { value: "rider_assigned", label: "Rider Assigned" },
+  { value: "order_failed_delivery", label: "Failed Delivery" },
 ];
 
 const DEFAULT_TEMPLATES = [
@@ -172,7 +177,24 @@ export function WhatsAppTemplatesTab() {
   const rejectedCount = templates.filter(t => t.approvalStatus === "rejected").length;
   const draftCount    = templates.filter(t => t.approvalStatus === "draft").length;
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates"] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates"] });
+    qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates/approved"] });
+    qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/templates/by-event"] });
+    qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/meta-templates"] });
+  };
+
+  const syncFromMeta = useMutation({
+    mutationFn: () => apiFetch("/api/admin/whatsapp/sync-meta-templates", { method: "POST" }),
+    onSuccess: (r) => {
+      invalidate();
+      toast({
+        title: "Synced from Meta",
+        description: `${r.total} templates — ${r.created} new, ${r.updated} updated`,
+      });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Meta sync failed", description: e.message }),
+  });
 
   const createTemplate = useMutation({
     mutationFn: (data: typeof EMPTY_FORM) => apiFetch("/api/admin/whatsapp/templates", {
@@ -307,10 +329,20 @@ export function WhatsAppTemplatesTab() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">WhatsApp Template Management</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Create templates here, submit to Meta for approval, then use them in order automations.
+            Templates from Meta Business Manager appear here after sync. Approved templates auto-send on orders.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => syncFromMeta.mutate()}
+            disabled={syncFromMeta.isPending}
+            className="gap-1.5 bg-[#25D366] hover:bg-[#1da851] text-white"
+          >
+            {syncFromMeta.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Sync from Meta
+          </Button>
           <Button variant="outline" size="sm" onClick={() => fixFormat.mutate()} disabled={fixFormat.isPending} className="gap-1.5 border-orange-200 text-orange-700 hover:bg-orange-50">
             {fixFormat.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             Fix Format
@@ -345,8 +377,8 @@ export function WhatsAppTemplatesTab() {
       <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-800 flex items-start gap-2">
         <Zap className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
         <div>
-          <span className="font-semibold">How it works: </span>
-          Create a template → click <strong>Submit to Meta</strong> → wait for Meta approval (usually minutes to hours) → click <strong>Refresh Status</strong> → once Approved, the template will be auto-used for order notifications.
+          <span className="font-semibold">Meta sync: </span>
+          Create templates in Meta Business Manager, then click <strong>Sync from Meta</strong>. Status (Approved / Pending / Rejected) updates automatically. Set <strong>Trigger Event</strong> to link each template to order automation. Server also syncs every 30 minutes.
         </div>
       </div>
 

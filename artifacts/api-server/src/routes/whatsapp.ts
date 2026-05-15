@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
-import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
+import { eq, desc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
 import { handleMenuItemTap } from "../lib/waMenuHandlers.js";
@@ -1913,45 +1913,38 @@ router.post("/admin/whatsapp/test", adminMiddleware as any, async (req, res) => 
   }
 });
 
-/* ─── Admin: Fetch Meta Templates (GET, 5-min cache) ────── */
-const _metaTplCache: { data: any[]; at: number } = { data: [], at: 0 };
+/* ─── Admin: Fetch Meta Templates (live from Meta API) ────── */
 router.get("/admin/whatsapp/meta-templates", adminMiddleware as any, async (req, res) => {
   try {
+    const { fetchAllMetaTemplates, clearMetaTemplateListCache } = await import("../lib/metaTemplateSync.js");
     const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
-    if (!settings?.accessToken)       return res.json({ templates: [], error: "no_token" });
+    if (!settings?.accessToken) return res.json({ templates: [], error: "no_token" });
     if (!settings?.businessAccountId) return res.json({ templates: [], error: "no_waba_id" });
-    const forceRefresh = req.query.refresh === "1";
-    if (!forceRefresh && _metaTplCache.data.length > 0 && Date.now() - _metaTplCache.at < 5 * 60_000) {
-      return res.json({ templates: _metaTplCache.data, cached: true, total: _metaTplCache.data.length });
-    }
-    const r = await fetch(
-      `https://graph.facebook.com/v18.0/${settings.businessAccountId}/message_templates?limit=200&fields=name,status,language,category,components`,
-      { headers: { Authorization: `Bearer ${settings.accessToken}` } }
-    );
-    const data: any = await r.json();
-    if (!r.ok) return res.json({ templates: [], error: data?.error?.message ?? "Meta API error" });
-    _metaTplCache.data = data.data ?? [];
-    _metaTplCache.at   = Date.now();
-    return res.json({ templates: _metaTplCache.data, total: _metaTplCache.data.length });
-  } catch (e: any) {
-    return res.json({ templates: [], error: e.message });
+
+    if (req.query.refresh === "1") clearMetaTemplateListCache();
+
+    const templates = await fetchAllMetaTemplates(settings.accessToken, settings.businessAccountId);
+    return res.json({ templates, total: templates.length });
+  } catch (e: unknown) {
+    return res.json({ templates: [], error: e instanceof Error ? e.message : "Meta API error" });
   }
 });
 
-/* ─── Admin: Sync Meta Templates ─────────────────────── */
-router.post("/admin/whatsapp/sync-meta-templates", adminMiddleware as any, async (req, res) => {
+/* ─── Admin: Sync Meta → Database (production two-way) ─────────────────────── */
+router.post("/admin/whatsapp/sync-meta-templates", adminMiddleware as any, async (_req, res) => {
   try {
-    const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
-    if (!settings?.accessToken) return res.status(400).json({ error: "Access token not configured" });
-    if (!settings?.businessAccountId) return res.status(400).json({ error: "Business Account ID not configured — add it in API Settings" });
-    const r = await fetch(`https://graph.facebook.com/v18.0/${settings.businessAccountId}/message_templates?limit=100&fields=name,status,language,category,components`, {
-      headers: { Authorization: `Bearer ${settings.accessToken}` },
+    const { syncMetaTemplatesToDatabase, clearMetaTemplateListCache } = await import("../lib/metaTemplateSync.js");
+    clearMetaTemplateListCache();
+    const result = await syncMetaTemplatesToDatabase();
+    if (!result.ok) return res.status(400).json(result);
+
+    const dbTemplates = await db.select().from(whatsappTemplatesTable).orderBy(whatsappTemplatesTable.name);
+    return res.json({
+      ...result,
+      templates: dbTemplates,
     });
-    const data = await r.json() as any;
-    if (!r.ok) return res.status(400).json({ error: data?.error?.message ?? "Failed to fetch from Meta", data });
-    return res.json({ templates: data.data ?? [], total: data.data?.length ?? 0 });
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Sync failed" });
   }
 });
 
@@ -1966,10 +1959,26 @@ router.get("/admin/whatsapp/templates", adminMiddleware as any, async (req, res)
 });
 
 /* ─── Admin: Approved Templates (for conversation picker) ── */
-router.get("/admin/whatsapp/templates/approved", adminMiddleware as any, async (req, res) => {
+router.get("/admin/whatsapp/templates/approved", adminMiddleware as any, async (_req, res) => {
   try {
-    const templates = await db.select().from(whatsappTemplatesTable)
+    const templates = await db
+      .select()
+      .from(whatsappTemplatesTable)
       .where(eq(whatsappTemplatesTable.approvalStatus, "approved"))
+      .orderBy(whatsappTemplatesTable.name);
+    return res.json(templates);
+  } catch {
+    return res.status(500).json({ error: "Failed" });
+  }
+});
+
+/** All templates usable in pickers (approved + pending review from Meta sync). */
+router.get("/admin/whatsapp/templates/for-picker", adminMiddleware as any, async (_req, res) => {
+  try {
+    const templates = await db
+      .select()
+      .from(whatsappTemplatesTable)
+      .where(inArray(whatsappTemplatesTable.approvalStatus, ["approved", "pending"]))
       .orderBy(whatsappTemplatesTable.name);
     return res.json(templates);
   } catch {
@@ -1981,9 +1990,18 @@ router.get("/admin/whatsapp/templates/approved", adminMiddleware as any, async (
 router.get("/admin/whatsapp/templates/by-event", adminMiddleware as any, async (req, res) => {
   try {
     const EVENT_TYPES = [
-      "order_confirmation", "order_processing", "order_shipped",
-      "order_out_for_delivery", "order_delivered", "order_cancelled",
+      "order_confirmation",
+      "paid_order_message",
+      "order_processing",
+      "order_shipped",
+      "order_out_for_delivery",
+      "order_delivered",
+      "cancel_order",
+      "order_cancelled",
+      "shipment_return_update",
       "abandoned_cart_recovery",
+      "rider_assigned",
+      "order_failed_delivery",
     ];
     const templates = await db.select().from(whatsappTemplatesTable);
     const byEvent: Record<string, typeof templates[0] | null> = {};
