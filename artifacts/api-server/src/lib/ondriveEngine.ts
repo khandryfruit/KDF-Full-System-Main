@@ -775,76 +775,15 @@ export async function triggerNewOrderAutomation(params: {
   financialStatus: string | null;
   lineItems: any[];
 }): Promise<{ routed: "lahore_rider" | "wa_confirmation" | "skipped"; message: string }> {
-  const {
-    shopifyOrderDbId, shopifyOrderId, orderNumber, customerPhone, customerName,
-    shippingAddress, totalPrice, financialStatus, lineItems,
-  } = params;
-
-  const phone = customerPhone ? normalizePhone(customerPhone) : null;
-  const { isLahoreShippingAddress } = await import("./lahoreShipping.js");
-  const isLahore = isLahoreShippingAddress(shippingAddress);
-  const isPaid = ["paid", "partially_paid"].includes(financialStatus ?? "");
-
-  logger.info({ shopifyOrderId, isLahore, phone: !!phone }, "triggerNewOrderAutomation");
-
-  /* ── LAHORE → unified assign + rider/customer notifications ── */
-  if (isLahore) {
-    try {
-      const { assignLahoreOrderWithNotifications } = await import("./lahoreOrderAssign.js");
-      const result = await assignLahoreOrderWithNotifications({
-        shopifyOrderDbId,
-        shopifyOrderId,
-        orderNumber,
-        customerPhone: phone,
-        customerName,
-        shippingAddress,
-        totalPrice,
-        financialStatus,
-        lineItems,
-      });
-      if (result.assigned) {
-        return {
-          routed: "lahore_rider",
-          message: result.message,
-        };
-      }
-      if (result.deliveryId) {
-        return { routed: "lahore_rider", message: result.message };
-      }
-      return { routed: "skipped", message: result.message };
-    } catch (err) {
-      logger.error(err, "triggerNewOrderAutomation Lahore error");
-      return { routed: "skipped", message: `Lahore routing error: ${err}` };
-    }
-  }
-
-  /* ── NON-LAHORE → send WA confirmation to customer ── */
-  if (!phone) {
-    return { routed: "skipped", message: "No customer phone — skipping WA confirmation" };
-  }
-
-  try {
-    const result = await sendOrderConfirmationWA({
-      phone,
-      orderNumber,
-      customerName: customerName ?? "Customer",
-      total: totalPrice ?? "0",
-      items: lineItems,
-      isPaid,
-      codAmount: isPaid ? 0 : Number(totalPrice ?? 0),
-      shopifyOrderId,
-      shopifyOrderDbId,
-    });
-
-    logger.info({ orderNumber, city, success: result.success }, "Non-Lahore order: WA confirmation sent");
-    return {
-      routed: "wa_confirmation",
-      message: result.success ? "WA confirmation sent to customer" : `WA send failed: ${result.error}`,
-    };
-  } catch (err) {
-    logger.error(err, "triggerNewOrderAutomation WA confirmation error");
-    return { routed: "skipped", message: `WA confirmation error: ${err}` };
-  }
+  const { runShopifyOrderAutomation } = await import("./orderAutomationEngine.js");
+  const result = await runShopifyOrderAutomation({
+    ...params,
+    source: "webhook",
+  });
+  return {
+    routed: result.routed,
+    message: result.message,
+  };
 }
 
 /* ── Generate local tracking ID (when API not configured) ── */

@@ -9,6 +9,7 @@ import { sendWhatsAppMessage, normalizePhone } from "./whatsapp.js";
 import { syncDeliveryToShopify, buildSyncPayload } from "./shopifySync.js";
 import { sendPremiumRiderAssignedNotification } from "./deliveryWaPremium.js";
 import { isLahoreShippingAddress, parseShippingAddress } from "./lahoreShipping.js";
+import { logOrderAutomation } from "./orderAutomationLog.js";
 
 export type LahoreAssignInput = {
   shopifyOrderDbId: number;
@@ -206,15 +207,27 @@ export async function assignLahoreOrderWithNotifications(
         `🛒 *Items:*\n${itemsList || "See order"}\n\n` +
         `💰 *Payment:* ${codLine}\n\n` +
         `Open the KDF Rider app to view details.`;
-      await sendWhatsAppMessage({ phone: normalizePhone(waPhone), message: msg }).catch(() => false);
-      await db
-        .execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW() WHERE id = ${deliveryId}`)
-        .catch(() => {});
+      const riderWaOk = await sendWhatsAppMessage({ phone: normalizePhone(waPhone), message: msg }).catch(() => false);
+      if (riderWaOk) {
+        await db
+          .execute(sql`UPDATE rider_deliveries SET wa_sent_at = NOW() WHERE id = ${deliveryId}`)
+          .catch(() => {});
+      }
+      await logOrderAutomation({
+        shopifyOrderDbId: input.shopifyOrderDbId,
+        shopifyOrderId: input.shopifyOrderId,
+        orderNumber: input.orderNumber,
+        deliveryId,
+        eventType: "rider_wa",
+        status: riderWaOk ? "success" : "failed",
+        message: riderWaOk ? `Rider WA sent to ${riderName}` : "Rider WA send failed",
+        scheduleRetry: !riderWaOk,
+      });
     }
 
     const expoPushToken = rider.expo_push_token as string | undefined;
     if (expoPushToken?.startsWith("ExponentPushToken")) {
-      await sendExpoPush({
+      const pushOk = await sendExpoPush({
         expoPushToken,
         title: `🚚 نیا آرڈر! ${input.orderNumber}`,
         body: `${input.customerName ?? "Customer"} · ${deliveryAddr} · ${codText}`,
@@ -230,13 +243,23 @@ export async function assignLahoreOrderWithNotifications(
         deliveryId,
         orderNumber: input.orderNumber,
       });
+      await logOrderAutomation({
+        shopifyOrderDbId: input.shopifyOrderDbId,
+        shopifyOrderId: input.shopifyOrderId,
+        orderNumber: input.orderNumber,
+        deliveryId,
+        eventType: "rider_push",
+        status: pushOk ? "success" : "failed",
+        message: pushOk ? "Expo push sent to rider" : "Expo push failed",
+        scheduleRetry: !pushOk,
+      });
     }
 
     if (phone) {
       const orderRow = await db.execute(sql`
         SELECT * FROM shopify_orders WHERE id = ${input.shopifyOrderDbId} LIMIT 1
       `);
-      await sendPremiumRiderAssignedNotification({
+      const trackingWa = await sendPremiumRiderAssignedNotification({
         deliveryId,
         shopifyOrderDbId: input.shopifyOrderDbId,
         order: (orderRow.rows[0] as Record<string, unknown>) ?? {
@@ -255,6 +278,18 @@ export async function assignLahoreOrderWithNotifications(
         rider,
       }).catch((waErr) => {
         logger.warn(waErr, "Premium customer WA on Lahore assign failed");
+        return { success: false, error: String(waErr) };
+      });
+      await logOrderAutomation({
+        shopifyOrderDbId: input.shopifyOrderDbId,
+        shopifyOrderId: input.shopifyOrderId,
+        orderNumber: input.orderNumber,
+        deliveryId,
+        eventType: "customer_tracking_wa",
+        status: trackingWa.success ? "success" : "failed",
+        message: trackingWa.success ? "Customer tracking WA sent" : (trackingWa.error ?? "Tracking WA failed"),
+        errorMessage: trackingWa.error,
+        scheduleRetry: !trackingWa.success,
       });
     }
 
@@ -269,6 +304,17 @@ export async function assignLahoreOrderWithNotifications(
         assignedAt: new Date().toISOString(),
       });
     } catch {}
+
+    await logOrderAutomation({
+      shopifyOrderDbId: input.shopifyOrderDbId,
+      shopifyOrderId: input.shopifyOrderId,
+      orderNumber: input.orderNumber,
+      deliveryId,
+      eventType: "rider_assign",
+      status: "success",
+      message: `Assigned to ${riderName}`,
+      payload: { riderId, riderName },
+    });
 
     logger.info({ orderNumber: input.orderNumber, riderName, deliveryId }, "Lahore order assigned");
     return {

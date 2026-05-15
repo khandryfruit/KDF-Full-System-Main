@@ -246,6 +246,7 @@ const LOGISTICS_NAV_ITEMS = [
   { href: "/logistics/riders",         label: "Riders & Accounting", icon: Users         },
   { href: "/logistics/confirmations",  label: "WA Confirmations",  icon: MessageCircle   },
   { href: "/logistics/automation",     label: "Automation",        icon: Zap             },
+  { href: "/logistics/order-automation", label: "Order Automation", icon: Activity        },
 ];
 
 const STORE_URL = "https://khanbabadryfruits.com";

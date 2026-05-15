@@ -90,8 +90,22 @@ async function shopifyFetch(store: any, path: string, options?: RequestInit) {
    UPSERT HELPERS (duplicated here to avoid circular imports from routes/)
 ────────────────────────────────────────────────────── */
 
+function extractOrderPhone(o: any): string | null {
+  const addr = o.shipping_address ?? o.billing_address ?? {};
+  const raw =
+    o.phone ??
+    o.customer?.phone ??
+    addr.phone ??
+    o.contact_phone ??
+    o.billing_address?.phone ??
+    null;
+  if (!raw || !String(raw).trim()) return null;
+  return String(raw).trim();
+}
+
 async function upsertOrder(store: any, o: any) {
   const addr = o.shipping_address ?? o.billing_address ?? {};
+  const phone = extractOrderPhone(o);
   const items = (o.line_items ?? []).map((li: any) => ({
     id: String(li.id), title: li.title, quantity: li.quantity,
     price: li.price, sku: li.sku, variantTitle: li.variant_title,
@@ -103,7 +117,7 @@ async function upsertOrder(store: any, o: any) {
     orderNumber: o.name ?? `#${o.order_number}`,
     customerName: o.customer ? `${o.customer.first_name ?? ""} ${o.customer.last_name ?? ""}`.trim() : null,
     customerEmail: o.customer?.email ?? null,
-    customerPhone: o.customer?.phone ?? addr.phone ?? null,
+    customerPhone: phone,
     status: o.fulfillment_status ?? "pending",
     fulfillmentStatus: o.fulfillment_status ?? null,
     financialStatus: o.financial_status ?? null,
@@ -113,8 +127,9 @@ async function upsertOrder(store: any, o: any) {
     totalTax: o.total_tax ?? null,
     totalDiscounts: o.total_discounts ?? null,
     shippingAddress: {
-      name: addr.name, address1: addr.address1, city: addr.city,
-      country: addr.country, phone: addr.phone, zip: addr.zip,
+      name: addr.name, address1: addr.address1, address2: addr.address2,
+      city: addr.city, province: addr.province, country: addr.country,
+      phone: addr.phone ?? phone, zip: addr.zip,
     },
     lineItems: items,
     tags: o.tags ?? null,
@@ -135,11 +150,12 @@ async function upsertOrder(store: any, o: any) {
       /* customer — update in case phone/name changed */
       customerName:  o.customer ? `${o.customer.first_name ?? ""} ${o.customer.last_name ?? ""}`.trim() : null,
       customerEmail: o.customer?.email ?? null,
-      customerPhone: o.customer?.phone ?? addr.phone ?? null,
+      customerPhone: phone,
       /* address & items — always keep fresh */
       shippingAddress: {
-        name: addr.name, address1: addr.address1, city: addr.city,
-        country: addr.country, phone: addr.phone, zip: addr.zip,
+        name: addr.name, address1: addr.address1, address2: addr.address2,
+        city: addr.city, province: addr.province, country: addr.country,
+        phone: addr.phone ?? phone, zip: addr.zip,
       },
       lineItems: items,
       /* meta */
@@ -546,46 +562,50 @@ export async function processShopifyWebhookPayload(
         } catch (e: any) {
           logger.warn({ err: e?.message, orderId: payload.id }, "markAbandonedRecoveredFromShopifyOrder failed");
         }
-        /* ── WhatsApp payment confirmation ── */
+        /* ── Premium WhatsApp payment confirmation ── */
         setImmediate(async () => {
           try {
-            const phone  = payload.billing_address?.phone ?? payload.shipping_address?.phone ?? payload.phone ?? null;
+            const { resolveCustomerPhone } = await import("./orderAutomationEngine.js");
+            const { sendPremiumPaymentConfirmed } = await import("./premiumOrderWa.js");
+            const { logOrderAutomation } = await import("./orderAutomationLog.js");
+            const phone = resolveCustomerPhone(
+              null,
+              payload.shipping_address ?? payload.billing_address,
+              extractOrderPhone(payload),
+            );
             if (!phone) return;
 
-            const { sendWhatsAppMessage, normalizePhone } = await import("./whatsapp.js");
-            const name        = (payload.billing_address?.first_name ?? payload.customer?.first_name ?? "Customer").split(" ")[0];
-            const orderNum    = payload.name ?? `#${payload.order_number}`;
-            const amount      = parseFloat(payload.total_price ?? "0").toLocaleString("en-PK");
-            const lineItems   = (payload.line_items ?? []) as any[];
-            const itemsList   = lineItems.slice(0, 4)
-              .map((li: any) => `• ${li.title} × ${li.quantity}`)
-              .join("\n");
-
-            const message = [
-              `✅ *Payment Received Successfully!*`,
-              ``,
-              `اسلام علیکم ${name}! 🎉`,
-              ``,
-              `آپ کی payment موصول ہوگئی ہے۔`,
-              ``,
-              `📦 *Order:* ${orderNum}`,
-              `💰 *Amount Paid:* PKR ${amount}`,
-              `✅ *Payment Status:* PAID`,
-              `💳 *Remaining Balance:* PKR 0`,
-              ``,
-              itemsList ? `🛒 *Items:*\n${itemsList}` : null,
-              ``,
-              `آپ کا آرڈر جلد dispatch کیا جائے گا۔ 🚚`,
-              ``,
-              `شکریہ! KDF NUTS 🥜`,
-            ].filter(l => l !== null).join("\n");
-
-            await sendWhatsAppMessage({
-              phone: normalizePhone(phone),
-              message,
-              templateName: "payment_confirmed",
+            const orderNum = payload.name ?? `#${payload.order_number}`;
+            const lineItems = (payload.line_items ?? []) as unknown[];
+            const waRes = await sendPremiumPaymentConfirmed({
+              orderNumber: orderNum,
+              customerName: payload.customer
+                ? `${payload.customer.first_name ?? ""} ${payload.customer.last_name ?? ""}`.trim()
+                : "Customer",
+              customerPhone: phone,
+              lineItems,
+              totalPrice: payload.total_price,
+              financialStatus: "paid",
+              isPaid: true,
+              codAmount: 0,
+              shopifyOrderId: String(payload.id),
             });
-            logger.info({ orderNum, phone }, "Payment confirmation WA sent");
+
+            const orderRow = await db.execute(sql`
+              SELECT id FROM shopify_orders WHERE shopify_order_id = ${String(payload.id)} LIMIT 1
+            `);
+            const dbId = Number((orderRow.rows[0] as { id?: number })?.id ?? 0);
+            await logOrderAutomation({
+              shopifyOrderDbId: dbId || undefined,
+              shopifyOrderId: String(payload.id),
+              orderNumber: orderNum,
+              eventType: "payment_wa",
+              status: waRes.success ? "success" : "failed",
+              message: waRes.success ? "Payment confirmation WA sent" : "Payment WA failed",
+              errorMessage: waRes.error,
+              scheduleRetry: !waRes.success,
+            });
+            if (waRes.success) logger.info({ orderNum, phone }, "Premium payment confirmation WA sent");
           } catch (waErr) {
             logger.warn({ waErr }, "Payment confirmation WA failed (non-critical)");
           }

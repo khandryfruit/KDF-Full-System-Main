@@ -56,6 +56,7 @@ const RestockPage = lazyPage(() => import("@/pages/RestockPage"));
 const ShopifyDashboardPage = lazyPage(() => import("@/pages/ShopifyDashboardPage"));
 const ShopifyOrdersPage = lazyPage(() => import("@/pages/ShopifyOrdersPage"));
 const LogisticsAutomationPage = lazyPage(() => import("@/pages/LogisticsAutomationPage"));
+const OrderAutomationDashboardPage = lazyPage(() => import("@/pages/OrderAutomationDashboardPage"));
 const WaOrderConfirmationsPage = lazyPage(() => import("@/pages/WaOrderConfirmationsPage"));
 const LahoreDeliveriesPage = lazyPage(() => import("@/pages/LahoreDeliveriesPage"));
 const RidersPage = lazyPage(() => import("@/pages/RidersPage"));
@@ -242,6 +243,7 @@ function Router() {
       <Route path="/bidding"><ProtectedRoute component={BiddingPage} /></Route>
       <Route path="/restock"><ProtectedRoute component={RestockPage} /></Route>
       <Route path="/logistics/automation"><ProtectedRoute component={LogisticsAutomationPage} /></Route>
+      <Route path="/logistics/order-automation"><ProtectedRoute component={OrderAutomationDashboardPage} /></Route>
       <Route path="/logistics/confirmations"><ProtectedRoute component={WaOrderConfirmationsPage} /></Route>
       <Route path="/logistics/lahore"><ProtectedRoute component={LahoreDeliveriesPage} /></Route>
       <Route path="/logistics/delivery-proofs"><ProtectedRoute component={DeliveryProofsPage} /></Route>
