@@ -2458,6 +2458,23 @@ export default function WhatsAppPage() {
                               autoComplete="new-password"
                             />
                             <p className="text-[11px] text-muted-foreground">Meta App → Settings → Basic → App Secret. Used to verify webhook signatures (X-Hub-Signature-256).</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7 mt-1"
+                              onClick={async () => {
+                                try {
+                                  const r = await apiFetch("/api/admin/whatsapp/clear-app-secret", { method: "POST", body: "{}" });
+                                  toast({ title: r.message ?? "Cleared", description: r.envConfigured ? "Using META_APP_SECRET from Railway." : "Set META_APP_SECRET on api-server." });
+                                  setForm((f) => ({ ...f, appSecret: "" }));
+                                } catch (e: unknown) {
+                                  toast({ title: "Failed", description: e instanceof Error ? e.message : "Error", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              Clear saved secret (use Railway env)
+                            </Button>
                           </div>
                           <div className="space-y-1.5">
                             <Label className="text-sm font-medium">API Version</Label>
@@ -3258,6 +3275,26 @@ export default function WhatsAppPage() {
                 </>
               )}
             </div>
+          </div>
+
+          {/* ── Meta Console (must be WhatsApp, not User) ── */}
+          <div className="rounded-xl border-2 border-amber-400 bg-amber-50 px-5 py-4 space-y-2">
+            <p className="text-sm font-bold text-amber-900">Meta Developer — product «User» se customer messages NAHI aate</p>
+            <p className="text-xs text-amber-900 leading-relaxed">
+              Aapki screenshot mein Webhooks par <strong>User</strong> select hai — yeh galat hai. WhatsApp replies ke liye:
+            </p>
+            <ol className="text-xs text-amber-900 list-decimal pl-5 space-y-1">
+              <li><strong>WhatsApp → Configuration</strong> open karein (ya Webhooks → product: <strong>WhatsApp Business Account</strong>)</li>
+              <li>Callback URL: <code className="bg-amber-100 px-1 rounded">https://api.khanbabadryfruits.com/api/webhooks/whatsapp</code></li>
+              <li>Verify token: <code className="bg-amber-100 px-1 rounded">kdfnuts_webhook_token</code></li>
+              <li>Field <strong>messages</strong> subscribe karein → Verify and save</li>
+              <li>App Secret Meta Basic se copy → API Settings → App Secret → Save</li>
+            </ol>
+            {waDiagnostics?.metaConsoleChecklist && (
+              <ul className="text-[11px] text-amber-800 border-t border-amber-200 pt-2 space-y-0.5">
+                {waDiagnostics.metaConsoleChecklist.map((line: string) => <li key={line}>• {line}</li>)}
+              </ul>
+            )}
           </div>
 
           {/* ── Webhook Setup Guide ── */}

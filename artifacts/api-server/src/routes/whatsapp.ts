@@ -42,11 +42,23 @@ router.get("/whatsapp/chat-config", async (req, res) => {
 });
 
 /* ─── Public: Webhook URL info ──────────────────────── */
+const ADMIN_TO_API_HOST: Record<string, string> = {
+  "admin.khanbabadryfruits.com": "api.khanbabadryfruits.com",
+};
+
+function mapAdminHostToApi(host: string): string {
+  const bare = host.split(":")[0]!.toLowerCase();
+  if (ADMIN_TO_API_HOST[bare]) return ADMIN_TO_API_HOST[bare]!;
+  if (bare.startsWith("admin.")) return `api.${bare.slice("admin.".length)}`;
+  return bare;
+}
+
 function resolvePublicApiBase(reqHost?: string): string {
   const fromEnv = (
     process.env.PUBLIC_API_URL
     ?? process.env.API_PUBLIC_URL
     ?? process.env.META_DOMAIN_OVERRIDE
+    ?? process.env.KDF_DEFAULT_API_URL
     ?? ""
   ).trim();
   if (fromEnv) return fromEnv.startsWith("http") ? fromEnv.replace(/\/$/, "") : `https://${fromEnv.replace(/\/$/, "")}`;
@@ -60,7 +72,11 @@ function resolvePublicApiBase(reqHost?: string): string {
   const devDomain = (process.env.REPLIT_DEV_DOMAIN ?? "").trim();
   if (devDomain) return `https://${devDomain}`;
 
-  if (reqHost) return `https://${reqHost.split(":")[0]}`;
+  if (reqHost) return `https://${mapAdminHostToApi(reqHost)}`;
+
+  if (process.env.NODE_ENV === "production") {
+    return "https://api.khanbabadryfruits.com";
+  }
   return "";
 }
 
@@ -1602,6 +1618,11 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
         `${hmacCount} customer message webhook(s) REJECTED (invalid HMAC). Fix: Meta Developer → Your App → Settings → Basic → copy App Secret → paste in WA API Settings → App Secret OR Railway env META_APP_SECRET. Then redeploy.`,
       );
     }
+    if (hmacCount > 0 || Number(is?.inbound_1h ?? 0) === 0) {
+      issues.push(
+        "Meta Console: Webhooks → product must be «WhatsApp Business Account» (NOT «User»). Subscribe: messages.",
+      );
+    }
     if (Number(is?.inbound_24h ?? 0) === 0 && Number(is?.inbound_1h ?? 0) === 0) {
       issues.push("No inbound messages logged in 24h — Meta may not be delivering webhooks (check Callback URL + subscribe to messages field).");
     }
@@ -1613,6 +1634,15 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
     }
 
     const healthy = hmacCount === 0 && !dbSecretLooksLikeVerifyToken && Number(is?.inbound_1h ?? 0) > 0;
+
+    const metaConsoleChecklist = [
+      "developers.facebook.com → Your App → WhatsApp → Configuration (recommended)",
+      "OR Webhooks → Select product: WhatsApp Business Account (NOT User)",
+      "Callback URL: " + (dedicatedUrl || "https://api.khanbabadryfruits.com/api/webhooks/whatsapp"),
+      "Verify token: " + verifyToken,
+      "Webhook fields: subscribe to messages (+ message_deliveries, message_reads)",
+      "App Secret (Basic settings) = same as WA API Settings → App Secret",
+    ];
 
     return res.json({
       healthy,
@@ -1645,6 +1675,7 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
         hmacRejected: hmacCount,
       },
       livePayloadCount: recentWebhookPayloads.length,
+      metaConsoleChecklist,
     });
   } catch (e: unknown) {
     return res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
@@ -1720,6 +1751,27 @@ router.post("/admin/whatsapp/test-webhook", adminMiddleware as any, async (req, 
 
 /* ─── Admin: Get Settings ────────────────────────────── */
 /* settings GET is now registered after PUT above */
+
+/* ─── Admin: Clear DB app secret (use META_APP_SECRET env only) ─── */
+router.post("/admin/whatsapp/clear-app-secret", adminMiddleware as any, async (_req, res) => {
+  try {
+    const [row] = await db.select({ id: whatsappSettingsTable.id }).from(whatsappSettingsTable).limit(1);
+    if (!row) return res.status(404).json({ error: "No settings row" });
+    await db.update(whatsappSettingsTable)
+      .set({ appSecret: null, updatedAt: new Date() })
+      .where(eq(whatsappSettingsTable.id, row.id));
+    const envSet = !!process.env.META_APP_SECRET?.trim();
+    return res.json({
+      success: true,
+      message: envSet
+        ? "Database App Secret cleared. Server will use META_APP_SECRET from Railway."
+        : "Database App Secret cleared. Set META_APP_SECRET on api-server or paste App Secret in settings.",
+      envConfigured: envSet,
+    });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
+  }
+});
 
 /* ─── Admin: Save Settings ───────────────────────────── */
 router.put("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) => {
