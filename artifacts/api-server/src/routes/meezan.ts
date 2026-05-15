@@ -838,13 +838,14 @@ router.post("/api/payment/meezan/qr", async (req, res: Response): Promise<void> 
     const { amount, description, invoiceNumber, customerPhone } = req.body as Record<string, string>;
     if (!amount || isNaN(Number(amount))) { res.status(400).json({ error: "Valid amount required" }); return; }
 
+    const urls     = dynamicUrls(req, settings);
     const orderRef = generateOrderRef("QR");
     const result   = await epg.register({
       orderNumber: orderRef,
       amountPKR:   Number(amount),
       description: description || invoiceNumber || "QR Payment",
-      returnUrl:   settings.returnUrl || undefined,
-      failUrl:     settings.failUrl   || undefined,
+      returnUrl:   urls.returnUrl,
+      failUrl:     urls.failUrl,
     });
 
     if (!result.success) { res.status(400).json({ error: result.errorMessage }); return; }

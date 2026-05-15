@@ -9,12 +9,21 @@
  *   Live    : https://securepayment.meezanbank.com/payment/rest
  *
  * Currency : PKR = ISO 586, amounts sent in paisa (× 100)
+ *
+ * Env:
+ *   MEEZAN_HTTP_USER_AGENT — optional override for outbound API User-Agent
  */
 
 import { logger } from "./logger";
 
 const SANDBOX_BASE = "https://test-securepayment.meezanbank.com:9716/payment/rest";
 const LIVE_BASE    = "https://securepayment.meezanbank.com/payment/rest";
+
+/** Do not auto-follow redirects — a 302 to an HTML login/WAF page would become HTTP 200 + HTML and hide the root cause. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+const DEFAULT_MEEZAN_UA =
+  "KDF-Meezan-EPG/1.0 (https://www.kdfnuts.com; integration@kdfnuts.com)";
 
 /* ──────────────────────────────────────────────────────
    TYPES
@@ -112,14 +121,27 @@ async function rawPost(
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      method:  "POST",
+      method: "POST",
+      redirect: "manual",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept":       "application/json,text/json,*/*",
+        "User-Agent":   process.env.MEEZAN_HTTP_USER_AGENT || DEFAULT_MEEZAN_UA,
       },
       body:   new URLSearchParams(body).toString(),
       signal: ctrl.signal,
     });
+
+    if (REDIRECT_STATUSES.has(res.status)) {
+      const text = await res.text();
+      const loc  = res.headers.get("location") || "";
+      throw new Error(
+        `Meezan API HTTP ${res.status} redirect (not auto-followed). Location: ${loc || "(missing)"}. ` +
+        `Often indicates WAF, session gate, or wrong host — verify IP whitelist and REST base URL. ` +
+        `Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
+      );
+    }
+
     const text        = await res.text();
     const contentType = res.headers.get("content-type") || "";
     return { ok: res.ok, status: res.status, contentType, text };
@@ -143,9 +165,24 @@ async function rawGet(
   try {
     const qs  = new URLSearchParams(params).toString();
     const res = await fetch(`${url}?${qs}`, {
-      headers: { "Accept": "application/json,text/json,*/*" },
-      signal:  ctrl.signal,
+      method:   "GET",
+      redirect: "manual",
+      headers: {
+        "Accept":     "application/json,text/json,*/*",
+        "User-Agent": process.env.MEEZAN_HTTP_USER_AGENT || DEFAULT_MEEZAN_UA,
+      },
+      signal: ctrl.signal,
     });
+
+    if (REDIRECT_STATUSES.has(res.status)) {
+      const text = await res.text();
+      const loc  = res.headers.get("location") || "";
+      throw new Error(
+        `Meezan API HTTP ${res.status} redirect on GET (not auto-followed). Location: ${loc || "(missing)"}. ` +
+        `Body preview: ${text.replace(/\s+/g, " ").slice(0, 200)}`,
+      );
+    }
+
     const text        = await res.text();
     const contentType = res.headers.get("content-type") || "";
     return { ok: res.ok, status: res.status, contentType, text };
@@ -169,6 +206,8 @@ function parseJsonSafe(text: string): Record<string, unknown> | null {
 
 function htmlHint(snippet: string): string {
   const lower = snippet.toLowerCase();
+  if (lower.includes("jquery") && lower.includes("bootstrap"))
+    return "GENERIC_HTML_PORTAL — Often IP not whitelisted, wrong environment, or REST blocked; bank served a web shell instead of JSON.";
   if (lower.includes("not authorized") || lower.includes("403") || lower.includes("forbidden"))
     return "IP_NOT_WHITELISTED — Your server IP is blocked by Meezan Bank's firewall.";
   if (lower.includes("login") || lower.includes("username") || lower.includes("password"))
@@ -178,6 +217,53 @@ function htmlHint(snippet: string): string {
   if (lower.includes("404") || lower.includes("not found"))
     return "WRONG_ENDPOINT — The API path returned 404. Verify the endpoint URL.";
   return "UNKNOWN — Meezan Bank returned HTML instead of JSON.";
+}
+
+/** Meezan register.do requires absolute HTTPS return/fail URLs (relative paths cause gateway errors / HTML). */
+function isAbsoluteHttps(u: string | undefined): boolean {
+  if (!u || typeof u !== "string") return false;
+  const t = u.trim();
+  return /^https:\/\//i.test(t) && t.length >= 12;
+}
+
+type MeezanUrlValidation =
+  | { ok: true; returnUrl: string; failUrl: string }
+  | { ok: false; result: RegisterResult };
+
+function validateMeezanReturnUrls(
+  p: RegisterParams,
+  defaultReturn: string,
+  defaultFail: string,
+): MeezanUrlValidation {
+  const returnUrl = (p.returnUrl || defaultReturn || "").trim();
+  const failUrl   = (p.failUrl   || defaultFail   || "").trim();
+
+  if (!isAbsoluteHttps(returnUrl)) {
+    return {
+      ok:     false,
+      result: {
+        success:       false,
+        errorCode:     "INVALID_RETURN_URL",
+        errorMessage:
+          "returnUrl must be a full absolute HTTPS URL (Meezan EPG requirement). " +
+          `Received: ${JSON.stringify(p.returnUrl || defaultReturn)}. ` +
+          "Fix admin Payment Gateway return/fail URLs or pass returnUrl/failUrl on API requests.",
+      },
+    };
+  }
+  if (!isAbsoluteHttps(failUrl)) {
+    return {
+      ok:     false,
+      result: {
+        success:       false,
+        errorCode:     "INVALID_FAIL_URL",
+        errorMessage:
+          "failUrl must be a full absolute HTTPS URL. " +
+          `Received: ${JSON.stringify(p.failUrl || defaultFail)}.`,
+      },
+    };
+  }
+  return { ok: true, returnUrl, failUrl };
 }
 
 /* ──────────────────────────────────────────────────────
@@ -293,6 +379,9 @@ export class MeezanEpg {
 
   /* ── Register (initiate payment) ── */
   async register(p: RegisterParams): Promise<RegisterResult> {
+    const urls = validateMeezanReturnUrls(p, this.defaultReturn, this.defaultFail);
+    if (!urls.ok) return urls.result;
+
     try {
       const raw = await this.post("register.do", {
         userName:    this.user,
@@ -300,8 +389,8 @@ export class MeezanEpg {
         orderNumber: p.orderNumber,
         amount:      this.paisas(p.amountPKR),
         currency:    "586",
-        returnUrl:   p.returnUrl || this.defaultReturn,
-        failUrl:     p.failUrl   || this.defaultFail,
+        returnUrl:   urls.returnUrl,
+        failUrl:     urls.failUrl,
         description: p.description || p.orderNumber,
         language:    p.language || "EN",
         ...(p.clientId ? { clientId: p.clientId } : {}),
@@ -318,6 +407,9 @@ export class MeezanEpg {
 
   /* ── Register Pre-Auth ── */
   async registerPreAuth(p: RegisterParams): Promise<RegisterResult> {
+    const urls = validateMeezanReturnUrls(p, this.defaultReturn, this.defaultFail);
+    if (!urls.ok) return urls.result;
+
     try {
       const raw = await this.post("registerPreAuth.do", {
         userName:    this.user,
@@ -325,8 +417,8 @@ export class MeezanEpg {
         orderNumber: p.orderNumber,
         amount:      this.paisas(p.amountPKR),
         currency:    "586",
-        returnUrl:   p.returnUrl || this.defaultReturn,
-        failUrl:     p.failUrl   || this.defaultFail,
+        returnUrl:   urls.returnUrl,
+        failUrl:     urls.failUrl,
         description: p.description || p.orderNumber,
         language:    p.language || "EN",
       });
@@ -536,6 +628,7 @@ export async function probeMeezanConnectivity(isLive: boolean): Promise<Diagnose
       currency:    "586",
       returnUrl:   "https://example.com/return",
       failUrl:     "https://example.com/fail",
+      description: "connectivity_probe",
       language:    "EN",
     });
 
