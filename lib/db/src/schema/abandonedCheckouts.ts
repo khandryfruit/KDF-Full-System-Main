@@ -40,7 +40,7 @@ export const abandonedCheckoutsTable = pgTable("abandoned_checkouts", {
   shopifyCheckoutId: text("shopify_checkout_id"),
   totalDiscounts: numeric("total_discounts", { precision: 12, scale: 2 }),
   currency: text("currency"),
-  /** native | shopify_webhook | shopify_rest */
+  /** native | shopify_webhook | shopify_rest | shopify_graphql */
   syncSource: text("sync_source").default("native"),
   customerAddress: text("customer_address"),
   whatsappSent: boolean("whatsapp_sent").notNull().default(false),

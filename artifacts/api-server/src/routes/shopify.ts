@@ -480,13 +480,35 @@ router.post("/admin/shopify/sync/products", adminMiddleware, async (req, res) =>
   }
 });
 
-/** Pull abandoned checkouts from Shopify REST (Marketing Hub backfill + reconciliation). */
+/** Pull abandoned checkouts from Shopify (GraphQL primary, REST fallback; Marketing Hub backfill). */
 router.post("/admin/shopify/sync/abandoned-checkouts", adminMiddleware, async (req, res) => {
   try {
     const store = await getActiveStore();
     if (!store) return res.status(400).json({ error: "No connected store" });
     const out = await syncAbandonedCheckoutsFromShopifyRest(store);
-    res.json({ success: !out.error, ...out });
+    const { debugBodySnippet, ...safe } = out;
+    if (debugBodySnippet) {
+      req.log.debug(
+        { snippet: debugBodySnippet.slice(0, 600) },
+        "abandoned_checkouts sync response snippet",
+      );
+    }
+    req.log.info(
+      {
+        upserted: out.upserted,
+        source: out.source,
+        apiVersion: out.apiVersion,
+        adminHost: out.adminHost,
+        error: out.error,
+        lastUrl: out.lastRequestUrl,
+        httpStatus: out.lastHttpStatus,
+      },
+      "abandoned_checkouts sync finished",
+    );
+    res.json({
+      success: !out.error || (out.upserted ?? 0) > 0,
+      ...safe,
+    });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: String(err) });

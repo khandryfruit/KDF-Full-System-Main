@@ -190,12 +190,32 @@ export default function ShopifyMarketingPage() {
       api("/admin/shopify/sync/abandoned-checkouts", { method: "POST" }).then(async r => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? r.statusText);
-        return j as { upserted?: number; pages?: number; error?: string };
+        return j as {
+          success?: boolean;
+          upserted?: number;
+          pages?: number;
+          error?: string;
+          hint?: string;
+          source?: string;
+          apiVersion?: string;
+          adminHost?: string;
+        };
       }),
     onSuccess: d => {
+      const upserted = d.upserted ?? 0;
+      const hasIssue = d.success === false || Boolean(d.error && upserted === 0);
+      const desc = [
+        `${d.source ? `Channel: ${d.source}` : "Sync"} · Admin API ${d.apiVersion ?? "—"} · ${d.adminHost ?? "—"}`,
+        `${upserted} row(s) upserted · ${d.pages ?? 0} page(s)`,
+        d.error ? `Details: ${d.error}` : "",
+        d.hint ? d.hint : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
       toast({
-        title: "Shopify abandoned carts synced",
-        description: `Upserted ${d.upserted ?? 0} row(s) across ${d.pages ?? 0} API page(s)${d.error ? `. Note: ${d.error}` : ""}`,
+        title: hasIssue ? "Shopify sync needs attention" : "Shopify abandoned carts synced",
+        description: desc,
+        variant: hasIssue ? "destructive" : "default",
       });
       queryClient.invalidateQueries({ queryKey: ["abandoned-carts"] });
       queryClient.invalidateQueries({ queryKey: ["marketing-summary"] });
