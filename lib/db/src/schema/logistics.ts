@@ -238,6 +238,45 @@ export type Rider = typeof ridersTable.$inferSelect;
 export type RiderDelivery = typeof riderDeliveriesTable.$inferSelect;
 export type RiderCodSettlement = typeof riderCodSettlementsTable.$inferSelect;
 
+export const deliveryTrackTokensTable = pgTable("delivery_track_tokens", {
+  id:                serial("id").primaryKey(),
+  token:             text("token").notNull().unique(),
+  deliveryId:        integer("delivery_id").notNull(),
+  shopifyOrderDbId:  integer("shopify_order_db_id"),
+  expiresAt:         timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt:         timestamp("revoked_at", { withTimezone: true }),
+  clickCount:        integer("click_count").notNull().default(0),
+  lastClickedAt:     timestamp("last_clicked_at", { withTimezone: true }),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const deliveryWaNotificationsTable = pgTable("delivery_wa_notifications", {
+  id:               serial("id").primaryKey(),
+  deliveryId:       integer("delivery_id").notNull(),
+  shopifyOrderDbId: integer("shopify_order_db_id"),
+  eventType:        text("event_type").notNull().default("rider_assigned"),
+  phone:            text("phone").notNull(),
+  status:           text("status").notNull().default("pending"),
+  waMessageId:      text("wa_message_id"),
+  templateName:     text("template_name"),
+  messagePreview:   text("message_preview"),
+  trackingToken:    text("tracking_token"),
+  trackingUrl:      text("tracking_url"),
+  invoiceSnapshot:  jsonb("invoice_snapshot").$type<Record<string, unknown>>(),
+  errorMessage:     text("error_message"),
+  retryCount:       integer("retry_count").notNull().default(0),
+  sentAt:           timestamp("sent_at", { withTimezone: true }),
+  deliveredAt:      timestamp("delivered_at", { withTimezone: true }),
+  readAt:           timestamp("read_at", { withTimezone: true }),
+  clickedAt:        timestamp("clicked_at", { withTimezone: true }),
+  completedAt:      timestamp("completed_at", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DeliveryTrackToken = typeof deliveryTrackTokensTable.$inferSelect;
+export type DeliveryWaNotification = typeof deliveryWaNotificationsTable.$inferSelect;
+
 export const insertCourierSchema = createInsertSchema(couriersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertShipmentSchema = createInsertSchema(shipmentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentGatewaySchema = createInsertSchema(paymentGatewaysTable).omit({ id: true, createdAt: true, updatedAt: true });

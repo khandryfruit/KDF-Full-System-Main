@@ -201,6 +201,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           ).catch(() => {});
           log?.info({ messageId: s.id, deliveryStatus, errors: s.errors }, "WhatsApp delivery status update");
 
+          void import("../lib/deliveryWaPremium.js").then(({ markDeliveryWaFromWebhook }) =>
+            markDeliveryWaFromWebhook(s.id, deliveryStatus),
+          ).catch(() => {});
+
           if (deliveryStatus === "delivered" || deliveryStatus === "read") {
             const [logRow] = await db.select({ id: whatsappLogsTable.id, templateName: whatsappLogsTable.templateName })
               .from(whatsappLogsTable).where(eq(whatsappLogsTable.messageId, s.id)).limit(1);

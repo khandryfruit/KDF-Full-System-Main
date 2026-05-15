@@ -922,6 +922,37 @@ export async function triggerNewOrderAutomation(params: {
           });
         } catch {}
 
+        /* Premium customer delivery WA (invoice + live track) */
+        if (delId && phone) {
+          try {
+            const { sendPremiumRiderAssignedNotification } = await import("./deliveryWaPremium.js");
+            const orderRow = await db.execute(sql`
+              SELECT * FROM shopify_orders WHERE id = ${shopifyOrderDbId} LIMIT 1
+            `);
+            const delRow = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${delId} LIMIT 1`);
+            await sendPremiumRiderAssignedNotification({
+              deliveryId: delId,
+              shopifyOrderDbId,
+              order: (orderRow.rows[0] as Record<string, unknown>) ?? {
+                order_number: orderNumber,
+                customer_phone: phone,
+                line_items: lineItems,
+                total_price: totalPrice,
+                financial_status: financialStatus,
+              },
+              delivery: (delRow.rows[0] as Record<string, unknown>) ?? {
+                id: delId,
+                shopify_order_db_id: shopifyOrderDbId,
+                customer_phone: phone,
+                customer_name: customerName,
+              },
+              rider,
+            });
+          } catch (waErr) {
+            logger.warn(waErr, "Premium customer WA on Lahore assign failed (non-critical)");
+          }
+        }
+
         return { routed: "lahore_rider", message: `Assigned to rider ${rider.name} + WA sent` };
       }
 

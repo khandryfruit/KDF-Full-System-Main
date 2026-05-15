@@ -5,12 +5,46 @@ import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendOrderStatusUpdate, sendFailedDeliveryNotification, sendReviewRequest } from "../lib/whatsapp";
 import { syncDeliveryToShopify, buildSyncPayload, type SyncAction } from "../lib/shopifySync.js";
 import { logger } from "../lib/logger.js";
+import { sendPremiumRiderAssignedNotification, resendPremiumNotification, revokeTrackingTokens } from "../lib/deliveryWaPremium.js";
 
 const router = Router();
 
 /* ═══════════════════════════════════════════════════════
    HELPER — normalise phone to international format
 ═══════════════════════════════════════════════════════ */
+function isLahoreOrder(order: { shipping_address?: unknown; city?: string } | null, delivery?: { city?: string } | null): boolean {
+  const city = String(delivery?.city ?? "").toLowerCase();
+  if (city.includes("lahore")) return true;
+  try {
+    const a = typeof order?.shipping_address === "string" ? JSON.parse(order.shipping_address) : order?.shipping_address;
+    return String((a as { city?: string })?.city ?? "").toLowerCase().includes("lahore");
+  } catch {
+    return false;
+  }
+}
+
+async function sendPremiumCustomerWaIfLahore(opts: {
+  order: Record<string, unknown>;
+  delivery: Record<string, unknown>;
+  rider: Record<string, unknown> | null;
+  etaMinutes?: number | null;
+  force?: boolean;
+}): Promise<void> {
+  if (!opts.rider?.id || !isLahoreOrder(opts.order as any, opts.delivery as any)) return;
+  const deliveryId = Number(opts.delivery.id);
+  const shopifyOrderDbId = Number(opts.delivery.shopify_order_db_id ?? opts.order.id);
+  if (!deliveryId || !shopifyOrderDbId) return;
+  await sendPremiumRiderAssignedNotification({
+    deliveryId,
+    shopifyOrderDbId,
+    order: opts.order,
+    delivery: opts.delivery,
+    rider: opts.rider,
+    etaMinutes: opts.etaMinutes,
+    force: opts.force,
+  }).catch((err) => logger.warn({ err }, "premium customer WA failed"));
+}
+
 function normalisePhone(raw: string): string {
   if (!raw) return raw;
   const digits = raw.replace(/\D/g, "");
@@ -738,21 +772,21 @@ router.post("/admin/riders/assign", adminMiddleware, async (req, res) => {
             }
           }
 
-          /* ── Auto WA to CUSTOMER — if auto mode or explicitly requested ── */
+          /* ── Premium WA to CUSTOMER (Lahore + rider assigned) ── */
           const shouldSendCustomerWa = send_customer_wa !== false && rider_id;
-          if (shouldSendCustomerWa) {
-            if (settings.auto_wa_on_assign || send_customer_wa === true) {
-              const customerPhone = delivery.customer_phone || order.customer_phone;
-              if (customerPhone) {
-                const etaMins = eta_minutes ? parseInt(String(eta_minutes)) : settings.default_eta_minutes;
-                const enrichedDel = { ...delivery, rider_name: rider?.name, rider_phone: rider?.phone || rider?.whatsapp_number };
-                const message = buildCustomerStatusMessage("assigned", order, enrichedDel, etaMins);
-                const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message }).catch(() => false);
-                if (sent) {
-                  await db.execute(sql`UPDATE rider_deliveries SET customer_wa_assigned_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
-                }
-              }
-            }
+          if (shouldSendCustomerWa && (settings.auto_wa_on_assign || send_customer_wa === true)) {
+            const etaMins = eta_minutes ? parseInt(String(eta_minutes)) : settings.default_eta_minutes;
+            const enrichedDel = {
+              ...delivery,
+              rider_name: rider?.name,
+              rider_phone: rider?.phone || rider?.whatsapp_number,
+            };
+            await sendPremiumCustomerWaIfLahore({
+              order,
+              delivery: enrichedDel,
+              rider,
+              etaMinutes: etaMins,
+            });
           }
         } catch (err: any) {
           logger.error(err, "rider-assign setImmediate error");
@@ -917,6 +951,19 @@ router.post("/admin/riders/auto-assign", adminMiddleware, async (req, res) => {
               `).catch(() => {});
             }
           }
+
+          /* Premium customer WA (Lahore) */
+          if (snap.deliveryId) {
+            const delRow = await db.execute(sql`SELECT * FROM rider_deliveries WHERE id = ${snap.deliveryId} LIMIT 1`);
+            const del = delRow.rows[0] as Record<string, unknown> | undefined;
+            if (del) {
+              await sendPremiumCustomerWaIfLahore({
+                order: snap.order,
+                delivery: { ...del, rider_name: snap.rider.name, rider_phone: snap.rider.phone },
+                rider: snap.rider,
+              });
+            }
+          }
         } catch (notifErr) {
           logger.warn(notifErr, "auto-assign: notification error (non-critical)");
         }
@@ -1064,15 +1111,13 @@ router.post("/admin/riders/bulk-assign", adminMiddleware, async (req, res) => {
                   }),
                 }).catch(() => {});
               }
-              /* Customer WA */
               if (send_customer_wa !== false && settings.auto_wa_on_assign) {
-                const customerPhone = delivery.customer_phone || order.customer_phone;
-                if (customerPhone) {
-                  const enrichedDel = { ...delivery, rider_name: rider.name, rider_phone: rider.phone || rider.whatsapp_number };
-                  const custMsg = buildCustomerStatusMessage("assigned", order, enrichedDel, etaMins);
-                  const sent = await sendWhatsAppMessage({ phone: normalisePhone(customerPhone), message: custMsg }).catch(() => false);
-                  if (sent) await db.execute(sql`UPDATE rider_deliveries SET customer_wa_assigned_at = NOW(), updated_at = NOW() WHERE id = ${delivery.id}`);
-                }
+                await sendPremiumCustomerWaIfLahore({
+                  order,
+                  delivery: { ...delivery, rider_name: rider.name, rider_phone: rider.phone || rider.whatsapp_number },
+                  rider,
+                  etaMinutes: etaMins,
+                });
               }
             } catch (e: any) { logger.error(e, "bulk-assign setImmediate error"); }
           });
@@ -1349,6 +1394,14 @@ router.put("/admin/riders/deliveries/:id/status", adminMiddleware, async (req, r
                   `).catch(() => {});
                 }
               }
+            }
+
+            if (status === "delivered") {
+              await revokeTrackingTokens(id).catch(() => {});
+              await db.execute(sql`
+                UPDATE delivery_wa_notifications SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+                WHERE delivery_id = ${id}
+              `).catch(() => {});
             }
 
             /* ── Extra: for delivered — also send review request ── */
@@ -2623,6 +2676,58 @@ router.post("/admin/riders/deliveries/reassign", adminMiddleware, async (req, re
   } catch (err: any) {
     req.log.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET /api/admin/delivery-wa/logs — premium delivery notification monitoring */
+router.get("/admin/delivery-wa/logs", adminMiddleware, async (req, res) => {
+  try {
+    const status = String(req.query.status ?? "").trim();
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const rows = await db.execute(sql`
+      SELECT
+        n.*,
+        d.shopify_order_number,
+        d.customer_name,
+        d.status AS delivery_status,
+        r.name AS rider_name
+      FROM delivery_wa_notifications n
+      LEFT JOIN rider_deliveries d ON d.id = n.delivery_id
+      LEFT JOIN riders r ON r.id = d.rider_id
+      WHERE (${status} = '' OR n.status = ${status})
+      ORDER BY n.created_at DESC
+      LIMIT ${limit}
+    `);
+    const stats = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+        COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+        COUNT(*) FILTER (WHERE status = 'read')::int AS read_count,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+        COUNT(*) FILTER (WHERE status = 'clicked')::int AS clicked,
+        COUNT(*) FILTER (WHERE status = 'completed')::int AS completed
+      FROM delivery_wa_notifications
+      WHERE created_at > NOW() - INTERVAL '7 days'
+    `);
+    res.json({ logs: rows.rows ?? [], stats: stats.rows[0] ?? {} });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+  }
+});
+
+/* POST /api/admin/delivery-wa/:id/resend */
+router.post("/admin/delivery-wa/:id/resend", adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const result = await resendPremiumNotification(id);
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
   }
 });
 

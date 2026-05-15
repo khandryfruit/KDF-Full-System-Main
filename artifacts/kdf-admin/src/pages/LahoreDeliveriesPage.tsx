@@ -1053,13 +1053,125 @@ function LiveDashboard({ soundEnabled, onSoundToggle }: { soundEnabled: boolean;
   );
 }
 
+function DeliveryWaLogsPanel() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState("");
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["/api/admin/delivery-wa/logs", statusFilter],
+    queryFn: () => apiFetch(`/admin/delivery-wa/logs?limit=80${statusFilter ? `&status=${statusFilter}` : ""}`),
+    refetchInterval: 20_000,
+  });
+  const logs = (data?.logs ?? []) as any[];
+  const stats = (data?.stats ?? {}) as Record<string, number>;
+
+  const resend = async (id: number) => {
+    const r = await apiFetch(`/admin/delivery-wa/resend/${id}`, { method: "POST" });
+    if (r.success) toast({ title: "Resent", description: "Premium delivery message queued" });
+    else toast({ variant: "destructive", title: r.error ?? "Resend failed" });
+    qc.invalidateQueries({ queryKey: ["/api/admin/delivery-wa/logs"] });
+  };
+
+  const statusColor: Record<string, string> = {
+    sent: "bg-green-100 text-green-800",
+    delivered: "bg-emerald-100 text-emerald-800",
+    read: "bg-blue-100 text-blue-800",
+    failed: "bg-red-100 text-red-800",
+    clicked: "bg-amber-100 text-amber-800",
+    pending: "bg-gray-100 text-gray-700",
+    completed: "bg-purple-100 text-purple-800",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {[
+          { k: "sent", label: "Sent" },
+          { k: "delivered", label: "Delivered" },
+          { k: "read", label: "Read" },
+          { k: "clicked", label: "Clicked link" },
+          { k: "failed", label: "Failed" },
+          { k: "completed", label: "Done" },
+          { k: "total", label: "7d total" },
+        ].map(({ k, label }) => (
+          <div key={k} className="rounded-xl border bg-card p-3 text-center">
+            <p className="text-lg font-bold">{stats[k] ?? 0}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm bg-background">
+          <option value="">All statuses</option>
+          {["pending", "sent", "delivered", "read", "clicked", "failed", "completed"].map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCw size={14} className="mr-1" />Refresh</Button>
+      </div>
+      <div className="rounded-xl border overflow-hidden bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="text-left p-3">Order</th>
+                <th className="text-left p-3">Customer</th>
+                <th className="text-left p-3">Rider</th>
+                <th className="text-left p-3">Status</th>
+                <th className="text-left p-3">Tracking</th>
+                <th className="text-left p-3">Sent</th>
+                <th className="p-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Loading…</td></tr>
+              ) : logs.length === 0 ? (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No delivery WhatsApp logs yet</td></tr>
+              ) : logs.map((row: any) => (
+                <tr key={row.id} className="border-t hover:bg-muted/30">
+                  <td className="p-3 font-medium">#{row.shopify_order_number ?? "—"}</td>
+                  <td className="p-3">{row.customer_name ?? "—"}</td>
+                  <td className="p-3">{row.rider_name ?? "—"}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[row.status] ?? "bg-gray-100"}`}>
+                      {row.status}
+                    </span>
+                    {row.error_message && <p className="text-[10px] text-red-600 mt-0.5 max-w-[180px] truncate">{row.error_message}</p>}
+                  </td>
+                  <td className="p-3">
+                    {row.tracking_url ? (
+                      <a href={row.tracking_url} target="_blank" rel="noopener" className="text-green-700 underline text-xs">Open track</a>
+                    ) : "—"}
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground">
+                    {row.sent_at ? new Date(row.sent_at).toLocaleString("en-PK", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                  </td>
+                  <td className="p-3">
+                    {(row.status === "failed" || row.status === "pending") && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => resend(row.id)}>Resend</Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Premium messages auto-send when a Lahore Shopify order gets a rider. Includes invoice summary, ETA window, and secure live tracking link.
+      </p>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function LahoreDeliveriesPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [activeTab,      setActiveTab]      = useState<"dashboard" | "orders">("dashboard");
+  const [activeTab,      setActiveTab]      = useState<"dashboard" | "orders" | "wa">("dashboard");
   const [page,           setPage]           = useState(1);
   const [search,         setSearch]         = useState("");
   const [searchInput,    setSearchInput]    = useState("");
@@ -1273,6 +1385,7 @@ export default function LahoreDeliveriesPage() {
         {[
           { id: "dashboard", label: "Live Dashboard", icon: BarChart3 },
           { id: "orders",    label: "Orders",         icon: Package },
+          { id: "wa",        label: "Delivery WA",    icon: MessageCircle },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
@@ -1287,6 +1400,8 @@ export default function LahoreDeliveriesPage() {
       {activeTab === "dashboard" && (
         <LiveDashboard soundEnabled={soundEnabled} onSoundToggle={toggleSound} />
       )}
+
+      {activeTab === "wa" && <DeliveryWaLogsPanel />}
 
       {/* ── Orders Tab ── */}
       {activeTab === "orders" && (

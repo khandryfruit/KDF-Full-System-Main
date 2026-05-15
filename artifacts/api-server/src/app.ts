@@ -6,6 +6,7 @@ import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
 import publicInvoiceRouter from "./routes/public-invoice";
+import deliveryTrackRouter from "./routes/delivery-track";
 import { logger } from "./lib/logger";
 import { generateSitemapXml } from "./lib/generateSitemap";
 import { generateSlugFromName } from "./lib/slugify";
@@ -154,6 +155,9 @@ app.use("/api/static", express.static(apiPublicDir, { maxAge: 86_400_000, index:
 
 /** Public invoice — also at /api/invoice (must be BEFORE /api router so it isn't swallowed) */
 app.use("/api/invoice", publicInvoiceRouter);
+
+/** Public live delivery tracking page (WhatsApp link opens here) */
+app.use(deliveryTrackRouter);
 
 app.use("/api", router);
 
