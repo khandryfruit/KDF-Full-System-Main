@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { verifyInvoiceShareToken } from "../lib/deliveryInvoiceShareToken.js";
 
 const router = Router();
 
@@ -52,10 +53,37 @@ function getSiteDomain(req: Request): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   PUBLIC INVOICE — no token required
+   SECURE SHARE LINK (signed, expiring) — for WhatsApp / customer share
+   GET /invoice/v/:shareToken
+   ════════════════════════════════════════════════════════════════ */
+router.get("/v/:shareToken", async (req: Request, res: Response): Promise<void> => {
+  const parsed = verifyInvoiceShareToken(req.params["shareToken"] as string);
+  if (!parsed) {
+    res.status(410).send(renderError("This invoice link has expired or is invalid."));
+    return;
+  }
+  try {
+    const delRows = await db.execute(sql`
+      SELECT rd.*, so.total_price, so.financial_status, so.line_items AS so_line_items,
+             so.order_number AS so_order_number
+      FROM   rider_deliveries rd
+      LEFT JOIN shopify_orders so ON so.id = rd.shopify_order_db_id
+      WHERE  rd.id = ${parsed.deliveryId}
+      LIMIT  1
+    `);
+    if (!delRows.rows.length) {
+      res.status(404).send(renderError("Invoice not found"));
+      return;
+    }
+    await sendInvoiceHtml(res, req, delRows.rows[0] as Record<string, unknown>);
+  } catch {
+    res.status(500).send(renderError("Failed to load invoice. Please try again."));
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   PUBLIC INVOICE — by order number (legacy / direct link)
    GET /invoice/:orderNumber
-   
-   Clean production URL: https://khanbabadryfruits.com/invoice/20039
    ════════════════════════════════════════════════════════════════ */
 router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> => {
   const orderNumber = req.params["orderNumber"] as string;
@@ -96,18 +124,32 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
       d = soRows.rows[0] as any;
     }
 
-    /* ── Parse fields ── */
+    await sendInvoiceHtml(res, req, d);
+  } catch (err) {
+    res.status(500).send(renderError("Failed to load invoice. Please try again."));
+  }
+});
+
+async function sendInvoiceHtml(
+  res: Response,
+  req: Request,
+  d: Record<string, unknown>,
+): Promise<void> {
+    const num = String(
+      d.shopify_order_number ?? d.so_order_number ?? d.order_number ?? d.id ?? "",
+    ).replace(/^#+/, "");
+
     const addr = (() => {
       try {
         const src = d.shipping_address;
         const a = typeof src === "string" ? JSON.parse(src) : src;
-        if (!a) return d.delivery_address ?? "";
+        if (!a) return (d.delivery_address as string) ?? "";
         return [a.address1, a.address2, a.city, a.province, a.country]
           .filter(Boolean).join(", ");
-      } catch { return d.delivery_address ?? ""; }
+      } catch { return (d.delivery_address as string) ?? ""; }
     })();
 
-    const items: any[] = (() => {
+    const items: unknown[] = (() => {
       try {
         const src = d.so_line_items ?? d.order_items ?? d.line_items;
         const arr = typeof src === "string" ? JSON.parse(src) : src;
@@ -119,20 +161,18 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     const dc       = Number(d.delivery_charge ?? 0);
     const isPaid   = Boolean(d.is_paid) || d.financial_status === "paid";
     const orderNum = String(d.shopify_order_number ?? d.so_order_number ?? d.order_number ?? num).replace(/^#+/, "");
-    const custName = d.customer_name ?? "Customer";
-    const custPhone = d.customer_phone ?? "";
-    const riderName = d.rider_name ?? "";
-    const status    = d.status ?? "processing";
+    const custName = (d.customer_name as string) ?? "Customer";
+    const custPhone = (d.customer_phone as string) ?? "";
+    const riderName = (d.rider_name as string) ?? "";
+    const status    = (d.status as string) ?? "processing";
 
-    const orderDate = new Date(d.created_at ?? d.assigned_at ?? Date.now())
+    const orderDate = new Date((d.created_at ?? d.assigned_at ?? Date.now()) as string | number)
       .toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
     const invoiceDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
-    /* ── Dynamic domain detection for share links ── */
     const domain = getSiteDomain(req);
-    const invoiceUrl = `${domain}/invoice/${num}`;
+    const invoiceUrl = `${domain}/invoice/${orderNum.replace(/^#+/, "")}`;
 
-    /* ── WhatsApp share ── */
     const ph = custPhone.replace(/\D/g, "");
     const intl = ph.startsWith("92") ? ph : ph.startsWith("0") ? `92${ph.slice(1)}` : ph;
     const waMsg = encodeURIComponent(
@@ -140,7 +180,6 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     );
     const waLink = intl ? `https://wa.me/${intl}?text=${waMsg}` : "";
 
-    /* ── Render ── */
     const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
       assigned:         { label: "Assigned",        color: "#1565C0", bg: "#E3F2FD" },
       picked:           { label: "Picked Up",        color: "#E65100", bg: "#FFF3E0" },
@@ -152,7 +191,7 @@ router.get("/:orderNumber", async (req: Request, res: Response): Promise<void> =
     const st = statusLabel[status] ?? { label: status, color: "#555", bg: "#F5F5F5" };
 
     const itemRows = items.length
-      ? items.map((i: any) => `
+      ? (items as Record<string, unknown>[]).map((i) => `
         <tr>
           <td>${escHtml(i.title ?? i.name ?? "Item")}${i.variant_title ? `<small class="variant">${escHtml(i.variant_title)}</small>` : ""}</td>
           <td class="center">${i.quantity ?? 1}</td>
@@ -434,12 +473,9 @@ ${status === "delivered" ? `<div class="delivered-stamp">DELIVERED</div>` : ""}
 </html>`;
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=60");
+    res.setHeader("Cache-Control", "private, no-store");
     res.send(html);
-  } catch (err) {
-    res.status(500).send(renderError("Failed to load invoice. Please try again."));
-  }
-});
+}
 
 /* ─── helpers ─── */
 function escHtml(str: string): string {

@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,23 +14,83 @@ import {
 import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BASE_URL, useAuth } from "@/context/AuthContext";
-import { buildRiderInvoiceUrl } from "@/lib/invoiceShare";
+import { riderFetch, useAuth } from "@/context/AuthContext";
+import {
+  buildInvoiceWhatsAppMessage,
+  fetchPublicInvoiceShareUrl,
+  whatsAppUrlForPhone,
+} from "@/lib/invoiceShare";
 
 export default function RiderInvoiceScreen() {
-  const { deliveryId, customerPhone, waMessage } = useLocalSearchParams<{
+  const { deliveryId, customerPhone } = useLocalSearchParams<{
     deliveryId: string;
     customerPhone?: string;
-    waMessage?: string;
   }>();
   const { token } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
+  const [publicUrl, setPublicUrl] = useState("");
+  const [waMessage, setWaMessage] = useState("");
 
-  const invoiceUrl = useMemo(() => {
-    if (!deliveryId || !token) return "";
-    return buildRiderInvoiceUrl(BASE_URL, deliveryId, token);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!deliveryId || !token) return;
+      try {
+        const [url, delRes] = await Promise.all([
+          fetchPublicInvoiceShareUrl(deliveryId, token),
+          riderFetch(`/rider/deliveries/${deliveryId}`, token),
+        ]);
+        if (cancelled) return;
+        setPublicUrl(url);
+
+        if (delRes.ok) {
+          const delivery = await delRes.json();
+          const items: unknown[] = (() => {
+            try {
+              const src = delivery.order_items ?? delivery.line_items;
+              const arr = typeof src === "string" ? JSON.parse(src) : src;
+              return Array.isArray(arr) ? arr : [];
+            } catch {
+              return [];
+            }
+          })();
+          const addr = (() => {
+            try {
+              const a =
+                typeof delivery.shipping_address === "string"
+                  ? JSON.parse(delivery.shipping_address)
+                  : delivery.shipping_address;
+              return [a?.address1, a?.address2, a?.city, a?.province].filter(Boolean).join(", ");
+            } catch {
+              return delivery.delivery_address ?? "";
+            }
+          })();
+
+          setWaMessage(
+            buildInvoiceWhatsAppMessage({
+              orderNumber: String(delivery.shopify_order_number ?? deliveryId),
+              customerName: delivery.customer_name,
+              customerPhone: delivery.customer_phone,
+              address: addr,
+              items: items as Parameters<typeof buildInvoiceWhatsAppMessage>[0]["items"],
+              codAmount: Number(delivery.cod_amount ?? 0),
+              isPaid: Boolean(delivery.is_paid),
+              deliveryCharge: Number(delivery.delivery_charge ?? 0),
+              invoiceUrl: url,
+            }),
+          );
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          Alert.alert("Invoice", e?.message ?? "Could not load invoice.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [deliveryId, token]);
 
   const sendWhatsApp = () => {
@@ -38,22 +98,27 @@ export default function RiderInvoiceScreen() {
       Alert.alert("No phone", "Customer phone number is not available.");
       return;
     }
-    const msg = waMessage ? decodeURIComponent(String(waMessage)) : `Your invoice: ${invoiceUrl}`;
-    const digits = String(customerPhone).replace(/\D/g, "");
-    const intl = digits.startsWith("92") ? digits : digits.startsWith("0") ? `92${digits.slice(1)}` : digits;
-    Linking.openURL(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`);
+    if (!waMessage) {
+      Alert.alert("Please wait", "Invoice link is still loading.");
+      return;
+    }
+    Linking.openURL(whatsAppUrlForPhone(customerPhone, waMessage));
   };
 
   const shareInvoice = () => {
-    const msg = waMessage ? decodeURIComponent(String(waMessage)) : `Invoice: ${invoiceUrl}`;
-    Share.share({ message: msg, title: "KDF Invoice" });
+    if (!waMessage) {
+      Alert.alert("Please wait", "Invoice link is still loading.");
+      return;
+    }
+    Share.share({ message: waMessage, title: "KDF Invoice" });
   };
 
-  if (!invoiceUrl) {
+  if (!publicUrl) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <Text style={styles.err}>Cannot load invoice (not signed in).</Text>
-        <TouchableOpacity onPress={() => router.back()}>
+        <ActivityIndicator size="large" color="#00B85A" />
+        <Text style={[styles.err, { marginTop: 16 }]}>Loading invoice…</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 12 }}>
           <Text style={styles.link}>Go back</Text>
         </TouchableOpacity>
       </View>
@@ -86,7 +151,7 @@ export default function RiderInvoiceScreen() {
       ) : null}
 
       <WebView
-        source={{ uri: invoiceUrl }}
+        source={{ uri: publicUrl }}
         onLoadEnd={() => setLoading(false)}
         style={styles.web}
         startInLoadingState

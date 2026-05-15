@@ -23,12 +23,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BASE_URL, riderFetch, useAuth } from "@/context/AuthContext";
+import { riderFetch, useAuth } from "@/context/AuthContext";
 import colors, { getStatusColor, getStatusBg, getStatusLabel } from "@/constants/colors";
 import { PriorityBanner } from "@/components/PriorityTimer";
 import {
   buildInvoiceWhatsAppMessage,
-  buildRiderInvoiceUrl,
+  fetchPublicInvoiceShareUrl,
   whatsAppUrlForPhone,
 } from "@/lib/invoiceShare";
 
@@ -260,8 +260,6 @@ export default function OrderDetailScreen() {
     } catch { return []; }
   })();
 
-  const invoiceUrl = token && id ? buildRiderInvoiceUrl(BASE_URL, id, token) : "";
-
   const invoiceSharePayload = {
     orderNumber: String(delivery?.shopify_order_number ?? id ?? ""),
     customerName: delivery?.customer_name,
@@ -271,7 +269,12 @@ export default function OrderDetailScreen() {
     codAmount: Number(delivery?.cod_amount ?? 0),
     isPaid: Boolean(delivery?.is_paid),
     deliveryCharge: Number(delivery?.delivery_charge ?? 0),
-    invoiceUrl,
+    invoiceUrl: "",
+  };
+
+  const resolvePublicInvoiceUrl = async (): Promise<string> => {
+    if (!token || !id) throw new Error("Not signed in");
+    return fetchPublicInvoiceShareUrl(id, token);
   };
 
   /* ── Actions ── */
@@ -290,30 +293,38 @@ export default function OrderDetailScreen() {
 
   const openInvoice = () => {
     if (!id || !token) return;
-    const waMsg = encodeURIComponent(buildInvoiceWhatsAppMessage(invoiceSharePayload));
     router.push({
       pathname: "/order/invoice",
       params: {
         deliveryId: String(id),
         customerPhone: delivery?.customer_phone ?? "",
-        waMessage: waMsg,
       },
     } as any);
   };
 
   const shareInvoice = async () => {
-    const msg = buildInvoiceWhatsAppMessage(invoiceSharePayload);
-    Share.share({ message: msg, title: `KDF Invoice #${delivery?.shopify_order_number}` });
+    try {
+      const publicUrl = await resolvePublicInvoiceUrl();
+      const msg = buildInvoiceWhatsAppMessage({ ...invoiceSharePayload, invoiceUrl: publicUrl });
+      Share.share({ message: msg, title: `KDF Invoice #${delivery?.shopify_order_number}` });
+    } catch (e: any) {
+      Alert.alert("Invoice link failed", e?.message ?? "Could not create secure invoice link.");
+    }
   };
 
-  const sendInvoiceWhatsApp = () => {
+  const sendInvoiceWhatsApp = async () => {
     const ph = delivery?.customer_phone;
     if (!ph) {
       Alert.alert("No phone", "Customer phone number is missing.");
       return;
     }
-    const msg = buildInvoiceWhatsAppMessage(invoiceSharePayload);
-    Linking.openURL(whatsAppUrlForPhone(ph, msg));
+    try {
+      const publicUrl = await resolvePublicInvoiceUrl();
+      const msg = buildInvoiceWhatsAppMessage({ ...invoiceSharePayload, invoiceUrl: publicUrl });
+      Linking.openURL(whatsAppUrlForPhone(ph, msg));
+    } catch (e: any) {
+      Alert.alert("Invoice link failed", e?.message ?? "Could not create secure invoice link.");
+    }
   };
 
   const confirmStatus = (status: string) => {
@@ -604,9 +615,9 @@ export default function OrderDetailScreen() {
         <Section title="Invoice & Sharing">
           {/* Invoice URL display */}
           <View style={styles.invoiceUrlBox}>
-            <Feather name="link" size={13} color="#6B7A99" />
-            <Text style={styles.invoiceUrlTxt} numberOfLines={1}>
-              {invoiceUrl.replace("https://", "")}
+            <Feather name="shield" size={13} color="#6B7A99" />
+            <Text style={styles.invoiceUrlTxt} numberOfLines={2}>
+              Secure invoice link for customers (no API tokens exposed)
             </Text>
           </View>
 

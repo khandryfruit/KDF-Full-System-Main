@@ -12,6 +12,11 @@ import {
   isCloudinaryConfigured,
   cloudinaryDeliveryThumbnailUrl,
 } from "../lib/cloudinaryStorage.js";
+import {
+  createInvoiceShareToken,
+  storefrontInvoiceShareUrl,
+  invoiceShareTtlDays,
+} from "../lib/deliveryInvoiceShareToken.js";
 
 const router = Router();
 
@@ -780,6 +785,34 @@ router.get("/rider/deliveries/:id/invoice", async (req: any, res): Promise<void>
   } catch (err: any) {
     req.log?.error(err);
     res.status(500).send(`<h3>Error: ${err.message}</h3>`);
+  }
+});
+
+/** Branded share link for WhatsApp — no API URL or JWT exposed to customers. */
+router.post("/rider/deliveries/:id/invoice-share", riderMiddleware, async (req: any, res: Response): Promise<void> => {
+  try {
+    const delivId = parseInt(req.params["id"] as string, 10);
+    if (!Number.isFinite(delivId)) {
+      res.status(400).json({ error: "Invalid delivery id" });
+      return;
+    }
+    const riderId = Number(req.rider?.id);
+    const isAdmin = req.rider?.role === "admin";
+    const delRows = isAdmin
+      ? await db.execute(sql`SELECT id FROM rider_deliveries WHERE id = ${delivId} LIMIT 1`)
+      : await db.execute(sql`SELECT id FROM rider_deliveries WHERE id = ${delivId} AND rider_id = ${riderId} LIMIT 1`);
+    if (!delRows.rows.length) {
+      res.status(404).json({ error: "Delivery not found" });
+      return;
+    }
+    const shareToken = createInvoiceShareToken(delivId);
+    res.json({
+      publicUrl: storefrontInvoiceShareUrl(shareToken),
+      expiresInDays: invoiceShareTtlDays(),
+    });
+  } catch (err: any) {
+    req.log?.error(err);
+    res.status(500).json({ error: err.message ?? "Failed to create invoice link" });
   }
 });
 
