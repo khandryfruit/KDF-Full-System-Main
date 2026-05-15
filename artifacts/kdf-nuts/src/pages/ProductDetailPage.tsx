@@ -504,8 +504,9 @@ export function ProductDetailPage() {
     const slug = (product as any).slug || product.id;
     const canonicalBase = "https://khanbabadryfruits.com";
     const pageUrl = `${canonicalBase}/products/${slug}`;
-    const title = (product as any).meta_title || `${product.name} | KDF NUTS`;
-    const rawDesc = (product as any).meta_description
+    const p = product as { metaTitle?: string; meta_title?: string; metaDescription?: string; meta_description?: string };
+    const title = p.metaTitle || p.meta_title || `Buy ${product.name} Online Pakistan | KDF NUTS`;
+    const rawDesc = p.metaDescription || p.meta_description
       || (product as any).description?.replace(/<[^>]+>/g, "").slice(0, 160)
       || `Buy ${product.name} online from KDF NUTS. Premium quality dry fruits delivered across Pakistan.`;
     const desc = rawDesc.slice(0, 160);

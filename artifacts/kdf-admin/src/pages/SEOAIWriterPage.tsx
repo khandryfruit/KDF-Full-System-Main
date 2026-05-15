@@ -15,23 +15,51 @@ interface BlogResult {
   title?: string;
   seoTitle?: string;
   metaDescription?: string;
+  ogTitle?: string;
+  ogDescription?: string;
   focusKeyword?: string;
+  longTailKeywords?: string[];
   slug?: string;
   tags?: string[];
   content?: string;
   excerpt?: string;
   faq?: { question: string; answer: string }[];
+  h2Headings?: string[];
+  h3Headings?: string[];
+  internalLinkSuggestions?: { anchor: string; targetType: string; suggestedSlug?: string }[];
+  buyerIntentPhrases?: string[];
+  featuredSnippetTarget?: string;
+  schemaSuggestions?: Record<string, unknown>;
   readTime?: number;
 }
 
 interface ProductSeoResult {
   seoTitle?: string;
+  metaTitle?: string;
   metaDescription?: string;
+  ogTitle?: string;
+  ogDescription?: string;
   focusKeyword?: string;
   keywords?: string[];
+  longTailKeywords?: string[];
   altText?: string;
   aiDescription?: string;
   faq?: { question: string; answer: string }[];
+  schemaSuggestions?: Record<string, unknown>;
+}
+
+interface CategorySeoResult {
+  metaTitle?: string;
+  metaDescription?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  focusKeyword?: string;
+  keywords?: string[];
+  longTailKeywords?: string[];
+  categoryDescription?: string;
+  faq?: { question: string; answer: string }[];
+  internalLinkSuggestions?: string[];
+  schemaSuggestions?: Record<string, unknown>;
 }
 
 function CopyBtn({ text }: { text: string }) {
@@ -83,7 +111,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function SEOAIWriterPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"product" | "blog">("product");
+  const [tab, setTab] = useState<"product" | "category" | "collection" | "blog">("product");
 
   // Product SEO
   const [pName, setPName] = useState("");
@@ -101,6 +129,15 @@ export default function SEOAIWriterPage() {
   const [bResult, setBResult] = useState<BlogResult | null>(null);
   const [bLoading, setBLoading] = useState(false);
 
+  const [cName, setCName] = useState("");
+  const [cDesc, setCDesc] = useState("");
+  const [cResult, setCResult] = useState<CategorySeoResult | null>(null);
+  const [cLoading, setCLoading] = useState(false);
+  const [colName, setColName] = useState("");
+  const [colDesc, setColDesc] = useState("");
+  const [colResult, setColResult] = useState<CategorySeoResult | null>(null);
+  const [colLoading, setColLoading] = useState(false);
+
   async function generateProductSEO() {
     if (!pName) { toast({ title: "Please enter a product name", variant: "destructive" }); return; }
     setPLoading(true);
@@ -114,6 +151,32 @@ export default function SEOAIWriterPage() {
       toast({ title: err.message, variant: "destructive" });
     } finally {
       setPLoading(false);
+    }
+  }
+
+  async function generateCategorySEO(type: "category" | "collection") {
+    const name = type === "category" ? cName : colName;
+    if (!name) {
+      toast({ title: "Enter a name", variant: "destructive" });
+      return;
+    }
+    const setLoad = type === "category" ? setCLoading : setColLoading;
+    const setRes = type === "category" ? setCResult : setColResult;
+    setLoad(true);
+    try {
+      const result = await apiFetch("/api/admin/seo/ai/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          type,
+          name,
+          description: type === "category" ? cDesc : colDesc,
+        }),
+      });
+      setRes(result);
+    } catch (err: unknown) {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    } finally {
+      setLoad(false);
     }
   }
 
@@ -143,17 +206,27 @@ export default function SEOAIWriterPage() {
           AI SEO Writer
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Generate SEO titles, meta descriptions, FAQs, alt text, and complete blog posts with AI
+          Purchase-intent SEO for products, categories, collections & blogs — optimized for CTR and conversions in Pakistan
         </p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
-        {(["product", "blog"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex items-center gap-1.5 px-5 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-            {t === "product" ? <Tag className="h-3.5 w-3.5" /> : <BookOpen className="h-3.5 w-3.5" />}
-            {t === "product" ? "Product SEO" : "Blog Writer"}
+        {(
+          [
+            { id: "product" as const, label: "Product", icon: Tag },
+            { id: "category" as const, label: "Category", icon: Tag },
+            { id: "collection" as const, label: "Collection", icon: Tag },
+            { id: "blog" as const, label: "Blog", icon: BookOpen },
+          ] as const
+        ).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === id ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
           </button>
         ))}
       </div>
@@ -195,8 +268,10 @@ export default function SEOAIWriterPage() {
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 Generated SEO Content
               </h3>
-              <ResultField label="SEO Title (60 chars max)" value={pResult.seoTitle ?? ""} />
-              <ResultField label="Meta Description (155 chars max)" value={pResult.metaDescription ?? ""} />
+              <ResultField label="Meta Title (50–60 chars)" value={pResult.metaTitle ?? pResult.seoTitle ?? ""} />
+              <ResultField label="Meta Description (140–160 chars)" value={pResult.metaDescription ?? ""} />
+              <ResultField label="OpenGraph Title" value={pResult.ogTitle ?? ""} />
+              <ResultField label="OpenGraph Description" value={pResult.ogDescription ?? ""} />
               <ResultField label="Focus Keyword" value={pResult.focusKeyword ?? ""} />
               <ResultField label="Image Alt Text" value={pResult.altText ?? ""} />
               {pResult.keywords && pResult.keywords.length > 0 && (
@@ -208,6 +283,16 @@ export default function SEOAIWriterPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {pResult.keywords.map((k, i) => (
                       <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">{k}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {pResult.longTailKeywords && pResult.longTailKeywords.length > 0 && (
+                <div className="border rounded-lg p-3">
+                  <label className="text-xs font-medium text-muted-foreground block mb-2">Long-tail keywords</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pResult.longTailKeywords.map((k, i) => (
+                      <span key={i} className="text-xs bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">{k}</span>
                     ))}
                   </div>
                 </div>
@@ -224,6 +309,63 @@ export default function SEOAIWriterPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Category SEO */}
+      {tab === "category" && (
+        <div className="space-y-5">
+          <div className="bg-white border rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold">Category page (buying intent)</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="text-xs font-medium mb-1 block">Category name *</label>
+                <input className={inp} value={cName} onChange={e => setCName(e.target.value)} placeholder="Premium Dry Fruits" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs font-medium mb-1 block">Notes / existing copy</label>
+                <textarea className={inp} rows={3} value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="What products live in this category…" />
+              </div>
+            </div>
+            <button onClick={() => generateCategorySEO("category")} disabled={cLoading || !cName}
+              className="flex items-center gap-2 bg-rose-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-rose-600 disabled:opacity-50">
+              {cLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              {cLoading ? "Generating…" : "Generate category SEO"}
+            </button>
+          </div>
+          {cResult && (
+            <div className="bg-white border rounded-xl p-5 space-y-4">
+              <ResultField label="Meta Title" value={cResult.metaTitle ?? ""} />
+              <ResultField label="Meta Description" value={cResult.metaDescription ?? ""} />
+              <ResultField label="Focus Keyword" value={cResult.focusKeyword ?? ""} />
+              {cResult.categoryDescription && <ResultField label="Category description (HTML)" value={cResult.categoryDescription} />}
+              {cResult.internalLinkSuggestions && cResult.internalLinkSuggestions.length > 0 && (
+                <ResultField label="Internal links" value={cResult.internalLinkSuggestions.join(" · ")} />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "collection" && (
+        <div className="space-y-5">
+          <div className="bg-white border rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold">Collection / curated shop page</h2>
+            <input className={inp} value={colName} onChange={e => setColName(e.target.value)} placeholder="Eid Gift Boxes" />
+            <textarea className={inp} rows={3} value={colDesc} onChange={e => setColDesc(e.target.value)} placeholder="Ramadan hampers, corporate gifts…" />
+            <button onClick={() => generateCategorySEO("collection")} disabled={colLoading || !colName}
+              className="flex items-center gap-2 bg-rose-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
+              {colLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              Generate collection SEO
+            </button>
+          </div>
+          {colResult && (
+            <div className="bg-white border rounded-xl p-5 space-y-4">
+              <ResultField label="Meta Title" value={colResult.metaTitle ?? ""} />
+              <ResultField label="Meta Description" value={colResult.metaDescription ?? ""} />
+              {colResult.categoryDescription && <ResultField label="Collection copy" value={colResult.categoryDescription} />}
             </div>
           )}
         </div>

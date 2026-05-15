@@ -1,8 +1,8 @@
 /**
- * SEO Extended Routes — AI SEO Generator, Redirects, Dashboard, Sitemaps, RSS
+ * SEO Extended Routes — AI SEO Generator, Redirects, Dashboard
  */
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, or, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   productsTable,
@@ -17,12 +17,14 @@ import {
 import { adminMiddleware } from "../lib/auth";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
+import {
+  getPromptForType,
+  normalizeSeoResponse,
+  type SeoEntityType,
+  type SeoGenerateContext,
+} from "../lib/ecommerceSeoEngine";
 
 const router: IRouter = Router();
-
-/* ═══════════════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════════════ */
 
 async function getOpenAI(): Promise<OpenAI | null> {
   const rows = await db.select().from(aiSettingsTable).limit(1);
@@ -31,8 +33,23 @@ async function getOpenAI(): Promise<OpenAI | null> {
   return new OpenAI({ apiKey: s.openaiApiKey, organization: s.openaiOrgId || undefined });
 }
 
-function escapeXml(str: string): string {
-  return (str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+async function runSeoAi(prompt: string, maxTokens = 2500): Promise<Record<string, unknown>> {
+  const ai = await getOpenAI();
+  if (!ai) throw new Error("OpenAI API key not configured. Go to AI Settings to add it.");
+
+  const response = await ai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are an ecommerce SEO expert. Return only valid JSON." },
+      { role: "user", content: prompt },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.65,
+    max_tokens: maxTokens,
+  });
+
+  const raw = JSON.parse(response.choices[0]?.message?.content ?? "{}") as Record<string, unknown>;
+  return raw;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -41,120 +58,47 @@ function escapeXml(str: string): string {
 
 /**
  * POST /admin/seo/ai/generate
- * Generate SEO content with AI: title, description, keywords, FAQ, alt text
+ * Types: product | category | collection | blog | alt
  */
 router.post("/admin/seo/ai/generate", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
-    const { type, content, name, description, price, category, existingContent } = req.body as {
-      type: "product" | "blog" | "category" | "alt";
+    const body = req.body as SeoGenerateContext & {
+      type: SeoEntityType;
       content?: string;
-      name?: string;
-      description?: string;
-      price?: string;
-      category?: string;
-      existingContent?: string;
     };
 
-    const ai = await getOpenAI();
-    if (!ai) {
-      res.status(400).json({ error: "OpenAI API key not configured. Go to AI Settings to add it." });
-      return;
-    }
+    const type = (body.type ?? "product") as SeoEntityType;
+    const ctx: SeoGenerateContext = {
+      name: body.name,
+      description: body.description,
+      price: body.price,
+      category: body.category,
+      keywords: body.keywords,
+      existingContent: body.existingContent ?? body.content,
+      topic: body.topic,
+      targetKeyword: body.targetKeyword,
+      tone: body.tone,
+    };
 
-    let prompt = "";
-    if (type === "product") {
-      prompt = `You are an expert SEO copywriter for an e-commerce store selling premium dry fruits and nuts (KDF NUTS / Khan Baba). Generate SEO content for this product:
-
-Product Name: ${name}
-Category: ${category || "Dry Fruits & Nuts"}
-Price: ${price ? `Rs. ${price}` : "N/A"}
-Description: ${description || existingContent || ""}
-
-Return a JSON object with these fields:
-{
-  "seoTitle": "60 chars max, keyword-rich title",
-  "metaDescription": "150-160 chars, compelling description with CTA",
-  "focusKeyword": "primary keyword",
-  "keywords": ["5-8 LSI keywords"],
-  "altText": "descriptive alt text for main product image",
-  "faq": [
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."}
-  ],
-  "aiDescription": "150-word SEO-optimized product description"
-}
-
-Focus on Pakistani market, include Urdu product names where relevant (badam=almonds, akhrot=walnuts, pista=pistachios, kaju=cashews).`;
-    } else if (type === "blog") {
-      prompt = `You are an expert SEO blogger for KDF NUTS, a premium dry fruits brand in Pakistan. Generate a complete SEO blog post outline and content for:
-
-Topic: ${name || content}
-Category: ${category || "Health & Nutrition"}
-
-Return a JSON object:
-{
-  "seoTitle": "60 chars, compelling title",
-  "metaDescription": "150-160 chars description",
-  "focusKeyword": "main keyword",
-  "keywords": ["related keywords"],
-  "outline": ["Section 1", "Section 2", "..."],
-  "intro": "150-word introduction paragraph",
-  "body": "Complete 600-word blog body with H2/H3 structure in markdown",
-  "conclusion": "100-word conclusion with CTA",
-  "faq": [{"question": "...", "answer": "..."}, {"question": "...", "answer": "..."}]
-}`;
-    } else if (type === "category") {
-      prompt = `Generate SEO content for a product category page:
-
-Category: ${name}
-Description: ${description || ""}
-
-Return JSON:
-{
-  "seoTitle": "60 chars title",
-  "metaDescription": "150-160 chars",
-  "focusKeyword": "main keyword",
-  "keywords": ["related keywords"],
-  "categoryDescription": "200-word SEO-friendly category description"
-}`;
-    } else if (type === "alt") {
-      prompt = `Generate a descriptive, SEO-friendly alt text for a product image.
-
-Product: ${name}
-Context: ${description || "Premium dry fruits and nuts"}
-
-Return JSON: { "altText": "descriptive alt text under 125 chars" }`;
-    }
-
-    const response = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
-
-    const result = JSON.parse(response.choices[0]?.message?.content ?? "{}");
+    const prompt = getPromptForType(type, ctx);
+    const raw = await runSeoAi(prompt, type === "blog" ? 3000 : 2200);
+    const result = normalizeSeoResponse(type, raw);
     res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "AI generation failed";
     logger.error({ err }, "AI SEO generate failed");
-    res.status(500).json({ error: err.message || "AI generation failed" });
+    res.status(500).json({ error: message });
   }
 });
 
 /**
  * POST /admin/seo/ai/bulk-generate
- * Bulk AI SEO generation for products without SEO content
+ * Generate & save meta for active products missing meta_title
  */
 router.post("/admin/seo/ai/bulk-generate", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
-    const { limit = 10 } = req.body as { limit?: number };
-    const ai = await getOpenAI();
-    if (!ai) {
-      res.status(400).json({ error: "OpenAI API key not configured" });
-      return;
-    }
+    const { limit = 10, dryRun = false } = req.body as { limit?: number; dryRun?: boolean };
+    const cap = Math.min(Math.max(1, limit), 15);
 
     const products = await db
       .select({
@@ -162,26 +106,81 @@ router.post("/admin/seo/ai/bulk-generate", adminMiddleware as any, async (req: R
         name: productsTable.name,
         description: productsTable.description,
         price: productsTable.price,
-        seoTitle: sql<string>`products.seo_title`,
+        metaTitle: productsTable.metaTitle,
+        categoryId: productsTable.categoryId,
       })
       .from(productsTable)
-      .where(eq(productsTable.active, true))
-      .limit(Math.min(limit, 20));
+      .where(
+        and(
+          eq(productsTable.active, true),
+          or(
+            sql`${productsTable.metaTitle} IS NULL`,
+            sql`trim(${productsTable.metaTitle}) = ''`,
+          ),
+        ),
+      )
+      .limit(cap);
 
-    const missing = products.filter(p => !p.seoTitle);
-    res.json({ total: products.length, missing: missing.length, message: `${missing.length} products need SEO content` });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (dryRun) {
+      res.json({
+        queued: products.length,
+        message: `${products.length} products need SEO meta`,
+        productIds: products.map((p) => p.id),
+      });
+      return;
+    }
+
+    const categoryRows = await db.select({ id: categoriesTable.id, name: categoriesTable.name }).from(categoriesTable);
+    const catById = new Map(categoryRows.map((c) => [c.id, c.name]));
+
+    const results: { id: number; name: string; ok: boolean; error?: string }[] = [];
+
+    for (const p of products) {
+      try {
+        const ctx: SeoGenerateContext = {
+          name: p.name,
+          description: p.description ?? undefined,
+          price: p.price ?? undefined,
+          category: p.categoryId ? catById.get(p.categoryId) ?? "Dry Fruits & Nuts" : "Dry Fruits & Nuts",
+        };
+        const raw = await runSeoAi(getPromptForType("product", ctx), 2000);
+        const seo = normalizeSeoResponse("product", raw);
+
+        await db
+          .update(productsTable)
+          .set({
+            metaTitle: String(seo.metaTitle ?? ""),
+            metaDescription: String(seo.metaDescription ?? ""),
+            altText: seo.altText ? String(seo.altText) : undefined,
+            updatedAt: new Date(),
+          })
+          .where(eq(productsTable.id, p.id));
+
+        results.push({ id: p.id, name: p.name, ok: true });
+      } catch (e: unknown) {
+        results.push({
+          id: p.id,
+          name: p.name,
+          ok: false,
+          error: e instanceof Error ? e.message : "failed",
+        });
+      }
+    }
+
+    res.json({
+      processed: results.length,
+      succeeded: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+      results,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Bulk SEO failed";
+    res.status(500).json({ error: message });
   }
 });
 
-/* ═══════════════════════════════════════════════════════
-   AI BLOG WRITER
-═══════════════════════════════════════════════════════ */
-
 /**
  * POST /admin/seo/ai/blog-write
- * Full AI blog post generation
  */
 router.post("/admin/seo/ai/blog-write", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
@@ -192,52 +191,70 @@ router.post("/admin/seo/ai/blog-write", adminMiddleware as any, async (req: Requ
       wordCount?: number;
     };
 
-    const ai = await getOpenAI();
-    if (!ai) {
-      res.status(400).json({ error: "OpenAI API key not configured" });
+    if (!topic?.trim()) {
+      res.status(400).json({ error: "topic is required" });
       return;
     }
 
-    const prompt = `Write a complete, SEO-optimized blog post for KDF NUTS (Khan Baba Dry Fruits), a premium dry fruits and nuts brand in Pakistan.
-
-Topic: ${topic}
-Target Keyword: ${targetKeyword || topic}
-Tone: ${tone}
-Target Word Count: ${wordCount} words
-
-Return a complete JSON object:
-{
-  "title": "Compelling H1 blog title",
-  "seoTitle": "60-char SEO title (can differ from H1)",
-  "metaDescription": "155-char meta description with CTA",
-  "focusKeyword": "${targetKeyword || topic}",
-  "slug": "url-friendly-slug",
-  "tags": ["tag1", "tag2", "tag3"],
-  "content": "Complete blog post in HTML format with proper H2/H3 tags, paragraphs, lists. Include the target keyword naturally. Write ${wordCount} words.",
-  "excerpt": "150-word excerpt for blog listing",
-  "faq": [
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."},
-    {"question": "...", "answer": "..."}
-  ],
-  "readTime": 5
-}
-
-Make the content informative, helpful, and optimized for Pakistani readers. Include relevant health benefits, tips, and use cases for dry fruits.`;
-
-    const response = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.8,
-      max_tokens: 3000,
-    });
-
-    const result = JSON.parse(response.choices[0]?.message?.content ?? "{}");
+    const ctx: SeoGenerateContext = { topic, targetKeyword, tone, wordCount: Number(wordCount) || 800 };
+    const raw = await runSeoAi(getPromptForType("blog-full", ctx), 4000);
+    const result = normalizeSeoResponse("blog-full", raw);
     res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Blog generation failed";
     logger.error({ err }, "AI blog write failed");
-    res.status(500).json({ error: err.message || "Blog generation failed" });
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * POST /admin/seo/ai/apply-product/:id
+ * Generate SEO and persist to product row
+ */
+router.post("/admin/seo/ai/apply-product/:id", adminMiddleware as any, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id)).limit(1);
+    if (!product) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    let categoryName = "Dry Fruits & Nuts";
+    if (product.categoryId) {
+      const [cat] = await db
+        .select({ name: categoriesTable.name })
+        .from(categoriesTable)
+        .where(eq(categoriesTable.id, product.categoryId))
+        .limit(1);
+      if (cat) categoryName = cat.name;
+    }
+
+    const ctx: SeoGenerateContext = {
+      name: product.name,
+      description: product.description ?? undefined,
+      price: product.price ?? undefined,
+      category: categoryName,
+      ...(req.body as SeoGenerateContext),
+    };
+
+    const raw = await runSeoAi(getPromptForType("product", ctx), 2200);
+    const seo = normalizeSeoResponse("product", raw);
+
+    const [updated] = await db
+      .update(productsTable)
+      .set({
+        metaTitle: String(seo.metaTitle ?? product.metaTitle ?? ""),
+        metaDescription: String(seo.metaDescription ?? product.metaDescription ?? ""),
+        altText: seo.altText ? String(seo.altText) : product.altText,
+        updatedAt: new Date(),
+      })
+      .where(eq(productsTable.id, id))
+      .returning();
+
+    res.json({ product: updated, seo });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Apply failed" });
   }
 });
 
@@ -245,20 +262,18 @@ Make the content informative, helpful, and optimized for Pakistani readers. Incl
    301 REDIRECT MANAGER
 ═══════════════════════════════════════════════════════ */
 
-/** GET /admin/seo/redirects */
-router.get("/admin/seo/redirects", adminMiddleware as any, async (req: Request, res: Response) => {
+router.get("/admin/seo/redirects", adminMiddleware as any, async (_req: Request, res: Response) => {
   try {
     const rows = await db.execute(sql`
       SELECT id, source_path, target_url, redirect_type, hits, is_active, note, created_at, updated_at
       FROM seo_redirects ORDER BY created_at DESC
     `);
     res.json(rows.rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error" });
   }
 });
 
-/** POST /admin/seo/redirects */
 router.post("/admin/seo/redirects", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
     const { sourcePath, targetUrl, redirectType = 301, note } = req.body as {
@@ -279,13 +294,12 @@ router.post("/admin/seo/redirects", adminMiddleware as any, async (req: Request,
       ON CONFLICT (source_path) DO UPDATE SET target_url = ${targetUrl}, redirect_type = ${redirectType}, note = ${note ?? null}, updated_at = NOW()
       RETURNING *
     `);
-    res.json((row as any).rows?.[0] ?? row);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json((row as { rows?: unknown[] }).rows?.[0] ?? row);
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error" });
   }
 });
 
-/** PUT /admin/seo/redirects/:id */
 router.put("/admin/seo/redirects/:id", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -309,28 +323,26 @@ router.put("/admin/seo/redirects/:id", adminMiddleware as any, async (req: Reque
     `);
 
     const rows = await db.execute(sql`SELECT * FROM seo_redirects WHERE id = ${Number(id)}`);
-    res.json((rows as any).rows?.[0] ?? {});
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json((rows as { rows?: unknown[] }).rows?.[0] ?? {});
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error" });
   }
 });
 
-/** DELETE /admin/seo/redirects/:id */
 router.delete("/admin/seo/redirects/:id", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
     await db.execute(sql`DELETE FROM seo_redirects WHERE id = ${Number(req.params.id)}`);
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error" });
   }
 });
 
 /* ═══════════════════════════════════════════════════════
-   SEO DASHBOARD — UNIFIED METRICS
+   SEO DASHBOARD
 ═══════════════════════════════════════════════════════ */
 
-/** GET /admin/seo/dashboard */
-router.get("/admin/seo/dashboard", adminMiddleware as any, async (req: Request, res: Response) => {
+router.get("/admin/seo/dashboard", adminMiddleware as any, async (_req: Request, res: Response) => {
   try {
     const [
       indexingSettings,
@@ -358,11 +370,18 @@ router.get("/admin/seo/dashboard", adminMiddleware as any, async (req: Request, 
     `);
 
     const productsWithSeo = await db.execute(sql`
-      SELECT count(*) as count FROM products WHERE active = true AND seo_title IS NOT NULL AND seo_title != ''
+      SELECT count(*) as count FROM products
+      WHERE active = true AND meta_title IS NOT NULL AND trim(meta_title) != ''
     `);
 
     const productsWithoutSeo = await db.execute(sql`
-      SELECT count(*) as count FROM products WHERE active = true AND (seo_title IS NULL OR seo_title = '')
+      SELECT count(*) as count FROM products
+      WHERE active = true AND (meta_title IS NULL OR trim(meta_title) = '')
+    `);
+
+    const categoriesWithSeo = await db.execute(sql`
+      SELECT count(*) as count FROM categories
+      WHERE meta_title IS NOT NULL AND trim(meta_title) != ''
     `);
 
     res.json({
@@ -371,27 +390,28 @@ router.get("/admin/seo/dashboard", adminMiddleware as any, async (req: Request, 
         autoEnabled: indexingSettings[0]?.autoIndexEnabled ?? false,
         siteUrl: indexingSettings[0]?.siteUrl ?? null,
         recentLogs: indexingLogs,
-        stats7d: (indexStats as any).rows ?? [],
+        stats7d: (indexStats as { rows?: unknown[] }).rows ?? [],
       },
       merchant: {
         enabled: merchantSettings[0]?.feedEnabled ?? false,
         brand: merchantSettings[0]?.brand ?? null,
         storeUrl: merchantSettings[0]?.storeUrl ?? null,
-        lastSync: (merchantSettings[0] as any)?.updatedAt ?? null,
+        lastSync: (merchantSettings[0] as { updatedAt?: Date })?.updatedAt ?? null,
       },
       seo: {
         sitemapEnabled: seoSettings[0]?.sitemapEnabled ?? false,
         canonicalDomain: seoSettings[0]?.canonicalDomain ?? null,
-        hasGtm: !!((seoSettings[0] as any)?.gtm_id),
-        hasGa4: !!((seoSettings[0] as any)?.ga4_id),
-        hasOrg: !!((seoSettings[0] as any)?.org_name),
+        hasGtm: !!((seoSettings[0] as { gtm_id?: string })?.gtm_id),
+        hasGa4: !!((seoSettings[0] as { ga4_id?: string })?.ga4_id),
+        hasOrg: !!((seoSettings[0] as { org_name?: string })?.org_name),
       },
       content: {
         products: Number(productCount[0]?.count ?? 0),
         blogs: Number(blogCount[0]?.count ?? 0),
-        redirects: Number(((redirectCount as any).rows?.[0] as any)?.count ?? 0),
-        productsWithSeo: Number(((productsWithSeo as any).rows?.[0] as any)?.count ?? 0),
-        productsWithoutSeo: Number(((productsWithoutSeo as any).rows?.[0] as any)?.count ?? 0),
+        redirects: Number(((redirectCount as { rows?: { count?: string }[] }).rows?.[0] as { count?: string })?.count ?? 0),
+        productsWithSeo: Number(((productsWithSeo as { rows?: { count?: string }[] }).rows?.[0] as { count?: string })?.count ?? 0),
+        productsWithoutSeo: Number(((productsWithoutSeo as { rows?: { count?: string }[] }).rows?.[0] as { count?: string })?.count ?? 0),
+        categoriesWithSeo: Number(((categoriesWithSeo as { rows?: { count?: string }[] }).rows?.[0] as { count?: string })?.count ?? 0),
       },
       feeds: {
         googleXml: "/api/feeds/google-merchant.xml",
@@ -402,20 +422,13 @@ router.get("/admin/seo/dashboard", adminMiddleware as any, async (req: Request, 
         sitemapNews: "/sitemap-news.xml",
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error({ err }, "SEO dashboard failed");
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Dashboard failed" });
   }
 });
 
-/* ═══════════════════════════════════════════════════════
-   REDIRECT STATS
-   Note: sitemap-index.xml, sitemap-images.xml, sitemap-news.xml,
-   and /feeds/rss.xml are served at root level in app.ts
-═══════════════════════════════════════════════════════ */
-
-/** GET /admin/seo/redirects/stats */
-router.get("/admin/seo/redirects/stats", adminMiddleware as any, async (req: Request, res: Response) => {
+router.get("/admin/seo/redirects/stats", adminMiddleware as any, async (_req: Request, res: Response) => {
   try {
     const stats = await db.execute(sql`
       SELECT
@@ -426,9 +439,9 @@ router.get("/admin/seo/redirects/stats", adminMiddleware as any, async (req: Req
         count(*) FILTER (WHERE redirect_type = 302) as temporary
       FROM seo_redirects
     `);
-    res.json((stats as any).rows?.[0] ?? {});
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json((stats as { rows?: unknown[] }).rows?.[0] ?? {});
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error" });
   }
 });
 

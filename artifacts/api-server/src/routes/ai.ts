@@ -5,6 +5,12 @@ import { adminMiddleware } from "../lib/auth";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
+import {
+  buildProductSeoPromptCompact,
+  buildCategorySeoPrompt,
+  buildBlogFullWritePrompt,
+  normalizeSeoResponse,
+} from "../lib/ecommerceSeoEngine";
 
 const router = Router();
 
@@ -285,35 +291,30 @@ Language: ${lang}.`;
         break;
 
       case "product-seo":
-        userPrompt = `Generate SEO metadata for a product page.
-Product: "${name ?? ""}"
-Category: "${category ?? ""}"
-Keywords: "${keywords ?? ""}"
-Return JSON: { "metaTitle": "50-60 chars", "metaDescription": "150-160 chars", "keywords": "comma-separated" }
-Language: ${lang}.`;
+        userPrompt = buildProductSeoPromptCompact({
+          name,
+          category,
+          keywords,
+          existingContent,
+          description: existingContent,
+        });
         break;
 
       case "category-description":
-        userPrompt = `Write a category description for an eCommerce store.
-Category: "${name ?? ""}"
-Keywords: "${keywords ?? ""}"
-Return JSON: { "description": "2 paragraphs in HTML <p>", "metaTitle": "50-60 chars", "metaDescription": "150-160 chars" }
-Language: ${lang}. Tone: ${toneDesc}.`;
+        userPrompt = buildCategorySeoPrompt({ name, keywords, description: existingContent }, "category");
+        break;
+
+      case "collection-seo":
+        userPrompt = buildCategorySeoPrompt({ name, keywords, description: existingContent }, "collection");
         break;
 
       case "blog-post":
-        userPrompt = `Write a full SEO-optimized blog article for a dry fruits/nuts eCommerce store.
-Topic: "${name ?? ""}"
-Keywords: "${keywords ?? ""}"
-Return JSON: {
-  "title": "Compelling blog title",
-  "content": "Full article in HTML with <h2>, <h3>, <p>, <ul><li>. Min 600 words.",
-  "excerpt": "2-sentence summary",
-  "metaTitle": "50-60 chars",
-  "metaDescription": "150-160 chars",
-  "keywords": "comma-separated keywords"
-}
-Language: ${lang}. Tone: ${toneDesc}.`;
+        userPrompt = buildBlogFullWritePrompt({
+          topic: name,
+          targetKeyword: keywords,
+          tone: reqTone ?? tone,
+          wordCount: 800,
+        });
         break;
 
       case "blog-improve":
@@ -415,9 +416,35 @@ Language: ${lang}.`;
         return res.status(400).json({ error: `Unknown generation type: ${type}` });
     }
 
-    const raw = await callAI("content", sysPrompt, userPrompt, { maxTokens: 1400 });
-    let parsed: Record<string, any>;
-    try { parsed = JSON.parse(raw); } catch { parsed = { content: raw }; }
+    const routeKey =
+      type === "product-seo" || type === "category-description" || type === "collection-seo" || type === "blog-post"
+        ? "seo"
+        : "content";
+    const maxTok = type === "blog-post" ? 4000 : type === "product-seo" ? 2200 : 1800;
+    const raw = await callAI(routeKey, sysPrompt, userPrompt, { maxTokens: maxTok });
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      parsed = { content: raw };
+    }
+
+    if (type === "product-seo") {
+      parsed = normalizeSeoResponse("product", parsed);
+      if (Array.isArray(parsed.keywords)) {
+        parsed.keywords = (parsed.keywords as string[]).join(", ");
+      }
+    } else if (type === "category-description" || type === "collection-seo") {
+      parsed = normalizeSeoResponse("category", parsed);
+    } else if (type === "blog-post") {
+      parsed = normalizeSeoResponse("blog-full", parsed);
+      if (typeof parsed.keywords === "string") {
+        parsed.keywords = parsed.keywords;
+      } else if (Array.isArray(parsed.keywords)) {
+        parsed.keywords = (parsed.keywords as string[]).join(", ");
+      }
+    }
+
     return res.json(parsed);
 
   } catch (e: any) {
