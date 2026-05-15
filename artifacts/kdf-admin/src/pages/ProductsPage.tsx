@@ -1323,6 +1323,7 @@ export default function ProductsPage() {
             )}
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Search + Status Filter */}
