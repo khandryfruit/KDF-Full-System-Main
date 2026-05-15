@@ -171,17 +171,54 @@ export function blockScannerPaths(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-/** Admin routes only from admin subdomain or when explicitly allowed. */
+function hostnameFromOrigin(origin: string | undefined): string {
+  if (!origin || origin === "null") return "";
+  try {
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function hostnameFromReferer(referer: string | undefined): string {
+  if (!referer) return "";
+  try {
+    return new URL(referer).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isAllowedAdminFrontend(hostname: string, allowed: string[]): boolean {
+  if (!hostname) return false;
+  return hostname.startsWith("admin.") || allowed.includes(hostname);
+}
+
+/**
+ * Admin routes only from admin UI hosts.
+ * Admin SPA is on admin.* but API is on api.* — allow when Origin/Referer is an admin host.
+ */
 export function adminHostGuard(req: Request, res: Response, next: NextFunction): void {
   if (!IS_PRODUCTION) { next(); return; }
-  const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
-  const allowed = (process.env.ADMIN_ALLOWED_HOSTS ?? "admin.khanbabadryfruits.com,admin.khandryfruit.com")
-    .split(",").map(h => h.trim().toLowerCase()).filter(Boolean);
-  const isAdminHost = host.startsWith("admin.") || allowed.includes(host);
   const path = req.path ?? "";
   const isAdminApi = path.startsWith("/api/admin-auth") || path.startsWith("/api/admin/");
-  if (isAdminApi && !isAdminHost && process.env.ADMIN_API_ALLOW_ANY_HOST !== "true") {
-    logger.warn({ host, path }, "Admin API blocked from non-admin host");
+  if (!isAdminApi) { next(); return; }
+  if (process.env.ADMIN_API_ALLOW_ANY_HOST === "true") { next(); return; }
+
+  const allowed = (process.env.ADMIN_ALLOWED_HOSTS ?? "admin.khanbabadryfruits.com,admin.khandryfruit.com")
+    .split(",").map(h => h.trim().toLowerCase()).filter(Boolean);
+
+  const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
+  const originHost = hostnameFromOrigin(req.headers.origin as string | undefined);
+  const refererHost = hostnameFromReferer(req.headers.referer as string | undefined);
+
+  const ok =
+    isAllowedAdminFrontend(host, allowed) ||
+    isAllowedAdminFrontend(originHost, allowed) ||
+    isAllowedAdminFrontend(refererHost, allowed);
+
+  if (!ok) {
+    logger.warn({ host, origin: originHost, referer: refererHost, path }, "Admin API blocked from non-admin host");
     res.status(404).json({ ok: false, error: "Not found" });
     return;
   }

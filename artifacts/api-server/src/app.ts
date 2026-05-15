@@ -64,7 +64,6 @@ const app: Express = express();
 app.disable("x-powered-by");
 app.use(securityHeaders);
 app.use(blockScannerPaths);
-app.use(adminHostGuard);
 
 app.use(
   pinoHttp({
@@ -118,6 +117,8 @@ app.use(
     maxAge: 86400, // preflight cache 24 h
   })
 );
+/* After CORS so blocked admin preflights still get ACAO headers (avoids misleading "CORS error"). */
+app.use(adminHostGuard);
 if (!IS_PRODUCTION) {
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("X-KDF-Backend", "api-server");
