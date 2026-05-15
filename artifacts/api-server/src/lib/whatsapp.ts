@@ -2,7 +2,15 @@ import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, w
 import { eq, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { normalizePhone } from "./waPhone";
+import {
+  DEFAULT_MENU_ITEMS,
+  filterMenuItems,
+  getMenuConfig,
+  type WaMenuItem,
+} from "./waMenuDefaults.js";
 export { normalizePhone } from "./waPhone";
+export type { WaMenuItem } from "./waMenuDefaults.js";
+export { DEFAULT_MENU_ITEMS, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 
 const WA_API_VERSION = "v22.0";
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
@@ -171,39 +179,21 @@ export async function sendWhatsAppTemplate(opts: {
   }
 }
 
-/* ─── Menu Item type (stored as JSONB in chatbot_settings) ─ */
-export interface WaMenuItem {
-  id: string;
-  label: string;
-  description?: string;
-  sectionTitle?: string;
-  enabled?: boolean;
-  sortOrder?: number;
-}
-
-export const DEFAULT_MENU_ITEMS: WaMenuItem[] = [
-  { id: "shop_products",  label: "Shop Products",       description: "Browse premium nuts & dry fruits",  sectionTitle: "🛒 Shopping",         enabled: true, sortOrder: 0 },
-  { id: "hot_deals",      label: "🔥 Hot Deals",        description: "Today's special offers",            sectionTitle: "🛒 Shopping",         enabled: true, sortOrder: 1 },
-  { id: "get_discount",   label: "🎁 Get Discount",     description: "Get an exclusive coupon code",      sectionTitle: "🛒 Shopping",         enabled: true, sortOrder: 2 },
-  { id: "track_order",    label: "📦 Track Order",      description: "Check your order status",           sectionTitle: "📦 Orders & Support", enabled: true, sortOrder: 3 },
-  { id: "talk_support",   label: "💬 Talk to Support",  description: "Chat with our team",                sectionTitle: "📦 Orders & Support", enabled: true, sortOrder: 4 },
-  { id: "visit_website",  label: "🌐 Visit Website",    description: "Shop online anytime",               sectionTitle: "📦 Orders & Support", enabled: true, sortOrder: 5 },
-];
-
 /* Build WhatsApp list sections from menu items */
 function buildMenuSections(items: WaMenuItem[]): Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> {
-  const activeItems = items.filter(i => i.enabled !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const activeItems = filterMenuItems(items).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const sectionMap = new Map<string, Array<{ id: string; title: string; description?: string }>>();
   for (const item of activeItems) {
-    const section = item.sectionTitle ?? "Options";
+    const section = (item.sectionTitle ?? "Options").slice(0, 24);
     if (!sectionMap.has(section)) sectionMap.set(section, []);
+    const rowTitle = `${item.emoji ? `${item.emoji} ` : ""}${item.label}`.trim().slice(0, 24);
     sectionMap.get(section)!.push({
       id: item.id,
-      title: item.label.slice(0, 24),
+      title: rowTitle,
       ...(item.description ? { description: item.description.slice(0, 72) } : {}),
     });
   }
-  return Array.from(sectionMap.entries()).map(([title, rows]) => ({ title, rows }));
+  return Array.from(sectionMap.entries()).map(([title, rows]) => ({ title: title.slice(0, 24), rows }));
 }
 
 /* ─── Send Interactive List Menu ──────────────────────── */
@@ -219,6 +209,7 @@ export async function sendInteractiveMenu(opts: {
     const normalizedPhone = normalizePhone(opts.phone);
 
     const menuItems = (opts.customItems && opts.customItems.length > 0) ? opts.customItems : DEFAULT_MENU_ITEMS;
+    const menuConfig = getMenuConfig(menuItems);
     let sections = buildMenuSections(menuItems);
     if (sections.length === 0 || sections.every(s => s.rows.length === 0)) {
       sections = buildMenuSections(DEFAULT_MENU_ITEMS);
@@ -231,10 +222,10 @@ export async function sendInteractiveMenu(opts: {
       type: "interactive",
       interactive: {
         type: "list",
-        header: { type: "text", text: "KDF NUTS 🥜" },
+        header: { type: "text", text: menuConfig.header.slice(0, 60) },
         body: { text: opts.greeting },
-        footer: { text: "Reply anytime — we're here to help 💚" },
-        action: { button: "View Options", sections },
+        footer: { text: menuConfig.footer.slice(0, 60) },
+        action: { button: menuConfig.button.slice(0, 20), sections },
       },
     };
 

@@ -33,6 +33,8 @@ async function apiFetch(url: string, opts?: RequestInit) {
 
 type Tab = "settings" | "recovery" | "chatbot" | "conversations" | "templates" | "logs" | "automations" | "campaigns" | "debug" | "qr" | "analytics" | "rules" | "flows";
 
+type WaMenuActionType = "default" | "cta" | "text" | "track" | "support" | "buttons";
+
 interface WaMenuItem {
   id: string;
   emoji: string;
@@ -40,9 +42,53 @@ interface WaMenuItem {
   description: string;
   sectionTitle?: string;
   replyMessage?: string;
+  url?: string;
+  ctaButtonText?: string;
+  actionType?: WaMenuActionType;
   enabled?: boolean;
+  sortOrder?: number;
   isDefault?: boolean;
 }
+
+const MENU_CONFIG_ID = "__menu_config__";
+const KHAN_BRAND = "Khan Dry Fruits";
+const KHAN_WEBSITE = "https://www.khandryfruit.com";
+
+const DEFAULT_MENU_CONFIG: WaMenuItem = {
+  id: MENU_CONFIG_ID,
+  emoji: "",
+  label: KHAN_BRAND,
+  description: "Browse • Order • Pay • Track • Support",
+  sectionTitle: "View Menu",
+  enabled: false,
+};
+
+const DEFAULT_MENU_ITEMS: WaMenuItem[] = [
+  { id: "shop_products", emoji: "🛒", label: "Shop Products", description: "Premium dry fruits, nuts & grocery", sectionTitle: "🛒 Shop", enabled: true, sortOrder: 0, actionType: "cta", url: KHAN_WEBSITE, isDefault: true,
+    replyMessage: "🛒 *Khan Dry Fruits*\n\nBrowse premium dry fruits, nuts & grocery.\n\nTap below to shop online 👇" },
+  { id: "hot_deals", emoji: "🔥", label: "Today's Deals", description: "Latest offers, bundles & discounts", sectionTitle: "🛒 Shop", enabled: true, sortOrder: 1, actionType: "cta", isDefault: true,
+    replyMessage: "🔥 *Today's Deals at Khan Dry Fruits*\n\nView latest offers & limited-time discounts 👇" },
+  { id: "get_discount", emoji: "🎁", label: "Claim Discount", description: "Exclusive coupons & first-order offers", sectionTitle: "🛒 Shop", enabled: true, sortOrder: 2, actionType: "buttons", isDefault: true,
+    replyMessage: "🎁 *Exclusive offer from Khan Dry Fruits* — use your coupon at checkout!" },
+  { id: "track_order", emoji: "📦", label: "Track My Order", description: "Order number & live status", sectionTitle: "📦 Orders", enabled: true, sortOrder: 3, actionType: "track", isDefault: true,
+    replyMessage: "📦 Please send your *order number* (e.g. KDF-123456) to check tracking status." },
+  { id: "talk_support", emoji: "💬", label: "Talk to Support", description: "Connect with our team instantly", sectionTitle: "💬 Help & Info", enabled: true, sortOrder: 4, actionType: "support", isDefault: true,
+    replyMessage: "Our *Khan Dry Fruits* team will assist you shortly. Type your question below 👇" },
+  { id: "delivery_info", emoji: "🚚", label: "Delivery Information", description: "Lahore same-day · nationwide shipping", sectionTitle: "💬 Help & Info", enabled: true, sortOrder: 5, actionType: "text", isDefault: true,
+    replyMessage: "🚚 *Delivery*\n\n• Lahore: Same-day available\n• Nationwide shipping\n• Charges at checkout by city" },
+  { id: "payment_methods", emoji: "💳", label: "Payment Methods", description: "COD, bank transfer & more", sectionTitle: "💬 Help & Info", enabled: true, sortOrder: 6, actionType: "text", isDefault: true,
+    replyMessage: "💳 *Payment:* COD & bank transfer available. Reply for payment details." },
+  { id: "visit_website", emoji: "🌐", label: "Visit Website", description: "Shop online anytime", sectionTitle: "💬 Help & Info", enabled: true, sortOrder: 7, actionType: "cta", url: KHAN_WEBSITE, isDefault: true,
+    replyMessage: "🌐 Visit *Khan Dry Fruits* online for our full catalog." },
+];
+
+const CUSTOMER_JOURNEY = [
+  { step: "Browse", icon: "🛒", desc: "Shop & deals" },
+  { step: "Order", icon: "📦", desc: "Place order" },
+  { step: "Pay", icon: "💳", desc: "COD / transfer" },
+  { step: "Track", icon: "🔍", desc: "Live status" },
+  { step: "Support", icon: "💬", desc: "We're here" },
+];
 
 const AI_MODELS = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast, Recommended)" },
@@ -1146,21 +1192,12 @@ export default function WhatsAppPage() {
     queryFn: () => apiFetch("/api/admin/whatsapp/chatbot-settings").catch(() => null),
     enabled: tab === "chatbot",
   });
-  const DEFAULT_MENU_ITEMS: WaMenuItem[] = [
-    { id: "shop_products", emoji: "🛒", label: "Shop Products", description: "Browse our premium nuts & dry fruits", sectionTitle: "KDF NUTS Menu", isDefault: true },
-    { id: "hot_deals", emoji: "🔥", label: "Hot Deals", description: "Today's special offers and discounts", isDefault: true },
-    { id: "get_discount", emoji: "🎁", label: "Get Discount", description: "Claim your exclusive discount code", isDefault: true },
-    { id: "track_order", emoji: "📦", label: "Track Order", description: "Check your order status and tracking", isDefault: true },
-    { id: "talk_support", emoji: "💬", label: "Talk to Support", description: "Chat with our customer support team", isDefault: true },
-    { id: "visit_website", emoji: "🌐", label: "Visit Website", description: "Browse our full product catalog online", isDefault: true },
-  ];
-
   const [chatbotForm, setChatbotForm] = useState({
     isEnabled: false,
     orderingEnabled: false,
     orderContextEnabled: true,
     aiModel: "gpt-4o-mini",
-    systemPrompt: "You are a helpful customer support assistant for KDF NUTS, a premium dry fruits and nuts store in Pakistan. Be friendly, concise, and helpful in both English and Urdu. Answer questions about products, orders, shipping, and returns. If order context is provided at the top of this conversation, use it to give accurate, personalised answers about the customer's orders. If you don't know something specific, offer to connect them with the team.",
+    systemPrompt: "You are a helpful customer support assistant for Khan Dry Fruits, a premium dry fruits, nuts and grocery store in Pakistan. Be friendly, concise, and professional in both English and Urdu. Answer questions about products, orders, shipping, delivery, payments, and returns. If order context is provided, use it for accurate personalised answers. If unsure, offer to connect them with the Khan Dry Fruits team.",
     fallbackMessage: "Thank you for your message! Our team will get back to you shortly. 🙏",
     replyDelaySec: 30,
     maxDailyReplies: 100,
@@ -1170,10 +1207,13 @@ export default function WhatsAppPage() {
     greetingMessage: "",
     catalogEnabled: false,
     catalogMaxProducts: 3,
-    websiteUrl: "https://kdfnuts.com",
+    websiteUrl: KHAN_WEBSITE,
     discountCode: "WELCOME10",
-    discountMessage: "Here's your exclusive discount code! 🎁\n\n*Code:* WELCOME10\n*Save:* 10% on your next order\n\nShop now and use the code at checkout 🛒",
-    hotDealsMessage: "🔥 *Today's Hot Deals at KDF NUTS* 🥜\n\nCheck our latest offers on premium nuts and dry fruits!\n\nVisit our website to see all deals 👇",
+    discountMessage: "🎁 *Exclusive offer from Khan Dry Fruits*\n\n*Code:* WELCOME10\n*Save:* 10% on your first order\n\nShop on our website and apply at checkout 🛒",
+    hotDealsMessage: "🔥 *Today's Deals at Khan Dry Fruits*\n\nView latest offers, bundles & limited-time discounts 👇",
+    menuHeaderTitle: KHAN_BRAND,
+    menuFooterText: "Browse • Order • Pay • Track • Support",
+    menuButtonLabel: "View Menu",
   });
   useEffect(() => {
     if (chatbotSettings) setChatbotForm({
@@ -1191,10 +1231,13 @@ export default function WhatsAppPage() {
       greetingMessage: chatbotSettings.greetingMessage ?? "",
       catalogEnabled: chatbotSettings.catalogEnabled ?? false,
       catalogMaxProducts: chatbotSettings.catalogMaxProducts ?? 3,
-      websiteUrl: chatbotSettings.websiteUrl ?? "https://kdfnuts.com",
+      websiteUrl: chatbotSettings.websiteUrl ?? KHAN_WEBSITE,
       discountCode: chatbotSettings.discountCode ?? "WELCOME10",
       discountMessage: chatbotSettings.discountMessage ?? "",
       hotDealsMessage: chatbotSettings.hotDealsMessage ?? "",
+      menuHeaderTitle: (chatbotSettings.menuItems as WaMenuItem[] | null)?.find(i => i.id === MENU_CONFIG_ID)?.label ?? KHAN_BRAND,
+      menuFooterText: (chatbotSettings.menuItems as WaMenuItem[] | null)?.find(i => i.id === MENU_CONFIG_ID)?.description ?? "Browse • Order • Pay • Track • Support",
+      menuButtonLabel: (chatbotSettings.menuItems as WaMenuItem[] | null)?.find(i => i.id === MENU_CONFIG_ID)?.sectionTitle ?? "View Menu",
     });
   }, [chatbotSettings]);
 
@@ -1204,8 +1247,26 @@ export default function WhatsAppPage() {
     enabled: tab === "chatbot",
     refetchInterval: tab === "chatbot" ? 30000 : false,
   });
+  const buildMenuPayload = () => {
+    const items = (chatbotForm.menuItems && chatbotForm.menuItems.length > 0 ? chatbotForm.menuItems : DEFAULT_MENU_ITEMS)
+      .filter(i => i.id !== MENU_CONFIG_ID);
+    const withConfig: WaMenuItem[] = [
+      ...items.map((it, idx) => ({ ...it, sortOrder: idx })),
+      {
+        id: MENU_CONFIG_ID,
+        emoji: "",
+        label: chatbotForm.menuHeaderTitle || KHAN_BRAND,
+        description: chatbotForm.menuFooterText || "Browse • Order • Pay • Track • Support",
+        sectionTitle: chatbotForm.menuButtonLabel || "View Menu",
+        enabled: false,
+      },
+    ];
+    const { menuHeaderTitle: _h, menuFooterText: _f, menuButtonLabel: _b, ...rest } = chatbotForm;
+    return { ...rest, menuItems: withConfig };
+  };
+
   const saveChatbot = useMutation({
-    mutationFn: () => apiFetch("/api/admin/whatsapp/chatbot-settings", { method: "PUT", body: JSON.stringify(chatbotForm) }),
+    mutationFn: () => apiFetch("/api/admin/whatsapp/chatbot-settings", { method: "PUT", body: JSON.stringify(buildMenuPayload()) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/admin/whatsapp/chatbot-settings"] }); toast({ title: "Chatbot settings saved" }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message }),
   });
@@ -2529,6 +2590,26 @@ export default function WhatsAppPage() {
                           {saveSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                           Save Only
                         </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const backup = await apiFetch("/api/admin/whatsapp/integration-backup");
+                              const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+                              const a = document.createElement("a");
+                              a.href = URL.createObjectURL(blob);
+                              a.download = `kdf-whatsapp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                              a.click();
+                              toast({ title: "Backup downloaded", description: "Secrets are not included — keep Railway env safe." });
+                            } catch (e: unknown) {
+                              toast({ variant: "destructive", title: e instanceof Error ? e.message : "Download failed" });
+                            }
+                          }}
+                          className="flex items-center gap-2 px-4 py-2.5 border border-border hover:bg-muted font-medium rounded-xl text-sm transition-colors"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download backup
+                        </button>
                         {form.accessToken && form.phoneNumberId && (
                           <button
                             onClick={() => testConnection.mutate()}
@@ -3772,12 +3853,22 @@ export default function WhatsAppPage() {
             </div>
           </div>
 
-          {/* ── Welcome Menu Builder (Phase 1) ── */}
+          {/* ── Khan Dry Fruits — Interactive Menu Builder ── */}
           {(() => {
-            const liveItems: WaMenuItem[] = chatbotForm.menuItems && (chatbotForm.menuItems as WaMenuItem[]).length > 0
+            const rawItems: WaMenuItem[] = chatbotForm.menuItems && (chatbotForm.menuItems as WaMenuItem[]).length > 0
               ? (chatbotForm.menuItems as WaMenuItem[])
               : DEFAULT_MENU_ITEMS;
-            const greeting = chatbotForm.greetingMessage || "Hello! 👋 Welcome to *KDF NUTS* 🥜\nHow can we help you today?\n\nReply anytime — we're here to help 💚";
+            const liveItems = rawItems.filter(i => i.id !== MENU_CONFIG_ID);
+            const headerTitle = chatbotForm.menuHeaderTitle || KHAN_BRAND;
+            const footerText = chatbotForm.menuFooterText || "Browse • Order • Pay • Track • Support";
+            const menuButton = chatbotForm.menuButtonLabel || "View Menu";
+            const greeting = chatbotForm.greetingMessage?.trim() || `Hello! 👋\n\nWelcome to *${KHAN_BRAND}* — premium dry fruits, nuts & grocery.\n\nTap *${menuButton}* below to get started.`;
+            const sections = liveItems.reduce<Record<string, WaMenuItem[]>>((acc, item) => {
+              const key = item.sectionTitle?.trim() || "Options";
+              if (!acc[key]) acc[key] = [];
+              if (item.enabled !== false) acc[key].push(item);
+              return acc;
+            }, {});
 
             const moveItem = (idx: number, dir: -1 | 1) => {
               const items = [...liveItems];
@@ -3794,10 +3885,27 @@ export default function WhatsAppPage() {
               setChatbotForm(f => ({ ...f, menuItems: liveItems.filter((_, i) => i !== idx) }));
             };
             const addItem = () => {
-              const newItem: WaMenuItem = { id: `custom_${Date.now()}`, emoji: "⭐", label: "New Option", description: "Description here", sectionTitle: "" };
+              const newItem: WaMenuItem = {
+                id: `custom_${Date.now()}`,
+                emoji: "⭐",
+                label: "New Option",
+                description: "Short description for customers",
+                sectionTitle: "💬 Help & Info",
+                actionType: "text",
+                enabled: true,
+                replyMessage: "Thanks for contacting *Khan Dry Fruits*. How can we help?",
+              };
               setChatbotForm(f => ({ ...f, menuItems: [...liveItems, newItem] }));
             };
-            const resetToDefaults = () => setChatbotForm(f => ({ ...f, menuItems: DEFAULT_MENU_ITEMS }));
+            const resetToDefaults = () => setChatbotForm(f => ({
+              ...f,
+              menuItems: DEFAULT_MENU_ITEMS,
+              menuHeaderTitle: KHAN_BRAND,
+              menuFooterText: "Browse • Order • Pay • Track • Support",
+              menuButtonLabel: "View Menu",
+              websiteUrl: KHAN_WEBSITE,
+              greetingMessage: "",
+            }));
 
             return (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -3808,32 +3916,59 @@ export default function WhatsAppPage() {
                     </div>
                     <div>
                       <h2 className="font-semibold text-base flex items-center gap-2">
-                        Interactive Menu Builder
+                        {KHAN_BRAND} — Menu Builder
                         {chatbotForm.menuEnabled
-                          ? <span className="text-[11px] font-normal text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Active</span>
-                          : <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Disabled</span>}
+                          ? <span className="text-[11px] font-medium text-green-800 bg-green-100 px-2 py-0.5 rounded-full">Live</span>
+                          : <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Off</span>}
                       </h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">Fully editable tappable menu — add, remove, reorder and customise every item</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Simple, premium menu — drag to reorder, edit every title, reply &amp; link</p>
                     </div>
                   </div>
                   <Switch checked={chatbotForm.menuEnabled} onCheckedChange={(v) => setChatbotForm(f => ({ ...f, menuEnabled: v }))} />
                 </div>
 
-                <div className="px-5 py-5 space-y-5">
-                  {/* Two-column: editor + live preview */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="px-5 py-3 border-b bg-muted/30">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Customer journey</p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {CUSTOMER_JOURNEY.map((j, i) => (
+                      <React.Fragment key={j.step}>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-border text-xs shadow-sm">
+                          <span>{j.icon}</span>
+                          <span className="font-medium">{j.step}</span>
+                          <span className="text-muted-foreground hidden sm:inline">· {j.desc}</span>
+                        </div>
+                        {i < CUSTOMER_JOURNEY.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
 
-                    {/* Left: editor */}
+                <div className="px-5 py-5 space-y-5">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      {/* Greeting message */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Menu header</Label>
+                          <Input value={chatbotForm.menuHeaderTitle} onChange={e => setChatbotForm(f => ({ ...f, menuHeaderTitle: e.target.value }))} placeholder={KHAN_BRAND} className="h-8 text-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Menu button</Label>
+                          <Input value={chatbotForm.menuButtonLabel} onChange={e => setChatbotForm(f => ({ ...f, menuButtonLabel: e.target.value }))} placeholder="View Menu" className="h-8 text-sm" maxLength={20} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Footer line</Label>
+                          <Input value={chatbotForm.menuFooterText} onChange={e => setChatbotForm(f => ({ ...f, menuFooterText: e.target.value }))} placeholder="Browse • Order • Track" className="h-8 text-sm" maxLength={60} />
+                        </div>
+                      </div>
+
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-semibold">Greeting Message</Label>
+                        <Label className="text-sm font-semibold">Greeting message</Label>
                         <Textarea
                           value={chatbotForm.greetingMessage}
                           onChange={e => setChatbotForm(f => ({ ...f, greetingMessage: e.target.value }))}
                           rows={3}
                           className="text-sm resize-y font-mono"
-                          placeholder="Hello! 👋 Welcome to *KDF NUTS* 🥜&#10;How can we help you today?"
+                          placeholder={`Hello! 👋 Welcome to *${KHAN_BRAND}*…`}
                         />
                         <p className="text-xs text-muted-foreground">Supports WhatsApp formatting: *bold*, _italic_. Leave blank for default.</p>
                       </div>
@@ -3884,9 +4019,50 @@ export default function WhatsAppPage() {
                                 rows={2}
                                 className="w-full border border-input rounded px-2 py-1 text-xs bg-background resize-none font-mono"
                                 placeholder="Auto-reply when this item is tapped (leave blank for default AI / flow handling)" />
-                              {/* Row 4: section title (all items) */}
-                              <input value={item.sectionTitle ?? ""} onChange={e => updateItem(idx, { sectionTitle: e.target.value })}
-                                className="w-full border border-input rounded px-2 py-1 text-xs bg-background" placeholder="Section header above this item (optional)" maxLength={24} />
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground">Section</label>
+                                  <input value={item.sectionTitle ?? ""} onChange={e => updateItem(idx, { sectionTitle: e.target.value })}
+                                    className="w-full border border-input rounded px-2 py-1 text-xs bg-background mt-0.5" placeholder="🛒 Shop" maxLength={24} />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground">Action</label>
+                                  <select value={item.actionType ?? "text"} onChange={e => updateItem(idx, { actionType: e.target.value as WaMenuActionType })}
+                                    className="w-full border border-input rounded px-2 py-1 text-xs bg-background mt-0.5">
+                                    <option value="cta">Open website</option>
+                                    <option value="text">Auto-reply text</option>
+                                    <option value="track">Track order</option>
+                                    <option value="support">AI support</option>
+                                    <option value="buttons">Reply + buttons</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="space-y-1.5 pt-1 border-t border-dashed border-border/80">
+                                <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+                                  <Globe className="w-3 h-3" /> Custom link (optional)
+                                </label>
+                                <input
+                                  type="url"
+                                  value={item.url ?? ""}
+                                  onChange={e => updateItem(idx, { url: e.target.value })}
+                                  className="w-full border border-input rounded px-2 py-1.5 text-xs bg-background"
+                                  placeholder={`e.g. ${KHAN_WEBSITE} or any page you want`}
+                                />
+                                {item.url?.trim() && (
+                                  <input
+                                    value={item.ctaButtonText ?? ""}
+                                    onChange={e => updateItem(idx, { ctaButtonText: e.target.value })}
+                                    className="w-full border border-input rounded px-2 py-1 text-xs bg-background"
+                                    placeholder="Button text e.g. Shop Now (max 20 chars)"
+                                    maxLength={20}
+                                  />
+                                )}
+                                <p className="text-[10px] text-muted-foreground">
+                                  {item.url?.trim()
+                                    ? "Customer will get a tappable link button with this URL."
+                                    : "Leave empty to use default action, or set your own link."}
+                                </p>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3898,23 +4074,29 @@ export default function WhatsAppPage() {
                       <p className="text-sm font-semibold flex items-center gap-2"><Globe className="w-4 h-4 text-muted-foreground" />Live WhatsApp Preview</p>
                       <div className="bg-[#e5ddd5] rounded-xl p-3 space-y-2 max-w-xs">
                         <div className="bg-white rounded-xl px-3 py-2.5 text-xs shadow-sm">
-                          <p className="font-semibold text-[11px] text-[#25D366] mb-1">KDF NUTS 🥜</p>
+                          <p className="font-semibold text-[11px] text-amber-900 mb-1">{headerTitle}</p>
                           <p className="text-gray-800 leading-relaxed whitespace-pre-line">{greeting}</p>
+                          <p className="text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-100">{footerText}</p>
                         </div>
-                        <div className="border border-[#25D366] bg-white rounded-xl text-xs text-center py-1.5 text-[#25D366] font-medium">View Options ▾</div>
-                        <div className="bg-white rounded-xl shadow-sm text-xs divide-y divide-gray-100">
-                          {liveItems.map((item, i) => (
-                            <div key={item.id} className="px-3 py-2">
-                              <div className="flex items-center gap-2 text-gray-800">
-                                <span>{item.emoji}</span>
-                                <span className="font-medium">{item.label || "…"}</span>
-                              </div>
-                              {item.description && <p className="text-gray-400 text-[10px] mt-0.5 ml-5">{item.description}</p>}
+                        <div className="border border-[#25D366] bg-white rounded-xl text-xs text-center py-2 text-[#25D366] font-semibold shadow-sm">{menuButton} ▾</div>
+                        <div className="bg-white rounded-xl shadow-sm text-xs overflow-hidden max-h-64 overflow-y-auto">
+                          {Object.entries(sections).map(([section, rows]) => (
+                            <div key={section}>
+                              <p className="px-3 py-1.5 bg-gray-50 text-[10px] font-semibold text-gray-500">{section}</p>
+                              {rows.map(item => (
+                                <div key={item.id} className="px-3 py-2 border-t border-gray-50">
+                                  <div className="flex items-center gap-2 text-gray-800">
+                                    <span>{item.emoji}</span>
+                                    <span className="font-medium">{item.label}</span>
+                                  </div>
+                                  {item.description && <p className="text-gray-400 text-[10px] mt-0.5 ml-5 line-clamp-2">{item.description}</p>}
+                                </div>
+                              ))}
                             </div>
                           ))}
                         </div>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Live preview updates as you edit</p>
+                      <p className="text-[10px] text-muted-foreground">Live preview — grouped by section like WhatsApp</p>
                     </div>
                   </div>
 
@@ -3929,14 +4111,16 @@ export default function WhatsAppPage() {
                     <p className="text-xs text-muted-foreground">When a customer sends any of these words, they'll receive the interactive menu.</p>
                   </div>
 
-                  {/* Website URL */}
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Website URL (for "Shop Products" &amp; "Visit Website")</Label>
+                    <Label className="text-sm">Default website URL (fallback)</Label>
                     <Input
                       value={chatbotForm.websiteUrl}
                       onChange={e => setChatbotForm(f => ({ ...f, websiteUrl: e.target.value }))}
-                      placeholder="https://kdfnuts.com"
+                      placeholder={KHAN_WEBSITE}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Used when a menu item has no custom link. Per-item links are set under each menu option above.
+                    </p>
                   </div>
 
                   {/* Discount Code + Message */}
@@ -3971,7 +4155,7 @@ export default function WhatsAppPage() {
                       className="text-sm resize-y"
                       placeholder="🔥 Today's Hot Deals…"
                     />
-                    <p className="text-xs text-muted-foreground">Sent when customer taps the "Hot Deals" menu item.</p>
+                    <p className="text-xs text-muted-foreground">Sent when customer taps &quot;Today&apos;s Deals&quot; (optional — item auto-reply overrides).</p>
                   </div>
                 </div>
               </div>
@@ -4022,7 +4206,7 @@ export default function WhatsAppPage() {
                   <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Preview — what the customer sees</p>
                     <div className="bg-[#25D366]/5 border border-[#25D366]/20 rounded-xl p-3 space-y-2 text-xs">
-                      <p className="font-semibold text-[#25D366]">🛍️ KDF NUTS Product Catalog 🥜</p>
+                      <p className="font-semibold text-[#25D366]">🛍️ {KHAN_BRAND} Catalog</p>
                       <div className="bg-white border border-gray-200 rounded-lg p-2.5 space-y-1">
                         <p className="font-bold">*Premium Kashmiri Almonds*</p>
                         <p>💰 <strong>Price:</strong> Rs. 2,500</p>

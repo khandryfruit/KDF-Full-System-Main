@@ -78,7 +78,7 @@ export const chatbotSettingsTable = pgTable("chatbot_settings", {
   isEnabled:             boolean("is_enabled").notNull().default(false),
   orderingEnabled:       boolean("ordering_enabled").notNull().default(false),
   aiModel:               text("ai_model").notNull().default("gpt-4o-mini"),
-  systemPrompt:          text("system_prompt").notNull().default("You are a helpful customer support assistant for KDF NUTS, a premium dry fruits and nuts store in Pakistan. Be friendly, concise, and helpful in both English and Urdu. Answer questions about products, orders, shipping, and returns. If order context is provided at the top of this conversation, use it to give accurate, personalised answers about the customer's orders. If you don't know something specific, offer to connect them with the team."),
+  systemPrompt:          text("system_prompt").notNull().default("You are a helpful customer support assistant for Khan Dry Fruits, a premium dry fruits, nuts and grocery store in Pakistan. Be friendly, concise, and professional in both English and Urdu. Answer questions about products, orders, shipping, delivery, payments, and returns. If order context is provided, use it for accurate personalised answers. If unsure, offer to connect them with the Khan Dry Fruits team."),
   fallbackMessage:       text("fallback_message").notNull().default("Thank you for your message! Our team will get back to you shortly. 🙏"),
   orderContextEnabled:   boolean("order_context_enabled").notNull().default(true),
   replyDelaySec:         integer("reply_delay_sec").notNull().default(30),
@@ -90,10 +90,10 @@ export const chatbotSettingsTable = pgTable("chatbot_settings", {
   greetingMessage:       text("greeting_message"),  // custom greeting text
   catalogEnabled:        boolean("catalog_enabled").notNull().default(false),
   catalogMaxProducts:    integer("catalog_max_products").notNull().default(3),
-  websiteUrl:            text("website_url").default("https://kdfnuts.com"),
+  websiteUrl:            text("website_url").default("https://www.khandryfruit.com"),
   discountCode:          text("discount_code").default("WELCOME10"),
-  discountMessage:       text("discount_message").default("Here's your exclusive discount code! 🎁\n\n*Code:* WELCOME10\n*Save:* 10% on your next order\n\nShop now and use the code at checkout 🛒"),
-  hotDealsMessage:       text("hot_deals_message").default("🔥 *Today's Hot Deals at KDF NUTS* 🥜\n\nCheck our latest offers on premium nuts and dry fruits!\n\nVisit our website to see all deals 👇"),
+  discountMessage:       text("discount_message").default("🎁 *Exclusive offer from Khan Dry Fruits*\n\n*Code:* WELCOME10\n*Save:* 10% on your first order\n\nShop on our website and apply at checkout 🛒"),
+  hotDealsMessage:       text("hot_deals_message").default("🔥 *Today's Deals at Khan Dry Fruits*\n\nView latest offers, bundles & limited-time discounts on premium dry fruits & nuts 👇"),
   updatedAt:             timestamp("updated_at").notNull().defaultNow(),
 });
 

@@ -5,6 +5,8 @@ import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
+import { handleMenuItemTap } from "../lib/waMenuHandlers.js";
+import { DEFAULT_GREETING, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "../lib/waMenuDefaults.js";
 import { broadcastSSE } from "../lib/sse";
 import type OpenAI from "openai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
@@ -392,106 +394,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               continue;
             }
 
-            /* ── Menu item handlers ── */
-            switch (interactionId) {
-
-              case "shop_products": {
-                const websiteUrl = (chatbot as any)?.websiteUrl ?? "https://kdfnuts.com";
-                await sendCtaUrlMessage({
-                  phone,
-                  text: "🛒 *Shop at KDF NUTS* 🥜\n\nBrowse our full range of premium nuts & dry fruits:\n• Almonds, Cashews, Pistachios\n• Walnuts, Pine Nuts, Raisins\n• Mixed Nuts, Snack Packs & more!\n\nTap the button below to shop now 👇",
-                  buttonText: "Shop Now",
-                  url: websiteUrl,
-                  settings: waSettings,
-                  templateName: "menu_shop",
-                });
-                await setConversationState(phone, "idle");
-                break;
-              }
-
-              case "hot_deals": {
-                const hotDealsMsg = (chatbot as any)?.hotDealsMessage
-                  ?? "🔥 *Today's Hot Deals at KDF NUTS* 🥜\n\nCheck our latest offers on premium nuts and dry fruits!\n\nVisit our website to see all deals 👇";
-                const websiteUrl = (chatbot as any)?.websiteUrl ?? "https://kdfnuts.com";
-                await sendCtaUrlMessage({
-                  phone,
-                  text: hotDealsMsg,
-                  buttonText: "See Deals",
-                  url: websiteUrl,
-                  settings: waSettings,
-                  templateName: "menu_hot_deals",
-                });
-                await setConversationState(phone, "idle");
-                break;
-              }
-
-              case "get_discount": {
-                const discountCode = (chatbot as any)?.discountCode ?? "WELCOME10";
-                const discountMsg  = (chatbot as any)?.discountMessage
-                  ?? `Here's your exclusive discount code! 🎁\n\n*Code:* ${discountCode}\n*Save:* 10% on your next order\n\nShop now and use the code at checkout 🛒`;
-                await sendInteractiveButtons({
-                  phone,
-                  text: discountMsg,
-                  buttons: [
-                    { id: "shop_products", title: "🛒 Shop Now" },
-                    { id: "main_menu",     title: "🏠 Main Menu" },
-                  ],
-                  settings: waSettings,
-                  templateName: "menu_discount",
-                });
-                await setConversationState(phone, "idle");
-                break;
-              }
-
-              case "track_order": {
-                await sendWhatsAppMessage({
-                  phone,
-                  message: "📦 *Track Your Order*\n\nPlease reply with your *Order ID* (e.g. KDF-123456) and I'll look it up for you right away! 🔍",
-                  templateName: "menu_track_prompt",
-                });
-                await setConversationState(phone, "track_order_wait");
-                break;
-              }
-
-              case "talk_support": {
-                await sendInteractiveButtons({
-                  phone,
-                  text: "💬 *You're now connected to our support team!*\n\nFeel free to type your question and our AI assistant will help you right away. I have access to your order history and can answer most questions instantly.\n\nType your question below 👇",
-                  buttons: [
-                    { id: "main_menu", title: "🏠 Main Menu" },
-                  ],
-                  settings: waSettings,
-                  templateName: "menu_support",
-                });
-                /* Switch to AI chat mode */
-                await setConversationState(phone, "ai_chat");
-                break;
-              }
-
-              case "visit_website": {
-                const websiteUrl = (chatbot as any)?.websiteUrl ?? "https://kdfnuts.com";
-                await sendCtaUrlMessage({
-                  phone,
-                  text: "🌐 *Visit KDF NUTS Website*\n\nShop our full collection of premium nuts and dry fruits online. Fast delivery across Pakistan! 🚚",
-                  buttonText: "Visit Website",
-                  url: websiteUrl,
-                  settings: waSettings,
-                  templateName: "menu_website",
-                });
-                await setConversationState(phone, "idle");
-                break;
-              }
-
-              case "track_again": {
-                await sendWhatsAppMessage({
-                  phone,
-                  message: "📦 Please reply with another *Order ID* to track it:",
-                  templateName: "menu_track_prompt",
-                });
-                await setConversationState(phone, "track_order_wait");
-                break;
-              }
-
+            /* ── Menu item handlers (editable items + defaults) ── */
+            const menuHandled = await handleMenuItemTap({
+              phone,
+              interactionId,
+              chatbot,
+              waSettings,
+            });
+            if (!menuHandled) switch (interactionId) {
               default: {
                 /* wa_order_PRODUCTNAME_IDX — from AI product card "Order Now" button */
                 if (interactionId.startsWith("wa_order_")) {
@@ -604,8 +514,8 @@ async function handleSendMenu(
     const greeting = customGreeting
       ? (customerName ? customGreeting.replace(/\{name\}/g, customerName.split(" ")[0]!) : customGreeting)
       : (customerName
-        ? `Hello ${customerName.split(" ")[0]}! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`
-        : `Hello! 👋\n\nWelcome to *KDF NUTS* 🥜 — Pakistan's favourite premium nuts store.\n\nHow can we help you today?`);
+        ? `Hello ${customerName.split(" ")[0]}! 👋\n\nWelcome to *${KHAN_BRAND_NAME}* — premium dry fruits, nuts & grocery.\n\nTap the menu below to browse, track, or get support.`
+        : DEFAULT_GREETING);
 
     /* Use custom menu items from chatbot settings if configured */
     const customItems = (chatbot as any)?.menuItems ?? null;
@@ -614,7 +524,7 @@ async function handleSendMenu(
     /* Fallback to text menu if interactive fails */
     await sendWhatsAppMessage({
       phone,
-      message: `Welcome to *KDF NUTS* 🥜\n\nReply with a number:\n1️⃣ Shop Products\n2️⃣ Hot Deals\n3️⃣ Get Discount\n4️⃣ Track Order\n5️⃣ Talk to Support\n6️⃣ Visit Website`,
+      message: `Welcome to *${KHAN_BRAND_NAME}*\n\n1️⃣ Shop Products\n2️⃣ Today's Deals\n3️⃣ Claim Discount\n4️⃣ Track Order\n5️⃣ Support\n6️⃣ Delivery Info\n7️⃣ Payment Methods\n8️⃣ Visit Website`,
       templateName: "menu_fallback",
     });
   }
@@ -1755,6 +1665,51 @@ router.post("/admin/whatsapp/clear-app-secret", adminMiddleware as any, async (_
   }
 });
 
+const MASKED_SECRET_PLACEHOLDER = "••••••••";
+
+function isMaskedOrEmptySecret(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim()) return true;
+  return value.trim() === MASKED_SECRET_PLACEHOLDER || /^[•*]+$/.test(value.trim());
+}
+
+/* ─── Admin: Integration backup checklist (no secrets) ─── */
+router.get("/admin/whatsapp/integration-backup", adminMiddleware as any, async (req, res) => {
+  try {
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() || req.hostname;
+    const [s] = await db.select().from(whatsappSettingsTable).limit(1);
+    return res.json({
+      savedAt: new Date().toISOString(),
+      note: "Store Railway env separately. Never commit access tokens or app secrets to git.",
+      database: {
+        hasRow: !!s,
+        phoneNumberId: s?.phoneNumberId ?? null,
+        businessAccountId: s?.businessAccountId ?? null,
+        webhookVerifyToken: s?.webhookVerifyToken ?? "kdfnuts_webhook_token",
+        apiVersion: s?.apiVersion ?? "v18.0",
+        businessPortfolioId: s?.businessPortfolioId ?? null,
+        isActive: s?.isActive ?? false,
+        hasAccessToken: !!s?.accessToken,
+        hasAppSecretInDb: !!s?.appSecret,
+      },
+      metaDeveloperConsole: {
+        callbackUrl: getPublicWebhookUrl(host),
+        unifiedCallbackUrl: getUnifiedWebhookUrl(host),
+        verifyToken: s?.webhookVerifyToken ?? "kdfnuts_webhook_token",
+        subscribeFields: ["messages", "message_deliveries", "message_reads"],
+        product: "WhatsApp Business Account (not User)",
+      },
+      railwayEnvRequired: [
+        "DATABASE_URL",
+        "SESSION_SECRET",
+        "PUBLIC_API_URL=https://api.khanbabadryfruits.com",
+        "META_APP_SECRET=<Meta App → Settings → Basic → App Secret>",
+      ],
+    });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
+  }
+});
+
 /* ─── Admin: Save Settings ───────────────────────────── */
 router.put("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) => {
   try {
@@ -1765,17 +1720,35 @@ router.put("/admin/whatsapp/settings", adminMiddleware as any, async (req, res) 
       appSecret, apiVersion, businessPortfolioId,
     } = req.body;
     const existing = await db.select().from(whatsappSettingsTable).limit(1);
+    const prev = existing[0];
     const payload: Record<string, any> = {
-      accessToken, phoneNumberId, businessAccountId, webhookVerifyToken,
-      isActive, chatButtonEnabled, chatButtonPhone, chatButtonMessage,
-      abandonedRecoveryEnabled: abandonedRecoveryEnabled ?? false,
-      abandonedRecoveryDelayMinutes: abandonedRecoveryDelayMinutes ?? 45,
-      abandonedRecoveryCouponCode: abandonedRecoveryCouponCode ?? null,
+      isActive: isActive ?? prev?.isActive ?? false,
+      chatButtonEnabled: chatButtonEnabled ?? prev?.chatButtonEnabled ?? false,
+      chatButtonPhone: chatButtonPhone ?? prev?.chatButtonPhone ?? null,
+      chatButtonMessage: chatButtonMessage ?? prev?.chatButtonMessage ?? null,
+      abandonedRecoveryEnabled: abandonedRecoveryEnabled ?? prev?.abandonedRecoveryEnabled ?? false,
+      abandonedRecoveryDelayMinutes: abandonedRecoveryDelayMinutes ?? prev?.abandonedRecoveryDelayMinutes ?? 45,
+      abandonedRecoveryCouponCode: abandonedRecoveryCouponCode ?? prev?.abandonedRecoveryCouponCode ?? null,
+      webhookVerifyToken: webhookVerifyToken?.trim() || prev?.webhookVerifyToken || "kdfnuts_webhook_token",
     };
-    if (apiVersion)          payload.apiVersion          = apiVersion;
-    if (businessPortfolioId) payload.businessPortfolioId = businessPortfolioId;
-    // Only update appSecret if provided (non-empty) — never clear an existing secret
-    if (appSecret && appSecret.trim()) payload.appSecret = appSecret.trim();
+    if (typeof accessToken === "string" && accessToken.trim() && !isMaskedOrEmptySecret(accessToken)) {
+      payload.accessToken = accessToken.trim();
+    } else if (prev?.accessToken) {
+      payload.accessToken = prev.accessToken;
+    }
+    if (phoneNumberId?.trim()) payload.phoneNumberId = phoneNumberId.trim();
+    else if (prev?.phoneNumberId) payload.phoneNumberId = prev.phoneNumberId;
+    if (businessAccountId?.trim()) payload.businessAccountId = businessAccountId.trim();
+    else if (prev?.businessAccountId) payload.businessAccountId = prev.businessAccountId;
+    if (apiVersion?.trim()) payload.apiVersion = apiVersion.trim();
+    else if (prev?.apiVersion) payload.apiVersion = prev.apiVersion;
+    if (businessPortfolioId?.trim()) payload.businessPortfolioId = businessPortfolioId.trim();
+    else if (prev?.businessPortfolioId) payload.businessPortfolioId = prev.businessPortfolioId;
+    if (appSecret && appSecret.trim() && !isMaskedOrEmptySecret(appSecret)) {
+      payload.appSecret = appSecret.trim();
+    } else if (prev?.appSecret) {
+      payload.appSecret = prev.appSecret;
+    }
 
     if (existing.length > 0) {
       const [updated] = await db.update(whatsappSettingsTable)
@@ -2238,7 +2211,7 @@ router.put("/admin/whatsapp/chatbot-settings", adminMiddleware as any, async (re
       menuGreetingKeywords: menuGreetingKeywords ?? "hi,hello,hey,salam,salaam,asslam,start,menu,help,shop,helo,hii",
       catalogEnabled:       catalogEnabled ?? false,
       catalogMaxProducts:   Number(catalogMaxProducts ?? 3),
-      websiteUrl:           websiteUrl ?? "https://kdfnuts.com",
+      websiteUrl:           websiteUrl ?? KHAN_WEBSITE_URL,
       discountCode:         discountCode ?? "WELCOME10",
       discountMessage:      discountMessage ?? "",
       hotDealsMessage:      hotDealsMessage ?? "",

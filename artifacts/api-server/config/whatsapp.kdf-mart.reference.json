@@ -1,0 +1,22 @@
+{
+  "business": "KDF MART",
+  "note": "Reference only — no secrets. Live values are in PostgreSQL whatsapp_settings + Railway env.",
+  "metaWebhook": {
+    "callbackUrl": "https://api.khanbabadryfruits.com/api/webhooks/whatsapp",
+    "verifyToken": "kdfnuts_webhook_token",
+    "product": "WhatsApp Business Account",
+    "subscribeFields": ["messages", "message_deliveries", "message_reads"]
+  },
+  "ids": {
+    "phoneNumberId": "399527296587762",
+    "wabaId": "512761931909971",
+    "businessPortfolioId": "8906132333206413",
+    "apiVersion": "v18.0"
+  },
+  "railwayApiServerEnv": [
+    "DATABASE_URL",
+    "SESSION_SECRET",
+    "PUBLIC_API_URL=https://api.khanbabadryfruits.com",
+    "META_APP_SECRET"
+  ]
+}
