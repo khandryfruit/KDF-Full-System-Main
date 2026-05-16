@@ -1359,7 +1359,7 @@ export function ChatWidget() {
 
       {/* FAB — hidden on mobile when chat is open, hidden when dismissed */}
       {!dismissed && (
-        <div className={`kdf-suppress-for-fullscreen-sheet fixed z-[500] flex flex-col items-end gap-2 max-sm:bottom-[7.25rem] max-sm:right-3 sm:bottom-6 sm:right-6 ${isOpen ? "hidden lg:flex" : ""}`}>
+        <div className={`kdf-suppress-for-fullscreen-sheet kdf-mobile-fab fixed z-[500] flex flex-col items-end gap-2 max-sm:right-2.5 sm:bottom-6 sm:right-6 ${isOpen ? "hidden lg:flex" : ""}`}>
           {isExpanded && !isOpen && (
             <>
               <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-200">

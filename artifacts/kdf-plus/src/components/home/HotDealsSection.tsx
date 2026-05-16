@@ -121,7 +121,7 @@ function HotDealsHero({ maxDiscount }: { maxDiscount: number }) {
 function HotDealsGrid({ products, loading }: { products: Product[]; loading: boolean }) {
   if (loading) {
     return (
-      <div className="kdf-product-grid kdf-hot-deals-grid px-3 pb-4 pt-3 sm:px-5 sm:pb-5">
+      <div className="kdf-product-grid kdf-hot-deals-grid px-2 pb-3 pt-3 sm:px-5 sm:pb-5">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i}>
             <Skeleton className="mb-2 h-[200px] rounded-xl sm:aspect-square sm:rounded-2xl" />
@@ -134,10 +134,10 @@ function HotDealsGrid({ products, loading }: { products: Product[]; loading: boo
 
   const shown = products.slice(0, 10);
   return (
-    <div className="px-3 pb-4 pt-3 sm:px-5 sm:pb-5">
+    <div className="px-2 pb-3 pt-3 sm:px-5 sm:pb-5">
       <div className="kdf-product-grid kdf-hot-deals-grid">
         {shown.map((product) => (
-          <ProductCard key={product.id} product={product} hotDealBadge />
+          <ProductCard key={product.id} product={product} hotDealBadge variant="featured" />
         ))}
       </div>
       {shown.length === 0 && (
@@ -163,7 +163,7 @@ export function HotDealsSection({ products, extraPool = [], loading }: HotDealsS
   if (!loading && smartProducts.length === 0) return null;
 
   return (
-    <section className="kdf-home-section max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 pb-10">
+    <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-10">
       <div className="overflow-hidden rounded-2xl border border-gray-100/80 bg-white shadow-[0_12px_40px_rgba(13,43,0,0.06)] max-sm:border-0 max-sm:shadow-[0_8px_28px_rgba(13,43,0,0.05)] sm:ring-1 sm:ring-black/[0.03]">
         <HotDealsHero maxDiscount={maxDiscount} />
 

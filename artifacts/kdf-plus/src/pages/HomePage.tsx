@@ -11,6 +11,7 @@ import { useListBanners, useListCategories, useListProducts } from "@workspace/a
 import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ProductCard";
 import { HotDealsSection } from "@/components/home/HotDealsSection";
+import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -1270,7 +1271,7 @@ function CountdownDealSection({
   const shouldShowMatchedItems = showCategories ? shownCategories.length > 0 : loading || shownProducts.length > 0;
 
   return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-8 sm:pb-9">
+    <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-8 sm:pb-9">
       <div className="overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-[0_14px_38px_rgba(13,43,0,0.08)] ring-1 ring-black/[0.03] sm:rounded-[1.5rem]">
         <div
           className="relative overflow-hidden px-4 py-5 sm:px-7 sm:py-6 lg:px-8"
@@ -1306,7 +1307,7 @@ function CountdownDealSection({
         </div>
 
         {shouldShowMatchedItems && (
-          <div className="bg-gradient-to-b from-white to-[#f8fbf4] px-3 py-3 sm:px-5 sm:py-4">
+          <div className="bg-gradient-to-b from-white to-[#f8fbf4] px-2 py-3 sm:px-5 sm:py-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Matched picks"}</p>
@@ -1328,7 +1329,7 @@ function CountdownDealSection({
             ) : (
               <div className="kdf-product-grid">
                 {shownProducts.map((p) => (
-                  <ProductCard key={p.id} product={p} hotDealBadge />
+                  <ProductCard key={p.id} product={p} hotDealBadge variant="featured" />
                 ))}
               </div>
             )}
@@ -1634,7 +1635,7 @@ export default function HomePage() {
         <TrustStrip />
 
         {/* Categories */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-10">
           <SectionHeader
             icon={Tag}
             title="Shop by Category"
@@ -1644,20 +1645,8 @@ export default function HomePage() {
           <CategoryGrid categories={categories} loading={catsLoading} />
         </section>
 
-        {/* Featured Products — only render when there are featured products or still loading */}
         {(featuredLoading || featuredProducts.length > 0) && (
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
-              <SectionHeader
-                icon={Sparkles}
-                label="Hand-Picked"
-                title="Featured Products"
-                viewAllHref="/products?featured=true"
-                testId="link-all-featured"
-              />
-              <ProductCarousel products={featuredProducts} loading={featuredLoading} />
-            </div>
-          </section>
+          <FeaturedProductsSection products={featuredProducts} loading={featuredLoading} />
         )}
 
         <CountdownDealSection
@@ -1679,8 +1668,8 @@ export default function HomePage() {
         )}
 
         {/* New Arrivals */}
-        <section className="kdf-home-section max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 pb-10">
-          <div className="overflow-hidden bg-white rounded-xl p-3 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
+        <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-10">
+          <div className="overflow-hidden bg-white rounded-xl p-2 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               icon={TrendingUp}
               label="Just In"
@@ -1693,7 +1682,7 @@ export default function HomePage() {
         </section>
 
         {/* All products */}
-        <section className="kdf-home-section max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 pb-14">
+        <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-14">
           <div className="overflow-hidden bg-white rounded-xl p-3 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               title="All Products"
