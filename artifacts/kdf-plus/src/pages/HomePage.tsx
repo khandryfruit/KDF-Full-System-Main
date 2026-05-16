@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, ArrowRight, Star, Truck, ShieldCheck,
   RefreshCw, Headphones, Flame, Sparkles, TrendingUp, Tag,
   Volume2, VolumeX, Play, Pause, Smartphone, Zap, Shield,
-  CreditCard, ShoppingBag,
+  CreditCard, ShoppingBag, Package,
 } from "lucide-react";
 import { useListBanners, useListCategories, useListProducts } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -37,12 +37,16 @@ const PROMO_ANNOUNCEMENTS = [
   "✨ Use Code NUTS10 for 10% Off Your First Order",
 ];
 
-const TRUST_BADGES = [
-  { icon: Truck,       title: "Fast Delivery",     desc: "Same-day in select cities", color: "#0ea5e9" },
-  { icon: ShieldCheck, title: "100% Authentic",    desc: "Original premium quality",  color: "#16a34a" },
-  { icon: RefreshCw,   title: "Easy Returns",      desc: "Simple support process",    color: "#f97316" },
-  { icon: CreditCard,  title: "Secure Payments",   desc: "Safe checkout options",     color: "#6366f1" },
-  { icon: Star,        title: "Premium Quality",   desc: "Fresh, hygienic packing",   color: "#d97706" },
+const DELIVERY_BENEFITS = [
+  { icon: Truck, title: "Fast Delivery", desc: "Same-day in select cities" },
+  { icon: Package, title: "Free Delivery", desc: "Orders above Rs. 1,500" },
+];
+
+const TRUST_ITEMS = [
+  { icon: ShieldCheck, title: "100% Authentic", desc: "Original premium quality", color: "#16a34a" },
+  { icon: RefreshCw, title: "Easy Returns", desc: "Simple support process", color: "#f97316" },
+  { icon: CreditCard, title: "Secure Payments", desc: "Safe checkout options", color: "#6366f1" },
+  { icon: Star, title: "Premium Quality", desc: "Fresh, hygienic packing", color: "#d97706" },
 ];
 
 
@@ -980,32 +984,56 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
   );
 }
 
-/* ─── Trust Badges ───────────────────────────────────────────── */
+/* ─── Trust & delivery strips (distinct styles) ─────────────── */
 function TrustStrip() {
   return (
-    <div className="bg-gradient-to-b from-white to-[#f7fbf2]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4">
-        <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-hide lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0">
-          {TRUST_BADGES.map(({ icon: Icon, title, desc, color }) => (
-            <div
-              key={title}
-              className="flex min-w-[210px] shrink-0 snap-start items-center gap-3 rounded-2xl border border-black/[0.04] bg-white/92 px-3.5 py-3.5 shadow-[0_12px_34px_rgba(13,43,0,0.07)] ring-1 ring-white transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(13,43,0,0.10)] lg:min-w-0"
-            >
-              <div
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner"
-                style={{ backgroundColor: `${color}14` }}
+    <section className="kdf-trust-strip" aria-label="Why customers trust KDF">
+      <div className="kdf-home-section max-w-7xl mx-auto px-1.5 sm:px-6 lg:px-8 py-3">
+        <p className="mb-2 px-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">
+          Trust & quality
+        </p>
+        <div className="kdf-trust-strip__scroll snap-x snap-mandatory">
+          {TRUST_ITEMS.map(({ icon: Icon, title, desc, color }) => (
+            <div key={title} className="kdf-trust-card shrink-0 snap-start lg:shrink">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ backgroundColor: `${color}12` }}
               >
-                <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
+                <Icon className="h-4 w-4" style={{ color }} strokeWidth={2.2} />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-black text-gray-950 leading-tight">{title}</p>
-                <p className="text-xs text-gray-500 leading-snug">{desc}</p>
+                <p className="text-xs font-black leading-tight text-gray-950">{title}</p>
+                <p className="text-[10px] leading-snug text-gray-500">{desc}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+function DeliveryBenefitsStrip() {
+  return (
+    <section className="kdf-delivery-strip" aria-label="Delivery benefits">
+      <div className="kdf-home-section max-w-7xl mx-auto px-1.5 sm:px-6 lg:px-8 py-3">
+        <p className="mb-2 px-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]/80">
+          Delivery
+        </p>
+        <div className="kdf-delivery-strip__scroll snap-x snap-mandatory">
+          {DELIVERY_BENEFITS.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="kdf-delivery-pill shrink-0 snap-start">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#5FA800]/15">
+                <Icon className="h-4 w-4 text-[#5FA800]" strokeWidth={2.2} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-gray-900">{title}</p>
+                <p className="text-[10px] text-gray-600">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1603,9 +1631,6 @@ export default function HomePage() {
           <HeroBanner banners={banners} loading={heroLoading} smartCatalog={heroSmartCatalog} />
         )}
 
-        {/* Trust strip */}
-        <TrustStrip />
-
         {/* Categories */}
         <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-10">
           <SectionHeader
@@ -1620,6 +1645,9 @@ export default function HomePage() {
         {(featuredLoading || featuredProducts.length > 0) && (
           <FeaturedProductsSection products={featuredProducts} loading={featuredLoading} />
         )}
+
+        <TrustStrip />
+        <DeliveryBenefitsStrip />
 
         <CountdownDealSection
           banner={promotionBanner}

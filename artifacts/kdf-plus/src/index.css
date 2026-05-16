@@ -558,7 +558,193 @@ html.kdf-variant-sheet-open .kdf-suppress-for-fullscreen-sheet {
   }
 }
 
-/* Featured products — glass shell + 2-up auto carousel */
+/* Premium center-focus product carousel */
+.kdf-premium-carousel-viewport {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  touch-action: pan-x;
+}
+.kdf-premium-carousel-fade {
+  position: absolute;
+  top: 0;
+  bottom: 12px;
+  width: 18px;
+  z-index: 3;
+  pointer-events: none;
+}
+.kdf-premium-carousel-fade--left {
+  left: 0;
+  background: linear-gradient(90deg, #fff 0%, transparent 100%);
+}
+.kdf-premium-carousel-fade--right {
+  right: 0;
+  background: linear-gradient(270deg, #fff 0%, transparent 100%);
+}
+.kdf-premium-carousel-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: max(6px, calc(50% - min(42vw, 168px)));
+}
+.kdf-premium-carousel-scroller.is-auto {
+  scroll-snap-type: none;
+}
+.kdf-premium-carousel-scroller.is-manual {
+  scroll-snap-type: x mandatory;
+}
+.kdf-premium-carousel-scroller::-webkit-scrollbar {
+  display: none;
+}
+.kdf-premium-carousel-track {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: max-content;
+  padding: 2px max(2px, calc(50% - min(42vw, 168px))) 8px;
+}
+.kdf-premium-carousel-slide {
+  flex: 0 0 min(84vw, 300px);
+  max-width: min(84vw, 300px);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s ease,
+    filter 0.45s ease;
+  transform: scale(0.88) translateZ(0);
+  opacity: 0.45;
+  filter: blur(1px);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.kdf-premium-carousel-slide.is-center {
+  transform: scale(1) translateZ(0);
+  opacity: 1;
+  filter: none;
+  z-index: 2;
+}
+@media (max-width: 359px) {
+  .kdf-premium-carousel-slide {
+    flex: 0 0 86vw;
+    max-width: 86vw;
+  }
+  .kdf-premium-carousel-track {
+    padding-inline: max(2px, calc(50% - 43vw));
+    gap: 5px;
+  }
+}
+@media (min-width: 390px) and (max-width: 479px) {
+  .kdf-premium-carousel-slide {
+    flex: 0 0 82vw;
+    max-width: 82vw;
+  }
+  .kdf-premium-carousel-track {
+    padding-inline: max(2px, calc(50% - 41vw));
+  }
+}
+@media (min-width: 640px) {
+  .kdf-premium-carousel-track {
+    padding-inline: max(6px, calc(50% - 140px));
+  }
+  .kdf-premium-carousel-slide {
+    flex: 0 0 280px;
+    max-width: 280px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kdf-premium-carousel-slide {
+    transition: none;
+    filter: none;
+    opacity: 0.85;
+  }
+  .kdf-premium-carousel-slide.is-center {
+    opacity: 1;
+  }
+}
+
+/* Trust vs delivery — distinct section styles */
+.kdf-trust-strip {
+  background: linear-gradient(180deg, #fff 0%, #f8fbf4 100%);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
+}
+.kdf-trust-strip__scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.kdf-trust-strip__scroll::-webkit-scrollbar {
+  display: none;
+}
+.kdf-trust-card {
+  display: flex;
+  min-width: 148px;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: #fff;
+  padding: 10px 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+@media (min-width: 1024px) {
+  .kdf-trust-strip__scroll {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    overflow: visible;
+  }
+  .kdf-trust-card {
+    min-width: 0;
+  }
+}
+
+.kdf-delivery-strip {
+  background: linear-gradient(180deg, #eef8e6 0%, #f4faf0 100%);
+  border-bottom: 1px solid rgba(95, 168, 0, 0.08);
+}
+.kdf-delivery-strip__scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kdf-delivery-strip__scroll::-webkit-scrollbar {
+  display: none;
+}
+.kdf-delivery-pill {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(95, 168, 0, 0.15);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 8px 14px;
+  box-shadow: 0 1px 4px rgba(95, 168, 0, 0.08);
+}
+@media (min-width: 640px) {
+  .kdf-delivery-strip__scroll {
+    justify-content: center;
+  }
+  .kdf-delivery-pill {
+    flex: 0 1 auto;
+    min-width: 200px;
+  }
+}
+
+.kdf-rec-strip {
+  padding-inline: 0;
+}
+
+/* Featured products — glass shell */
 .kdf-featured-shell {
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.85);
