@@ -834,6 +834,7 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   width: max-content;
   padding: 2px 4px 6px;
 }
+.kdf-modal-rec__carousel .kdf-carousel-slide--peek,
 .kdf-modal-rec__card {
   flex: 0 0 42%;
   max-width: 42%;
@@ -1012,7 +1013,180 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   }
 }
 
-/* Premium center-focus product carousel */
+/* ── Unified KDF product carousel (auto + manual swipe/drag) ── */
+.kdf-carousel {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  touch-action: pan-x;
+}
+.kdf-carousel-fade {
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 22px;
+  z-index: 4;
+  pointer-events: none;
+}
+.kdf-carousel-fade--left {
+  left: 0;
+  background: linear-gradient(90deg, var(--kdf-carousel-fade, #fff) 0%, transparent 100%);
+}
+.kdf-carousel-fade--right {
+  right: 0;
+  background: linear-gradient(270deg, var(--kdf-carousel-fade, #fff) 0%, transparent 100%);
+}
+.kdf-carousel-nav {
+  display: none;
+  position: absolute;
+  top: 38%;
+  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #475569;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.kdf-carousel-nav:active {
+  transform: scale(0.96);
+}
+.kdf-carousel-nav--prev {
+  left: 4px;
+}
+.kdf-carousel-nav--next {
+  right: 4px;
+}
+@media (min-width: 640px) {
+  .kdf-carousel:hover .kdf-carousel-nav {
+    display: flex;
+  }
+}
+.kdf-carousel-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  cursor: grab;
+}
+.kdf-carousel-scroller:active {
+  cursor: grabbing;
+}
+.kdf-carousel-scroller.is-auto {
+  scroll-snap-type: none;
+}
+.kdf-carousel-scroller.is-manual {
+  scroll-snap-type: x mandatory;
+}
+.kdf-carousel-scroller::-webkit-scrollbar {
+  display: none;
+}
+.kdf-carousel-track {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: max-content;
+  padding: 4px 12px 10px 8px;
+}
+.kdf-carousel-card {
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 2px 10px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.kdf-carousel-card .kdf-product-card {
+  border-radius: 16px;
+  box-shadow: none;
+  border-color: transparent;
+}
+.kdf-carousel-slide--peek {
+  flex: 0 0 calc(50% - 6px);
+  max-width: calc(50% - 6px);
+  min-width: 148px;
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+@media (min-width: 390px) {
+  .kdf-carousel-slide--peek {
+    flex: 0 0 calc(47% - 5px);
+    max-width: calc(47% - 5px);
+  }
+}
+@media (min-width: 640px) {
+  .kdf-carousel-slide--peek {
+    flex: 0 0 220px;
+    max-width: 220px;
+    min-width: 200px;
+  }
+  .kdf-carousel-track {
+    padding-inline: 4px 20px;
+  }
+}
+.kdf-carousel-slide--center {
+  flex: 0 0 min(84vw, 300px);
+  max-width: min(84vw, 300px);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s ease,
+    filter 0.45s ease;
+  transform: scale(0.88) translateZ(0);
+  opacity: 0.45;
+  filter: blur(0.8px);
+  will-change: transform, opacity;
+}
+.kdf-carousel--center .kdf-carousel-track {
+  gap: 8px;
+  padding: 2px max(2px, calc(50% - min(42vw, 168px))) 8px;
+}
+.kdf-carousel-slide--center.is-center {
+  transform: scale(1) translateZ(0);
+  opacity: 1;
+  filter: none;
+  z-index: 2;
+}
+@media (min-width: 640px) {
+  .kdf-carousel--center .kdf-carousel-track {
+    padding-inline: max(6px, calc(50% - 140px));
+  }
+  .kdf-carousel-slide--center {
+    flex: 0 0 280px;
+    max-width: 280px;
+  }
+}
+.kdf-pdp-ai-carousel .kdf-carousel-slide--peek,
+.kdf-pdp-pick-card {
+  flex: 0 0 148px;
+  max-width: 148px;
+  min-width: 140px;
+}
+.kdf-pdp-ai-carousel .kdf-carousel-track {
+  padding-inline: 8px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kdf-carousel-slide--center {
+    transition: none;
+    filter: none;
+    opacity: 0.88;
+  }
+  .kdf-carousel-slide--center.is-center {
+    opacity: 1;
+  }
+}
+
+/* Legacy aliases (premium carousel) */
 .kdf-premium-carousel-viewport {
   position: relative;
   width: 100%;

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { KdfCarousel } from "@/components/carousel/KdfCarousel";
 import {
   Sparkles,
   Flame,
@@ -127,28 +128,24 @@ function CategoryOrbitStrip({
     return STATIC_CATEGORIES;
   }, [apiCategories]);
 
-  const loop = [...items, ...items];
-
   return (
     <div className="space-y-2">
       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80">Shop by mood</p>
-      <div className="relative overflow-hidden rounded-2xl border border-white/80 bg-gradient-to-r from-slate-50/90 via-white/70 to-emerald-50/40 py-2.5 shadow-inner ring-1 ring-black/[0.04]">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[hsl(var(--background))] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[hsl(var(--background))] to-transparent" />
-        <div className="flex w-max gap-2 px-2 animate-kdf-pdp-marquee-ltr hover:[animation-play-state:paused] motion-reduce:hover:[animation-play-state:running]">
-          {loop.map((c, i) => (
+      <div className="relative overflow-hidden rounded-2xl border border-white/80 bg-gradient-to-r from-slate-50/90 via-white/70 to-emerald-50/40 py-1 shadow-inner ring-1 ring-black/[0.04]">
+        <KdfCarousel mode="peek" itemCount={items.length} loopCopies={2} resumeMs={4000} fadeColor="hsl(var(--background))" showArrows={items.length > 3}>
+          {items.map((c, i) => (
             <button
               key={`${c.label}-${i}`}
               type="button"
               onClick={() => onNavigate(c.href)}
-              className="flex shrink-0 items-center gap-2 rounded-xl border border-gray-200/80 bg-white/90 px-3 py-2 text-left text-xs font-semibold text-foreground shadow-sm ring-1 ring-black/[0.03] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              className="kdf-carousel-slide--peek flex shrink-0 items-center gap-2 rounded-xl border border-gray-200/80 bg-white/90 px-3 py-2 text-left text-xs font-semibold text-foreground shadow-sm ring-1 ring-black/[0.03] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
             >
               <span className="text-base leading-none">{c.emoji}</span>
               {c.label}
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           ))}
-        </div>
+        </KdfCarousel>
       </div>
     </div>
   );
@@ -165,15 +162,7 @@ function AiCarousel({
   onOpen: (p: GalleryEngagementProduct) => void;
   onQuickAdd: (p: GalleryEngagementProduct) => void;
 }) {
-  const loop = useMemo(() => {
-    const base = products.length ? products : [];
-    if (base.length === 0) return [];
-    const min = 6;
-    const filled = base.length >= min ? base : [...base, ...base, ...base].slice(0, min);
-    return [...filled, ...filled];
-  }, [products]);
-
-  if (loop.length === 0) return null;
+  if (products.length === 0) return null;
 
   return (
     <div className="space-y-2">
@@ -186,16 +175,21 @@ function AiCarousel({
           <p className="text-sm font-bold text-foreground">Recommended picks</p>
         </div>
       </div>
-      <div className="relative overflow-hidden rounded-[1.25rem] border border-emerald-100/80 bg-gradient-to-b from-white/95 to-emerald-50/30 py-3 shadow-md ring-1 ring-emerald-900/[0.04]">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-white to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-white to-transparent" />
-        <div className="flex w-max gap-3 px-3 animate-kdf-pdp-marquee-ltr hover:[animation-play-state:paused] [animation-duration:56s]">
-          {loop.map((p, i) => {
+      <div className="relative overflow-hidden rounded-[1.25rem] border border-emerald-100/80 bg-gradient-to-b from-white/95 to-emerald-50/30 py-1 shadow-md ring-1 ring-emerald-900/[0.04]">
+        <KdfCarousel
+          mode="peek"
+          itemCount={products.length}
+          loopCopies={2}
+          resumeMs={4000}
+          fadeColor="#ffffff"
+          className="kdf-pdp-ai-carousel"
+        >
+          {products.map((p, i) => {
             const img = p.images?.[0];
             return (
               <div
                 key={`${p.id}-${i}`}
-                className="group relative w-[148px] shrink-0 overflow-hidden rounded-2xl border border-gray-100/90 bg-white shadow-md ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#5FA800]/15 hover:ring-[#5FA800]/25 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                className="kdf-carousel-slide--peek kdf-pdp-pick-card group relative shrink-0 overflow-hidden rounded-2xl border border-gray-100/90 bg-white shadow-md ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#5FA800]/15 hover:ring-[#5FA800]/25 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <button type="button" onClick={() => onOpen(p)} className="block w-full text-left">
                   <div className={`relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br ${p.gradient || "from-emerald-100 to-green-200"}`}>
@@ -229,7 +223,7 @@ function AiCarousel({
               </div>
             );
           })}
-        </div>
+        </KdfCarousel>
       </div>
     </div>
   );
@@ -246,30 +240,26 @@ function DualMarqueeRow({
   onOpen: (p: GalleryEngagementProduct) => void;
   rtl?: boolean;
 }) {
-  const loop = useMemo(() => {
-    if (!products.length) return [];
-    const doubled = products.length >= 5 ? products : [...products, ...products];
-    return [...doubled, ...doubled];
-  }, [products]);
-
-  if (!loop.length) return null;
+  if (!products.length) return null;
 
   return (
-    <div className="relative overflow-hidden py-1">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[hsl(var(--background))] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[hsl(var(--background))] to-transparent" />
-      <div
-        className={`flex w-max gap-2 px-1 ${rtl ? "animate-kdf-pdp-marquee-rtl" : "animate-kdf-pdp-marquee-ltr"} hover:[animation-play-state:paused]`}
-        style={{ animationDuration: rtl ? "52s" : "46s" }}
-      >
-        {loop.map((p, i) => {
+    <KdfCarousel
+      mode="peek"
+      itemCount={products.length}
+      loopCopies={2}
+      resumeMs={4000}
+      fadeColor="hsl(var(--background))"
+      showArrows={products.length > 3}
+      className="kdf-pdp-discover-carousel"
+    >
+      {products.map((p, i) => {
           const img = p.images?.[0];
           return (
             <button
               key={`m-${p.id}-${i}`}
               type="button"
               onClick={() => onOpen(p)}
-              className="flex shrink-0 items-center gap-2 rounded-xl border border-gray-100/90 bg-white/90 py-1.5 pl-1.5 pr-3 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm transition hover:border-[#5FA800]/30 hover:shadow-md"
+              className="kdf-carousel-slide--peek flex shrink-0 items-center gap-2 rounded-xl border border-gray-100/90 bg-white/90 py-1.5 pl-1.5 pr-3 min-w-[200px] shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm transition hover:border-[#5FA800]/30 hover:shadow-md"
             >
               <span className="relative h-10 w-10 overflow-hidden rounded-lg bg-muted">
                 {img ? <img src={getImageSrc(img)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <Package className="m-2 h-6 w-6 text-muted" />}
@@ -279,8 +269,7 @@ function DualMarqueeRow({
             </button>
           );
         })}
-      </div>
-    </div>
+    </KdfCarousel>
   );
 }
 

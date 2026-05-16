@@ -40,7 +40,7 @@ export function FeaturedProductsSection({ products, loading }: FeaturedProductsS
 
         <div className="px-0 pb-2 pt-1.5 sm:px-5 sm:pb-5 sm:pt-4">
           <div className="sm:hidden">
-            <PremiumProductCarousel products={products} loading={loading} />
+            <PremiumProductCarousel products={products} loading={loading} resumeMs={4000} />
           </div>
 
           <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">

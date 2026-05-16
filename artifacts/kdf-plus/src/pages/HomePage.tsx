@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ProductCard";
 import { HotDealsSection } from "@/components/home/HotDealsSection";
 import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
+import { KdfProductCarousel } from "@/components/carousel/KdfProductCarousel";
 import { PremiumCountdown } from "@/components/home/PremiumCountdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1067,87 +1068,8 @@ function SectionHeader({
 }
 
 /* ─── Horizontal Product Carousel ───────────────────────────── */
-function ProductCarousel({ products, loading, skeletonCount = 5 }: {
-  products: Product[]; loading: boolean; skeletonCount?: number;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const scroll = (dir: "left" | "right") => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollBy({ left: dir === "right" ? 280 : -280, behavior: "smooth" });
-  };
-
-  if (loading) {
-    return (
-      <>
-        {/* Mobile skeleton: 2-col grid */}
-        <div className="flex gap-3 overflow-x-auto pb-2 sm:hidden snap-x snap-mandatory scrollbar-hide -mx-1 px-1">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex-shrink-0 w-[min(78vw,280px)] snap-start">
-              <Skeleton className="aspect-square rounded-2xl mb-2" />
-              <Skeleton className="h-3 rounded w-3/4 mb-1" />
-              <Skeleton className="h-3 rounded w-1/2" />
-            </div>
-          ))}
-        </div>
-        {/* Desktop skeleton: horizontal */}
-        <div className="hidden sm:flex gap-4 overflow-hidden">
-          {Array.from({ length: skeletonCount }).map((_, i) => (
-            <div key={i} className="flex-shrink-0 w-52">
-              <Skeleton className="aspect-square rounded-2xl mb-2" />
-              <Skeleton className="h-3 rounded w-3/4 mb-1" />
-              <Skeleton className="h-3 rounded w-1/2" />
-            </div>
-          ))}
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {/* Mobile: horizontal snap carousel (app-like browsing) */}
-      <div
-        className="flex gap-3 overflow-x-auto pb-2 sm:hidden snap-x snap-mandatory scrollbar-hide -mx-1 px-1"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        {products.map((product) => (
-          <div key={product.id} className="flex-shrink-0 w-[min(78vw,280px)] snap-start first:pl-0.5">
-            <ProductCard product={product} />
-          </div>
-        ))}
-      </div>
-
-      {/* Desktop: horizontal carousel with arrows */}
-      <div className="relative group/carousel hidden sm:block">
-        <button
-          onClick={() => scroll("left")}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-9 h-9 rounded-full bg-white shadow-lg border border-gray-100 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-all hover:scale-110"
-        >
-          <ChevronLeft className="w-4 h-4 text-gray-600" />
-        </button>
-
-        <div
-          ref={scrollRef}
-          className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide scroll-smooth"
-          style={{ scrollSnapType: "x mandatory" }}
-        >
-          {products.map((product) => (
-            <div key={product.id} className="flex-shrink-0 w-52" style={{ scrollSnapAlign: "start" }}>
-              <ProductCard product={product} />
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={() => scroll("right")}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-9 h-9 rounded-full bg-white shadow-lg border border-gray-100 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-all hover:scale-110"
-        >
-          <ChevronRight className="w-4 h-4 text-gray-600" />
-        </button>
-      </div>
-    </>
-  );
+function ProductCarousel({ products, loading }: { products: Product[]; loading: boolean }) {
+  return <KdfProductCarousel products={products} loading={loading} mode="peek" />;
 }
 
 function DealProductCard({ product }: { product: Product }) {

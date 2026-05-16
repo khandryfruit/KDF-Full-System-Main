@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import type { Product } from "@workspace/api-client-react";
 import { ProductCard } from "@/components/ProductCard";
-import { PremiumProductCarousel } from "@/components/home/PremiumProductCarousel";
+import { KdfProductCarousel } from "@/components/carousel/KdfProductCarousel";
 
 export type RecommendationSlot =
   | "relatedProducts"
@@ -77,7 +77,7 @@ export function ProductRecommendationStrip({
       </div>
 
       <div className="max-sm:-mx-0.5 sm:hidden">
-        <PremiumProductCarousel products={visible} />
+        <KdfProductCarousel products={visible} mode="peek" resumeMs={4000} />
       </div>
 
       <div className="hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3">
