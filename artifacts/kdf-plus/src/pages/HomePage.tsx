@@ -1179,7 +1179,7 @@ function DealProductCard({ product }: { product: Product }) {
             <img src={img} alt={product.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
           )}
           {discount > 0 && (
-            <span className="absolute left-2 top-2 rounded-full bg-red-500 px-2 py-1 text-[10px] font-black text-white shadow-lg">
+            <span className="kdf-discount-badge absolute left-2 top-2">
               -{discount}%
             </span>
           )}
@@ -1425,10 +1425,10 @@ function PromoBanner({
 function ProductGrid({ products, loading }: { products: Product[]; loading: boolean }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+      <div className="kdf-product-grid">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i}>
-            <Skeleton className="aspect-square rounded-2xl mb-2" />
+            <Skeleton className="mb-2 h-[200px] rounded-xl max-sm:min-h-[180px] sm:aspect-square sm:rounded-2xl" />
             <Skeleton className="h-3 rounded w-3/4 mb-1" />
             <Skeleton className="h-3 rounded w-1/2" />
           </div>
@@ -1437,7 +1437,7 @@ function ProductGrid({ products, loading }: { products: Product[]; loading: bool
     );
   }
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+    <div className="kdf-product-grid">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}
@@ -1679,8 +1679,8 @@ export default function HomePage() {
         )}
 
         {/* New Arrivals */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-          <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
+        <section className="kdf-home-section max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 pb-10">
+          <div className="overflow-hidden bg-white rounded-xl p-3 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               icon={TrendingUp}
               label="Just In"
@@ -1693,8 +1693,8 @@ export default function HomePage() {
         </section>
 
         {/* All products */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
-          <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
+        <section className="kdf-home-section max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 pb-14">
+          <div className="overflow-hidden bg-white rounded-xl p-3 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               title="All Products"
               viewAllHref="/products"

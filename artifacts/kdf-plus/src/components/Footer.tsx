@@ -303,7 +303,7 @@ function ScrollToTop() {
     <button
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="kdf-suppress-for-fullscreen-sheet fixed bottom-36 sm:bottom-28 right-4 z-[450] flex h-11 w-11 items-center justify-center rounded-full text-white shadow-[0_8px_32px_rgba(95,168,0,0.35)] ring-1 ring-white/10 transition-transform duration-200 hover:scale-105 active:scale-95 motion-reduce:transition-none"
+      className="kdf-suppress-for-fullscreen-sheet fixed z-[450] flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_8px_32px_rgba(95,168,0,0.35)] ring-1 ring-white/10 transition-transform duration-200 max-sm:bottom-[10.75rem] max-sm:right-3 sm:bottom-28 sm:right-4 sm:h-11 sm:w-11 hover:scale-105 active:scale-95 motion-reduce:transition-none"
       style={{ background: `linear-gradient(145deg, ${GREEN}, #2d5a00)` }}
       aria-label="Scroll to top"
     >

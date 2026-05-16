@@ -191,7 +191,7 @@ export default function ProductsPage() {
         <link rel="canonical" href="/kdf-plus/products" />
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
+      <main className="max-w-7xl mx-auto box-border overflow-x-hidden px-2.5 py-6 pb-24 sm:px-6 lg:px-8 sm:pb-6">
         {/* Top Bar */}
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <div>
@@ -285,7 +285,7 @@ export default function ProductsPage() {
               </Alert>
             )}
             {(isPending || (isFetching && !products.length)) && !isError ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              <div className="kdf-product-grid">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <Skeleton key={i} className="aspect-[3/4] rounded-xl" />
                 ))}
@@ -301,7 +301,7 @@ export default function ProductsPage() {
               </div>
             ) : !isError ? (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                <div className="kdf-product-grid">
                   {products.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}

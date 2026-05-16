@@ -46,7 +46,7 @@ export default function CategoryPage() {
         <link rel="canonical" href={`/kdf-plus/category/${params.slug}`} />
       </Helmet>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 sm:pb-6">
+      <main className="max-w-7xl mx-auto box-border overflow-x-hidden px-2.5 py-6 pb-24 sm:px-6 lg:px-8 sm:pb-6">
         <div className="mb-6 flex items-center gap-3">
           <Link href="/products">
             <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="link-back-products">
@@ -81,7 +81,7 @@ export default function CategoryPage() {
         )}
 
         {(isPending || (isFetching && !products.length)) && !isError ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+          <div className="kdf-product-grid">
             {Array.from({ length: 10 }).map((_, i) => (
               <Skeleton key={i} className="aspect-[3/4] rounded-xl" />
             ))}
@@ -96,7 +96,7 @@ export default function CategoryPage() {
             </Link>
           </div>
         ) : !isError ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+          <div className="kdf-product-grid">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
