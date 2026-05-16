@@ -344,7 +344,7 @@ const SYSTEM_USER_STEPS = [
   },
   {
     n: 7, icon: "🔗", title: "Configure Webhook in Meta",
-    desc: "In your App → WhatsApp → Configuration → Webhooks: paste the Webhook URL and Verify Token from the panel above. Subscribe to: messages, message_deliveries, message_reads, messaging_postbacks.",
+    desc: "In your App → WhatsApp → Configuration → Webhooks: paste the Webhook URL and Verify Token from the panel above. Subscribe to: messages, message_template_status_update, message_template_quality_update.",
   },
 ];
 function MetaSetupGuide() {
@@ -1885,7 +1885,7 @@ export default function WhatsAppPage() {
     { id: "templates",     label: "Templates",       icon: FileText },
     { id: "logs",          label: "Message Logs",    icon: Phone },
     { id: "qr",            label: "QR Code",         icon: QrCode },
-    { id: "debug",         label: "Debug Panel",     icon: Bug },
+    { id: "debug",         label: "Health Monitor",  icon: Activity },
   ];
 
   const SaveBar = () => (
@@ -2713,9 +2713,8 @@ export default function WhatsAppPage() {
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-blue-800">
                 <strong>Subscribe to these fields in Meta:</strong>{" "}
                 <code className="bg-blue-100 px-1 rounded">messages</code>{" "}
-                <code className="bg-blue-100 px-1 rounded">message_deliveries</code>{" "}
-                <code className="bg-blue-100 px-1 rounded">message_reads</code>{" "}
-                <code className="bg-blue-100 px-1 rounded">messaging_postbacks</code>
+                <code className="bg-blue-100 px-1 rounded">message_template_status_update</code>{" "}
+                <code className="bg-blue-100 px-1 rounded">message_template_quality_update</code>
               </div>
               {/* Test webhook */}
               <div className="flex gap-2 pt-1">
@@ -3249,9 +3248,139 @@ export default function WhatsAppPage() {
       {/* ── DEBUG TAB ── */}
       {tab === "debug" && (
         <div className="space-y-5">
-          <div>
-            <h2 className="text-lg font-bold">Debug Panel</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Diagnose WhatsApp API connection issues and inspect error logs</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">WhatsApp Health Monitor</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Live automation status, exact failure reasons, alerts, retries, and Shopify order WhatsApp tracking</p>
+            </div>
+            {waMonitoring?.health && (
+              <div className={`px-4 py-2 rounded-2xl border text-sm font-bold inline-flex items-center gap-2 w-fit ${
+                waMonitoring.health.overall === "connected"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : waMonitoring.health.overall === "disconnected"
+                    ? "bg-red-50 border-red-200 text-red-800"
+                    : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}>
+                {waMonitoring.health.overall === "connected" ? <CheckCircle2 className="w-4 h-4" /> : waMonitoring.health.overall === "disconnected" ? <WifiOff className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                {waMonitoring.health.statusLabel}
+              </div>
+            )}
+          </div>
+
+          {/* ── Permanent health dashboard ── */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#25D366]" /> Real-time WhatsApp status dashboard
+              </h3>
+              <Button variant="outline" size="sm" onClick={() => { refetchWaMonitoring(); refetchWaDiagnostics(); }} disabled={monitoringLoading || diagnosticsLoading} className="gap-1.5">
+                <RefreshCw className={`w-3.5 h-3.5 ${monitoringLoading || diagnosticsLoading ? "animate-spin" : ""}`} />Refresh
+              </Button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {!waMonitoring?.health ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading health report…
+                </div>
+              ) : (
+                <>
+                  {waMonitoring.health.mainIssue && (
+                    <div className={`rounded-xl border px-4 py-3 ${
+                      waMonitoring.health.mainIssue.status === "down"
+                        ? "bg-red-50 border-red-200 text-red-900"
+                        : "bg-amber-50 border-amber-200 text-amber-900"
+                    }`}>
+                      <p className="text-sm font-bold">Why automation needs attention: {waMonitoring.health.mainIssue.reason}</p>
+                      <p className="text-xs mt-1">{waMonitoring.health.mainIssue.action}</p>
+                    </div>
+                  )}
+
+                  <div className="grid md:grid-cols-3 gap-3">
+                    {(waMonitoring.health.checks ?? []).map((c: any) => (
+                      <div key={c.id} className={`rounded-xl border px-4 py-3 ${
+                        c.status === "ok" ? "border-emerald-200 bg-emerald-50/50" :
+                        c.status === "down" ? "border-red-200 bg-red-50/50" :
+                        "border-amber-200 bg-amber-50/50"
+                      }`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-sm">{c.label}</p>
+                          <Badge className={
+                            c.status === "ok" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" :
+                            c.status === "down" ? "bg-red-100 text-red-800 hover:bg-red-100" :
+                            "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                          }>
+                            {c.status === "ok" ? "OK" : c.status === "down" ? "Down" : "Warning"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{c.reason}</p>
+                        <p className="text-xs font-medium mt-2">{c.action}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: "Last successful", value: waMonitoring.health.metrics?.lastSuccessfulMessageAt ? new Date(waMonitoring.health.metrics.lastSuccessfulMessageAt).toLocaleString() : "Never" },
+                      { label: "Last failed", value: waMonitoring.health.metrics?.lastFailedMessageAt ? new Date(waMonitoring.health.metrics.lastFailedMessageAt).toLocaleString() : "None" },
+                      { label: "Retry backlog", value: waMonitoring.health.metrics?.retryBacklog ?? 0, warn: (waMonitoring.health.metrics?.retryBacklog ?? 0) > 0 },
+                      { label: "Queue stuck", value: waMonitoring.health.metrics?.stuckSent ?? 0, warn: (waMonitoring.health.metrics?.stuckSent ?? 0) > 0 },
+                    ].map((m) => (
+                      <div key={m.label} className={`rounded-lg border px-3 py-2.5 ${m.warn ? "border-amber-200 bg-amber-50/50" : "border-border bg-muted/30"}`}>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</p>
+                        <p className="text-sm font-bold tabular-nums break-words">{m.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(waMonitoring.health.rootCauses?.length ?? 0) > 0 && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/50 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-red-100">
+                        <p className="text-sm font-bold text-red-900">Exact failure reasons</p>
+                        <p className="text-xs text-red-700">No more generic “Failed” messages. These are classified from Meta responses and webhook errors.</p>
+                      </div>
+                      <div className="divide-y divide-red-100 max-h-72 overflow-y-auto">
+                        {waMonitoring.health.rootCauses.slice(0, 8).map((issue: any, idx: number) => (
+                          <div key={`${issue.source}-${issue.id}-${idx}`} className="px-4 py-3 text-sm">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-semibold text-red-900">{issue.title}</p>
+                                <p className="text-xs text-red-800 mt-1">{issue.detail}</p>
+                              </div>
+                              <Badge variant="outline" className="text-[10px] shrink-0">{issue.code}</Badge>
+                            </div>
+                            <p className="text-xs font-medium text-red-900 mt-2">Fix: {issue.actionRequired}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold">Shopify + WhatsApp order monitoring</p>
+                        <p className="text-xs text-muted-foreground">Tracks order received, confirmation sent, pending/stuck, failures, and retry attempts.</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => window.location.href = "/shopify/orders"}>Open orders</Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4">
+                      {[
+                        { label: "Order WA events", value: waMonitoring.health.orderMonitoring?.orders_with_wa_24h ?? 0 },
+                        { label: "Confirmations sent", value: waMonitoring.health.orderMonitoring?.order_wa_sent_24h ?? 0 },
+                        { label: "Failed", value: waMonitoring.health.orderMonitoring?.order_wa_failed_24h ?? 0, warn: (waMonitoring.health.orderMonitoring?.order_wa_failed_24h ?? 0) > 0 },
+                        { label: "Pending stuck", value: waMonitoring.health.orderMonitoring?.order_wa_pending_stuck ?? 0, warn: (waMonitoring.health.orderMonitoring?.order_wa_pending_stuck ?? 0) > 0 },
+                        { label: "Retry attempts", value: waMonitoring.health.orderMonitoring?.order_wa_retry_attempts ?? 0 },
+                      ].map((m) => (
+                        <div key={m.label} className={`rounded-lg border px-3 py-2.5 ${m.warn ? "border-red-200 bg-red-50/50" : "border-border bg-muted/30"}`}>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.label}</p>
+                          <p className={`text-lg font-bold tabular-nums ${m.warn ? "text-red-700" : ""}`}>{m.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* ── 24h monitoring snapshot ── */}
@@ -3469,7 +3598,7 @@ export default function WhatsAppPage() {
                     { step: "1", text: <>Go to <strong>developers.facebook.com</strong> → Your App → <strong>WhatsApp → Configuration</strong></> },
                     { step: "2", text: <>Under <strong>Webhook</strong>, click <strong>Edit</strong> → paste the <strong>Callback URL</strong> above</> },
                     { step: "3", text: <>Paste the <strong>Verify Token</strong> above into the Verify Token field → click <strong>Verify and Save</strong></> },
-                    { step: "4", text: <>Under <strong>Webhook Fields</strong>, click <strong>Manage</strong> → Subscribe to: <code className="bg-blue-100 px-1 rounded">messages</code>, <code className="bg-blue-100 px-1 rounded">message_deliveries</code>, <code className="bg-blue-100 px-1 rounded">message_reads</code></> },
+                    { step: "4", text: <>Under <strong>Webhook Fields</strong>, click <strong>Manage</strong> → Subscribe to: <code className="bg-blue-100 px-1 rounded">messages</code>, <code className="bg-blue-100 px-1 rounded">message_template_status_update</code>, <code className="bg-blue-100 px-1 rounded">message_template_quality_update</code></> },
                     { step: "5", text: <>Click <strong>Test Webhook</strong> above — if it passes, Meta can deliver messages to your server</> },
                   ].map(({ step, text }) => (
                     <li key={step} className="flex items-start gap-3">

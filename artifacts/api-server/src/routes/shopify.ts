@@ -274,6 +274,21 @@ async function getActiveStore() {
   return store ?? null;
 }
 
+function normalizeShopDomain(domain: string | null | undefined): string {
+  return String(domain ?? "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+async function findStoreByShopDomain(shopDomain: string) {
+  const normalized = normalizeShopDomain(shopDomain);
+  if (!normalized) return null;
+  const stores = await db.select().from(shopifyStoresTable);
+  return stores.find((s) => normalizeShopDomain(s.shopDomain) === normalized) ?? null;
+}
+
 /* ═══════════════════════════════════════════════════════
    STORE CONFIG
 ══════════════════════════════════════════════════════ */
@@ -2426,9 +2441,6 @@ function generateShopifyTrackingId(slug: string): string {
 ══════════════════════════════════════════════════════ */
 
 router.post("/shopify/webhook", async (req, res) => {
-  /* Always respond 200 immediately to acknowledge receipt */
-  res.status(200).send("ok");
-
   const topic = (req.headers["x-shopify-topic"] as string) ?? "unknown";
   const shopDomain = (req.headers["x-shopify-shop-domain"] as string) ?? "";
   const hmacHeader = (req.headers["x-shopify-hmac-sha256"] as string) ?? "";
@@ -2437,16 +2449,31 @@ router.post("/shopify/webhook", async (req, res) => {
 
   try {
     /* 1. Look up store */
-    const [store] = await db
-      .select()
-      .from(shopifyStoresTable)
-      .where(ilike(shopifyStoresTable.shopDomain, shopDomain))
-      .limit(1);
+    const store = await findStoreByShopDomain(shopDomain);
 
     /* 2. HMAC verification — mandatory in production */
     const isProd = process.env.NODE_ENV === "production";
+    if (!store) {
+      await db.insert(shopifyWebhookLogsTable).values({
+        storeId: null,
+        topic: `UNKNOWN_SHOP:${topic}`,
+        shopifyId: String(payload?.id ?? ""),
+        payload: { shopDomain, normalizedShopDomain: normalizeShopDomain(shopDomain), payload },
+        processed: false,
+        error: "No configured Shopify store matched webhook shop domain",
+      }).catch(() => {});
+      return res.status(isProd ? 404 : 200).send(isProd ? "unknown shop" : "ok");
+    }
     if (isProd && (!store?.webhookSecret || !rawBody || !hmacHeader)) {
-      return;
+      await db.insert(shopifyWebhookLogsTable).values({
+        storeId: store.id,
+        topic: `REJECTED:${topic}`,
+        shopifyId: String(payload?.id ?? ""),
+        payload: { reason: "missing_webhook_secret_or_hmac", shopDomain },
+        processed: false,
+        error: "Missing Shopify webhook secret/raw body/HMAC",
+      }).catch(() => {});
+      return res.status(401).send("missing hmac");
     }
     if (store?.webhookSecret && rawBody && hmacHeader) {
       const valid = verifyShopifyHmac(store.webhookSecret, rawBody, hmacHeader);
@@ -2459,10 +2486,10 @@ router.post("/shopify/webhook", async (req, res) => {
           processed: false,
           error: "HMAC signature verification failed",
         }).catch(() => {});
-        return;
+        return res.status(401).send("invalid hmac");
       }
     } else if (isProd) {
-      return;
+      return res.status(401).send("missing hmac");
     }
 
     /* 3. Log webhook receipt */
@@ -2474,14 +2501,19 @@ router.post("/shopify/webhook", async (req, res) => {
       processed: false,
     }).returning({ id: shopifyWebhookLogsTable.id }).catch(() => [{ id: undefined }] as any);
 
-    /* 4. Process asynchronously (don't block the already-sent response) */
-    if (store) {
-      setImmediate(() =>
-        processShopifyWebhookPayload(topic, store, payload, logRow?.id).catch(() => {}),
-      );
-    }
-  } catch {
-    /* silently swallow — response already sent */
+    /* 4. Acknowledge only after verification + durable log, then process asynchronously. */
+    res.status(200).send("ok");
+    setImmediate(() =>
+      processShopifyWebhookPayload(topic, store, payload, logRow?.id).catch(async (err) => {
+        await db.update(shopifyWebhookLogsTable)
+          .set({ processed: false, error: err instanceof Error ? err.message : String(err) })
+          .where(eq(shopifyWebhookLogsTable.id, logRow?.id ?? -1))
+          .catch(() => {});
+      }),
+    );
+  } catch (err) {
+    req.log?.error(err, "Shopify webhook receipt failed before ack");
+    if (!res.headersSent) res.status(500).send("webhook receipt failed");
   }
 });
 

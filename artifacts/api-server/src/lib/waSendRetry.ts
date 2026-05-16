@@ -15,13 +15,15 @@ let timer: ReturnType<typeof setInterval> | null = null;
 async function processFailedMessageRetries() {
   try {
     const rows = await db.execute(sql`
-      SELECT id, phone, message, template_name AS "templateName", response
+      SELECT id, phone, message, template_name AS "templateName", response, retry_count AS "retryCount"
       FROM whatsapp_logs
       WHERE status = 'failed'
         AND (template_name IS NULL OR (template_name NOT LIKE 'incoming%' AND template_name NOT LIKE 'auto_retry:%'))
         AND message IS NOT NULL
         AND message NOT LIKE '[template]%'
         AND created_at > NOW() - INTERVAL '48 hours'
+        AND COALESCE(retry_count, 0) < ${MAX_RETRIES}
+        AND (last_retry_at IS NULL OR last_retry_at < NOW() - INTERVAL '5 minutes')
       ORDER BY created_at ASC
       LIMIT ${BATCH}
     `);
@@ -32,12 +34,13 @@ async function processFailedMessageRetries() {
       message: string;
       templateName: string | null;
       response: string | null;
+      retryCount: number | null;
     }>) {
       if (!row.phone || !row.message) continue;
-      let retryCount = 0;
+      let retryCount = Number(row.retryCount ?? 0);
       try {
         const parsed = row.response ? JSON.parse(row.response) : {};
-        retryCount = Number(parsed?.autoRetryCount ?? 0);
+        retryCount = Math.max(retryCount, Number(parsed?.autoRetryCount ?? 0));
       } catch { /* ignore */ }
       if (retryCount >= MAX_RETRIES) continue;
 
@@ -51,7 +54,9 @@ async function processFailedMessageRetries() {
         UPDATE whatsapp_logs
         SET status = ${ok ? "sent" : "failed"},
             delivery_status = ${ok ? "sent" : "failed"},
-            response = ${JSON.stringify({ autoRetryCount: retryCount + 1, lastRetryAt: new Date().toISOString() })}
+            retry_count = COALESCE(retry_count, 0) + 1,
+            last_retry_at = NOW(),
+            response = ${JSON.stringify({ autoRetryCount: retryCount + 1, lastRetryAt: new Date().toISOString(), autoRecovery: true })}
         WHERE id = ${row.id}
       `).catch(() => {});
     }

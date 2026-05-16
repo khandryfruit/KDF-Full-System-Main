@@ -14,11 +14,19 @@ import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { verifyMetaWebhookSignatureAny, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
 import { getMetaAppSecrets, getMetaAppSecret } from "../lib/waSecrets";
+import { buildWhatsappHealthReport } from "../lib/whatsappHealth.js";
+import { classifyWaFailure } from "../lib/waFailureClassifier.js";
+import { createAdminAlert } from "../lib/adminAlerts.js";
 
 const router = Router();
 
 /* ─── In-memory webhook payload log (last 50) ────────── */
 const recentWebhookPayloads: Array<{ ts: string; body: unknown }> = [];
+
+export function rememberWhatsappWebhookPayload(body: unknown): void {
+  recentWebhookPayloads.unshift({ ts: new Date().toISOString(), body });
+  if (recentWebhookPayloads.length > 50) recentWebhookPayloads.pop();
+}
 
 /* ─── Helper: get OpenAI client (DB key or OPENAI_API_KEY env) ────────── */
 async function getOpenAIClient() {
@@ -147,6 +155,12 @@ router.post("/webhooks/whatsapp", async (req, res) => {
         error: "invalid_hmac_signature",
         signature: signature ?? null,
       }).catch(() => {});
+      void createAdminAlert({
+        title: "WhatsApp webhook failed: App Secret mismatch",
+        message: "Reason: Customer message webhook rejected because Meta HMAC signature did not match.\nAction: Copy the Meta App Secret into WhatsApp API Settings or META_APP_SECRET, then redeploy.",
+        type: "wa_health",
+        dedupeMinutes: 30,
+      });
       res.sendStatus(403);
       return;
     }
@@ -164,8 +178,7 @@ router.post("/webhooks/whatsapp", async (req, res) => {
   res.sendStatus(200);
   try {
     const body = req.body as any;
-    recentWebhookPayloads.unshift({ ts: new Date().toISOString(), body });
-    if (recentWebhookPayloads.length > 50) recentWebhookPayloads.pop();
+    rememberWhatsappWebhookPayload(body);
     if (body?.object !== "whatsapp_business_account") {
       req.log?.debug({ object: body?.object }, "WA webhook ignored: not whatsapp_business_account");
       return;
@@ -191,6 +204,42 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { errors: value.errors, metadata: value.metadata },
             error: "meta_webhook_value_errors",
           }).catch(() => {});
+        }
+
+        if (change?.field === "message_template_status_update" || change?.field === "message_template_quality_update") {
+          const templateName = String(value.message_template_name ?? value.name ?? value.template_name ?? "").trim();
+          const templateId = String(value.message_template_id ?? value.template_id ?? value.id ?? "").trim();
+          const language = String(value.message_template_language ?? value.language ?? "").trim();
+          const event = String(value.event ?? value.status ?? value.quality_score ?? "").toLowerCase();
+          const reason = value.reason ?? value.rejection_reason ?? value.disable_info ?? value.other_info ?? null;
+          const approvalStatus =
+            event.includes("approved") ? "approved" :
+            event.includes("rejected") ? "rejected" :
+            event.includes("paused") ? "paused" :
+            event.includes("disabled") ? "disabled" :
+            event.includes("pending") ? "pending" :
+            event || "unknown";
+
+          if (templateName || templateId) {
+            await db.execute(sql`
+              UPDATE whatsapp_templates
+              SET approval_status = ${approvalStatus},
+                  rejection_reason = ${reason ? JSON.stringify(reason).slice(0, 1000) : null},
+                  meta_template_id = COALESCE(NULLIF(${templateId}, ''), meta_template_id)
+              WHERE (${templateId} <> '' AND meta_template_id = ${templateId})
+                 OR (${templateName} <> '' AND name = ${templateName} AND (${language} = '' OR language = ${language}))
+            `).catch((err: unknown) => log?.warn({ err, templateName, templateId }, "WA template status update failed"));
+          }
+          log?.info({ field: change.field, templateName, templateId, language, approvalStatus }, "WA template webhook status update");
+          if (approvalStatus === "rejected" || approvalStatus === "paused" || approvalStatus === "disabled") {
+            void createAdminAlert({
+              title: `WhatsApp template ${approvalStatus}: ${templateName || templateId || "unknown"}`,
+              message: `Reason: Meta reported template status ${approvalStatus}${reason ? ` (${JSON.stringify(reason).slice(0, 300)})` : ""}.\nAction: Open WhatsApp Templates, fix the template, submit again, then retry failed messages.`,
+              type: "wa_health",
+              dedupeMinutes: 60,
+            });
+          }
+          continue;
         }
 
         /* ── Delivery status updates ── */
@@ -312,7 +361,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             message: rawText,
             status: "received",
             response: JSON.stringify(msg),
-          }).catch((err) => log?.warn({ err, phone, msgId }, "WA inbound whatsapp_logs insert failed"));
+          }).catch((err: unknown) => log?.warn({ err, phone, msgId }, "WA inbound whatsapp_logs insert failed"));
 
           if (phone === "unknown") continue;
 
@@ -766,7 +815,7 @@ async function handleProductCatalog(opts: {
         .limit(maxProducts * 2);
 
       /* If no keyword match, fall back to featured/in-stock */
-      const source = dbProducts.filter(p => p.stock > 0);
+      const source = dbProducts.filter((p: any) => p.stock > 0);
       const finalSource = source.length > 0 ? source : await db.select({
         id: productsTable.id, name: productsTable.name, price: productsTable.price,
         description: productsTable.description, images: productsTable.images, slug: productsTable.slug,
@@ -776,7 +825,7 @@ async function handleProductCatalog(opts: {
         .orderBy(desc(productsTable.featured))
         .limit(maxProducts);
 
-      products = finalSource.slice(0, maxProducts).map(p => ({
+      products = finalSource.slice(0, maxProducts).map((p: any) => ({
         name: p.name,
         price: `Rs. ${parseFloat(String(p.price)).toLocaleString("en-PK")}`,
         description: p.description?.slice(0, 80) ?? null,
@@ -1117,7 +1166,7 @@ async function handleAiReply(opts: {
 
         if (recentOrders.length > 0) {
           customerName = (recentOrders[0]?.shipping as any)?.name ?? "";
-          const lines = recentOrders.map(o =>
+          const lines = recentOrders.map((o: any) =>
             `  • Order #${o.orderNumber}: Status=${o.status}, Total=Rs.${o.total}${o.trackingId ? `, Tracking=${o.trackingId}` : ""}, Placed=${new Date(o.createdAt).toLocaleDateString("en-PK")}`
           );
           orderContextBlock = `\n\n[CUSTOMER CONTEXT]\nCustomer Name: ${customerName || "Unknown"}\nPhone: ${phone}\nRecent Orders:\n${lines.join("\n")}\n[END CONTEXT]`;
@@ -1502,9 +1551,12 @@ router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, re
       LIMIT 15
     `).catch(() => ({ rows: [] }));
 
+    const health = await buildWhatsappHealthReport();
+
     return res.json({
       generatedAt: new Date().toISOString(),
       serverIp,
+      health,
       templateFunnel: templateFunnel.rows,
       integration: {
         isActive: settings?.isActive ?? false,
@@ -1530,9 +1582,15 @@ router.get("/admin/whatsapp/monitoring", adminMiddleware as any, async (_req, re
         unreadTotal: Number(is?.unread_total ?? 0),
       },
       recentWebhookPayloads: recentWebhookPayloads.slice(0, 10),
-      recentFailures,
+      recentFailures: recentFailures.map((f: any) => ({
+        ...f,
+        classification: classifyWaFailure(f.failureReason ?? f.response ?? f.message),
+      })),
       recentInbound,
-      webhookFailures,
+      webhookFailures: webhookFailures.map((f: any) => ({
+        ...f,
+        classification: classifyWaFailure(f.error ?? f.payload),
+      })),
     });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
@@ -1617,7 +1675,7 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
       "OR Webhooks → Select product: WhatsApp Business Account (NOT User)",
       "Callback URL: " + (dedicatedUrl || "https://api.khanbabadryfruits.com/api/webhooks/whatsapp"),
       "Verify token: " + verifyToken,
-      "Webhook fields: subscribe to messages (+ message_deliveries, message_reads)",
+      "Webhook fields: subscribe to messages, message_template_status_update, message_template_quality_update",
       "App Secret (Basic settings) = same as WA API Settings → App Secret",
     ];
 
@@ -1636,7 +1694,7 @@ router.get("/admin/whatsapp/webhook-diagnostics", adminMiddleware as any, async 
         recommended: "Use ONE URL in Meta — prefer unified /api/meta/webhook if IG/FB also use it",
       },
       metaSetup: {
-        subscribeFields: ["messages", "message_deliveries", "message_reads"],
+        subscribeFields: ["messages", "message_template_status_update", "message_template_quality_update"],
         verifyToken: settings?.webhookVerifyToken ?? "kdfnuts_webhook_token",
         hasAppSecret: secrets.length > 0,
         phoneNumberId: settings?.phoneNumberId ?? null,
@@ -2006,7 +2064,7 @@ router.get("/admin/whatsapp/templates/by-event", adminMiddleware as any, async (
     const templates = await db.select().from(whatsappTemplatesTable);
     const byEvent: Record<string, typeof templates[0] | null> = {};
     for (const ev of EVENT_TYPES) {
-      byEvent[ev] = templates.find(t => t.triggerEvent === ev) ?? null;
+      byEvent[ev] = templates.find((t: any) => t.triggerEvent === ev) ?? null;
     }
     return res.json(byEvent);
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
@@ -2071,7 +2129,7 @@ router.post("/admin/whatsapp/templates/fix-format", adminMiddleware as any, asyn
         const newParamCount = (() => {
           const matches = body.match(/\{\{(\d+)\}\}/g);
           if (!matches) return 0;
-          const nums = matches.map(m => parseInt(m.replace(/\{\{|\}\}/g, "")));
+          const nums = matches.map((m: string) => parseInt(m.replace(/\{\{|\}\}/g, "")));
           return Math.max(...nums, 0);
         })();
 
@@ -3269,7 +3327,7 @@ router.post("/admin/whatsapp/campaigns/:id/send", adminMiddleware as any, async 
         if (r.phone && !seen.has(r.phone)) { seen.add(r.phone); phones.push({ phone: r.phone, name: r.name ?? undefined }); }
       }
     } else if (campaign.audience === "custom_phones" && campaign.customPhones) {
-      phones = campaign.customPhones.split("\n").map(p => p.trim()).filter(Boolean).map(p => ({ phone: p }));
+      phones = campaign.customPhones.split("\n").map((p: string) => p.trim()).filter(Boolean).map((p: string) => ({ phone: p }));
     } else if (campaign.audience === "chat_leads") {
       const leadsR = await db.execute(sql`SELECT phone, full_name AS name FROM chat_leads WHERE phone IS NOT NULL`) as any;
       const seen = new Set<string>();
@@ -3867,7 +3925,7 @@ router.get("/admin/wa/analytics/chatbot", adminMiddleware as any, async (req, re
       totalConversations: totalConvs, resolvedConversations: Number(conv.resolved ?? 0),
       humanModeConversations: Number(conv.human_mode_count ?? 0), botModeConversations: Number(conv.bot_mode_count ?? 0),
       resolutionRate: totalConvs > 0 ? Math.round((Number(conv.resolved ?? 0) / totalConvs) * 100) : 0,
-      topFlows: topFlows.map(f => ({ name: f.name, action: f.action, firedCount: f.firedCount, keywords: f.keywords as string[] })),
+      topFlows: topFlows.map((f: any) => ({ name: f.name, action: f.action, firedCount: f.firedCount, keywords: f.keywords as string[] })),
       dailyTrend: ((dailyR.rows ?? dailyR) as any[]).map((d: any) => ({ date: d.date, aiReplies: Number(d.ai_replies ?? 0), incoming: Number(d.incoming ?? 0) })),
       days,
     });

@@ -67,9 +67,14 @@ export const whatsappLogsTable = pgTable("whatsapp_logs", {
   messageId: text("message_id"),
   deliveryStatus: text("delivery_status"),
   templateName: text("template_name"),
+  triggerEvent: text("trigger_event"),
+  shopifyOrderId: text("shopify_order_id"),
   message: text("message"),
   status: text("status").notNull().default("pending"),
   response: text("response"),
+  failureReason: text("failure_reason"),
+  retryCount: integer("retry_count").notNull().default(0),
+  lastRetryAt: timestamp("last_retry_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

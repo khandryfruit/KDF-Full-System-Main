@@ -147,6 +147,10 @@ app.use("/api/geocode", geocodeRateLimiter);
 app.use("/api/chat", chatRateLimiter);
 app.use((req, res, next) => {
   const p = req.path ?? req.url ?? "";
+  if (p === "/api/shopify/webhook" || p === "/api/webhooks/whatsapp" || p === "/api/meta/webhook") {
+    next();
+    return;
+  }
   if (p.includes("/webhook") || p.includes("/callback") || p.includes("/payment/")) {
     webhookRateLimiter(req, res, next);
     return;

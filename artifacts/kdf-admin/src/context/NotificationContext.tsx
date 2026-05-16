@@ -293,6 +293,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         setWaUnread(d.total ?? 0);
       });
 
+      /* ── WhatsApp health alert ── */
+      es.addEventListener("wa_health_alert", (e: MessageEvent) => {
+        const d = safeJsonParse<Record<string, unknown>>(e.data, {});
+        playSound("wa_message");
+        const title = String(d.title ?? "WhatsApp Health Alert");
+        const message = String(d.message ?? "WhatsApp automation needs attention.");
+        addToast({
+          type: "system",
+          title,
+          message,
+          link: "/whatsapp",
+        });
+        sendPush(title, message, "/whatsapp");
+      });
+
       /* ── New order ── */
       es.addEventListener("new_order", (e: MessageEvent) => {
         const d = safeJsonParse<Record<string, unknown>>(e.data, {});
@@ -333,10 +348,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         addToast({
           type: "rider_update",
           title: `🚴 Rider Update`,
-          message: d.message || `Delivery status updated`,
+          message: String(d.message ?? "Delivery status updated"),
           link: "/logistics/riders",
         });
-        sendPush("Rider Update", d.message || "Delivery status changed", "/logistics/riders");
+        sendPush("Rider Update", String(d.message ?? "Delivery status changed"), "/logistics/riders");
       });
 
       /* ── Payment confirmed ── */
@@ -347,10 +362,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         addToast({
           type: "payment",
           title: `💰 Payment Received!`,
-          message: d.message || "Customer confirmed payment",
+          message: String(d.message ?? "Customer confirmed payment"),
           link: "/orders",
         });
-        sendPush("Payment Confirmed!", d.message || "Customer confirmed payment", "/orders");
+        sendPush("Payment Confirmed!", String(d.message ?? "Customer confirmed payment"), "/orders");
       });
 
       /* ── Order delivered ── */
@@ -361,10 +376,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         addToast({
           type: "delivered",
           title: `✅ Order Delivered`,
-          message: d.message || "Order delivered successfully",
+          message: String(d.message ?? "Order delivered successfully"),
           link: "/orders",
         });
-        sendPush("Order Delivered!", d.message || "Order delivered", "/orders");
+        sendPush("Order Delivered!", String(d.message ?? "Order delivered"), "/orders");
       });
 
       es.onerror = () => {

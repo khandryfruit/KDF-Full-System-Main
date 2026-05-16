@@ -1,7 +1,9 @@
 import { db, whatsappSettingsTable, whatsappLogsTable, whatsappTemplatesTable, whatsappConversationStatesTable } from "@workspace/db";
-import { eq, or, sql } from "drizzle-orm";
+import { desc, eq, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { normalizePhone } from "./waPhone";
+import { classifyWaFailure } from "./waFailureClassifier.js";
+import { createAdminAlert } from "./adminAlerts.js";
 import {
   DEFAULT_MENU_ITEMS,
   filterMenuItems,
@@ -12,8 +14,12 @@ export { normalizePhone } from "./waPhone";
 export type { WaMenuItem } from "./waMenuDefaults.js";
 export { DEFAULT_MENU_ITEMS, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 
-const WA_API_VERSION = "v22.0";
-const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`;
+const DEFAULT_WA_API_VERSION = "v22.0";
+
+function graphBase(apiVersion?: string | null): string {
+  const version = (apiVersion || DEFAULT_WA_API_VERSION).trim().replace(/^\/+/, "");
+  return `https://graph.facebook.com/${version || DEFAULT_WA_API_VERSION}`;
+}
 
 export interface WASendOptions {
   phone: string;
@@ -25,7 +31,11 @@ export interface WASendOptions {
 }
 
 export async function getSettings() {
-  const [settings] = await db.select().from(whatsappSettingsTable).limit(1);
+  const [settings] = await db
+    .select()
+    .from(whatsappSettingsTable)
+    .orderBy(desc(whatsappSettingsTable.isActive), desc(whatsappSettingsTable.updatedAt), desc(whatsappSettingsTable.id))
+    .limit(1);
   return settings ?? null;
 }
 
@@ -86,6 +96,16 @@ async function log(opts: {
   });
 }
 
+function alertCriticalFailure(classified: ReturnType<typeof classifyWaFailure>, context: string) {
+  if (classified.severity !== "disconnected") return;
+  void createAdminAlert({
+    title: `WhatsApp failed: ${classified.title}`,
+    message: `Context: ${context}\nReason: ${classified.detail}\nAction: ${classified.actionRequired}`,
+    type: "wa_health",
+    dedupeMinutes: 30,
+  });
+}
+
 /* ─── Sanitize template param value for Meta ───────────── */
 function sanitizeParam(v: string): string {
   return v.replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
@@ -107,7 +127,12 @@ export async function getApprovedTemplate(triggerEvent: string) {
 export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean> {
   try {
     const settings = await getSettings();
-    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) {
+      const classified = classifyWaFailure("WhatsApp not configured or inactive");
+      await log({ ...opts, status: "failed", failureReason: classified.detail });
+      alertCriticalFailure(classified, opts.templateName ?? "free_text_send");
+      return false;
+    }
 
     const normalizedPhone = normalizePhone(opts.phone);
     const body = {
@@ -118,7 +143,7 @@ export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean>
       text: { preview_url: false, body: opts.message },
     };
 
-    const res = await fetch(`${WA_BASE}/${settings.phoneNumberId}/messages`, {
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
       body: JSON.stringify(body),
@@ -139,12 +164,16 @@ export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean>
       return true;
     } else {
       logger.warn({ data }, "WhatsApp message failed");
-      await log({ ...opts, status: "failed", response: JSON.stringify(data) });
+      const classified = classifyWaFailure(data);
+      await log({ ...opts, status: "failed", response: JSON.stringify(data), failureReason: classified.detail });
+      alertCriticalFailure(classified, opts.templateName ?? "free_text_send");
       return false;
     }
   } catch (err) {
     logger.error(err, "WhatsApp send error");
-    await log({ ...opts, status: "failed", response: String(err) });
+    const classified = classifyWaFailure(err);
+    await log({ ...opts, status: "failed", response: String(err), failureReason: classified.detail });
+    alertCriticalFailure(classified, opts.templateName ?? "free_text_send");
     return false;
   }
 }
@@ -162,6 +191,18 @@ export async function sendWhatsAppTemplate(opts: {
   try {
     const settings = await getSettings();
     if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) {
+      const classified = classifyWaFailure("WhatsApp not configured or inactive");
+      await log({
+        phone: opts.phone,
+        templateName: opts.templateName,
+        triggerEvent: opts.triggerEvent,
+        shopifyOrderId: opts.shopifyOrderId,
+        message: `[template] ${opts.templateName}`,
+        status: "failed",
+        failureReason: classified.detail,
+        userId: opts.userId,
+      });
+      alertCriticalFailure(classified, opts.templateName);
       return { success: false, error: "WhatsApp not configured or inactive" };
     }
     const normalizedPhone = normalizePhone(opts.phone);
@@ -178,7 +219,7 @@ export async function sendWhatsAppTemplate(opts: {
       },
     };
 
-    const res = await fetch(`${WA_BASE}/${settings.phoneNumberId}/messages`, {
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
       body: JSON.stringify(body),
@@ -200,12 +241,27 @@ export async function sendWhatsAppTemplate(opts: {
       return { success: true, messageId };
     } else {
       const errMsg = data?.error?.message ?? `HTTP ${res.status}`;
+      const classified = classifyWaFailure(data);
       logger.warn({ data }, "WhatsApp template message failed");
-      await log({ phone: opts.phone, templateName: opts.templateName, triggerEvent: opts.triggerEvent, shopifyOrderId: opts.shopifyOrderId, message: `[template] ${opts.templateName}`, status: "failed", response: JSON.stringify(data) });
+      await log({ phone: opts.phone, templateName: opts.templateName, triggerEvent: opts.triggerEvent, shopifyOrderId: opts.shopifyOrderId, message: `[template] ${opts.templateName}`, status: "failed", response: JSON.stringify(data), failureReason: classified.detail });
+      alertCriticalFailure(classified, opts.templateName);
       return { success: false, error: errMsg };
     }
   } catch (err) {
     logger.error(err, "WhatsApp template send error");
+    const classified = classifyWaFailure(err);
+    await log({
+      phone: opts.phone,
+      templateName: opts.templateName,
+      triggerEvent: opts.triggerEvent,
+      shopifyOrderId: opts.shopifyOrderId,
+      message: `[template] ${opts.templateName}`,
+      status: "failed",
+      response: String(err),
+      failureReason: classified.detail,
+      userId: opts.userId,
+    });
+    alertCriticalFailure(classified, opts.templateName);
     return { success: false, error: String(err) };
   }
 }
@@ -260,7 +316,7 @@ export async function sendInteractiveMenu(opts: {
       },
     };
 
-    const res = await fetch(`${WA_BASE}/${settings.phoneNumberId}/messages`, {
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
       body: JSON.stringify(body),
@@ -311,7 +367,7 @@ export async function sendInteractiveButtons(opts: {
       },
     };
 
-    const res = await fetch(`${WA_BASE}/${settings.phoneNumberId}/messages`, {
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
       body: JSON.stringify(body),
@@ -360,7 +416,7 @@ export async function sendCtaUrlMessage(opts: {
       },
     };
 
-    const res = await fetch(`${WA_BASE}/${settings.phoneNumberId}/messages`, {
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
       body: JSON.stringify(body),

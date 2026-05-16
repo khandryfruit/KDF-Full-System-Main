@@ -620,6 +620,15 @@ router.post("/meta/webhook", async (req, res) => {
       waRow?.appSecret?.trim(),
     ].filter((s): s is string => !!s);
     const unique = [...new Set(secrets)];
+    if (unique.length === 0 && process.env.NODE_ENV === "production") {
+      logger.warn("Meta unified webhook: no WA App Secret configured — rejected in production");
+      await db.insert(waWebhookFailuresTable).values({
+        payload: req.body as Record<string, unknown>,
+        error: "missing_meta_app_secret",
+        signature: signature ?? null,
+      }).catch(() => {});
+      return res.sendStatus(403);
+    }
     if (unique.length > 0 && (!signature || !rawBody || !verifyMetaWebhookSignatureAny(rawBody, signature, unique).ok)) {
       logger.warn({ signature: signature ? "present" : "missing" }, "Meta unified webhook: invalid WA HMAC — rejected");
       await db.insert(waWebhookFailuresTable).values({
@@ -641,7 +650,8 @@ router.post("/meta/webhook", async (req, res) => {
 
     /* ── WhatsApp Business Account — route to WA processor (bypasses social settings) ── */
     if (payload.object === "whatsapp_business_account") {
-      const { processWaWebhookBody } = await import("./whatsapp.js");
+      const { processWaWebhookBody, rememberWhatsappWebhookPayload } = await import("./whatsapp.js");
+      rememberWhatsappWebhookPayload(payload);
       await processWaWebhookBody(payload, logger);
       return;
     }
