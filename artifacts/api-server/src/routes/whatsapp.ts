@@ -1505,82 +1505,21 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   source?: "shopify" | "local"; rawPrice?: number; variantLines?: string[];
   shopifyProductId?: string; variantOptions?: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }>;
 }>> {
-  const websiteUrl = "https://khanbabadryfruits.com";
-  const results: Array<any> = [];
-  const searchTerms = expandProductSearchTerms(query);
-  const matchDiagnostics: Array<{ title: string; score: number; reason: string; excludedReason?: string; source: string; roots?: string[] }> = [];
-
-  try {
-    const aliasProductIds = await searchShopifyProductIdsByAlias(query, limit * 3);
-    let shopProds: any[] = [];
-    if (aliasProductIds.length) {
-      shopProds = await fetchShopifyProductsByIds(aliasProductIds);
-    }
-    if (shopProds.length < limit) {
-      const fallback = await db.select({
-        title: shopifyProductsTable.title,
-        price: shopifyProductsTable.price,
-        compareAtPrice: shopifyProductsTable.compareAtPrice,
-        description: shopifyProductsTable.description,
-        imageUrl: shopifyProductsTable.imageUrl,
-        variants: shopifyProductsTable.variants,
-        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-        shopifyProductId: shopifyProductsTable.shopifyProductId,
-        handle: shopifyProductsTable.handle,
-        collections: shopifyProductsTable.collections,
-        tags: shopifyProductsTable.tags,
-      }).from(shopifyProductsTable)
-        .where(and(
-          eq(shopifyProductsTable.status, "active"),
-          searchTerms.length ? or(...searchTerms.flatMap((term) => [ilike(shopifyProductsTable.title, `%${term}%`), ilike(shopifyProductsTable.tags, `%${term}%`)])) : sql`false`,
-        ))
-        .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-        .limit(limit * 3);
-      const seen = new Set(shopProds.map((p) => p.shopifyProductId));
-      for (const row of fallback) {
-        if (!seen.has(row.shopifyProductId)) shopProds.push(row);
-      }
-    }
-
-    const scoredShopify = shopProds
-      .map((sp: any) => ({ sp, match: productMatchAnalysis(query, sp.title, sp.tags) }));
-    matchDiagnostics.push(...scoredShopify.map((x: any) => ({ title: x.sp.title, score: x.match.score, reason: x.match.reason, excludedReason: x.match.excludedReason, source: "shopify", roots: x.match.roots })));
-    for (const sp of scoredShopify
-      .filter((x: any) => x.match.score > 0)
-      .sort((a: any, b: any) => b.match.score - a.match.score)
-      .slice(0, limit)) {
-      const variants = formatShopifyVariants(sp.sp.variants);
-      const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(sp.sp.price);
-      const handle = sp.sp.handle || sp.sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "product";
-      results.push({
-        name: sp.sp.title,
-        price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(parseCatalogUnitPrice(sp.sp.price)),
-        compareAt: sp.sp.compareAtPrice ? formatRupees(parseCatalogUnitPrice(sp.sp.compareAtPrice)) : null,
-        description: sp.sp.description ? String(sp.sp.description).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180) : null,
-        imageUrl: sp.sp.imageUrl ?? null,
-        productUrl: `${websiteUrl}/products/${handle}`,
-        variants: variants.label,
-        variantLines: variants.lines,
-        rawPrice: basePrice,
-        inStock: (sp.sp.inventoryQuantity ?? 0) > 0 || variants.lines.length > 0,
-        source: "shopify",
-        shopifyProductId: sp.sp.shopifyProductId,
-        variantOptions: variants.options,
-      });
-    }
-  } catch { /* Shopify table may be empty */ }
+  const { searchShopifyCatalog, toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
+  const catalog = await searchShopifyCatalog(query, limit);
+  const results = toWhatsAppCatalogProducts(catalog);
 
   await logWaProcessingStep({
     step: "shopify_product_lookup",
     status: results.length ? "sent" : "failed",
-    detail: results.length ? `Shopify/live catalog lookup found ${results.length} matching product(s).` : `No exact Shopify/live catalog match for "${query}".`,
+    detail: results.length
+      ? `KDF Shopify Product Knowledge found ${results.length} match(es).`
+      : `No Shopify catalog match for "${query}".`,
     payload: {
       query,
-      normalizedQuery: normalizeCatalogProductQuery(query),
-      searchTerms,
+      engine: "shopifyProductKnowledge",
       count: results.length,
       products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })),
-      diagnostics: matchDiagnostics.slice(0, 20),
     },
     failureReason: results.length ? null : "no_matching_shopify_product",
   });
@@ -2903,7 +2842,7 @@ async function handleAiReply(opts: {
 
     let whatsappInstructions = `WhatsApp sales behavior:
 - For any product/price/variant question, use the official catalog context if provided and answer only from that data.
-- Product, variant, price, stock, discount, SKU, image, and availability data must come from synced Shopify catalog only. Never use local/manual products or guessed prices.
+- Product, variant, price, stock, discount, SKU, image, and availability data must come from ONE synced Shopify catalog (KDF Product Knowledge / shopifyProductKnowledge). Never use local/manual products or guessed prices.
 - For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
 - Product matching is strict: if customer asks one product (for example "1kg walnut"), answer only that product family and variants. Never include gift boxes, combos, mixed packs, or unrelated products unless customer explicitly asks for gift/combo/mix.

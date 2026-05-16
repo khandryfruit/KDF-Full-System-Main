@@ -494,12 +494,15 @@ router.post("/admin/shopify/sync/products", adminMiddleware, async (req, res) =>
 /** Rebuild local Shopify product alias index for WhatsApp/AI fuzzy search */
 router.post("/admin/shopify/products/rebuild-search-index", adminMiddleware, async (req, res) => {
   try {
-    const { rebuildShopifyProductAliases } = await import("../lib/shopifyProductSearch.js");
+    const { rebuildShopifyProductAliases, getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
     const result = await rebuildShopifyProductAliases();
+    const stats = await getShopifyCatalogStats();
     res.json({
       success: true,
-      message: `Product search index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
+      message: `KDF Product Knowledge index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
+      engine: "shopifyProductKnowledge",
       ...result,
+      ...stats,
     });
   } catch (err) {
     req.log.error(err);

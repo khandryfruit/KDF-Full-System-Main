@@ -81,6 +81,7 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
       title: shopifyProductsTable.title,
       tags: shopifyProductsTable.tags,
       handle: shopifyProductsTable.handle,
+      variants: shopifyProductsTable.variants,
     })
     .from(shopifyProductsTable)
     .where(where)
@@ -126,6 +127,13 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
         pushAlias(id, root, "synonym_root");
         for (const syn of synonyms) pushAlias(id, syn, "synonym");
       }
+    }
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    for (const v of variants as Array<{ title?: string }>) {
+      const vt = String(v?.title ?? "").trim();
+      if (!vt || /^default title$/i.test(vt)) continue;
+      pushAlias(id, vt, "variant");
+      for (const token of tokenizeForAliases(vt)) pushAlias(id, token, "variant_token");
     }
   }
 
@@ -176,6 +184,7 @@ export async function fetchShopifyProductsByIds(productIds: string[]) {
   if (!productIds.length) return [];
   return db
     .select({
+      id: shopifyProductsTable.id,
       title: shopifyProductsTable.title,
       price: shopifyProductsTable.price,
       compareAtPrice: shopifyProductsTable.compareAtPrice,

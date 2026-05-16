@@ -98,9 +98,10 @@ TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
 11. TRACKING/ORDER STATUS — CRITICAL: When customer asks about their order, parcel, tracking, delivery status, "mera order", "kahan hai", "dispatch hua", "delivered", "tracking number", "courier", "parcel", "shipment" → call track_order IMMEDIATELY. Pass any phone/order number they mention. If no details provided, ask ONCE for their phone number (03xx format), then call track_order with the phone.
 
 CRITICAL PRODUCT SEARCH RULES:
+- All product names, prices, and variants come from ONE synced Shopify catalog (KDF Product Knowledge). Never guess prices.
 - Pass the EXACT product name/keyword to search_products. If customer says "اخروٹ", pass query="اخروٹ". If they say "walnuts", pass query="walnuts". If they say "akhrot", pass query="akhrot".
 - NEVER broaden the search. If customer asks for walnuts, search ONLY "walnuts" — not "nuts" or "dry fruits".
-- The search system automatically handles Urdu↔English translation (اخروٹ=walnuts, بادام=almonds, کاجو=cashews, پستہ=pistachios, کشمش=raisins, خشک میوہ=dry fruits).
+- The search system automatically handles Urdu↔English translation (اخروٹ=walnuts, بادام=almonds, کاجو=cashews, پستہ=pistachios, کشمش=raisins) and variant weights (500g, 1kg).
 - Results are already filtered to show only the most relevant products. Trust the results shown.
 - NEVER list product names, prices, or variants as text in your reply. After calling search_products, write ONLY 1 short sentence (e.g. "Yeh raha badam ka collection!" or "Walnut products mil gaye!"). The product cards appear automatically — do NOT repeat the info in text.`;
 
@@ -408,100 +409,12 @@ router.post("/chat/message", async (req, res) => {
 
         if (fn === "search_products") {
           const query = String(args.query ?? "");
-          const terms = expandQuery(query);
           const sellers = await getBestSellers();
-          const rows = await db
-            .select({
-              id: shopifyProductsTable.id,
-              title: shopifyProductsTable.title,
-              price: shopifyProductsTable.price,
-              compareAtPrice: shopifyProductsTable.compareAtPrice,
-              imageUrl: shopifyProductsTable.imageUrl,
-              variants: shopifyProductsTable.variants,
-              inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-              productType: shopifyProductsTable.productType,
-              tags: shopifyProductsTable.tags,
-            })
-            .from(shopifyProductsTable)
-            .where(and(
-              eq(shopifyProductsTable.status, "active"),
-              or(
-                ...terms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)),
-                ...terms.map(t => sql`coalesce(${shopifyProductsTable.tags}::text,'') ILIKE ${`%${t}%`}`),
-                ...terms.map(t => ilike(shopifyProductsTable.productType, `%${t}%`)),
-              )
-            ))
-            .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-            .limit(18);
-
-          if (rows.length > 0) {
-            // Score each product by relevance:
-            // 30 = search term is at the VERY START of title (primary product, e.g. "Walnut Kernels...")
-            // 20 = search term within first 35 chars of title (product is primarily this item)
-            // 10 = search term appears later in title (likely ingredient in "Gift Box - Almonds, Walnuts...")
-            //  5 = product type matches
-            //  1 = tag-only match (lowest priority)
-            const scored = rows.map(p => {
-              const titleLow = p.title.toLowerCase();
-              const typeLow = (p.productType ?? "").toLowerCase();
-              let relevance = 0;
-              for (const t of terms) {
-                const tl = t.toLowerCase();
-                const pos = titleLow.indexOf(tl);
-                if (pos !== -1) {
-                  if (pos === 0) relevance = Math.max(relevance, 30);
-                  else if (pos <= 28) relevance = Math.max(relevance, 20);
-                  else relevance = Math.max(relevance, 10);
-                }
-              }
-              if (relevance === 0) {
-                for (const t of terms) {
-                  if (typeLow.includes(t.toLowerCase())) { relevance = 5; break; }
-                }
-              }
-              if (relevance === 0) relevance = 1;
-              return { ...p, relevance };
-            });
-
-            // If primary matches exist (term in first 35 chars of title), drop all weaker matches
-            const hasPrimaryMatch = scored.some(p => p.relevance >= 20);
-            const filtered = hasPrimaryMatch
-              ? scored.filter(p => p.relevance >= 20)
-              : scored.filter(p => p.relevance >= 5).length > 0
-                ? scored.filter(p => p.relevance >= 5)
-                : scored;
-
-            const topSellers = Array.from(sellers.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
-            const ranked = filtered
-              .map(p => ({ ...p, sellerScore: sellers.get(p.title.toLowerCase()) ?? 0 }))
-              .sort((a, b) => b.relevance - a.relevance || b.sellerScore - a.sellerScore)
-              .slice(0, 6);
-            foundProducts = ranked.map(p => {
-              const vars = (p.variants as any[]) ?? [];
-              const minPrice = vars.length > 0 ? Math.min(...vars.map((v: any) => Number(v.price))) : Number(p.price);
-              const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
-              const discount = compareAt && compareAt > minPrice ? Math.round(((compareAt - minPrice) / compareAt) * 100) : null;
-              const sellerRank = topSellers.indexOf(p.title.toLowerCase());
-              const badge = sellerRank >= 0 && sellerRank < 3 ? "Best Seller" : sellerRank < 7 ? "Popular" : p.score > 200 ? "Trending" : null;
-              const inStock = (p.inventoryQuantity ?? 0) > 0 || vars.some((v: any) => (v.inventoryQuantity ?? 0) > 0);
-              return {
-                id: p.id,
-                name: p.title,
-                price: minPrice,
-                originalPrice: compareAt,
-                discount,
-                stock: inStock ? Math.max(p.inventoryQuantity ?? 0, 1) : 0,
-                variants: vars.map((v: any) => ({ id: String(v.id), name: v.title, value: v.title, price: Number(v.price), stock: v.inventoryQuantity ?? 0 })),
-                image: p.imageUrl ?? null,
-                badge,
-              };
-            });
-            toolResult = ranked.map(p => {
-              const vs = (p.variants as any[]) ?? [];
-              const varStr = vs.length > 0 ? ` | ${vs.map((v: any) => `${v.title} Rs.${v.price}`).join(", ")}` : "";
-              const stock = (p.inventoryQuantity ?? 0) > 0 ? "in stock" : "limited";
-              return `${p.title}: Rs. ${Number(p.price).toLocaleString()} (${stock})${varStr}`;
-            }).join("\n");
+          const { searchShopifyCatalog, toWebsiteChatProductCards, formatShopifyCatalogForOpenAI } = await import("../lib/shopifyProductKnowledge.js");
+          const catalog = await searchShopifyCatalog(query, 6);
+          if (catalog.length > 0) {
+            foundProducts = toWebsiteChatProductCards(catalog, sellers);
+            toolResult = formatShopifyCatalogForOpenAI(catalog);
           } else {
             foundProducts = [];
             toolResult = "No products found matching that search.";
@@ -545,43 +458,26 @@ router.post("/chat/message", async (req, res) => {
           const reqItems: Array<{ query: string; variantHint?: string; qty: number }> = args.items ?? [];
           const autoCartResult: any[] = [];
 
-          // Helper: resolve a product query to a cart item (uses shopify_products)
+          // Helper: resolve via unified KDF Shopify Product Knowledge
           async function resolveProduct(query: string, variantHint: string | undefined, qty: number) {
-            const terms = expandQuery(query);
-            const rows = await db
-              .select({
-                id: shopifyProductsTable.id,
-                title: shopifyProductsTable.title,
-                price: shopifyProductsTable.price,
-                variants: shopifyProductsTable.variants,
-                imageUrl: shopifyProductsTable.imageUrl,
-                inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-              })
-              .from(shopifyProductsTable)
-              .where(and(
-                eq(shopifyProductsTable.status, "active"),
-                or(...terms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)))
-              ))
-              .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-              .limit(1);
-            if (rows.length === 0) return null;
-            const product = rows[0];
-            const variants = (product.variants as any[]) ?? [];
-            let selectedVariant: any = null;
-            if (variants.length > 0 && variantHint) {
+            const { searchShopifyCatalog } = await import("../lib/shopifyProductKnowledge.js");
+            const hits = await searchShopifyCatalog(query, 1);
+            const product = hits[0];
+            if (!product) return null;
+            let selectedVariant = product.variantOptions[0] ?? null;
+            if (variantHint && product.variantOptions.length) {
               const hint = variantHint.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g").replace(/gm/g, "g");
-              selectedVariant = variants.find((v: any) => {
-                const vt = (v.title ?? "").toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
+              selectedVariant = product.variantOptions.find((v) => {
+                const vt = v.title.toLowerCase().replace(/\s/g, "").replace(/kilo/g, "kg").replace(/gram/g, "g");
                 return vt.includes(hint) || hint.includes(vt);
-              });
+              }) ?? selectedVariant;
             }
-            if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
-            const price = selectedVariant?.price ? Number(selectedVariant.price) : Number(product.price);
+            const price = selectedVariant?.price ?? product.rawPrice;
             return {
               productId: product.id,
-              name: product.title,
+              name: product.name,
               variant: selectedVariant?.title ?? null,
-              variantId: selectedVariant?.id ? String(selectedVariant.id) : null,
+              variantId: selectedVariant?.id ?? null,
               price,
               qty: Number(qty) || 1,
               image: product.imageUrl ?? null,
@@ -1298,48 +1194,9 @@ router.get("/chat/products/search", async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 12, 24);
     if (!q) return res.json({ products: [] });
 
-    const rows = await db.select({
-      id: shopifyProductsTable.id,
-      title: shopifyProductsTable.title,
-      price: shopifyProductsTable.price,
-      compareAtPrice: shopifyProductsTable.compareAtPrice,
-      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-      imageUrl: shopifyProductsTable.imageUrl,
-      variants: shopifyProductsTable.variants,
-    })
-    .from(shopifyProductsTable)
-    .where(and(
-      eq(shopifyProductsTable.status, "active"),
-      or(
-        ilike(shopifyProductsTable.title, `%${q}%`),
-        ilike(shopifyProductsTable.title, `%${expandQuery(q)}%`),
-      )
-    ))
-    .orderBy(desc(shopifyProductsTable.updatedAt))
-    .limit(limit);
-
-    const products = rows.map(p => {
-      const price = Number(p.price) || 0;
-      const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
-      const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : null;
-      const vars = (p.variants as any[]) ?? [];
-      return {
-        id: p.id,
-        name: p.title,
-        price,
-        originalPrice: compareAt,
-        discount,
-        stock: p.inventoryQuantity ?? 0,
-        variants: vars.map((v: any) => ({
-          id: String(v.id),
-          value: v.title,
-          price: Number(v.price) || price,
-          stock: v.inventoryQuantity ?? 0,
-        })),
-        image: p.imageUrl ?? null,
-      };
-    });
-
+    const { searchShopifyCatalog, toWebsiteChatProductCards } = await import("../lib/shopifyProductKnowledge.js");
+    const catalog = await searchShopifyCatalog(q, limit);
+    const products = toWebsiteChatProductCards(catalog);
     return res.json({ products });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
@@ -1382,37 +1239,9 @@ Rules:
       .replace(/[^a-z\s]/g, "").trim();
     if (!detected || detected === "unknown") return res.json({ detected: "unknown", products: [] });
 
-    const expanded = expandQuery(detected);
-    const searchTerms = [...new Set([detected, ...expanded])];
-
-    const rows = await db.select({
-      id: shopifyProductsTable.id,
-      title: shopifyProductsTable.title,
-      price: shopifyProductsTable.price,
-      compareAtPrice: shopifyProductsTable.compareAtPrice,
-      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-      imageUrl: shopifyProductsTable.imageUrl,
-      variants: shopifyProductsTable.variants,
-    })
-    .from(shopifyProductsTable)
-    .where(and(
-      eq(shopifyProductsTable.status, "active"),
-      or(...searchTerms.map(t => ilike(shopifyProductsTable.title, `%${t}%`)))
-    ))
-    .orderBy(desc(shopifyProductsTable.updatedAt))
-    .limit(8);
-
-    const products = rows.map(p => {
-      const price = Number(p.price) || 0;
-      const compareAt = p.compareAtPrice ? Number(p.compareAtPrice) : null;
-      const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : null;
-      const vars = (p.variants as any[]) ?? [];
-      return {
-        id: p.id, name: p.title, price, originalPrice: compareAt, discount, stock: p.inventoryQuantity ?? 0,
-        variants: vars.map((v: any) => ({ id: String(v.id), value: v.title, price: Number(v.price) || price, stock: v.inventoryQuantity ?? 0 })),
-        image: p.imageUrl ?? null,
-      };
-    });
+    const { searchShopifyCatalog, toWebsiteChatProductCards } = await import("../lib/shopifyProductKnowledge.js");
+    const catalog = await searchShopifyCatalog(detected, 8);
+    const products = toWebsiteChatProductCards(catalog);
 
     return res.json({ detected, products });
   } catch (e: any) {
