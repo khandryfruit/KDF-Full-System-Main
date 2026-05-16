@@ -725,7 +725,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ═══════════════════════════════════════════════
              BRANCH 2b: Order placement flow states
              ═══════════════════════════════════════════════ */
-          if (["wa_order_await_product", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
+          if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
             await handleCommerceOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
             continue;
@@ -1153,8 +1153,24 @@ function formatRupees(value: unknown): string {
   return `Rs. ${Number.isFinite(n) ? Math.round(n).toLocaleString("en-PK") : "0"}`;
 }
 
+function parseMoneyValue(value: unknown): number {
+  const matches = String(value ?? "").match(/\d[\d,]*(?:\.\d+)?/g);
+  if (!matches?.length) return 0;
+  const n = Number.parseFloat(matches[matches.length - 1]!.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
 function normalizeProductText(value: unknown): string {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeVariantText(value: unknown): string {
+  return normalizeProductText(value)
+    .replace(/\bgrams?\b/g, "g")
+    .replace(/\bgm\b/g, "g")
+    .replace(/\bkgs?\b/g, "kg")
+    .replace(/\bkilograms?\b/g, "kg")
+    .replace(/\s+/g, "");
 }
 
 function expandProductSearchTerms(query: string): string[] {
@@ -1405,7 +1421,7 @@ async function calculateWhatsAppOrderTotal(opts: {
     }
   }
 
-  let delivery = 150;
+  let delivery = 300;
   let deliveryLabel = "Estimated standard delivery";
   const city = normalizeProductText(opts.city ?? "");
   const rules = await db.select().from(shippingRulesTable).where(eq(shippingRulesTable.enabled, true)).orderBy(asc(shippingRulesTable.priority), asc(shippingRulesTable.id)).catch(() => []);
@@ -1422,6 +1438,10 @@ async function calculateWhatsAppOrderTotal(opts: {
   if (matchingRule) {
     delivery = Number(matchingRule.price ?? 0);
     deliveryLabel = `${matchingRule.methodName} (${matchingRule.deliveryTime})`;
+  }
+  if (amountForShipping >= 10000) {
+    delivery = 0;
+    deliveryLabel = "FREE delivery (order above Rs. 10,000)";
   }
 
   const total = Math.max(0, subtotal - discount + delivery);
@@ -1445,8 +1465,10 @@ const WA_SHOPIFY_API_VERSION = "2024-01";
 
 function parseCommerceOrderRequest(text: string, fallbackQuery?: string) {
   const normalized = normalizeProductText(text);
-  const qtyMatch = normalized.match(/\b(\d+)\s*(x|pcs|piece|pack|qty|quantity)?\b/);
   const weightMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i);
+  const qtyMatch =
+    normalized.match(/\b(?:qty|quantity|pack|packs|pcs|piece)\s*(\d+)\b/i) ??
+    normalized.match(/\b(\d+)\s*(x|pcs|piece|pack|packs|qty|quantity)\b/i);
   const quantity = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
   const variantTitle = weightMatch
     ? `${weightMatch[1]}${weightMatch[2].toLowerCase().startsWith("k") ? "KG" : "g"}`
@@ -1465,8 +1487,11 @@ async function findCommerceProductVariant(productQuery: string, variantHint?: st
   if (!product || product.source !== "shopify") return null;
   let selected = product.variantOptions?.[0] ?? null;
   if (variantHint && product.variantOptions?.length) {
-    const wanted = normalizeProductText(variantHint);
-    selected = product.variantOptions.find((v) => normalizeProductText(v.title).includes(wanted)) ?? selected;
+    const wanted = normalizeVariantText(variantHint);
+    selected = product.variantOptions.find((v) => {
+      const title = normalizeVariantText(v.title);
+      return title === wanted || title.includes(wanted) || wanted.includes(title);
+    }) ?? selected;
   }
   if (!selected) return null;
   return {
@@ -1529,9 +1554,9 @@ async function buildCommerceStateDataFromSelection(params: {
     quantity: params.quantity,
     unitPrice: params.variant.price,
     subtotal,
-    delivery: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).delivery).replace(/[^\d.]/g, "")) : 0,
+    delivery: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).delivery) : 300,
     deliveryLabel: totalCalc && (totalCalc as any).ok ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})` : "Will confirm by city",
-    total: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).total).replace(/[^\d.]/g, "")) : subtotal,
+    total: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).total) : subtotal + 300,
     source: "whatsapp_ai_commerce",
   };
 }
@@ -1555,7 +1580,7 @@ async function startCommerceOrderFromText(opts: {
     await sendWaText(opts.phone, "Ji 😊 bill bana deta hoon. Sab se pehle product ka naam bhej dein.\n\nExample: *Badam*, *Kaju*, *Pista*", opts.waSettings);
     return true;
   }
-  const products = await searchProductsForWa(parsed.productQuery, 1);
+  const products = await searchProductsForWa(parsed.productQuery, 4);
   const product = products[0];
   if (!product || product.source !== "shopify") {
     await logWaProcessingStep({
@@ -1567,6 +1592,23 @@ async function startCommerceOrderFromText(opts: {
       failureReason: "shopify_product_not_found",
     });
     await sendWaText(opts.phone, "Sorry, is product ka official data nahi mila. Please product ka exact naam bhej dein.", opts.waSettings);
+    return true;
+  }
+  const needsProductChoice = products.length > 1 && !/\b(shell|kaghzi|kagzi|with shell|without shell|baghair|bghair|soft|hard)\b/i.test(opts.textBody);
+  if (needsProductChoice) {
+    await setConversationState(opts.phone, "wa_order_await_product_choice", { productQuery: parsed.productQuery, products });
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "commerce_product_choice_requested",
+      status: "received",
+      detail: "Multiple matching products found; asking customer to choose exact product.",
+      payload: { query: parsed.productQuery, products: products.map((p) => ({ name: p.name, variants: p.variantLines })) },
+    });
+    await sendWaText(
+      opts.phone,
+      `جی 😊 Badam mein yeh options available hain:\n\n${products.map((p, i) => `${i + 1}. ${p.name}`).join("\n")}\n\nKaunsa chahiye? Number ya naam reply kar dein.`,
+      opts.waSettings,
+    );
     return true;
   }
   if (!parsed.variantTitle && (product.variantOptions?.length ?? 0) > 1) {
@@ -1730,12 +1772,42 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     });
     return;
   }
+  if (state === "wa_order_await_product_choice") {
+    const products = Array.isArray(stateData.products) ? stateData.products : [];
+    const selectedIndex = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10) - 1;
+    const selected = products[selectedIndex] ?? products.find((p: any) => normalizeProductText(p.name).includes(normalizeProductText(trimmed)));
+    if (!selected) {
+      await sendWaText(phone, `Please in options mein se number ya naam select karein:\n\n${products.map((p: any, i: number) => `${i + 1}. ${p.name}`).join("\n")}`, waSettings);
+      return;
+    }
+    if ((selected.variantOptions?.length ?? 0) > 1) {
+      await setConversationState(phone, "wa_order_await_variant", { productQuery: stateData.productQuery, product: selected });
+      await sendWaText(phone, `جی 😊 *${selected.name}* ke available variants:\n\n${selected.variantLines?.map((v: string) => `• ${v}`).join("\n") || selected.variants}\n\nKaunsa variant chahiye?`, waSettings);
+      return;
+    }
+    const variant = selected.variantOptions?.[0];
+    if (!variant) {
+      await sendWaText(phone, "Is product ka variant/price available nahi. Please doosra product select kar dein.", waSettings);
+      return;
+    }
+    await setConversationState(phone, "wa_order_await_quantity", {
+      product: selected,
+      variant,
+      productName: selected.name,
+      variantTitle: variant.title,
+      unitPrice: variant.price,
+    });
+    await sendWaText(phone, `Perfect 😊\n\n*${selected.name}*\nVariant: *${variant.title}*\nPrice: *${formatRupees(variant.price)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
+    return;
+  }
   if (state === "wa_order_await_variant") {
     const product = stateData.product;
     const options = Array.isArray(product?.variantOptions) ? product.variantOptions : [];
     const wanted = normalizeProductText(trimmed);
-    const selected = options.find((v: any) => normalizeProductText(v.title).includes(wanted))
-      ?? options.find((v: any) => wanted.includes(normalizeProductText(v.title)))
+    const selected = options.find((v: any) => {
+      const title = normalizeVariantText(v.title);
+      return title === normalizeVariantText(trimmed) || title.includes(normalizeVariantText(trimmed)) || normalizeVariantText(trimmed).includes(title);
+    })
       ?? null;
     if (!product || !selected) {
       await sendWaText(phone, `Please available variants mein se select karein:\n\n${(product?.variantLines ?? []).map((v: string) => `• ${v}`).join("\n")}`, waSettings);
@@ -1822,7 +1894,8 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     }).catch(() => null);
     if (calc && (calc as any).ok) {
       stateData.deliveryLabel = `${(calc as any).delivery} (${(calc as any).deliveryLabel})`;
-      stateData.total = Number(String((calc as any).total).replace(/[^\d.]/g, "")) || stateData.subtotal;
+      stateData.delivery = parseMoneyValue((calc as any).delivery);
+      stateData.total = parseMoneyValue((calc as any).total) || stateData.subtotal + stateData.delivery;
     }
     await setConversationState(phone, "wa_order_await_payment", stateData);
     await sendWaText(phone, `${buildCommerceSummary(stateData)}\n\nPayment method bhej dein: *COD* ya *Bank Transfer*`, waSettings);
@@ -1947,7 +2020,7 @@ async function handleOrderFlow(
         stateData.deliveryLabel = (calculated as any).delivery;
         stateData.finalTotalLabel = (calculated as any).total;
         stateData.deliveryMethod = (calculated as any).deliveryLabel;
-        stateData.totalNumeric = Number(String((calculated as any).total).replace(/[^\d.]/g, "")) || stateData.subtotal;
+        stateData.totalNumeric = parseMoneyValue((calculated as any).total) || stateData.subtotal;
       }
       await setConversationState(phone, "order_await_confirm", stateData);
       const summary =
