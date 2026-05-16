@@ -5,7 +5,7 @@ import {
   Youtube, Twitter, Shield, Truck, Package, Clock,
   ChevronUp, ArrowRight, Calendar, BookOpen, CheckCircle,
   Sparkles, Zap, ExternalLink, X,
-  Leaf, Bot, Headphones, BadgeCheck,
+  Leaf, Headphones, BadgeCheck, RotateCcw, Gift, ShoppingBag,
 } from "lucide-react";
 import {
   Accordion,
@@ -29,7 +29,7 @@ const OFFICIAL_APP_STORE_BADGE =
   "https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83";
 
 /* ─── Premium config (admin JSON: footer_settings.premium_config) ─── */
-type TrustIconKey = "shield" | "truck" | "package" | "clock" | "sparkles" | "leaf" | "headphones" | "bot";
+type TrustIconKey = "shield" | "truck" | "package" | "clock" | "sparkles" | "leaf" | "headphones" | "returns" | "gift" | "bag";
 type PremiumCfg = {
   newsletterHeadline?: string;
   newsletterSub?: string;
@@ -47,20 +47,16 @@ type PremiumCfg = {
   showFooterBlog?: boolean;
   footerBlogTitle?: string;
   footerBlogCount?: number;
-  showBlogAiTag?: boolean;
   certificationImages?: string[];
-  aiPicks?: { label: string; href: string }[];
-  aiPicksTitle?: string;
 };
 
 const DEFAULT_ROTATING = [
-  "AI Recommended Products",
-  "Trending This Week",
-  "Healthy Picks For You",
-  "Flash Deals Live",
-  "Personalized Wellness Picks",
-  "Seasonal harvest · freshest stock",
-  "Smart picks for fitness & focus",
+  "Seasonal offers and new arrivals",
+  "Gift packs for every occasion",
+  "Premium dry fruits delivered fresh",
+  "Healthy lifestyle tips from KDF",
+  "Wholesale and bulk order updates",
+  "Fresh stock and exclusive deals",
 ];
 
 const DEFAULT_HEALTH = [
@@ -78,6 +74,22 @@ function parsePremium(raw: string | null | undefined): PremiumCfg {
   } catch {
     return {};
   }
+}
+
+function customerFooterText(value: unknown, fallback = ""): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const cleaned = raw
+    .replace(/AI\s*Recommended\s*(Healthy\s*)?Products?/gi, "Recommended Premium Products")
+    .replace(/AI\s*Picks?\s*Live/gi, "Seasonal Picks")
+    .replace(/Intelligence\s*Layer/gi, "KDF Newsletter")
+    .replace(/AI\s*recommendations?/gi, "Product shortcuts")
+    .replace(/Intelligence\s*desk/gi, "KDF Journal")
+    .replace(/AI\s*pick/gi, "Featured")
+    .replace(/\bAI\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || fallback;
 }
 
 function parseScreenshotPaths(raw: unknown): string[] {
@@ -104,14 +116,20 @@ const TRUST_ICON_MAP: Record<TrustIconKey, React.ElementType> = {
   sparkles: Sparkles,
   leaf: Leaf,
   headphones: Headphones,
-  bot: Bot,
+  returns: RotateCcw,
+  gift: Gift,
+  bag: ShoppingBag,
 };
 
-const DEFAULT_AI_PICKS: { label: string; href: string }[] = [
-  { label: "Immunity essentials", href: "/products?sortBy=popular" },
-  { label: "Protein & gym fuel", href: "/products?featured=true" },
-  { label: "Office snack bundles", href: "/categories" },
-  { label: "Gift-ready hampers", href: "/products?sortBy=newest" },
+const PRODUCT_SHORTCUTS: { label: string; href: string }[] = [
+  { label: "Almonds", href: "/products?search=almonds" },
+  { label: "Cashews", href: "/products?search=cashews" },
+  { label: "Walnuts", href: "/products?search=walnuts" },
+  { label: "Pistachios", href: "/products?search=pistachios" },
+  { label: "Dates", href: "/products?search=dates" },
+  { label: "Seeds", href: "/products?search=seeds" },
+  { label: "Gift Boxes", href: "/products?search=gift" },
+  { label: "Dry Fruits", href: "/categories" },
 ];
 
 function TikTokIcon({ className }: { className?: string }) {
@@ -176,38 +194,42 @@ const SOCIAL_COLORS: Record<string, { bg: string; hover: string; color: string }
 };
 
 const FALLBACK_MENUS = [
-  { id: -1, title: "Shop", items: [
+  { id: -1, title: "Company", items: [
+    { label: "About Us",        linkValue: "/about",                     openInNewTab: false },
+    { label: "Contact Us",      linkValue: "/contact",                   openInNewTab: false },
+    { label: "Track Order",     linkValue: "/track",                     openInNewTab: false },
+    { label: "Blogs",           linkValue: "/blog",                      openInNewTab: false },
+    { label: "FAQ",             linkValue: "/faq",                       openInNewTab: false },
+  ]},
+  { id: -2, title: "Shop", items: [
     { label: "All Products",    linkValue: "/products",                  openInNewTab: false },
     { label: "Categories",      linkValue: "/categories",                openInNewTab: false },
     { label: "New Arrivals",    linkValue: "/products?sortBy=newest",    openInNewTab: false },
     { label: "Best Sellers",    linkValue: "/products?sortBy=popular",   openInNewTab: false },
-    { label: "Deals & Offers",  linkValue: "/products?featured=true",    openInNewTab: false },
+    { label: "Gift Packs",      linkValue: "/products?search=gift",       openInNewTab: false },
+    { label: "Wholesale Orders", linkValue: "/contact?type=wholesale",    openInNewTab: false },
   ]},
-  { id: -2, title: "Customer", items: [
+  { id: -3, title: "Support", items: [
     { label: "Login",           linkValue: "/login",                     openInNewTab: false },
     { label: "Register",        linkValue: "/register",                  openInNewTab: false },
     { label: "My Orders",       linkValue: "/account",                   openInNewTab: false },
     { label: "Wishlist",        linkValue: "/wishlist",                  openInNewTab: false },
-    { label: "Wallet",          linkValue: "/account?tab=wallet",        openInNewTab: false },
-    { label: "Track Order",     linkValue: "/track",                     openInNewTab: false },
-  ]},
-  { id: -3, title: "Support", items: [
-    { label: "About Us",        linkValue: "/about",                     openInNewTab: false },
-    { label: "FAQ",             linkValue: "/faq",                       openInNewTab: false },
-    { label: "Contact Us",      linkValue: "/contact",                   openInNewTab: false },
-    { label: "Privacy Policy",  linkValue: "/policies/privacy-policy",   openInNewTab: false },
     { label: "Refund Policy",   linkValue: "/policies/refund-policy",    openInNewTab: false },
+  ]},
+  { id: -4, title: "Legal", items: [
+    { label: "Privacy Policy",  linkValue: "/policies/privacy-policy",   openInNewTab: false },
     { label: "Terms & Conditions", linkValue: "/policies/terms-and-conditions", openInNewTab: false },
+    { label: "Refund Policy",   linkValue: "/policies/refund-policy",    openInNewTab: false },
   ]},
 ];
 
 const TRUST_BADGES_DEFAULT: { icon: TrustIconKey; label: string; sub: string }[] = [
-  { icon: "shield", label: "Secure Checkout", sub: "256-bit SSL encryption" },
-  { icon: "truck", label: "Fast Delivery", sub: "Tracked nationwide" },
-  { icon: "bot", label: "AI Recommendations", sub: "Curated for your goals" },
-  { icon: "leaf", label: "Organic Certified", sub: "Verified sourcing" },
-  { icon: "package", label: "Premium Quality", sub: "Cold-chain freshness" },
-  { icon: "headphones", label: "Live Support", sub: "Real humans, fast replies" },
+  { icon: "truck", label: "Same Day Delivery", sub: "Available in Lahore" },
+  { icon: "package", label: "Free Delivery", sub: "Above order threshold" },
+  { icon: "leaf", label: "Premium Quality", sub: "Fresh, hygienic packing" },
+  { icon: "shield", label: "Secure Payments", sub: "Protected checkout" },
+  { icon: "returns", label: "Easy Returns", sub: "Customer-first support" },
+  { icon: "headphones", label: "24/7 Support", sub: "WhatsApp, call, email" },
 ];
 
 function mergeTrustBadges(premium: PremiumCfg) {
@@ -215,8 +237,8 @@ function mergeTrustBadges(premium: PremiumCfg) {
   if (Array.isArray(custom) && custom.length > 0) {
     return custom.map((t) => ({
       icon: TRUST_ICON_MAP[(t.icon ?? "sparkles") as TrustIconKey] ?? Sparkles,
-      label: t.label,
-      sub: t.sub,
+      label: customerFooterText(t.label),
+      sub: customerFooterText(t.sub),
     }));
   }
   return TRUST_BADGES_DEFAULT.map((t) => ({
@@ -296,13 +318,13 @@ function NewsletterBand({
   const [tipIdx, setTipIdx] = useState(0);
 
   const rotating = useMemo(() => {
-    const custom = (premium.rotatingLines ?? []).filter(Boolean);
+    const custom = (premium.rotatingLines ?? []).filter(Boolean).map((line) => customerFooterText(line));
     const merged = [...custom, ...DEFAULT_ROTATING];
     return Array.from(new Set(merged)).slice(0, 8);
   }, [premium.rotatingLines]);
 
   const tips = useMemo(() => {
-    const custom = (premium.healthTips ?? []).filter(Boolean);
+    const custom = (premium.healthTips ?? []).filter(Boolean).map((tip) => customerFooterText(tip));
     return [...custom, ...DEFAULT_HEALTH].slice(0, 6);
   }, [premium.healthTips]);
 
@@ -328,8 +350,8 @@ function NewsletterBand({
     el.style.setProperty("--fy", String(fy));
   }, []);
 
-  const headline = premium.newsletterHeadline ?? "Get Exclusive Deals & AI Recommended Healthy Products";
-  const sub = premium.newsletterSub ?? "Flash sales, seasonal picks, and curated wellness tips — zero spam.";
+  const headline = customerFooterText(premium.newsletterHeadline, "Exclusive Deals & Offers");
+  const sub = customerFooterText(premium.newsletterSub, "Get seasonal offers, new arrivals, gift packs, premium dry fruits, and healthy lifestyle tips.");
 
   return (
     <section
@@ -389,17 +411,17 @@ function NewsletterBand({
           <div className="lg:col-span-6">
             <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">
               <Sparkles className="h-3 w-3" style={{ color: ORANGE }} aria-hidden />
-              Intelligence layer
+              KDF newsletter
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200/90">
-                <Bot className="h-3 w-3" aria-hidden /> AI picks live
+                <Leaf className="h-3 w-3" aria-hidden /> Seasonal offers
               </span>
               <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100/90">
-                <Zap className="h-3 w-3" aria-hidden /> Flash lane
+                <Gift className="h-3 w-3" aria-hidden /> Gift packs
               </span>
               <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-200/90">
-                <BadgeCheck className="h-3 w-3 text-sky-300" aria-hidden /> Verified quality
+                <BadgeCheck className="h-3 w-3 text-sky-300" aria-hidden /> Premium quality
               </span>
             </div>
             <h2 className="mt-4 text-balance text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
@@ -418,7 +440,7 @@ function NewsletterBand({
 
             {premium.aiTipsEnabled !== false && (
               <div className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 backdrop-blur-md">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Health tip</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Healthy tip</p>
                 <p key={tipIdx} className="mt-1 text-xs leading-relaxed text-slate-300 motion-reduce:animate-none kdf-fade-up">
                   {tips[tipIdx % tips.length]}
                 </p>
@@ -518,7 +540,7 @@ function BlogCardLux({ post, showAiTag }: { post: Record<string, unknown>; showA
         </span>
         {showAiTag !== false ? (
           <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100 backdrop-blur-md kdf-ai-tag">
-            <Sparkles className="h-3 w-3" aria-hidden /> AI pick
+            <Sparkles className="h-3 w-3" aria-hidden /> Featured
           </span>
         ) : null}
       </div>
@@ -568,7 +590,7 @@ export function Footer() {
     () => parsePremium((settings?.premiumConfig ?? settings?.premium_config) as string | undefined),
     [settings?.premiumConfig, settings?.premium_config],
   );
-  const menus       = ((footerData?.menus as unknown[])?.length ? footerData?.menus : FALLBACK_MENUS) as typeof FALLBACK_MENUS;
+  const menus       = FALLBACK_MENUS;
   const socialLinks = (footerData?.socialLinks ?? []) as Record<string, unknown>[];
   const appLinks    = footerData?.appLinks as Record<string, unknown> | null | undefined;
   const policies    = (footerData?.policies ?? []) as { id: number; title: string; slug: string }[];
@@ -582,15 +604,14 @@ export function Footer() {
   const showInsta   = premium.showInstagram !== false && (premium.instagramUrls?.length ?? 0) > 0;
   const blogLimit   = Math.min(6, Math.max(1, premium.footerBlogCount ?? 3));
   const showBlogCol = premium.showFooterBlog !== false && blogPosts.length > 0;
-  const aiPickLinks = (premium.aiPicks?.length ? premium.aiPicks : DEFAULT_AI_PICKS).slice(0, 6);
   const certs       = (premium.certificationImages ?? []).filter((u): u is string => typeof u === "string" && u.length > 0);
 
-  const description = (settings?.description as string) || "Premium dry fruits & nuts — sourced with care, delivered fresh across Pakistan.";
+  const description = customerFooterText(settings?.description, "Premium dry fruits & nuts — sourced with care, delivered fresh across Pakistan.");
   const address       = (settings?.address as string) || "Lahore, Pakistan";
   const phone         = (settings?.phone as string) || "+92 304 999 6000";
   const emailAddr     = (settings?.email as string) || "support@kdfnuts.com";
   const copyright     = (settings?.copyrightText as string) || `© ${new Date().getFullYear()} ${siteName}. Crafted for wellness & taste.`;
-  const tagline       = premium.tagline ?? "Nature refined. Nutrition elevated.";
+  const tagline       = customerFooterText(premium.tagline, "Nature refined. Nutrition elevated.");
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -716,6 +737,18 @@ export function Footer() {
                 WhatsApp us
               </a>
 
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <a href={`tel:${phone.replace(/\s/g, "")}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white">
+                  <Phone className="h-3.5 w-3.5" /> Call
+                </a>
+                <a href={`mailto:${emailAddr}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white">
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </a>
+                <Link href="/track" className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border border-[#5FA800]/25 bg-[#5FA800]/10 px-3 py-2 text-xs font-bold text-[#c8f090] transition-colors hover:bg-[#5FA800]/16">
+                  <Package className="h-3.5 w-3.5" /> Track order
+                </Link>
+              </div>
+
               <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Social</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {socialLinks.length > 0 ? (
@@ -738,14 +771,22 @@ export function Footer() {
                     );
                   })
                 ) : (
-                  [Facebook, Instagram, TikTokIcon, Youtube].map((Icon, i) => (
-                    <span
-                      key={i}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-slate-600"
-                      aria-hidden
+                  [
+                    { Icon: Facebook, href: "https://facebook.com", label: "Facebook" },
+                    { Icon: Instagram, href: "https://instagram.com", label: "Instagram" },
+                    { Icon: TikTokIcon, href: "https://www.tiktok.com", label: "TikTok" },
+                    { Icon: Youtube, href: "https://youtube.com", label: "YouTube" },
+                  ].map(({ Icon, href, label }) => (
+                    <a
+                      key={label}
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={label}
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-slate-400 transition-all hover:-translate-y-0.5 hover:border-[#5FA800]/30 hover:text-white"
                     >
                       <Icon className="h-4 w-4" />
-                    </span>
+                    </a>
                   ))
                 )}
               </div>
@@ -753,7 +794,7 @@ export function Footer() {
 
             {/* Desktop link columns */}
             <div className="hidden lg:col-span-5 lg:block">
-              <div className="grid grid-cols-3 gap-x-6 gap-y-2">
+              <div className="grid grid-cols-4 gap-x-6 gap-y-2">
                 {menus.map(menu => (
                   <div key={menu.id}>
                     <h3 className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -795,18 +836,18 @@ export function Footer() {
             <div className="space-y-8 lg:col-span-4">
               <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 shadow-[0_24px_80px_-48px_rgba(95,168,0,0.55)] backdrop-blur-xl ring-1 ring-[#5FA800]/10">
                 <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                  <Bot className="h-3.5 w-3.5 text-violet-300" aria-hidden />
-                  {premium.aiPicksTitle ?? "AI recommendations"}
+                  <ShoppingBag className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
+                  Product shortcuts
                 </h3>
-                <ul className="space-y-1">
-                  {aiPickLinks.map((row) => (
+                <ul className="grid grid-cols-2 gap-1.5">
+                  {PRODUCT_SHORTCUTS.map((row) => (
                     <li key={row.label + row.href}>
                       <Link
                         href={row.href}
-                        className="group flex items-center justify-between gap-2 rounded-xl border border-transparent px-2 py-2 text-sm text-slate-300 transition-all hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
+                        className="group flex items-center justify-between gap-2 rounded-xl border border-transparent px-2.5 py-2 text-sm text-slate-300 transition-all hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300/90 opacity-80 group-hover:opacity-100" aria-hidden />
+                          <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-300/90 opacity-80 group-hover:opacity-100" aria-hidden />
                           <span className="truncate">{row.label}</span>
                         </span>
                         <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
@@ -820,7 +861,7 @@ export function Footer() {
                 <div>
                   <div className="mb-4 flex items-center justify-between gap-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                      {premium.footerBlogTitle ?? "Intelligence desk"}
+                      {customerFooterText(premium.footerBlogTitle, "KDF Journal")}
                     </h3>
                     <Link href="/blog" className="group inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-white" style={{ color: GREEN }}>
                       View all
@@ -829,7 +870,7 @@ export function Footer() {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
                     {blogPosts.slice(0, blogLimit).map(post => (
-                      <BlogCardLux key={String(post.id)} post={post} showAiTag={premium.showBlogAiTag} />
+                      <BlogCardLux key={String(post.id)} post={post} showAiTag={false} />
                     ))}
                   </div>
                 </div>
