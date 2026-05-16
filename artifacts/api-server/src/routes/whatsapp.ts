@@ -4644,8 +4644,10 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
       count: products.length,
       totalMatches,
       debug,
+      salesCategory: resolveSalesCategoryFromQuery(query),
+      browseMode: browseHit?.mode ?? null,
       matchedAliasRoots: roots,
-      whatsappReplyPreview: formatShopifyCatalogWhatsAppReply(products.slice(0, 1), roman),
+      whatsappReplyPreview: browseHit?.reply ?? null,
       topMatch: products[0]
         ? { name: products[0].name, score: products[0].score, shopifyProductId: products[0].shopifyProductId }
         : null,
