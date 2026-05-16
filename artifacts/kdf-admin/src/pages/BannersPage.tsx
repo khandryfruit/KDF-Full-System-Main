@@ -53,6 +53,35 @@ function isPromoCard(b: { bgColor?: string | null; imageUrl?: string | null; mob
   return true;
 }
 
+function bannerDebugInfo(banner: any) {
+  const hasMedia = hasHeroStyleMedia(banner);
+  const matchedCount = Array.isArray(banner.relatedProductIds)
+    ? banner.relatedProductIds.map(Number).filter((id: number) => Number.isFinite(id) && id > 0).length
+    : 0;
+  if (hasMedia) {
+    return {
+      source: "Manual",
+      reason: "Uploaded media is used first.",
+      matchedCount,
+      className: "bg-blue-50 text-blue-700 border-blue-200",
+    };
+  }
+  if (banner.aiMode) {
+    return {
+      source: "AI",
+      reason: matchedCount > 0 ? "AI copy with matched products." : "AI copy with storefront gradient fallback.",
+      matchedCount,
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    };
+  }
+  return {
+    source: "Fallback",
+    reason: "Storefront will generate a premium gradient if no image exists.",
+    matchedCount,
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+}
+
 /* ── Banner Image Uploader ──────────────────────────── */
 function BannerImageUploader({
   value,
@@ -1168,6 +1197,28 @@ export default function BannersPage() {
                 </p>
               </DialogHeader>
               <form onSubmit={handleHeroSubmit} className="space-y-5 py-2">
+                <div className="rounded-2xl border bg-muted/30 p-2">
+                  <Label className="mb-2 block text-xs font-bold uppercase tracking-wide text-muted-foreground">Banner Mode</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, aiMode: false })}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold transition-all ${!formData.aiMode ? "bg-white text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-white/60"}`}
+                    >
+                      Manual banner upload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, aiMode: true })}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold transition-all ${formData.aiMode ? "bg-emerald-700 text-white shadow-sm" : "text-muted-foreground hover:bg-white/60"}`}
+                    >
+                      AI Smart Banner
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Manual uses uploaded media first. AI Smart Banner can run without an image and the storefront generates a premium #5FA800 + #F58300 gradient fallback.
+                  </p>
+                </div>
                 <BannerImageUploader value={formData.imageUrl} onChange={(url) => setFormData({ ...formData, imageUrl: url })} label="🖥️ Desktop Banner Image" recommendedW={1200} recommendedH={400} aspectRatio="3/1" />
                 <BannerImageUploader value={formData.mobileImageUrl} onChange={(url) => setFormData({ ...formData, mobileImageUrl: url })} label="📱 Mobile Banner Image" recommendedW={600} recommendedH={300} aspectRatio="2/1" optional />
                 <div className="h-px bg-border" />
@@ -1614,40 +1665,48 @@ export default function BannersPage() {
                     <TableRow key={i}>{[...Array(7)].map((_, j) => (<TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>))}</TableRow>
                   ))
                 : heroBanners.length
-                ? heroBanners.map((banner: any) => (
-                    <TableRow key={banner.id} className="group">
-                      <TableCell className="font-mono text-sm text-muted-foreground">{banner.sortOrder}</TableCell>
-                      <TableCell>
-                        {banner.imageUrl ? (
-                          <div className="w-36 h-12 bg-muted rounded-lg overflow-hidden border"><img src={storagePublicUrl(banner.imageUrl)} alt={banner.title} className="w-full h-full object-cover" /></div>
-                        ) : (
-                          <div className="w-36 h-12 rounded-lg border flex items-center justify-center bg-muted"><ImageOff className="w-4 h-4 text-muted-foreground/40" /></div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-semibold text-sm">{banner.title}</div>
-                        {banner.subtitle && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{banner.subtitle}</div>}
-                        {banner.cta && <div className="text-xs text-muted-foreground mt-0.5">CTA: <span className="font-medium text-foreground">"{banner.cta}"</span></div>}
-                      </TableCell>
-                      <TableCell>{getTargetBadge(banner)}</TableCell>
-                      <TableCell>
-                        {banner.platform === "mobile" && <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">📱 Mobile</Badge>}
-                        {banner.platform === "website" && <Badge variant="outline" className="text-indigo-600 border-indigo-200 bg-indigo-50">🖥️ Website</Badge>}
-                        {(!banner.platform || banner.platform === "both") && <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">🌐 Both</Badge>}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={banner.active ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200"}>
-                          {banner.active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openHeroEdit(banner)}><Edit className="w-4 h-4 text-muted-foreground" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(banner.id, "hero")}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                ? heroBanners.map((banner: any) => {
+                    const debug = bannerDebugInfo(banner);
+                    return (
+                      <TableRow key={banner.id} className="group">
+                        <TableCell className="font-mono text-sm text-muted-foreground">{banner.sortOrder}</TableCell>
+                        <TableCell>
+                          {banner.imageUrl ? (
+                            <div className="w-36 h-12 bg-muted rounded-lg overflow-hidden border"><img src={storagePublicUrl(banner.imageUrl)} alt={banner.title} className="w-full h-full object-cover" /></div>
+                          ) : (
+                            <div className="w-36 h-12 rounded-lg border flex items-center justify-center bg-gradient-to-br from-emerald-50 via-lime-50 to-orange-50"><ImageOff className="w-4 h-4 text-emerald-600/50" /></div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-semibold text-sm">{banner.title}</div>
+                          {banner.subtitle && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{banner.subtitle}</div>}
+                          {banner.cta && <div className="text-xs text-muted-foreground mt-0.5">CTA: <span className="font-medium text-foreground">"{banner.cta}"</span></div>}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <Badge variant="outline" className={`text-[10px] ${debug.className}`}>Source: {debug.source}</Badge>
+                            <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 border-slate-200">{debug.matchedCount} matched products</Badge>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">{debug.reason}</div>
+                        </TableCell>
+                        <TableCell>{getTargetBadge(banner)}</TableCell>
+                        <TableCell>
+                          {banner.platform === "mobile" && <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">📱 Mobile</Badge>}
+                          {banner.platform === "website" && <Badge variant="outline" className="text-indigo-600 border-indigo-200 bg-indigo-50">🖥️ Website</Badge>}
+                          {(!banner.platform || banner.platform === "both") && <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">🌐 Both</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={banner.active ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200"}>
+                            {banner.active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openHeroEdit(banner)}><Edit className="w-4 h-4 text-muted-foreground" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(banner.id, "hero")}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 : (
                   <TableRow>
                     <TableCell colSpan={7} className="h-28 text-center text-muted-foreground text-sm">

@@ -147,8 +147,10 @@ function dealThemeForBanner(banner: any) {
   if (text.includes("eid") || text.includes("gift")) return "linear-gradient(135deg,#073b22 0%,#0f7a3b 52%,#c89b3c 100%)";
   if (text.includes("winter")) return "linear-gradient(135deg,#07182f 0%,#153e75 55%,#4b6b93 100%)";
   if (text.includes("summer")) return "linear-gradient(135deg,#7c2d12 0%,#ea580c 52%,#f59e0b 100%)";
+  if (text.includes("healthy") || text.includes("wellness") || text.includes("energy")) return "linear-gradient(135deg,#123500 0%,#5FA800 52%,#F58300 100%)";
+  if (text.includes("best") || text.includes("popular") || text.includes("customer")) return "linear-gradient(135deg,#0D2B00 0%,#326f09 48%,#F58300 100%)";
   if (text.includes("deal") || text.includes("sale") || text.includes("offer")) return "linear-gradient(135deg,#2b1208 0%,#7c2d12 45%,#f97316 100%)";
-  return "linear-gradient(135deg,#082611 0%,#155e2f 50%,#0f172a 100%)";
+  return "linear-gradient(135deg,#0D2B00 0%,#5FA800 52%,#F58300 100%)";
 }
 
 function productMatchScore(product: Product, banner: any): number {
@@ -174,6 +176,77 @@ function customerMarketingText(value: unknown, fallback = ""): string {
     .replace(/\s{2,}/g, " ")
     .trim();
   return cleaned || fallback;
+}
+
+const AUTO_PROMO_RECIPES = [
+  {
+    key: "seasonal",
+    label: "Seasonal Picks",
+    title: "Healthy Seasonal Picks",
+    subtitle: "Fresh nuts and dry fruits selected for everyday energy and better snacking.",
+    cta: "Shop Now",
+    keywords: ["almond", "walnut", "dates", "healthy", "energy"],
+    campaign: "healthy_lifestyle",
+  },
+  {
+    key: "gift",
+    label: "Gift Selection",
+    title: "Premium Gift Packs",
+    subtitle: "Elegant dry fruit selections for Eid, family sharing, and corporate gifting.",
+    cta: "Explore Gifts",
+    keywords: ["gift", "pack", "pistachio", "cashew", "dates"],
+    campaign: "gift_season",
+  },
+  {
+    key: "wellness",
+    label: "Wellness Collection",
+    title: "Daily Energy Nuts",
+    subtitle: "Almonds, walnuts, seeds, and dry fruits for a smarter healthy routine.",
+    cta: "Healthy Picks",
+    keywords: ["almond", "walnut", "seeds", "organic", "healthy"],
+    campaign: "healthy_lifestyle",
+  },
+  {
+    key: "bestsellers",
+    label: "Customer Favorites",
+    title: "Best Sellers This Week",
+    subtitle: "Popular premium picks customers keep adding to cart.",
+    cta: "View Collection",
+    keywords: ["best", "popular", "cashew", "pistachio", "almond"],
+    campaign: "weekend_deals",
+  },
+];
+
+function buildAutoPromoBanners(products: Product[]): Banner[] {
+  return AUTO_PROMO_RECIPES.map((recipe, index) => {
+    const matchedProducts = products
+      .filter((product) => {
+        const text = `${product.name ?? ""} ${(product.tags ?? []).join(" ")}`.toLowerCase();
+        return recipe.keywords.some((term) => text.includes(term));
+      })
+      .slice(0, 8);
+    const fallbackProduct = products[index % Math.max(1, products.length)];
+    const relatedIds = (matchedProducts.length ? matchedProducts : fallbackProduct ? [fallbackProduct] : [])
+      .map((product) => product.id)
+      .filter(Boolean);
+    return {
+      id: -12000 - index,
+      title: recipe.title,
+      subtitle: recipe.subtitle,
+      label: recipe.label,
+      cta: recipe.cta,
+      linkUrl: "/products",
+      targetType: "page",
+      sortOrder: index,
+      active: true,
+      aiMode: true,
+      aiCampaign: recipe.campaign,
+      relatedProductIds: relatedIds,
+      healthBenefitText: recipe.subtitle,
+      urgencyText: index === 3 ? "Updated from current customer favorites." : "Fresh picks curated for this season.",
+      bannerStyle: "premium",
+    } as unknown as Banner;
+  });
 }
 
 /* ─── AI Fallback Slides ─── */
@@ -1170,6 +1243,7 @@ function SmartPromoBannerCard({
   const b = banner as any;
   const desktopImg = b.imageUrl ? getProductImageSrc(b.imageUrl, { maxWidth: 1000 }) : "";
   const mobileImg = b.mobileImageUrl ? getProductImageSrc(b.mobileImageUrl, { maxWidth: 700 }) : desktopImg;
+  const source = desktopImg || mobileImg ? "Manual" : b.id < 0 ? "Fallback" : "AI";
   const targetHref =
     b.targetType === "product" && b.targetId ? `/products/${b.targetId}` :
     b.targetType === "category" && b.targetId ? `/products?categoryId=${b.targetId}` :
@@ -1182,12 +1256,16 @@ function SmartPromoBannerCard({
     <button
       type="button"
       onClick={() => setLocation(targetHref)}
+      data-banner-source={source}
+      data-banner-reason={source === "Manual" ? "uploaded-image" : source === "AI" ? "ai-content-with-gradient" : "local-fallback-gradient"}
       className="group relative min-h-[150px] overflow-hidden rounded-[1.4rem] p-5 text-left text-white shadow-[0_16px_44px_rgba(13,43,0,0.12)] ring-1 ring-black/[0.04] transition-all hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(13,43,0,0.17)] active:translate-y-0 sm:min-h-[178px] sm:p-6"
       style={{ background: bg }}
     >
       {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:block" />}
       {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:hidden" />}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.18),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.28),rgba(0,0,0,0.08))]" />
+      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-3xl transition-transform duration-700 group-hover:scale-125" />
+      <div className="absolute -bottom-14 left-8 h-36 w-36 rounded-full bg-[#F58300]/25 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.18),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.30),rgba(0,0,0,0.06))]" />
       <div className="relative z-10 flex h-full flex-col justify-between gap-5">
         <div>
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/14 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/85 ring-1 ring-white/16 backdrop-blur">
@@ -1223,7 +1301,41 @@ function SmartPromoBannerSection({
   banners: Banner[];
   products: Product[];
 }) {
-  if (!banners.length) return null;
+  const [rotation, setRotation] = useState(0);
+  const autoBanners = useMemo(() => buildAutoPromoBanners(products), [products]);
+  const displayBanners = useMemo(() => {
+    const active = banners.filter((banner) => (banner as any).active !== false);
+    const existingKeys = new Set(active.map((banner) => customerMarketingText((banner as any).title).toLowerCase()));
+    const supplements = autoBanners.filter((banner) => !existingKeys.has(customerMarketingText((banner as any).title).toLowerCase()));
+    return [...active, ...supplements].slice(0, 4);
+  }, [banners, autoBanners]);
+
+  useEffect(() => {
+    if (displayBanners.length <= 1) return;
+    const id = window.setInterval(() => setRotation((current) => (current + 1) % displayBanners.length), 6500);
+    return () => window.clearInterval(id);
+  }, [displayBanners.length]);
+
+  useEffect(() => {
+    const isAdminViewing = typeof window !== "undefined" && window.localStorage?.getItem("kdf_admin_token");
+    if (!displayBanners.length || !isAdminViewing || typeof console === "undefined") return;
+    const diagnostics = displayBanners.map((banner) => {
+      const b = banner as any;
+      const hasImage = Boolean(b.imageUrl || b.mobileImageUrl);
+      const relatedIds = Array.isArray(b.relatedProductIds) ? b.relatedProductIds.map(Number).filter(Boolean) : [];
+      const matched = relatedIds.length || products.filter((product) => productMatchScore(product, b) > 0).length;
+      return {
+        title: customerMarketingText(b.title, "Untitled banner"),
+        source: hasImage ? "Manual" : b.id < 0 ? "Fallback" : "AI",
+        reason: hasImage ? "Uploaded banner image available" : b.id < 0 ? "Generated because fewer than 4 AI banners were active" : "No image, using smart gradient banner",
+        matchedProducts: matched,
+      };
+    });
+    console.info("[KDF Smart Promo Banners]", diagnostics);
+  }, [displayBanners, products]);
+
+  if (!displayBanners.length) return null;
+  const rotatedBanners = displayBanners.map((_, index) => displayBanners[(index + rotation) % displayBanners.length]);
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
       <div className="mb-4 flex items-end justify-between gap-3">
@@ -1235,11 +1347,15 @@ function SmartPromoBannerSection({
           View products
         </Link>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {banners.slice(0, 2).map((banner) => {
+      <div className="flex snap-x gap-4 overflow-x-auto pb-1 [scrollbar-width:none] md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
+        {rotatedBanners.map((banner) => {
           const ids = Array.isArray((banner as any).relatedProductIds) ? (banner as any).relatedProductIds.map(Number) : [];
           const count = ids.length || products.filter((p) => productMatchScore(p, banner as any) > 0).length;
-          return <SmartPromoBannerCard key={banner.id} banner={banner} productCount={count} />;
+          return (
+            <div key={banner.id} className="min-w-[82vw] snap-start sm:min-w-[360px] md:min-w-0">
+              <SmartPromoBannerCard banner={banner} productCount={count} />
+            </div>
+          );
         })}
       </div>
     </section>
@@ -1614,7 +1730,13 @@ export default function HomePage() {
   const smartBanners = useMemo(() => {
     return banners.filter((b: any) => b.aiMode);
   }, [banners]);
-  const smartBanner = smartBanners.find((b: any) => Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? smartBanners[0] ?? null;
+  const autoSmartBanners = useMemo(() => buildAutoPromoBanners(heroSmartCatalog), [heroSmartCatalog]);
+  const smartPromoBanners = useMemo(() => {
+    const existingTitles = new Set(smartBanners.map((banner: any) => customerMarketingText(banner.title).toLowerCase()));
+    const supplements = autoSmartBanners.filter((banner: any) => !existingTitles.has(customerMarketingText(banner.title).toLowerCase()));
+    return [...smartBanners, ...supplements].slice(0, 4);
+  }, [autoSmartBanners, smartBanners]);
+  const smartBanner = smartPromoBanners.find((b: any) => Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? smartPromoBanners[0] ?? null;
   const smartBannerProductIds = useMemo(() => {
     const ids = (smartBanner as any)?.relatedProductIds;
     return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0).slice(0, 12) : [];
@@ -1785,30 +1907,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {smartBanners.length > 0 ? (
-          <SmartPromoBannerSection banners={smartBanners} products={heroSmartCatalog} />
-        ) : (
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <PromoBanner
-                badge="Gift Packs"
-                title="Perfect for Every Occasion"
-                subtitle="Eid, birthdays, corporate gifting — curated with love."
-                cta="Explore Gifts"
-                href="/category/gifting"
-                gradient="linear-gradient(135deg, #7b2d8b 0%, #c0392b 100%)"
-              />
-              <PromoBanner
-                badge="Bulk Orders"
-                title="Wholesale Prices for Bulk Buyers"
-                subtitle="Special rates on orders above 5kg. Contact us today."
-                cta="Contact Now"
-                href="/products"
-                gradient="linear-gradient(135deg, #1a5276 0%, #117a8b 100%)"
-              />
-            </div>
-          </section>
-        )}
+        <SmartPromoBannerSection banners={smartPromoBanners} products={heroSmartCatalog} />
 
         {/* All products */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
