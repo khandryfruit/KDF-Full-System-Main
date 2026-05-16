@@ -4084,6 +4084,218 @@ router.get("/admin/whatsapp/chatbot-stats", adminMiddleware as any, async (req, 
   } catch (e: any) { return res.status(500).json({ error: e.message }); }
 });
 
+/* ─── Admin: Shopify Product Knowledge (AI Chatbot catalog) ─── */
+router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (req, res) => {
+  try {
+    const { getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
+    const { getAutoSyncStatus } = await import("../lib/shopifyAutoSync.js");
+    const stats = await getShopifyCatalogStats();
+    const sync = getAutoSyncStatus();
+    const [store] = await db.select({
+      lastProductSync: shopifyStoresTable.lastProductSync,
+      totalProductsSynced: shopifyStoresTable.totalProductsSynced,
+      shopDomain: shopifyStoresTable.shopDomain,
+      isConnected: shopifyStoresTable.isConnected,
+    }).from(shopifyStoresTable).limit(1).catch(() => []);
+
+    let aliasSample: Array<{ shopifyProductId: string; alias: string; aliasType: string }> = [];
+    try {
+      const sample = await db.execute(sql`
+        SELECT shopify_product_id, alias, alias_type
+        FROM shopify_product_aliases
+        ORDER BY updated_at DESC NULLS LAST
+        LIMIT 12
+      `);
+      aliasSample = ((sample as any).rows ?? sample ?? []) as typeof aliasSample;
+    } catch { /* migration may be pending */ }
+
+    const [inactiveCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(shopifyProductsTable)
+      .where(sql`${shopifyProductsTable.status} != 'active'`)
+      .catch(() => [{ count: 0 }]);
+
+    return res.json({
+      engine: "shopifyProductKnowledge",
+      stats: {
+        ...stats,
+        inactiveProducts: Number(inactiveCount?.count ?? 0),
+        totalProducts: stats.activeProducts + Number(inactiveCount?.count ?? 0),
+      },
+      store: store ?? null,
+      sync: {
+        enabled: sync.enabled,
+        status: sync.status,
+        lastSyncAt: sync.lastSyncAt,
+        lastSyncResult: sync.lastSyncResult,
+        intervalMinutes: sync.intervalMinutes,
+        webhookEventsProcessed: sync.webhookEventsProcessed,
+      },
+      aliasSample,
+      features: [
+        "Multi-language aliases (Urdu / Roman / English)",
+        "Variant-level search (250g, 500g, 1kg)",
+        "Live Shopify prices & stock",
+        "Webhook + scheduled auto-sync",
+      ],
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Failed to load product knowledge" });
+  }
+});
+
+router.get("/admin/whatsapp/product-knowledge/products", adminMiddleware as any, async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(50, Math.max(5, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const { searchShopifyCatalog } = await import("../lib/shopifyProductKnowledge.js");
+
+    if (q) {
+      const hits = await searchShopifyCatalog(q, limit);
+      return res.json({
+        products: hits.map((p) => ({
+          shopifyProductId: p.shopifyProductId,
+          name: p.name,
+          productType: null,
+          tags: p.tags,
+          status: "active",
+          inStock: p.inStock,
+          priceFrom: p.rawPrice,
+          compareAt: p.compareAt,
+          variants: p.variantOptions.map((v, i) => ({
+            index: i + 1,
+            title: v.title,
+            price: v.price,
+            compareAtPrice: v.compareAtPrice,
+            sku: v.sku,
+            stock: v.inventoryQuantity ?? 0,
+          })),
+          variantCount: p.variantOptions.length,
+          syncedAt: null,
+        })),
+        total: hits.length,
+        page: 1,
+        limit,
+        searchEngine: "shopifyProductKnowledge",
+      });
+    }
+
+    const rows = await db
+      .select({
+        shopifyProductId: shopifyProductsTable.shopifyProductId,
+        title: shopifyProductsTable.title,
+        productType: shopifyProductsTable.productType,
+        tags: shopifyProductsTable.tags,
+        status: shopifyProductsTable.status,
+        price: shopifyProductsTable.price,
+        compareAtPrice: shopifyProductsTable.compareAtPrice,
+        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+        variants: shopifyProductsTable.variants,
+        syncedAt: shopifyProductsTable.syncedAt,
+        collections: shopifyProductsTable.collections,
+      })
+      .from(shopifyProductsTable)
+      .where(eq(shopifyProductsTable.status, "active"))
+      .orderBy(desc(shopifyProductsTable.syncedAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(shopifyProductsTable)
+      .where(eq(shopifyProductsTable.status, "active"));
+
+    const { parseCatalogUnitPrice } = await import("../lib/shopifyProductKnowledge.js");
+
+    const products = rows.map((row) => {
+      const vars = Array.isArray(row.variants) ? row.variants : [];
+      const variantRows = vars.map((v: any, i: number) => ({
+        index: i + 1,
+        title: String(v.title ?? "Default").replace(/^default title$/i, "Standard"),
+        price: parseCatalogUnitPrice(v.price),
+        compareAtPrice: v.compareAtPrice ? parseCatalogUnitPrice(v.compareAtPrice) : null,
+        sku: v.sku ?? null,
+        stock: Number(v.inventoryQuantity ?? 0),
+      }));
+      const prices = variantRows.map((v) => v.price).filter((n) => n > 0);
+      const priceFrom = prices.length ? Math.min(...prices) : parseCatalogUnitPrice(row.price);
+      const collections = Array.isArray(row.collections) ? row.collections : [];
+      return {
+        shopifyProductId: row.shopifyProductId,
+        name: row.title,
+        productType: row.productType,
+        tags: row.tags,
+        status: row.status,
+        category: collections[0]?.title ?? null,
+        inStock: (row.inventoryQuantity ?? 0) > 0 || variantRows.some((v) => v.stock > 0),
+        priceFrom,
+        compareAt: row.compareAtPrice ? parseCatalogUnitPrice(row.compareAtPrice) : null,
+        variants: variantRows,
+        variantCount: variantRows.length,
+        syncedAt: row.syncedAt,
+      };
+    });
+
+    return res.json({
+      products,
+      total: Number(countRow?.count ?? 0),
+      page,
+      limit,
+      searchEngine: "shopify_products_table",
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Failed to list products" });
+  }
+});
+
+router.post("/admin/whatsapp/product-knowledge/rebuild", adminMiddleware as any, async (req, res) => {
+  try {
+    const { rebuildShopifyProductAliases, getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
+    const result = await rebuildShopifyProductAliases();
+    const stats = await getShopifyCatalogStats();
+    return res.json({
+      success: true,
+      message: `Product Knowledge index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
+      ...result,
+      stats,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Rebuild failed" });
+  }
+});
+
+router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as any, async (req, res) => {
+  try {
+    const query = String(req.body?.query ?? "").trim();
+    if (!query) return res.status(400).json({ error: "query is required" });
+    const limit = Math.min(6, Math.max(1, Number(req.body?.limit ?? 4)));
+    const { searchShopifyCatalog, formatShopifyCatalogForOpenAI } = await import("../lib/shopifyProductKnowledge.js");
+    const products = await searchShopifyCatalog(query, limit);
+    return res.json({
+      query,
+      count: products.length,
+      products: products.map((p) => ({
+        name: p.name,
+        shopifyProductId: p.shopifyProductId,
+        priceFrom: p.rawPrice,
+        inStock: p.inStock,
+        variants: p.variantOptions.map((v) => ({
+          title: v.title,
+          price: v.price,
+          stock: v.inventoryQuantity ?? 0,
+          sku: v.sku,
+        })),
+      })),
+      openAiContextPreview: formatShopifyCatalogForOpenAI(products),
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Test search failed" });
+  }
+});
+
 /* ─── Admin: Conversations (unique phones) ────────────── */
 router.get("/admin/whatsapp/conversations", adminMiddleware as any, async (req, res) => {
   try {

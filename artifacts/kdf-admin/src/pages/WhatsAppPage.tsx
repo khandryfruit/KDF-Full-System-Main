@@ -13,6 +13,7 @@ import {
   ArrowUp, ArrowDown, Edit2, GitBranch, CalendarClock, Search,
 } from "lucide-react";
 import { WhatsAppTemplatesTab } from "./WhatsAppTemplatesTab";
+import { WaProductKnowledgePanel } from "@/components/whatsapp/WaProductKnowledgePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -3937,6 +3938,8 @@ export default function WhatsAppPage() {
             </div>
           )}
 
+          <WaProductKnowledgePanel enabled={chatbotForm.isEnabled} />
+
           {/* ── Main Settings Card ── */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b">
@@ -3960,12 +3963,12 @@ export default function WhatsAppPage() {
             <div className="px-5 py-5 space-y-5">
               {/* How it works */}
               <div className="bg-purple-50 border border-purple-100 rounded-lg px-4 py-3 text-xs text-purple-800 leading-relaxed space-y-1">
-                <p className="font-semibold mb-1">How the Order-Aware Chatbot works:</p>
-                <p>1. Customer sends a WhatsApp message → system captures it instantly</p>
-                <p>2. System looks up their recent orders by phone number</p>
-                <p>3. Order context (status, tracking, total) is injected into ChatGPT's prompt</p>
-                <p>4. ChatGPT generates a personalised reply — e.g. "Hi Qadir, your order #KDF123 is on the way 🚚"</p>
-                <p>5. Reply is sent back via WhatsApp and logged in Conversations</p>
+                <p className="font-semibold mb-1">How the AI Chatbot works:</p>
+                <p>1. Customer message → <strong>Shopify Product Knowledge</strong> finds product, variants, price, stock</p>
+                <p>2. Recent orders by phone → order context for tracking questions</p>
+                <p>3. OpenAI replies using official catalog data only (no guessed prices)</p>
+                <p>4. Delivery / price / product questions get direct answers — not generic greetings</p>
+                <p>5. Reply sent on WhatsApp and logged in Conversations</p>
               </div>
 
               {/* AI Model */}
