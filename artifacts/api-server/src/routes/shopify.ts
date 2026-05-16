@@ -462,18 +462,13 @@ router.post("/admin/shopify/sync/products", adminMiddleware, async (req, res) =>
   try {
     const store = await getActiveStore();
     if (!store) return res.status(400).json({ error: "No connected store" });
-    let path: string | null = "/products.json?limit=250";
-    let synced = 0;
-    while (path) {
-      const resp = await shopifyFetch(store, path);
-      if (!resp.ok) return res.status(502).json({ error: `Shopify error: ${resp.status}` });
-      const { products } = await resp.json() as any;
-      for (const p of (products ?? [])) { await upsertProduct(store, p); synced++; }
-      const next = parseNextPageInfo(resp.headers.get("Link"));
-      path = next ? `/products.json?page_info=${encodeURIComponent(next)}&limit=250` : null;
-    }
-    await db.update(shopifyStoresTable).set({ lastProductSync: new Date(), totalProductsSynced: synced, updatedAt: new Date() }).where(eq(shopifyStoresTable.id, store.id));
-    res.json({ success: true, synced });
+    const [job] = await db.insert(syncJobsTable).values({
+      integrationType: "shopify", status: "pending",
+      logs: ["Products full sync started (background job)"],
+      meta: { types: ["products"], storeId: store.id },
+    }).returning();
+    setImmediate(() => runFullSync(store, ["products"], job.id));
+    res.json({ success: true, jobId: job.id, message: "Products sync started in background" });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: String(err) });

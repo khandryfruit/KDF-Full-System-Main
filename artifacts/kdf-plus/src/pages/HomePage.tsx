@@ -357,16 +357,16 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
               onClick={() => handleBannerClick(banner)}
             >
               {/* Video background (takes priority over image) */}
-              {videoSrc ? (
+              {i === idx && videoSrc ? (
                 <video
                   key={videoSrc}
                   className="absolute inset-0 w-full h-full object-cover object-center"
                   src={videoSrc.startsWith("http") ? videoSrc : `/api/storage/objects/${videoSrc}`}
-                  autoPlay
+                  autoPlay={i === idx}
                   muted
                   loop
                   playsInline
-                  preload={i === 0 ? "auto" : "none"}
+                  preload={i === idx ? "metadata" : "none"}
                 />
               ) : bgImg ? (
                 <img
@@ -602,27 +602,27 @@ function VideoBannerHero({ banners }: { banners: VideoBanner[] }) {
             className={`absolute inset-0 transition-opacity duration-500 ease-out motion-reduce:transition-none ${i === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"}`}>
 
             {/* Video Layer: Cloudflare (iframe) */}
-            {cfSrc ? (
+            {i === idx && cfSrc ? (
               <iframe
                 src={cfSrc}
                 className="absolute inset-0 w-full h-full object-cover border-0"
                 allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
                 style={{ pointerEvents: "none" }}
               />
-            ) : vid ? (
+            ) : i === idx && vid ? (
               /* Direct video */
               <video
                 key={`${banner.id}-${vid}`}
                 ref={i === idx ? videoRef : undefined}
                 className="absolute inset-0 w-full h-full object-cover"
                 src={vid.startsWith("http") ? vid : `/api/storage/objects/${vid}`}
-                autoPlay={banner.autoplay}
+                autoPlay={banner.autoplay && i === idx}
                 muted={muted}
                 loop={banner.loop}
                 playsInline
                 preload={i === 0 ? "auto" : "none"}
               />
-            ) : ytId ? (
+            ) : i === idx && ytId ? (
               /* YouTube embed */
               <iframe
                 src={`https://www.youtube.com/embed/${ytId}?autoplay=${banner.autoplay ? 1 : 0}&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1`}
@@ -847,7 +847,7 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
                 onClick={() => reel.ctaUrl && setLocation(reel.ctaUrl)}>
                 {vid ? (
                   <video src={vid} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    muted={isMuted} loop playsInline preload="metadata" autoPlay />
+                    muted={isMuted} loop playsInline preload="metadata" />
                 ) : thumb ? (
                   <img src={thumb} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={reel.title}
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
@@ -1206,11 +1206,23 @@ export default function HomePage() {
     refetchOnWindowFocus: false,
   });
 
+  const [loadHeavyMedia, setLoadHeavyMedia] = useState(false);
+  useEffect(() => {
+    const start = () => setLoadHeavyMedia(true);
+    if ("requestIdleCallback" in window) {
+      const id = (window as any).requestIdleCallback(start, { timeout: 1800 });
+      return () => (window as any).cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(start, 1200);
+    return () => globalThis.clearTimeout(id);
+  }, []);
+
   const { data: videoBanners = [] } = useQuery<VideoBanner[]>({
     queryKey: ["video-banners"],
     queryFn: () => fetch("/api/video-banners?platform=website").then(r => r.ok ? r.json() : []),
     staleTime: 120_000,
     refetchOnWindowFocus: false,
+    enabled: loadHeavyMedia,
   });
 
   const { data: mobileReels = [] } = useQuery<MobileReel[]>({
@@ -1218,6 +1230,7 @@ export default function HomePage() {
     queryFn: () => fetch("/api/mobile-reels").then(r => r.ok ? r.json() : []),
     staleTime: 120_000,
     refetchOnWindowFocus: false,
+    enabled: loadHeavyMedia,
   });
 
   const [isMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);

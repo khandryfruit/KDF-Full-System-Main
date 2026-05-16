@@ -76,6 +76,10 @@ import {
   Database,
   Factory,
   BarChart3,
+  BadgeCheck,
+  Circle,
+  Clock3,
+  Pin,
 } from "lucide-react";
 import { useState, useEffect, useRef, type ElementType } from "react";
 import { motion } from "framer-motion";
@@ -259,6 +263,39 @@ const WEBSITE_LINKS = [
   ...(IS_DEV ? [{ label: "Preview (Local)", path: "/",              icon: Globe   }] : []),
 ];
 
+const RECENT_NAV_ITEMS: SidebarNavLeaf[] = [
+  { href: "/shopify/orders",     label: "Shopify Orders",    icon: ShoppingBag },
+  { href: "/logistics/lahore",   label: "Lahore Deliveries", icon: Truck       },
+  { href: "/seo/ai-writer",      label: "AI SEO Writer",     icon: Sparkles    },
+];
+
+function MiniSectionLabel({
+  icon: Icon,
+  label,
+  expanded,
+}: {
+  icon: ElementType;
+  label: string;
+  expanded: boolean;
+}) {
+  if (!expanded) {
+    return (
+      <div className="my-3 flex justify-center" aria-hidden>
+        <div className="h-px w-7 bg-gradient-to-r from-transparent via-sidebar-border to-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 pb-1.5 pt-3">
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground/55">
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════
    WEBSITE PREVIEW BUTTON
 ═══════════════════════════════════════════════ */
@@ -316,35 +353,35 @@ function NavItem({ href, label, icon: Icon, isActive, expanded, onClick }: NavIt
       <motion.div
         layout
         title={!expanded ? label : undefined}
-        whileHover={{ scale: expanded ? 1.01 : 1.04 }}
-        whileTap={{ scale: 0.99 }}
+        whileHover={{ scale: expanded ? 1.012 : 1.06, x: expanded ? 2 : 0 }}
+        whileTap={{ scale: 0.97 }}
         transition={{ type: "spring", stiffness: 420, damping: 28 }}
         className={`
-          relative flex items-center rounded-xl transition-colors duration-200 cursor-pointer group overflow-hidden
-          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center py-2.5 mx-auto w-11 h-11"}
+          relative flex items-center rounded-2xl transition-all duration-200 cursor-pointer group overflow-hidden
+          ${expanded ? "min-h-[48px] gap-3.5 px-3.5 py-3" : "justify-center mx-auto w-12 h-12"}
           ${isActive
-            ? "text-primary bg-gradient-to-r from-primary/[0.14] via-primary/[0.08] to-transparent shadow-[0_0_0_1px_hsl(var(--primary)/0.35),inset_0_1px_0_0_hsl(var(--primary)/0.12),0_8px_32px_-12px_hsl(var(--primary)/0.45)]"
-            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.06] hover:shadow-[0_0_24px_-10px_hsl(var(--primary)/0.25)]"
+            ? "text-primary bg-gradient-to-r from-primary/[0.20] via-primary/[0.12] to-sky-500/[0.04] shadow-[0_0_0_1px_hsl(var(--primary)/0.38),inset_0_1px_0_0_rgba(255,255,255,0.12),0_16px_42px_-18px_hsl(var(--primary)/0.75)]"
+            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.055] dark:hover:bg-white/[0.075] hover:shadow-[0_10px_30px_-22px_hsl(var(--primary)/0.45)]"
           }
         `}
       >
-        {isActive && expanded && (
-          <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-gradient-to-b from-primary via-primary to-primary/40 shadow-[0_0_12px_hsl(var(--primary))]" />
+        {isActive && (
+          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-gradient-to-b from-primary via-sky-400 to-primary/40 shadow-[0_0_18px_hsl(var(--primary))]" />
         )}
         <span
           className={`
-            flex shrink-0 items-center justify-center rounded-lg transition-all duration-200
-            ${expanded ? "h-9 w-9" : "h-8 w-8"}
+            flex shrink-0 items-center justify-center rounded-xl transition-all duration-200
+            ${expanded ? "h-10 w-10" : "h-9 w-9"}
             ${isActive
-              ? "bg-primary/20 text-primary shadow-[0_0_20px_-6px_hsl(var(--primary)/0.65)]"
-              : "bg-muted/40 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+              ? "bg-white/80 text-primary shadow-[0_0_24px_-7px_hsl(var(--primary)/0.85)] dark:bg-primary/20"
+              : "bg-muted/45 text-muted-foreground ring-1 ring-border/30 group-hover:bg-primary/12 group-hover:text-primary group-hover:ring-primary/20"
             }
           `}
         >
-          <Icon strokeWidth={2} className={expanded ? "h-[1.15rem] w-[1.15rem]" : "h-4 w-4"} />
+          <Icon strokeWidth={2.15} className={expanded ? "h-5 w-5" : "h-[1.05rem] w-[1.05rem]"} />
         </span>
         <span
-          className={`text-[13px] font-semibold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${
+          className={`text-[14px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${
             expanded ? "opacity-100 max-w-[200px] w-auto" : "opacity-0 max-w-0 w-0"
           }`}
         >
@@ -385,29 +422,34 @@ function SidebarSection({
         layout
         onClick={onToggle}
         title={!expanded ? label : undefined}
-        whileHover={{ scale: expanded ? 1.01 : 1.05 }}
-        whileTap={{ scale: 0.99 }}
+        whileHover={{ scale: expanded ? 1.012 : 1.06, x: expanded ? 2 : 0 }}
+        whileTap={{ scale: 0.97 }}
         transition={{ type: "spring", stiffness: 400, damping: 26 }}
         className={`
-          w-full flex items-center rounded-xl transition-colors duration-200 group
-          ${expanded ? "gap-3 px-3 py-2.5" : "justify-center py-2.5 mx-auto w-11 h-11"}
+          relative w-full flex items-center rounded-2xl transition-all duration-200 group overflow-hidden
+          ${expanded ? "min-h-[50px] gap-3.5 px-3.5 py-3" : "justify-center mx-auto w-12 h-12"}
           ${isActive
-            ? "text-foreground bg-white/[0.04] dark:bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.05]"
+            ? "text-foreground bg-gradient-to-r from-white/[0.08] via-white/[0.055] to-white/[0.02] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_14px_38px_-28px_currentColor]"
+            : "text-muted-foreground hover:text-foreground hover:bg-white/[0.055] dark:hover:bg-white/[0.075]"
           }
         `}
       >
-        {/* Icon with colored bg when active */}
+        {isActive && (
+          <span
+            className="absolute left-0 top-2.5 bottom-2.5 w-1 rounded-r-full shadow-[0_0_16px_currentColor]"
+            style={{ backgroundColor: accentColor, color: accentColor }}
+          />
+        )}
         <div
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200 ${
-            isActive ? "shadow-[0_0_20px_-6px_currentColor]" : "group-hover:bg-muted/50"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ring-1 ${
+            isActive ? "ring-white/15 shadow-[0_0_24px_-7px_currentColor]" : "ring-border/30 group-hover:bg-muted/55 group-hover:ring-primary/20"
           }`}
           style={isActive ? { backgroundColor: `${accentColor}22`, color: accentColor } : {}}
         >
-          <Icon strokeWidth={2} className="h-[1.05rem] w-[1.05rem] shrink-0" style={isActive ? { color: accentColor } : undefined} />
+          <Icon strokeWidth={2.15} className="h-5 w-5 shrink-0" style={isActive ? { color: accentColor } : undefined} />
         </div>
 
-        <span className={`flex-1 text-left text-[13px] font-semibold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[150px]" : "opacity-0 max-w-0"}`}>
+        <span className={`flex-1 text-left text-[14px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 ${expanded ? "opacity-100 max-w-[150px]" : "opacity-0 max-w-0"}`}>
           {label}
         </span>
 
@@ -427,12 +469,12 @@ function SidebarSection({
         transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
         className="overflow-hidden"
       >
-        <div className="ml-[11px] mt-1 border-l pl-3 space-y-0.5" style={{ borderColor: `${accentColor}35` }}>
+        <div className="ml-[14px] mt-1.5 border-l pl-3.5 space-y-1" style={{ borderColor: `${accentColor}35` }}>
           {items.map((item, idx) => {
             if ("divider" in item && item.divider) {
               return (
                 <div key={`divider-${idx}`} className="px-2 pt-3 pb-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/45">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground/45">
                     {item.label}
                   </span>
                 </div>
@@ -446,12 +488,13 @@ function SidebarSection({
             return (
               <Link key={leaf.href} href={leaf.href} onClick={onNavClick} className="block">
                 <motion.div
-                  whileHover={{ x: 2 }}
+                  whileHover={{ x: 3, scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                  className={`relative flex min-h-[2rem] items-center gap-2 rounded-lg px-2.5 py-2 text-[12.5px] transition-colors ${
+                  className={`relative flex min-h-[40px] items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] transition-all ${
                     subActive
-                      ? "font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] dark:hover:bg-white/[0.06]"
+                      ? "font-bold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_12px_28px_-24px_currentColor]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.055] dark:hover:bg-white/[0.075]"
                   }`}
                   style={subActive ? { color: accentColor, backgroundColor: `${accentColor}14` } : {}}
                 >
@@ -459,10 +502,10 @@ function SidebarSection({
                     <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full" style={{ backgroundColor: accentColor }} />
                   )}
                   <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/35 dark:bg-muted/25"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/35 ring-1 ring-border/25 dark:bg-muted/25"
                     style={subActive ? { backgroundColor: `${accentColor}22` } : {}}
                   >
-                    <SubIcon strokeWidth={2} className="h-3.5 w-3.5 shrink-0" style={subActive ? { color: accentColor } : {}} />
+                    <SubIcon strokeWidth={2.1} className="h-4 w-4 shrink-0" style={subActive ? { color: accentColor } : {}} />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{leaf.label}</span>
                   {leaf.notifyDot && (
@@ -537,49 +580,90 @@ function SidebarContent({
   const isOperationsActive = ["/couriers","/shipping-rules","/same-day-delivery","/payments","/import-export","/failed-orders","/notifications","/sync-jobs"].some(p => location === p || location.startsWith(p + "/"));
   const isSettingsActive   = ["/integrations","/location","/cities","/website-settings","/header-builder","/footer","/image-optimization","/email-settings","/intelligence","/profile"].some(p => location === p || location.startsWith(p + "/"));
   const { waUnread } = useNotifications();
+  const favoriteItems = [
+    hasPermission("dashboard.view") ? { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard } : null,
+    hasPermission("orders.view") ? { href: "/orders", label: "Orders", icon: ShoppingCart } : null,
+    hasPermission("products.view") ? { href: "/products", label: "Products", icon: Package } : null,
+    hasPermission("billing.view") ? { href: "/pos", label: "POS", icon: Zap } : null,
+    hasPermission("whatsapp.view") ? { href: "/wa-inbox", label: "WA Inbox", icon: MessageCircle } : null,
+  ].filter(Boolean) as SidebarNavLeaf[];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden border-r border-white/[0.06] bg-sidebar/75 shadow-[8px_0_48px_-24px_rgba(0,0,0,0.55)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-[hsl(var(--sidebar)/0.72)]">
+    <div className="relative flex h-full flex-col overflow-hidden border-r border-white/[0.08] bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_32%),linear-gradient(180deg,hsl(var(--sidebar)/0.96),hsl(var(--sidebar)/0.78))] shadow-[16px_0_60px_-32px_rgba(0,0,0,0.78)] backdrop-blur-2xl dark:border-white/[0.07]">
+      <div className="pointer-events-none absolute inset-x-3 top-3 h-28 rounded-full bg-primary/10 blur-3xl" />
 
       {/* Logo area */}
-      <div className={`h-[52px] flex items-center border-b border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "px-4 gap-3 justify-between" : "px-0 justify-center"}`}>
+      <div className={`relative h-[72px] flex items-center border-b border-white/[0.07] shrink-0 transition-all duration-300 ${expanded ? "px-4 gap-3 justify-between" : "px-0 justify-center"}`}>
         {expanded ? (
           <>
             <div className="flex items-center gap-2.5 min-w-0">
               {/* Brand mark */}
-              <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-sm">
-                <span className="text-primary-foreground text-[11px] font-black tracking-tight">KD</span>
+              <div className="relative w-10 h-10 rounded-2xl bg-gradient-to-br from-primary via-emerald-500 to-sky-500 flex items-center justify-center shrink-0 shadow-[0_16px_34px_-18px_hsl(var(--primary))] ring-1 ring-white/20">
+                <span className="text-primary-foreground text-[13px] font-black tracking-tight">KD</span>
+                <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-sidebar bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
               </div>
               <div className="min-w-0">
-                <p className="font-bold text-[13px] text-foreground leading-none truncate tracking-tight">KDF NUTS</p>
-                <p className="text-[10px] text-muted-foreground/70 leading-none mt-[3px] font-medium">Admin Console</p>
+                <p className="font-black text-[15px] text-foreground leading-none truncate tracking-tight">KDF Admin</p>
+                <p className="text-[10px] text-muted-foreground/70 leading-none mt-1 font-bold uppercase tracking-[0.18em]">Command Center</p>
               </div>
             </div>
             {!isMobile && onToggleCollapse && (
               <button
                 onClick={onToggleCollapse}
-                className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-accent text-muted-foreground/60 hover:text-muted-foreground transition-colors shrink-0"
+                className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.07] text-muted-foreground/70 hover:text-foreground transition-colors shrink-0 ring-1 ring-white/[0.06]"
                 title="Collapse sidebar"
               >
-                <PanelLeftClose size={13} />
+                <PanelLeftClose size={16} />
               </button>
             )}
           </>
         ) : (
           <button
             onClick={onToggleCollapse}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent transition-colors"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center hover:bg-white/[0.07] transition-colors"
             title="Expand sidebar"
           >
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-              <span className="text-primary-foreground text-[10px] font-black">KD</span>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary via-emerald-500 to-sky-500 flex items-center justify-center shadow-[0_16px_34px_-18px_hsl(var(--primary))] ring-1 ring-white/20">
+              <span className="text-primary-foreground text-[13px] font-black">KD</span>
             </div>
           </button>
         )}
       </div>
 
       {/* Scrollable nav */}
-      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-2 space-y-px ${expanded ? "px-2" : "px-1.5"}`}>
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-1.5 ${expanded ? "px-3" : "px-1.5"}`}>
+
+        {favoriteItems.length > 0 && (
+          <>
+            <MiniSectionLabel icon={Pin} label="Pinned" expanded={expanded} />
+            <div className={expanded ? "grid grid-cols-2 gap-2 px-1" : "space-y-1"}>
+              {favoriteItems.slice(0, expanded ? 4 : 5).map((item) => {
+                const FavIcon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href} onClick={onNavClick} className="block">
+                    <motion.div
+                      title={!expanded ? item.label : undefined}
+                      whileHover={{ y: expanded ? -1 : 0, scale: expanded ? 1.015 : 1.06 }}
+                      whileTap={{ scale: 0.97 }}
+                      className={`relative flex items-center rounded-2xl transition-all ${
+                        expanded ? "min-h-[58px] flex-col justify-center gap-1.5 px-2 py-2 text-center" : "mx-auto h-12 w-12 justify-center"
+                      } ${
+                        location === item.href || location.startsWith(`${item.href}/`)
+                          ? "bg-gradient-to-br from-primary/22 to-sky-500/10 text-primary shadow-[0_16px_38px_-24px_hsl(var(--primary))] ring-1 ring-primary/30"
+                          : "bg-white/[0.045] text-muted-foreground ring-1 ring-white/[0.055] hover:bg-white/[0.075] hover:text-foreground"
+                      }`}
+                    >
+                      <FavIcon className={expanded ? "h-5 w-5" : "h-[1.05rem] w-[1.05rem]"} strokeWidth={2.15} />
+                      {expanded && <span className="max-w-full truncate text-[11px] font-black leading-tight">{item.label}</span>}
+                    </motion.div>
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <MiniSectionLabel icon={BarChart3} label="Business" expanded={expanded} />
 
         {/* ── Dashboard (standalone top link) ── */}
         {hasPermission("dashboard.view") && (
@@ -588,8 +672,6 @@ function SidebarContent({
             expanded={expanded} onClick={onNavClick} />
         )}
 
-        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
-
         {/* ── Shopify (TOP PRIORITY) ── */}
         {hasPermission("shopify.view") && (
           <SidebarSection label="Shopify" icon={Store}
@@ -597,41 +679,6 @@ function SidebarContent({
             isActive={isShopifyActive} expanded={expanded} open={shopifyOpen} onToggle={onToggleShopify}
             items={SHOPIFY_NAV_ITEMS} location={location} onNavClick={onNavClick} />
         )}
-
-        {/* ── Logistics (TOP PRIORITY) ── */}
-        {hasPermission("riders.view") && (
-          <SidebarSection label="Logistics" icon={Truck}
-            accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
-            isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
-            items={LOGISTICS_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
-        )}
-
-        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
-
-        {/* ── WA Chat ── */}
-        {hasPermission("whatsapp.view") && (
-          <div className="relative">
-            <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
-              accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
-              isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
-              items={WA_CHAT_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
-            {waUnread > 0 && !waChatOpen && (
-              <span className={`absolute top-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 pointer-events-none leading-none ${expanded ? "right-1.5" : "-right-1 -top-0.5"}`}>
-                {waUnread > 99 ? "99+" : waUnread}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* ── Invoice & Billing ── */}
-        {hasPermission("billing.view") && (
-          <SidebarSection label="Invoice & Billing" icon={Receipt}
-            accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
-            isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
-            items={INVOICE_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
-        )}
-
-        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
 
         {/* ── Commerce ── */}
         {(hasPermission("orders.view") || hasPermission("products.view")) && (
@@ -649,12 +696,22 @@ function SidebarContent({
             items={STORE_NAV} location={location} onNavClick={onNavClick} />
         )}
 
-        {/* ── Marketing ── */}
-        {hasPermission("marketing.view") && (
-          <SidebarSection label="Marketing" icon={Megaphone}
-            accentColor="#EC4899" activeBg="bg-pink-500/10" activeText="text-pink-700" badgeLetter="M"
-            isActive={isMarketingActive} expanded={expanded} open={marketingOpen} onToggle={onToggleMarketing}
-            items={MARKETING_NAV} location={location} onNavClick={onNavClick} />
+        <MiniSectionLabel icon={Boxes} label="Orders & Operations" expanded={expanded} />
+
+        {/* ── Logistics (TOP PRIORITY) ── */}
+        {hasPermission("riders.view") && (
+          <SidebarSection label="Logistics" icon={Truck}
+            accentColor="#059669" activeBg="bg-emerald-600/10" activeText="text-emerald-700" badgeLetter="L"
+            isActive={isLogisticsActive} expanded={expanded} open={logisticsOpen} onToggle={onToggleLogistics}
+            items={LOGISTICS_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
+        )}
+
+        {/* ── Invoice & Billing ── */}
+        {hasPermission("billing.view") && (
+          <SidebarSection label="Invoice & Billing" icon={Receipt}
+            accentColor="#D97706" activeBg="bg-amber-600/10" activeText="text-amber-700" badgeLetter="₨"
+            isActive={isInvoiceActive} expanded={expanded} open={invoiceOpen} onToggle={onToggleInvoice}
+            items={INVOICE_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
         )}
 
         {/* ── Operations ── */}
@@ -665,22 +722,39 @@ function SidebarContent({
             items={OPERATIONS_NAV} location={location} onNavClick={onNavClick} />
         )}
 
+        <MiniSectionLabel icon={MessageCircle} label="Customers" expanded={expanded} />
+
+        {/* ── WA Chat ── */}
+        {hasPermission("whatsapp.view") && (
+          <div className="relative">
+            <SidebarSection label="WA Chat & Inbox" icon={MessageCircle}
+              accentColor="#25D366" activeBg="bg-[#25D366]/10" activeText="text-[#128C7E]" badgeLetter="W"
+              isActive={isWaChatActive} expanded={expanded} open={waChatOpen} onToggle={onToggleWaChat}
+              items={WA_CHAT_NAV_ITEMS as unknown as readonly SidebarNavBlockEntry[]} location={location} onNavClick={onNavClick} />
+            {waUnread > 0 && !waChatOpen && (
+              <span className={`absolute top-2 min-w-[18px] h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 pointer-events-none leading-none shadow-[0_0_18px_rgba(239,68,68,0.65)] ${expanded ? "right-2" : "-right-1 -top-0.5"}`}>
+                {waUnread > 99 ? "99+" : waUnread}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Marketing ── */}
+        {hasPermission("marketing.view") && (
+          <SidebarSection label="Marketing" icon={Megaphone}
+            accentColor="#EC4899" activeBg="bg-pink-500/10" activeText="text-pink-700" badgeLetter="M"
+            isActive={isMarketingActive} expanded={expanded} open={marketingOpen} onToggle={onToggleMarketing}
+            items={MARKETING_NAV} location={location} onNavClick={onNavClick} />
+        )}
+
+        <MiniSectionLabel icon={Settings} label="System" expanded={expanded} />
+
         {/* ── Settings ── */}
         {(hasPermission("settings.view") || hasPermission("integrations.manage")) && (
           <SidebarSection label="Settings" icon={Settings}
             accentColor="#6B7280" activeBg="bg-gray-500/10" activeText="text-gray-700" badgeLetter="⚙"
             isActive={isSettingsActive} expanded={expanded} open={settingsOpen} onToggle={onToggleSettings}
             items={SETTINGS_NAV} location={location} onNavClick={onNavClick} />
-        )}
-
-        <div className={`my-1.5 ${expanded ? "mx-1" : "mx-auto w-5"}`}><div className="h-px bg-sidebar-border/60" /></div>
-
-        {/* ── Branches ── */}
-        {hasPermission("branches.view") && (
-          <SidebarSection label="Branches" icon={Building2}
-            accentColor="#4F46E5" activeBg="bg-indigo-600/10" activeText="text-indigo-700" badgeLetter="B"
-            isActive={isBranchesActive} expanded={expanded} open={branchesOpen} onToggle={onToggleBranches}
-            items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
         )}
 
         {/* ── Payment Gateway ── */}
@@ -699,47 +773,94 @@ function SidebarContent({
             items={ADMIN_IAM_NAV_ITEMS} location={location} onNavClick={onNavClick} />
         )}
 
+        {/* ── Branches ── */}
+        {hasPermission("branches.view") && (
+          <SidebarSection label="Branches" icon={Building2}
+            accentColor="#4F46E5" activeBg="bg-indigo-600/10" activeText="text-indigo-700" badgeLetter="B"
+            isActive={isBranchesActive} expanded={expanded} open={branchesOpen} onToggle={onToggleBranches}
+            items={BRANCHES_NAV_ITEMS} location={location} onNavClick={onNavClick} />
+        )}
+
+        {expanded && (
+          <>
+            <MiniSectionLabel icon={Clock3} label="Recent" expanded={expanded} />
+            <div className="space-y-1 px-1 pb-2">
+              {RECENT_NAV_ITEMS.map((item) => {
+                const RecentIcon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href} onClick={onNavClick} className="block">
+                    <div className="flex min-h-[38px] items-center gap-2.5 rounded-xl px-2.5 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-white/[0.055] hover:text-foreground">
+                      <RecentIcon className="h-3.5 w-3.5" />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
+
       </div>
 
       {/* Bottom: User + Logout */}
-      <div className={`border-t border-sidebar-border shrink-0 transition-all duration-300 ${expanded ? "p-2.5" : "p-1.5"}`}>
+      <div className={`border-t border-white/[0.08] shrink-0 transition-all duration-300 ${expanded ? "p-3" : "p-1.5"}`}>
 
         {/* Profile card — expanded */}
         {expanded && adminUser && (
-          <div className="flex items-center gap-2.5 px-2.5 py-2.5 mb-1.5 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/60">
+          <div className="relative mb-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.075] via-white/[0.045] to-primary/[0.055] p-3 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.85)]">
+            <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
             {/* Avatar */}
-            <div className="relative shrink-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm">
-                {adminUser.isSuper
-                  ? <Crown size={13} className="text-amber-300" />
-                  : <span className="text-primary-foreground text-xs font-bold leading-none">{adminUser.name.charAt(0).toUpperCase()}</span>
-                }
-              </div>
-              {/* Online dot */}
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-sidebar" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] font-semibold truncate leading-tight text-foreground">{adminUser.name}</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-px rounded-full leading-none ${adminUser.isSuper ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-primary/10 text-primary"}`}>
-                  {adminUser.isSuper ? "Super Admin" : (adminUser.roles?.[0]?.name ?? "Admin")}
+            <div className="relative flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-sky-500 to-emerald-500 shadow-[0_16px_32px_-18px_hsl(var(--primary))] ring-2 ring-white/15">
+                  {adminUser.avatarUrl ? (
+                    <img src={adminUser.avatarUrl} alt={adminUser.name} className="h-full w-full object-cover" />
+                  ) : adminUser.isSuper ? (
+                    <Crown size={17} className="text-amber-300" />
+                  ) : (
+                    <span className="text-primary-foreground text-sm font-black leading-none">{adminUser.name.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                {/* Online dot */}
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.85)]">
+                  <Circle className="h-1.5 w-1.5 fill-white text-white" />
                 </span>
               </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13.5px] font-black leading-tight text-foreground">{adminUser.name}</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black leading-none ${adminUser.isSuper ? "bg-amber-400/15 text-amber-500 ring-1 ring-amber-400/25" : "bg-primary/12 text-primary ring-1 ring-primary/20"}`}>
+                    <BadgeCheck className="h-3 w-3" />
+                    {adminUser.isSuper ? "Super Admin" : (adminUser.roles?.[0]?.name ?? "Admin")}
+                  </span>
+                </div>
+              </div>
+              <Link
+                href="/profile"
+                onClick={onNavClick}
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.07] hover:text-foreground"
+                title="Quick settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
             </div>
           </div>
         )}
 
         {/* Collapsed avatar only */}
         {!expanded && adminUser && (
-          <div className="flex justify-center mb-1.5">
+          <div className="flex justify-center mb-2">
             <div className="relative">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm" title={adminUser.name}>
-                {adminUser.isSuper
-                  ? <Crown size={12} className="text-amber-300" />
-                  : <span className="text-primary-foreground text-[10px] font-bold">{adminUser.name.charAt(0).toUpperCase()}</span>
-                }
+              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-sky-500 to-emerald-500 shadow-[0_16px_32px_-18px_hsl(var(--primary))] ring-1 ring-white/15" title={adminUser.name}>
+                {adminUser.avatarUrl ? (
+                  <img src={adminUser.avatarUrl} alt={adminUser.name} className="h-full w-full object-cover" />
+                ) : adminUser.isSuper ? (
+                  <Crown size={14} className="text-amber-300" />
+                ) : (
+                  <span className="text-primary-foreground text-[12px] font-black">{adminUser.name.charAt(0).toUpperCase()}</span>
+                )}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-sidebar" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-sidebar shadow-[0_0_12px_rgba(16,185,129,0.85)]" />
             </div>
           </div>
         )}
@@ -749,9 +870,9 @@ function SidebarContent({
           onClick={onLogout}
           title={!expanded ? "Logout" : undefined}
           className={`
-            flex items-center rounded-lg w-full transition-all duration-150 group
-            text-muted-foreground hover:bg-red-500/8 hover:text-red-500
-            ${expanded ? "gap-2.5 px-3 py-2" : "justify-center py-2 mx-auto w-9 h-9"}
+            flex items-center rounded-xl w-full transition-all duration-150 group
+            text-muted-foreground hover:bg-red-500/10 hover:text-red-500
+            ${expanded ? "min-h-[42px] gap-2.5 px-3 py-2.5" : "justify-center mx-auto w-10 h-10"}
           `}
         >
           <LogOut size={14} className="shrink-0 transition-colors group-hover:text-red-500" />
@@ -926,7 +1047,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className={`
           hidden md:block h-screen sticky top-0 shrink-0 z-20
           transition-[width] duration-300 ease-in-out
-          ${sidebarExpanded ? "w-[288px]" : "w-[60px]"}
+          ${sidebarExpanded ? "w-[310px]" : "w-[68px]"}
         `}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -995,7 +1116,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Menu size={20} />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-72 border-r-0 bg-sidebar/95 backdrop-blur-xl">
+              <SheetContent side="left" className="p-0 w-[320px] max-w-[92vw] border-r-0 bg-sidebar/95 backdrop-blur-xl">
                 <SidebarContent
                   {...sharedProps}
                   expanded={true}

@@ -2,6 +2,8 @@
 import { useLocation } from "wouter";
 import { X, ShoppingCart, Plus, Minus, Trash2, ArrowRight, ShoppingBag, Package } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
+import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
 
 const GREEN = "#5FA800";
@@ -9,6 +11,13 @@ const GREEN = "#5FA800";
 export function MiniCart() {
   const [, setLocation] = useLocation();
   const { items, miniCartOpen, setMiniCartOpen, totalItems, totalPrice, updateQty, removeItem, lastAdded } = useCart();
+  const cartProductIds = items.map((item) => item.product.id);
+  const { data: recs } = useProductRecommendations({
+    context: "cart",
+    cartProductIds,
+    limit: 8,
+    enabled: miniCartOpen && items.length > 0,
+  });
 
   const handleViewCart = () => { setMiniCartOpen(false); setLocation("/cart"); };
   const handleCheckout = () => { setMiniCartOpen(false); setLocation("/checkout"); };
@@ -86,10 +95,7 @@ export function MiniCart() {
             </div>
           ) : (
             items.map((item, idx) => {
-              const variantPrice = item.variantId
-                ? item.product.variants?.find(v => v.id === item.variantId)?.price
-                : undefined;
-              const unitPrice = variantPrice ? parseFloat(variantPrice) : parseFloat(item.product.price) || 0;
+              const unitPrice = getCartItemUnitPrice(item);
               const imageUrl = getProductImageSrc(item.product.images?.[0]);
               return (
                 <div
@@ -134,6 +140,16 @@ export function MiniCart() {
               );
             })
           )}
+          {items.length > 0 && recs?.cartUpsells?.length ? (
+            <div className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-gray-100">
+              <ProductRecommendationStrip
+                title="Complete your cart"
+                subtitle="Popular add-ons customers buy together"
+                products={recs.cartUpsells}
+                compact
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* ── Sticky Footer (checkout) ── */}

@@ -245,6 +245,31 @@ export async function selectBestCourier(params: { city: string; weight: number; 
 }
 
 /* ── Send OnDrive branded WhatsApp confirmation with interactive buttons ── */
+export async function upsertOrderConfirmationRecord(params: {
+  shopifyOrderId: string;
+  orderNumber: string;
+  shopifyOrderDbId?: number;
+  phone: string;
+  customerName: string;
+  messageId?: string | null;
+}) {
+  const normalizedPhone = normalizePhone(params.phone);
+  await db.execute(sql`
+    INSERT INTO shopify_order_confirmations
+      (shopify_order_id, shopify_order_number, shopify_order_db_id, customer_phone, customer_name,
+       wa_message_id, status, last_sent_at, auto_book_enabled)
+    VALUES
+      (${params.shopifyOrderId}, ${params.orderNumber}, ${params.shopifyOrderDbId ?? null}, ${normalizedPhone},
+       ${params.customerName}, ${params.messageId ?? null}, 'pending', NOW(), TRUE)
+    ON CONFLICT (shopify_order_id) DO UPDATE SET
+      status = CASE WHEN shopify_order_confirmations.status = 'confirmed' THEN 'confirmed' ELSE 'pending' END,
+      wa_message_id = COALESCE(${params.messageId ?? null}, shopify_order_confirmations.wa_message_id),
+      last_sent_at = NOW(),
+      retry_count = shopify_order_confirmations.retry_count + 1,
+      updated_at = NOW()
+  `).catch(() => {});
+}
+
 export async function sendOrderConfirmationWA(params: {
   phone: string;
   orderNumber: string;
@@ -277,21 +302,27 @@ export async function sendOrderConfirmationWA(params: {
     const { getApprovedTemplate } = await import("./whatsapp.js");
     const tpl = await getApprovedTemplate("order_confirmation");
     const templateName = tpl?.name ?? "order_confromd_";
+    const bodyParams = [
+      orderNumber,
+      name,
+      `Rs. ${Number(total).toLocaleString()}`,
+      paymentLabel,
+    ];
+    const selectedParams = tpl?.paramCount != null ? bodyParams.slice(0, tpl.paramCount) : bodyParams;
     const templateResult = await sendWhatsAppTemplate({
       phone: normalizedPhone,
       templateName,
       languageCode: tpl?.language ?? "en_US",
-      components: [
-        {
-          type: "body",
-          parameters: [
-            { type: "text", text: orderNumber },
-            { type: "text", text: name },
-            { type: "text", text: `Rs. ${Number(total).toLocaleString()}` },
-            { type: "text", text: paymentLabel },
-          ],
-        },
-      ],
+      triggerEvent: "order_confirmation",
+      shopifyOrderId,
+      components: selectedParams.length
+        ? [
+            {
+              type: "body",
+              parameters: selectedParams.map((text) => ({ type: "text", text })),
+            },
+          ]
+        : [],
     });
 
     let messageId: string | undefined = templateResult.messageId;
@@ -326,20 +357,14 @@ export async function sendOrderConfirmationWA(params: {
     }
 
     /* Store pending confirmation record */
-    await db.execute(sql`
-      INSERT INTO shopify_order_confirmations
-        (shopify_order_id, shopify_order_number, shopify_order_db_id, customer_phone, customer_name,
-         wa_message_id, status, last_sent_at, auto_book_enabled)
-      VALUES
-        (${shopifyOrderId}, ${orderNumber}, ${shopifyOrderDbId}, ${normalizedPhone},
-         ${customerName}, ${messageId ?? null}, 'pending', NOW(), TRUE)
-      ON CONFLICT (shopify_order_id) DO UPDATE SET
-        status = CASE WHEN shopify_order_confirmations.status = 'confirmed' THEN 'confirmed' ELSE 'pending' END,
-        wa_message_id = ${messageId ?? null},
-        last_sent_at = NOW(),
-        retry_count = shopify_order_confirmations.retry_count + 1,
-        updated_at = NOW()
-    `).catch(() => {});
+    await upsertOrderConfirmationRecord({
+      shopifyOrderId,
+      orderNumber,
+      shopifyOrderDbId,
+      phone: normalizedPhone,
+      customerName,
+      messageId,
+    });
 
     return { success, messageId, error: success ? undefined : "WhatsApp send failed" };
   } catch (err: any) {

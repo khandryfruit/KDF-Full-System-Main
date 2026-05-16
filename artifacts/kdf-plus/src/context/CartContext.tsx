@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { Product } from "@workspace/api-client-react";
 import { getSessionId, trackAbandonedCheckout } from "@/lib/abandonedCheckout";
+import { getCartItemUnitPrice } from "@/lib/cartPricing";
 
 export interface CartItem {
   product: Product;
@@ -49,18 +50,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem("kdf_cart", JSON.stringify(items)); } catch {}
     if (items.length > 0) {
       const subtotal = items.reduce((sum, item) => {
-        const variant = item.variantId
-          ? (item.product.variants ?? []).find(v => v.id === item.variantId)
-          : undefined;
-        const price = variant?.price ? parseFloat(variant.price) : parseFloat(item.product.price ?? "0") || 0;
-        return sum + price * item.quantity;
+        return sum + getCartItemUnitPrice(item) * item.quantity;
       }, 0);
       trackAbandonedCheckout({
         sessionId: getSessionId(),
         cartItems: items.map((item) => ({
           productId: item.product.id,
           name: item.product.name,
-          price: item.product.price ?? "0",
+          price: String(getCartItemUnitPrice(item)),
           qty: item.quantity,
           variant: item.variantId,
           variantLabel: item.variantLabel,
@@ -119,11 +116,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const totalPrice = items.reduce((sum, item) => {
     if (!item?.product?.price) return sum;
-    const variant = item.variantId
-      ? (item.product.variants ?? []).find(v => v.id === item.variantId)
-      : undefined;
-    const price = variant?.price ? parseFloat(variant.price) : parseFloat(item.product.price) || 0;
-    return sum + price * item.quantity;
+    return sum + getCartItemUnitPrice(item) * item.quantity;
   }, 0);
 
   return (

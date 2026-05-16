@@ -10,6 +10,8 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/context/LocationContext";
 import { useCreateOrder, useGetWalletBalance } from "@workspace/api-client-react";
+import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
+import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +93,13 @@ export default function CheckoutPage() {
   const { toast } = useToast();
   const createOrder = useCreateOrder();
   const { city: detectedCity, cities, detectLocation, isDetecting, mapsLoaded, initAutocomplete } = useUserLocation();
+  const cartProductIds = items.map((item) => item.product.id);
+  const { data: checkoutRecs } = useProductRecommendations({
+    context: "checkout",
+    cartProductIds,
+    limit: 8,
+    enabled: items.length > 0,
+  });
 
   const [referenceNumber, setReferenceNumber] = useState("");
   const [deliveryType, setDeliveryType] = useState<"standard" | "same_day">("standard");
@@ -142,14 +151,14 @@ export default function CheckoutPage() {
   const shippingCalcItems = items.map((i) => ({
     productId: i.product.id,
     qty: i.quantity,
-    price: parseFloat(i.product.price ?? "0") || 0,
+    price: getCartItemUnitPrice(i),
   }));
 
   /* Track: checkout page opened */
   useEffect(() => {
     if (items.length === 0) return;
     const subtotal = items.reduce((sum, item) => {
-      return sum + (parseFloat(item.product.price ?? "0") || 0) * item.quantity;
+      return sum + getCartItemUnitPrice(item) * item.quantity;
     }, 0);
     trackAbandonedCheckout({
       sessionId: getSessionId(),
@@ -159,7 +168,7 @@ export default function CheckoutPage() {
       cartItems: items.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
-        price: item.product.price ?? "0",
+        price: String(getCartItemUnitPrice(item)),
         qty: item.quantity,
         variant: item.variantId,
         variantLabel: item.variantLabel,
@@ -246,7 +255,7 @@ export default function CheckoutPage() {
       cartItems: items.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
-        price: item.product.price ?? "0",
+        price: String(getCartItemUnitPrice(item)),
         qty: item.quantity,
         variant: item.variantId,
         variantLabel: item.variantLabel,
@@ -279,7 +288,7 @@ export default function CheckoutPage() {
       cartItems: items.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
-        price: item.product.price ?? "0",
+        price: String(getCartItemUnitPrice(item)),
         qty: item.quantity,
         variant: item.variantId,
         variantLabel: item.variantLabel,
@@ -313,7 +322,7 @@ export default function CheckoutPage() {
           items: items.map((item) => ({
             productId: item.product.id,
             name: item.product.name,
-            price: item.product.price,
+            price: String(getCartItemUnitPrice(item)),
             qty: item.quantity,
             variant: item.variantId,
             gradient: item.product.gradient,
@@ -469,6 +478,7 @@ export default function CheckoutPage() {
                         )}
                         <FormControl>
                           <div className="space-y-1.5">
+                            {!mapsLoaded && <input ref={addressInputRef} className="hidden" aria-hidden="true" tabIndex={-1} />}
                             {/* Google Maps Places Autocomplete search input (only shown when Maps loaded) */}
                             {mapsLoaded && (
                               <div className="relative">
@@ -493,6 +503,14 @@ export default function CheckoutPage() {
                                 className={`w-full border border-input rounded-md ${!mapsLoaded ? "pl-9" : "pl-3"} pr-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 resize-none`}
                                 value={field.value}
                                 onChange={(e) => field.onChange(e.target.value)}
+                                onFocus={() => {
+                                  if (addressInputRef.current) {
+                                    initAutocomplete(addressInputRef.current, (address, city) => {
+                                      form.setValue("address", address, { shouldValidate: true });
+                                      if (city) form.setValue("city", city, { shouldValidate: true });
+                                    });
+                                  }
+                                }}
                                 onBlur={field.onBlur}
                                 name={field.name}
                               />
@@ -768,10 +786,20 @@ export default function CheckoutPage() {
                           <p className="text-xs font-medium line-clamp-1">{item.product.name}</p>
                           <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                         </div>
-                        <p className="text-xs font-bold flex-shrink-0">Rs. {(parseFloat(item.product.price) * item.quantity).toLocaleString()}</p>
+                        <p className="text-xs font-bold flex-shrink-0">Rs. {(getCartItemUnitPrice(item) * item.quantity).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
+                  {checkoutRecs?.cartUpsells?.length ? (
+                    <div className="mb-4 rounded-2xl border border-[#5FA800]/10 bg-[#5FA800]/[0.03] p-3">
+                      <ProductRecommendationStrip
+                        title="Add before checkout"
+                        subtitle="Small add-ons customers often include"
+                        products={checkoutRecs.cartUpsells}
+                        compact
+                      />
+                    </div>
+                  ) : null}
                   <Separator className="my-3" />
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>Rs. {totalPrice.toLocaleString()}</span></div>

@@ -93,11 +93,6 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       .then((data) => {
         if (!data) return;
         setMapsSettings(data);
-        if (data.isEnabled && data.apiKey) {
-          loadGoogleMaps(data.apiKey)
-            .then(() => setMapsLoaded(true))
-            .catch(() => setMapsLoaded(false));
-        }
       })
       .catch(() => {});
   }, []);
@@ -145,6 +140,12 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 
   const initAutocomplete = useCallback(
     (input: HTMLInputElement, onSelect: (address: string, city?: string) => void) => {
+      if (!mapsLoaded && mapsSettings?.isEnabled && mapsSettings.apiKey) {
+        loadGoogleMaps(mapsSettings.apiKey)
+          .then(() => setMapsLoaded(true))
+          .catch(() => setMapsLoaded(false));
+        return undefined;
+      }
       if (!mapsLoaded || !(window as any).google?.maps?.places) return undefined;
       const g = (window as any).google;
       const autocomplete = new g.maps.places.Autocomplete(input, {
@@ -164,7 +165,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         g.maps.event.removeListener(listener);
       };
     },
-    [mapsLoaded]
+    [mapsLoaded, mapsSettings]
   );
 
   return (

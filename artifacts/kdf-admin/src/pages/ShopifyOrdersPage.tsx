@@ -1995,6 +1995,7 @@ export default function ShopifyOrdersPage() {
       if (deliveryFilter !== "all")  params.set("delivery_type", deliveryFilter);
       return api(`/admin/shopify/orders?${params}`).then(r => r.json());
     },
+    refetchInterval: 10_000,
   });
 
   const { data: tabCounts = {} } = useQuery<Record<string, number>>({

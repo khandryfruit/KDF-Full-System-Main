@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Search, Package, ChevronLeft, ChevronRight, Tag, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,13 +30,21 @@ export default function ShopifyProductsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["shopify-products", page, search, status],
     queryFn: () => api(`/admin/shopify/products?page=${page}&limit=24&search=${encodeURIComponent(search)}&status=${status}`).then(r => r.json()),
+    refetchInterval: 30_000,
   });
 
   const syncMutation = useMutation({
     mutationFn: () => api("/admin/shopify/sync/products", { method: "POST" }).then(r => r.json()),
-    onSuccess: (d) => { qc.invalidateQueries({ queryKey: ["shopify-products"] }); toast({ title: `${d.synced} products synced` }); },
+    onSuccess: (d) => { qc.invalidateQueries({ queryKey: ["shopify-products"] }); toast({ title: d.jobId ? "Products sync started" : `${d.synced ?? 0} products synced`, description: d.message }); },
     onError: () => toast({ title: "Sync failed", variant: "destructive" }),
   });
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      qc.invalidateQueries({ queryKey: ["shopify-products"] });
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [qc]);
 
   const products = data?.products ?? [];
   const total = data?.total ?? 0;

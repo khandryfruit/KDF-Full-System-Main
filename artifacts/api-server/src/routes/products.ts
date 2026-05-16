@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, productsTable, shopifyProductsTable } from "@workspace/db";
-import { eq, ilike, and, desc, asc, sql, or, exists } from "drizzle-orm";
+import { db, productsTable, shopifyOrdersTable, shopifyProductsTable } from "@workspace/db";
+import { eq, ilike, and, desc, asc, sql, or, exists, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { generateSlugFromName, ensureUniqueSlug } from "../lib/slugify";
 
@@ -123,6 +123,161 @@ router.get("/products", async (req, res) => {
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed to list products" });
+  }
+});
+
+type RecommendationContext = "product" | "variant" | "cart" | "checkout";
+
+function parseIdList(value: unknown): number[] {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((v) => Number(v.trim()))
+    .filter((v) => Number.isFinite(v) && v > 0);
+}
+
+function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(String).map((v) => v.toLowerCase().trim()).filter(Boolean);
+}
+
+function dedupeProducts<T extends { id: number }>(items: T[], limit: number): T[] {
+  const seen = new Set<number>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function getShopifyTitleSalesScores(): Promise<Map<string, number>> {
+  try {
+    const rows = await db.execute(sql`
+      SELECT lower(li->>'title') AS title,
+             SUM(COALESCE((li->>'quantity')::int, 1))::int AS units
+      FROM ${shopifyOrdersTable},
+           jsonb_array_elements(COALESCE(${shopifyOrdersTable.lineItems}, '[]'::jsonb)) AS li
+      WHERE ${shopifyOrdersTable.shopifyCreatedAt} > NOW() - INTERVAL '120 days'
+      GROUP BY lower(li->>'title')
+      ORDER BY units DESC
+      LIMIT 200
+    `);
+    const scores = new Map<string, number>();
+    for (const row of rows.rows as Array<Record<string, unknown>>) {
+      const title = String(row.title ?? "").trim();
+      const units = Number(row.units ?? 0);
+      if (title && units > 0) scores.set(title, units);
+    }
+    return scores;
+  } catch {
+    return new Map();
+  }
+}
+
+router.get("/products/recommendations", async (req, res) => {
+  try {
+    const context = String(req.query.context ?? "product") as RecommendationContext;
+    const productId = Number(req.query.productId ?? 0);
+    const cartProductIds = parseIdList(req.query.cartProductIds);
+    const excludeIds = new Set<number>([...cartProductIds, ...(productId > 0 ? [productId] : [])]);
+    const limit = Math.min(16, Math.max(4, Number(req.query.limit ?? 10)));
+
+    const [currentProduct] = productId > 0
+      ? await db
+          .select(storefrontProductListColumns)
+          .from(productsTable)
+          .where(and(eq(productsTable.active, true), eq(productsTable.id, productId)))
+          .limit(1)
+      : [];
+
+    const cartProducts = cartProductIds.length > 0
+      ? await db
+          .select(storefrontProductListColumns)
+          .from(productsTable)
+          .where(and(eq(productsTable.active, true), inArray(productsTable.id, cartProductIds)))
+      : [];
+
+    const seedProducts = [currentProduct, ...cartProducts].filter(Boolean) as any[];
+    const seedCategoryIds = new Set(seedProducts.map((p: any) => p.categoryId).filter(Boolean));
+    const seedTags = new Set(seedProducts.flatMap((p: any) => normalizeTags(p.tags)));
+    const seedNames = seedProducts.map((p: any) => String(p.name ?? "").toLowerCase());
+    const seedPrice = seedProducts.length
+      ? seedProducts.reduce((sum: number, p: any) => sum + Number(p.price ?? 0), 0) / seedProducts.length
+      : 0;
+
+    const [products, shopifyFlags, salesScores] = await Promise.all([
+      db
+        .select(storefrontProductListColumns)
+        .from(productsTable)
+        .where(and(eq(productsTable.active, true), sql`${productsTable.stock} > 0`))
+        .orderBy(desc(productsTable.featured), desc(productsTable.rating), desc(productsTable.reviewCount), desc(productsTable.createdAt))
+        .limit(180),
+      db
+        .select({
+          shopifyProductId: shopifyProductsTable.shopifyProductId,
+          isRecommended: shopifyProductsTable.isRecommended,
+          recommendPriority: shopifyProductsTable.recommendPriority,
+          isFeatured: shopifyProductsTable.isFeatured,
+        })
+        .from(shopifyProductsTable)
+        .where(or(eq(shopifyProductsTable.isRecommended, true), eq(shopifyProductsTable.isFeatured, true))),
+      getShopifyTitleSalesScores(),
+    ]);
+
+    const flags = new Map((shopifyFlags as any[]).map((p: any) => [p.shopifyProductId, p]));
+    const scored = products
+      .filter((p: any) => !excludeIds.has(p.id))
+      .map((p: any) => {
+        const tags = normalizeTags(p.tags);
+        const tagOverlap = tags.filter((tag) => seedTags.has(tag)).length;
+        const sameCategory = p.categoryId != null && seedCategoryIds.has(p.categoryId);
+        const flag = p.shopifyProductId ? flags.get(p.shopifyProductId) : undefined;
+        const productPrice = Number(p.price ?? 0);
+        const priceFit = seedPrice > 0 && productPrice > 0 ? Math.max(0, 12 - Math.abs(productPrice - seedPrice) / Math.max(seedPrice, 1) * 10) : 0;
+        const nameHit = seedNames.some((name) => name && String(p.name).toLowerCase().includes(name.split(" ")[0] ?? "")) ? 4 : 0;
+        const units = salesScores.get(String(p.name ?? "").toLowerCase()) ?? 0;
+        const score =
+          (sameCategory ? 30 : 0) +
+          tagOverlap * 12 +
+          (p.featured ? 14 : 0) +
+          (flag?.isRecommended ? 18 : 0) +
+          (flag?.isFeatured ? 10 : 0) +
+          Number(flag?.recommendPriority ?? 0) * 2 +
+          Number(p.rating ?? 0) * 4 +
+          Math.min(Number(p.reviewCount ?? 0), 50) * 0.5 +
+          Math.min(units, 80) * 0.8 +
+          priceFit +
+          nameHit;
+        return { product: p, score, units, price: productPrice, sameCategory, tagOverlap };
+      })
+      .sort((a: any, b: any) => b.score - a.score);
+
+    const byScore = scored.map((s: any) => s.product);
+    const bestSellers = dedupeProducts(scored.filter((s: any) => s.units > 0).sort((a: any, b: any) => b.units - a.units).map((s: any) => s.product), limit);
+    const lowQuantityAddOns = dedupeProducts(scored.filter((s: any) => s.price > 0 && s.price <= Math.max(700, seedPrice * 0.65 || 700)).map((s: any) => s.product), 8);
+    const frequentlyBoughtTogether = dedupeProducts(scored.filter((s: any) => s.sameCategory || s.tagOverlap > 0).map((s: any) => s.product), limit);
+    const relatedProducts = dedupeProducts(byScore, limit);
+    const customersAlsoBought = dedupeProducts([...bestSellers, ...byScore], limit);
+    const recommendedWithThis = dedupeProducts([...frequentlyBoughtTogether, ...byScore], 8);
+    const cartUpsells = dedupeProducts(context === "cart" || context === "checkout" ? [...lowQuantityAddOns, ...frequentlyBoughtTogether, ...bestSellers] : byScore, 8);
+
+    res.set("Cache-Control", "public, max-age=20, s-maxage=60, stale-while-revalidate=180");
+    res.json({
+      context,
+      relatedProducts,
+      bestSellers,
+      frequentlyBoughtTogether,
+      customersAlsoBought,
+      recommendedWithThis,
+      cartUpsells,
+      lowQuantityAddOns,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to build recommendations" });
   }
 });
 

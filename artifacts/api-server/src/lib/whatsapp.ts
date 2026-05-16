@@ -156,6 +156,8 @@ export async function sendWhatsAppTemplate(opts: {
   languageCode?: string;
   components?: unknown[];
   userId?: number;
+  triggerEvent?: string;
+  shopifyOrderId?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const settings = await getSettings();
@@ -185,7 +187,7 @@ export async function sendWhatsAppTemplate(opts: {
     const messageId = data?.messages?.[0]?.id as string | undefined;
 
     if (res.ok && messageId) {
-      await log({ phone: opts.phone, templateName: opts.templateName, message: `[template] ${opts.templateName}`, status: "sent", response: JSON.stringify(data), messageId, userId: opts.userId });
+      await log({ phone: opts.phone, templateName: opts.templateName, triggerEvent: opts.triggerEvent, shopifyOrderId: opts.shopifyOrderId, message: `[template] ${opts.templateName}`, status: "sent", response: JSON.stringify(data), messageId, userId: opts.userId });
       mirrorOutboundToInbox({
         phone: opts.phone,
         content: `[template] ${opts.templateName}`,
@@ -199,7 +201,7 @@ export async function sendWhatsAppTemplate(opts: {
     } else {
       const errMsg = data?.error?.message ?? `HTTP ${res.status}`;
       logger.warn({ data }, "WhatsApp template message failed");
-      await log({ phone: opts.phone, templateName: opts.templateName, message: `[template] ${opts.templateName}`, status: "failed", response: JSON.stringify(data) });
+      await log({ phone: opts.phone, templateName: opts.templateName, triggerEvent: opts.triggerEvent, shopifyOrderId: opts.shopifyOrderId, message: `[template] ${opts.templateName}`, status: "failed", response: JSON.stringify(data) });
       return { success: false, error: errMsg };
     }
   } catch (err) {

@@ -5,7 +5,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { isLahoreShippingAddress, parseShippingAddress } from "./lahoreShipping.js";
 import { assignLahoreOrderWithNotifications } from "./lahoreOrderAssign.js";
-import { sendOrderConfirmationWA } from "./ondriveEngine.js";
+import { sendOrderConfirmationWA, upsertOrderConfirmationRecord } from "./ondriveEngine.js";
 import {
   sendPremiumOrderConfirmed,
   sendPremiumPaymentConfirmed,
@@ -94,6 +94,14 @@ export async function runShopifyOrderAutomation(
   if (isLahore) {
     if (phone) {
       const confirmRes = await sendPremiumOrderConfirmed(waCtx);
+      await upsertOrderConfirmationRecord({
+        shopifyOrderId: input.shopifyOrderId,
+        orderNumber: input.orderNumber,
+        shopifyOrderDbId: input.shopifyOrderDbId,
+        phone,
+        customerName: input.customerName ?? "Customer",
+        messageId: null,
+      });
       await logOrderAutomation({
         shopifyOrderDbId: input.shopifyOrderDbId,
         shopifyOrderId: input.shopifyOrderId,
@@ -186,6 +194,17 @@ export async function runShopifyOrderAutomation(
   const premium = await sendPremiumOrderConfirmed(waCtx);
   let success = premium.success;
   let errMsg = premium.error;
+
+  if (success) {
+    await upsertOrderConfirmationRecord({
+      shopifyOrderId: input.shopifyOrderId,
+      orderNumber: input.orderNumber,
+      shopifyOrderDbId: input.shopifyOrderDbId,
+      phone,
+      customerName: input.customerName ?? "Customer",
+      messageId: null,
+    });
+  }
 
   if (!success) {
     const legacy = await sendOrderConfirmationWA({

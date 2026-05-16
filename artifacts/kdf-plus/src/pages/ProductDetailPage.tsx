@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
 import { useToast } from "@/hooks/use-toast";
 import {
   ProductConversionRail,
@@ -345,6 +346,7 @@ function MobilePurchaseSheet({
   availableStock,
   onAddToCart,
   onBuyNow,
+  recommendations,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -362,6 +364,7 @@ function MobilePurchaseSheet({
   availableStock: number;
   onAddToCart: () => void;
   onBuyNow: () => void;
+  recommendations?: any[];
 }) {
   const selectedLabel = activeVariant?.value ?? (product as any).weight ?? "Standard";
   const canBuy = availableStock > 0;
@@ -494,6 +497,17 @@ function MobilePurchaseSheet({
               </div>
             </div>
           </div>
+
+          {recommendations && recommendations.length > 0 && (
+            <div className="mt-5 rounded-2xl border border-[#5FA800]/10 bg-[#5FA800]/[0.03] p-3">
+              <ProductRecommendationStrip
+                title="Recommended with this"
+                subtitle="Pairs customers often add together"
+                products={recommendations}
+                compact
+              />
+            </div>
+          )}
         </div>
 
         <div className="absolute inset-x-0 bottom-0 border-t border-gray-100 bg-white/95 px-4 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
@@ -621,6 +635,25 @@ export default function ProductDetailPage() {
         variants: p.variants,
       }));
   }, [engagementPool, productId]);
+
+  const { data: recommendationData } = useProductRecommendations({
+    context: "product",
+    productId,
+    limit: 10,
+    enabled: !!productId,
+  });
+  const recommendedPairItems: PairProduct[] = useMemo(
+    () => (recommendationData?.frequentlyBoughtTogether ?? []).slice(0, 4).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      price: Number(p.price),
+      originalPrice: p.originalPrice,
+      images: p.images,
+      gradient: p.gradient,
+    })),
+    [recommendationData],
+  );
 
   const { ref: desktopCtaRef, inView: desktopCtaInView } = useCtaInView<HTMLDivElement>();
 
@@ -1058,7 +1091,7 @@ export default function ProductDetailPage() {
             <ProductConversionRail
               productId={productId}
               stock={product.stock}
-              pairs={pairItems}
+              pairs={recommendedPairItems.length ? recommendedPairItems : pairItems}
               getImageSrc={getProductImageSrc}
               onPairClick={(p) => setLocation(`/products/${p.slug || p.id}`)}
             />
@@ -1077,6 +1110,19 @@ export default function ProductDetailPage() {
             onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
             onQuickAdd={handleQuickAddGallery}
             onPathNavigate={(path) => setLocation(path)}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          <ProductRecommendationStrip
+            title="Related products"
+            subtitle="Selected by category, tags, stock and sales"
+            products={recommendationData?.relatedProducts ?? []}
+          />
+          <ProductRecommendationStrip
+            title="Best sellers"
+            subtitle="Popular products customers also buy"
+            products={recommendationData?.bestSellers ?? recommendationData?.customersAlsoBought ?? []}
           />
         </div>
 
@@ -1223,6 +1269,7 @@ export default function ProductDetailPage() {
         availableStock={availableStock}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
+        recommendations={recommendationData?.recommendedWithThis ?? []}
       />
 
       {/* Notify Me mobile modal */}

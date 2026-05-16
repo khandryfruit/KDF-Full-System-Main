@@ -144,6 +144,8 @@ async function sendPremiumText(
       phone: norm,
       templateName: tpl.name,
       languageCode: tpl.language,
+      triggerEvent: templateName,
+      shopifyOrderId: opts?.ctx?.shopifyOrderId,
       components:
         tpl.paramCount > 0
           ? [
