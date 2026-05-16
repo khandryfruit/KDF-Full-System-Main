@@ -99,7 +99,7 @@ function CountdownTimer({ endAt }: { endAt: string }) {
   );
 }
 
-function DealCountdownTimer({ endAt }: { endAt: string }) {
+function DealCountdownTimer({ endAt, onClick }: { endAt: string; onClick?: () => void }) {
   const calc = () => {
     const diff = Math.max(0, Math.floor((new Date(endAt).getTime() - Date.now()) / 1000));
     return {
@@ -108,6 +108,7 @@ function DealCountdownTimer({ endAt }: { endAt: string }) {
       m: Math.floor((diff % 3600) / 60),
       s: diff % 60,
       done: diff === 0,
+      urgent: diff > 0 && diff < 24 * 3600,
     };
   };
   const [t, setT] = useState(calc);
@@ -120,19 +121,41 @@ function DealCountdownTimer({ endAt }: { endAt: string }) {
   const cells = [
     ["Days", t.d],
     ["Hours", t.h],
-    ["Min", t.m],
-    ["Sec", t.s],
+    ["Minutes", t.m],
+    ["Seconds", t.s],
   ] as const;
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2" aria-label="Countdown timer">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-2xl border border-white/15 bg-white/[0.08] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-md transition-all hover:bg-white/[0.13] active:scale-[0.98] sm:gap-2 ${t.urgent ? "animate-pulse" : ""}`}
+      aria-label="Countdown timer"
+    >
       {cells.map(([label, value]) => (
-        <div key={label} className="min-w-[44px] rounded-xl border border-white/15 bg-white/15 px-2 py-1.5 text-center shadow-inner backdrop-blur-md sm:min-w-[58px] sm:px-3">
-          <div className="font-mono text-base font-black leading-none text-white sm:text-xl">{String(value).padStart(2, "0")}</div>
-          <div className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-white/65 sm:text-[9px]">{label}</div>
+        <div key={label} className="min-w-[42px] rounded-xl bg-white/[0.14] px-2 py-1.5 text-center ring-1 ring-white/15 transition-transform hover:-translate-y-0.5 sm:min-w-[54px] sm:px-2.5">
+          <div className="font-mono text-base font-black leading-none text-white tabular-nums sm:text-lg">{String(value).padStart(2, "0")}</div>
+          <div className="mt-0.5 text-[7px] font-black uppercase tracking-wider text-white/65 sm:text-[8px]">{label}</div>
         </div>
       ))}
-    </div>
+    </button>
   );
+}
+
+function dealThemeForBanner(banner: any) {
+  const text = `${banner?.title ?? ""} ${banner?.subtitle ?? ""} ${banner?.label ?? ""} ${banner?.aiCampaign ?? ""}`.toLowerCase();
+  if (text.includes("ramadan")) return "linear-gradient(135deg,#102d16 0%,#1e5b2b 48%,#b8892f 100%)";
+  if (text.includes("eid") || text.includes("gift")) return "linear-gradient(135deg,#073b22 0%,#0f7a3b 52%,#c89b3c 100%)";
+  if (text.includes("winter")) return "linear-gradient(135deg,#07182f 0%,#153e75 55%,#4b6b93 100%)";
+  if (text.includes("summer")) return "linear-gradient(135deg,#7c2d12 0%,#ea580c 52%,#f59e0b 100%)";
+  if (text.includes("deal") || text.includes("sale") || text.includes("offer")) return "linear-gradient(135deg,#2b1208 0%,#7c2d12 45%,#f97316 100%)";
+  return "linear-gradient(135deg,#082611 0%,#155e2f 50%,#0f172a 100%)";
+}
+
+function productMatchScore(product: Product, banner: any): number {
+  const text = `${banner?.title ?? ""} ${banner?.subtitle ?? ""} ${banner?.label ?? ""} ${banner?.healthBenefitText ?? ""} ${banner?.urgencyText ?? ""}`.toLowerCase();
+  const terms = text.split(/[^a-z0-9]+/).filter((v) => v.length > 3);
+  const haystack = `${product.name ?? ""} ${(product as any).description ?? ""} ${(product.tags ?? []).join(" ")}`.toLowerCase();
+  return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
 }
 
 /* ─── AI Fallback Slides ─── */
@@ -1092,14 +1115,14 @@ function SmartBannerProductStrip({
   const b = banner as any;
   const title = b.healthBenefitText || b.urgencyText || "Picked for this banner";
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-      <div className="rounded-2xl border border-emerald-100 bg-white/92 p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9">
+      <div className="rounded-2xl border border-emerald-100 bg-white/92 p-3 shadow-[0_12px_34px_rgba(13,43,0,0.07)] sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#5FA800]">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5FA800]">
               Smart picks
             </p>
-            <h2 className="mt-1 text-lg font-black text-gray-950 sm:text-2xl">
+            <h2 className="mt-1 text-base font-black text-gray-950 sm:text-xl">
               {title}
             </h2>
             {b.urgencyText && (
@@ -1133,9 +1156,9 @@ function DealProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <div className="group relative flex min-w-[170px] max-w-[190px] flex-1 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.10)] ring-1 ring-black/[0.03] transition-all hover:-translate-y-1 hover:shadow-[0_22px_52px_rgba(95,168,0,0.18)] sm:min-w-0 sm:max-w-none">
+    <div className="group relative flex min-w-[148px] max-w-[164px] flex-1 snap-start overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.02] transition-all hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(95,168,0,0.16)] sm:min-w-[170px] sm:max-w-[190px]">
       <Link href={href} className="flex w-full flex-col">
-        <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-[#eef8e8] to-[#f9fbf5]">
+        <div className="relative aspect-[1.08/1] overflow-hidden bg-gradient-to-br from-[#eef8e8] to-[#f9fbf5]">
           {img && (
             <img src={img} alt={product.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
           )}
@@ -1150,22 +1173,22 @@ function DealProductCard({ product }: { product: Product }) {
             </span>
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-1.5 p-3">
-          <h3 className="line-clamp-2 min-h-[2.25rem] text-sm font-black leading-tight text-gray-950">{product.name}</h3>
+        <div className="flex flex-1 flex-col gap-1.5 p-2.5 sm:p-3">
+          <h3 className="line-clamp-2 min-h-[2.1rem] text-[13px] font-black leading-tight text-gray-950 sm:text-sm">{product.name}</h3>
           <div className="mt-auto">
             <div className="flex items-end gap-1.5">
-              <span className="text-base font-black text-gray-950">Rs. {price.toLocaleString()}</span>
+              <span className="text-sm font-black text-gray-950 sm:text-base">Rs. {price.toLocaleString()}</span>
               {originalPrice > price && <span className="text-[11px] font-semibold text-gray-400 line-through">Rs. {originalPrice.toLocaleString()}</span>}
             </div>
-            <p className="mt-0.5 text-[11px] font-semibold text-gray-500">{stock > 0 ? `${stock} in stock` : "Limited stock"}</p>
+            <p className="mt-0.5 text-[10px] font-semibold text-gray-500 sm:text-[11px]">{stock > 0 ? `${stock} in stock` : "Limited stock"}</p>
           </div>
         </div>
       </Link>
       <div className="absolute inset-x-2 bottom-2 grid grid-cols-2 gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
-        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(false); }} className="rounded-xl bg-white/95 px-2 py-2 text-[11px] font-black text-[#4d8a00] shadow-lg ring-1 ring-[#5FA800]/20">
+        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(false); }} className="rounded-xl bg-white/95 px-2 py-1.5 text-[10px] font-black text-[#4d8a00] shadow-lg ring-1 ring-[#5FA800]/20 sm:py-2 sm:text-[11px]">
           Add
         </button>
-        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(true); }} className="rounded-xl bg-[#5FA800] px-2 py-2 text-[11px] font-black text-white shadow-lg">
+        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(true); }} className="rounded-xl bg-[#5FA800] px-2 py-1.5 text-[10px] font-black text-white shadow-lg sm:py-2 sm:text-[11px]">
           Quick Buy
         </button>
       </div>
@@ -1194,6 +1217,9 @@ function CountdownDealSection({
   const productIds: number[] = Array.isArray(b.offerProductIds) ? b.offerProductIds.map(Number) : [];
   const categoryIds: number[] = Array.isArray(b.offerCategoryIds) ? b.offerCategoryIds.map(Number) : [];
   const sortedProducts = [...products].sort((a, z) => {
+    const zScore = productMatchScore(z, b);
+    const aScore = productMatchScore(a, b);
+    if (zScore !== aScore) return zScore - aScore;
     if (sortMode === "discount") {
       const aDiscount = Number(a.originalPrice ?? 0) - Number(a.price ?? 0);
       const zDiscount = Number(z.originalPrice ?? 0) - Number(z.price ?? 0);
@@ -1215,60 +1241,65 @@ function CountdownDealSection({
     b.targetType === "product" && b.targetId ? `/products/${b.targetId}` :
     b.targetType === "category" && b.targetId ? `/products?categoryId=${b.targetId}` :
     b.linkUrl || "/products";
-  const bg = b.bgColor && String(b.bgColor).startsWith("#")
-    ? `linear-gradient(135deg, ${b.bgColor}, #101827)`
-    : "linear-gradient(135deg,#0f2f12 0%,#133d18 45%,#21160a 100%)";
+  const bg = b.imageUrl || b.mobileImageUrl
+    ? "linear-gradient(135deg,#082611 0%,#155e2f 52%,#0f172a 100%)"
+    : b.bgColor && String(b.bgColor).startsWith("#")
+      ? `linear-gradient(135deg, ${b.bgColor}, #101827)`
+      : dealThemeForBanner(b);
   const btnBg = b.buttonBgColor || "#ffffff";
   const btnText = b.buttonTextColor || DARK;
   const textColor = b.textColor || "#ffffff";
+  const supportingText = b.healthBenefitText || b.urgencyText || b.subtitle;
 
   return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-      <div className="overflow-hidden rounded-[1.6rem] border border-white/70 bg-white shadow-[0_24px_70px_rgba(13,43,0,0.12)] ring-1 ring-black/[0.03]">
+    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9 sm:pb-10">
+      <div className="overflow-hidden rounded-[1.35rem] border border-white/80 bg-white shadow-[0_16px_46px_rgba(13,43,0,0.10)] ring-1 ring-black/[0.03] sm:rounded-[1.65rem]">
         <div
-          className="relative min-h-[156px] overflow-hidden px-4 py-4 sm:min-h-[172px] sm:px-7 sm:py-5"
+          className="relative overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-7"
           style={{ background: bg, color: textColor }}
         >
-          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-35 sm:block" />}
-          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-35 sm:hidden" />}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-black/20" />
-          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur">
-                <Flame className="h-3.5 w-3.5 text-orange-300" /> {b.label || "Limited Time Offer"}
+          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-25 sm:block" />}
+          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-24 sm:hidden" />}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(255,255,255,0.14),transparent_24%)]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/38 via-black/14 to-black/28" />
+          <div className="relative z-10 grid gap-4 lg:grid-cols-[1.1fr_auto_auto] lg:items-center">
+            <div className="min-w-0 lg:max-w-xl">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/90 backdrop-blur">
+                <Flame className="h-3 w-3 text-orange-300" /> {b.label || "AI Limited Deal"}
               </div>
-              <h2 className="text-xl font-black leading-tight sm:text-3xl">{banner.title}</h2>
-              {banner.subtitle && <p className="mt-1 max-w-2xl text-sm font-medium opacity-80 sm:text-base">{banner.subtitle}</p>}
-              {b.offerText && <p className="mt-1 text-xs font-bold text-amber-200 sm:text-sm">{b.offerText}</p>}
+              <h2 className="text-lg font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.7rem]">{banner.title || "Daily Energy Nuts"}</h2>
+              {supportingText && <p className="mt-1 max-w-xl text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">{supportingText}</p>}
             </div>
-            <div className="flex flex-col items-start gap-3 sm:items-end">
-              {b.showTimer !== false && b.countdownEndAt && <DealCountdownTimer endAt={String(b.countdownEndAt)} />}
+            <div className="flex items-center lg:justify-center">
+              {b.showTimer !== false && b.countdownEndAt && <DealCountdownTimer endAt={String(b.countdownEndAt)} onClick={() => setLocation(targetHref)} />}
+            </div>
+            <div className="flex items-center justify-start lg:justify-end">
               <button
                 type="button"
                 onClick={() => setLocation(targetHref)}
-                className="inline-flex min-h-[42px] items-center gap-2 rounded-full px-5 py-2.5 text-sm font-black shadow-[0_18px_34px_rgba(0,0,0,0.22)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                className="inline-flex min-h-[38px] items-center gap-2 rounded-full px-4 py-2 text-xs font-black shadow-[0_14px_26px_rgba(0,0,0,0.20)] ring-1 ring-white/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(0,0,0,0.24)] active:translate-y-0 sm:text-sm"
                 style={{ backgroundColor: btnBg, color: btnText }}
               >
-                <ShoppingBag className="h-4 w-4" /> {banner.cta || "Shop Now"}
+                <ShoppingBag className="h-4 w-4" /> {banner.cta || "Explore Deals"}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-b from-white to-[#f8fbf4] p-3 sm:p-5">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="bg-gradient-to-b from-white to-[#f8fbf4] px-3 py-3 sm:px-5 sm:py-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Recommended deals"}</p>
-              <h3 className="text-base font-black text-gray-950 sm:text-lg">{showCategories ? "Explore the offer" : "Top picks under this offer"}</h3>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Recommended products"}</p>
+              <h3 className="text-sm font-black text-gray-950 sm:text-base">{showCategories ? "Explore this collection" : "Matched to this offer"}</h3>
             </div>
-            <Link href="/products" className="text-xs font-black text-[#5FA800]">View all</Link>
+            <Link href="/products" className="shrink-0 rounded-full border border-[#5FA800]/20 px-3 py-1.5 text-xs font-black text-[#5FA800] transition-colors hover:bg-[#5FA800]/10">View all</Link>
           </div>
           {showCategories ? (
             <CategoryGrid categories={shownCategories} loading={false} />
           ) : loading ? (
             <ProductCarousel products={[]} loading />
           ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:overflow-visible">
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]" style={{ WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory" }}>
               {shownProducts.map((p) => <DealProductCard key={p.id} product={p} />)}
             </div>
           )}
@@ -1558,19 +1589,6 @@ export default function HomePage() {
           <HeroBanner banners={banners} loading={heroLoading} smartCatalog={heroSmartCatalog} />
         )}
 
-        <SmartBannerProductStrip
-          banner={smartBanner}
-          products={smartBannerProducts}
-          loading={smartBannerProductsLoading}
-        />
-
-        <CountdownDealSection
-          banner={countdownBanner}
-          products={countdownSectionProducts}
-          categories={categories}
-          loading={countdownProductsLoading || dealsLoading || featuredLoading}
-        />
-
         {/* Trust strip */}
         <TrustStrip />
 
@@ -1585,22 +1603,6 @@ export default function HomePage() {
           <CategoryGrid categories={categories} loading={catsLoading} />
         </section>
 
-        {/* Deals / Hot Deals */}
-        {(dealsLoading || dealProducts.length > 0) && (
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
-              <SectionHeader
-                icon={Flame}
-                label="Limited Time"
-                title="Hot Deals"
-                viewAllHref="/products"
-                testId="link-all-deals"
-              />
-              <ProductCarousel products={dealProducts} loading={dealsLoading} />
-            </div>
-          </section>
-        )}
-
         {/* Featured Products — only render when there are featured products or still loading */}
         {(featuredLoading || featuredProducts.length > 0) && (
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
@@ -1613,6 +1615,35 @@ export default function HomePage() {
                 testId="link-all-featured"
               />
               <ProductCarousel products={featuredProducts} loading={featuredLoading} />
+            </div>
+          </section>
+        )}
+
+        <CountdownDealSection
+          banner={countdownBanner}
+          products={countdownSectionProducts}
+          categories={categories}
+          loading={countdownProductsLoading || dealsLoading || featuredLoading}
+        />
+
+        <SmartBannerProductStrip
+          banner={smartBanner}
+          products={smartBannerProducts}
+          loading={smartBannerProductsLoading}
+        />
+
+        {/* Deals / Hot Deals */}
+        {(dealsLoading || dealProducts.length > 0) && (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
+              <SectionHeader
+                icon={Flame}
+                label="Limited Time"
+                title="Hot Deals"
+                viewAllHref="/products"
+                testId="link-all-deals"
+              />
+              <ProductCarousel products={dealProducts} loading={dealsLoading} />
             </div>
           </section>
         )}
