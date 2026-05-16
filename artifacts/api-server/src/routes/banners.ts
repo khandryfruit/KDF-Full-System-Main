@@ -56,8 +56,38 @@ function pickWritableBannerFields(body: Record<string, unknown>): Record<string,
   return out;
 }
 
+let countdownColumnsReady = false;
+async function ensureCountdownBannerColumns(): Promise<void> {
+  if (countdownColumnsReady) return;
+  const statements = [
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "offer_category_ids" jsonb DEFAULT '[]'::jsonb`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "offer_mode" text NOT NULL DEFAULT 'discount_products'`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "offer_display_count" integer NOT NULL DEFAULT 8`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "offer_sort" text NOT NULL DEFAULT 'featured'`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "show_timer" boolean NOT NULL DEFAULT true`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "button_bg_color" text`,
+    `ALTER TABLE "banners" ADD COLUMN IF NOT EXISTS "button_text_color" text`,
+  ];
+  for (const statement of statements) {
+    await db.execute(sql.raw(statement));
+  }
+  countdownColumnsReady = true;
+}
+
+function needsCountdownColumns(payload: Record<string, unknown>): boolean {
+  return payload.placement === "countdown_deal"
+    || "offerCategoryIds" in payload
+    || "offerMode" in payload
+    || "offerDisplayCount" in payload
+    || "offerSort" in payload
+    || "showTimer" in payload
+    || "buttonBgColor" in payload
+    || "buttonTextColor" in payload;
+}
+
 router.get("/banners", async (req, res) => {
   try {
+    await ensureCountdownBannerColumns();
     const { platform, placement } = req.query;
     const now = new Date();
     const activeFilter = eq(bannersTable.active, true);
@@ -117,6 +147,9 @@ router.post("/banners", adminMiddleware as any, async (req, res) => {
       res.status(400).json({ error: "title is required" });
       return;
     }
+    if (needsCountdownColumns(picked)) {
+      await ensureCountdownBannerColumns();
+    }
     const [banner] = await db
       .insert(bannersTable)
       .values({ ...(picked as any), title } as any)
@@ -133,6 +166,9 @@ router.put("/banners/:id", adminMiddleware as any, async (req, res) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const picked = pickWritableBannerFields(body);
+    if (needsCountdownColumns(picked)) {
+      await ensureCountdownBannerColumns();
+    }
     const [banner] = await db
       .update(bannersTable)
       .set(picked as any)
