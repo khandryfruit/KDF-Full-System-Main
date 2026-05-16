@@ -4462,6 +4462,9 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
 /* ─── Admin: Conversations (unique phones) ────────────── */
 router.get("/admin/whatsapp/conversations", adminMiddleware as any, async (req, res) => {
   try {
+    const { syncWaInboxFromWhatsappLogs } = await import("../lib/waInboxSync.js");
+    await syncWaInboxFromWhatsappLogs().catch(() => {});
+
     const { status, assigned, search, intent } = req.query as Record<string, string>;
     const rows = await db.execute(sql`
       SELECT
@@ -4472,7 +4475,7 @@ router.get("/admin/whatsapp/conversations", adminMiddleware as any, async (req, 
         (SELECT COUNT(*) FROM wa_messages m WHERE m.conversation_id = c.id) as message_count
       FROM wa_conversations c
       WHERE 1=1
-        ${status  ? sql`AND c.status = ${status}`               : sql``}
+        ${status === "open" ? sql`AND c.status = 'open'` : status === "closed" || status === "resolved" ? sql`AND c.status IN ('closed', 'resolved')` : status === "spam" ? sql`AND c.status = 'spam'` : status ? sql`AND c.status = ${status}` : sql``}
         ${assigned === "me" ? sql`AND c.assigned_to IS NOT NULL` : sql``}
         ${intent   ? sql`AND c.intent = ${intent}`              : sql``}
         ${search   ? sql`AND (c.contact_phone ILIKE ${'%' + search + '%'} OR c.contact_name ILIKE ${'%' + search + '%'})` : sql``}

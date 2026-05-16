@@ -449,7 +449,7 @@ export default function WaInboxPage() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [message, setMessage] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
+  const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("all");
   const [showMobile, setShowMobile] = useState<"list" | "chat" | "analytics">("list");
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -468,9 +468,31 @@ export default function WaInboxPage() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const { data: convData, isLoading: convLoading, refetch: refetchConvs } = useQuery({
+  const syncInboxMutation = useMutation({
+    mutationFn: () => api("/admin/wa/inbox/sync", { method: "POST" }).then(async (r) => {
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error ?? `Sync failed (${r.status})`);
+      }
+      return r.json();
+    }),
+    onSuccess: (d) => {
+      showToast(`Synced ${d.conversationsUpserted ?? 0} chats`);
+      queryClient.invalidateQueries({ queryKey: ["wa-conversations"] });
+    },
+    onError: (e: Error) => showToast(e.message, "error"),
+  });
+
+  const { data: convData, isLoading: convLoading, refetch: refetchConvs, isError: convError } = useQuery({
     queryKey: ["wa-conversations", search, statusFilter],
-    queryFn: () => api(`/admin/wa/conversations?search=${encodeURIComponent(search)}&status=${statusFilter}&limit=60`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await api(`/admin/wa/conversations?search=${encodeURIComponent(search)}&status=${statusFilter}&limit=60`);
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error ?? `Failed to load (${r.status})`);
+      }
+      return r.json();
+    },
     staleTime: 10_000,
     refetchInterval: 20_000,
   });
@@ -593,9 +615,10 @@ export default function WaInboxPage() {
     markReadMutation.mutate(id);
     queryClient.invalidateQueries({ queryKey: ["wa-conversations"] });
     /* Sync global WA unread after marking read — fetch fresh count */
-    fetch("/api/admin/wa/unread-count", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}` },
-    }).then(r => r.json()).then(d => setWaUnread(d.total ?? 0)).catch(() => {});
+    api("/admin/wa/unread-count")
+      .then((r) => r.json())
+      .then((d) => setWaUnread(d.total ?? 0))
+      .catch(() => {});
   }, [setWaUnread]);
 
   const handleSend = () => {
@@ -718,10 +741,24 @@ export default function WaInboxPage() {
           <div className="flex items-center justify-center p-8">
             <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
           </div>
+        ) : convError ? (
+          <div className="p-6 text-center space-y-2">
+            <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
+            <p className="text-sm text-red-600 font-medium">Could not load inbox</p>
+            <button type="button" onClick={() => refetchConvs()} className="text-xs text-[#25D366] font-semibold underline">Retry</button>
+          </div>
         ) : conversations.length === 0 ? (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center space-y-3">
             <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-2" />
             <p className="text-sm text-gray-400 font-medium">No conversations</p>
+            <button
+              type="button"
+              onClick={() => syncInboxMutation.mutate()}
+              disabled={syncInboxMutation.isPending}
+              className="text-xs font-semibold text-white bg-[#25D366] px-3 py-1.5 rounded-lg hover:bg-[#1da851] disabled:opacity-60"
+            >
+              {syncInboxMutation.isPending ? "Syncing…" : "Sync from WhatsApp logs"}
+            </button>
           </div>
         ) : conversations.map((c: any) => (
           <button key={c.id} onClick={() => selectConversation(c.id)}

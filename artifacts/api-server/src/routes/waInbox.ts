@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { eq, desc, and, sql, ilike, or } from "drizzle-orm";
+import { eq, desc, and, sql, ilike, or, inArray } from "drizzle-orm";
 import { db, waConversationsTable, waMessagesTable, ordersTable, usersTable, aiSettingsTable, whatsappSettingsTable } from "@workspace/db";
 import { productsTable } from "@workspace/db";
 import { shopifyProductsTable } from "@workspace/db";
@@ -18,14 +18,25 @@ async function getOpenAI() {
 
 /* ─── List conversations ───────────────────────────────────── */
 router.get("/admin/wa/conversations", adminMiddleware, async (req: Request, res: Response) => {
-  const { search, status, page = "1", limit = "30" } = req.query as Record<string, string>;
+  const { search, status, page = "1", limit = "30", sync } = req.query as Record<string, string>;
   try {
+    const { syncWaInboxFromWhatsappLogs } = await import("../lib/waInboxSync.js");
+    await syncWaInboxFromWhatsappLogs({ force: sync === "1" }).catch((err) => {
+      req.log.warn({ err }, "WA inbox log sync failed (non-fatal)");
+    });
+
     const pageNum = Math.max(1, parseInt(page));
     const pageSize = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * pageSize;
 
     const conditions: any[] = [];
-    if (status && status !== "all") conditions.push(eq(waConversationsTable.status, status));
+    if (status === "open") {
+      conditions.push(eq(waConversationsTable.status, "open"));
+    } else if (status === "closed") {
+      conditions.push(inArray(waConversationsTable.status, ["closed", "resolved"]));
+    } else if (status && status !== "all") {
+      conditions.push(eq(waConversationsTable.status, status));
+    }
     if (search) conditions.push(or(
       ilike(waConversationsTable.contactName, `%${search}%`),
       ilike(waConversationsTable.contactPhone, `%${search}%`),
@@ -182,12 +193,25 @@ router.put("/admin/wa/conversations/:id/bot-mode", adminMiddleware, async (req: 
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
+/* ─── Backfill inbox from whatsapp_logs ───────────────────── */
+router.post("/admin/wa/inbox/sync", adminMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { syncWaInboxFromWhatsappLogs } = await import("../lib/waInboxSync.js");
+    const result = await syncWaInboxFromWhatsappLogs({ force: true });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 /* ─── Set status (open/closed) ────────────────────────────── */
 router.put("/admin/wa/conversations/:id/status", adminMiddleware, async (req: Request, res: Response) => {
   const { status } = req.body as { status: string };
-  if (!["open", "closed"].includes(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+  const normalized = status === "resolved" ? "closed" : status;
+  if (!["open", "closed"].includes(normalized)) { res.status(400).json({ error: "Invalid status" }); return; }
   try {
-    const [conv] = await db.update(waConversationsTable).set({ status, updatedAt: new Date() })
+    const [conv] = await db.update(waConversationsTable).set({ status: normalized, updatedAt: new Date() })
       .where(eq(waConversationsTable.id, parseInt(req.params["id"] as string))).returning();
     res.json(conv);
   } catch (err) { res.status(500).json({ error: String(err) }); }
