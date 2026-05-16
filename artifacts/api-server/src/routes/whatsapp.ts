@@ -650,7 +650,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           /* Get current conversation state */
           const convState = await getConversationState(phone);
-          const currentState = convState?.state ?? "idle";
+          let currentState = convState?.state ?? "idle";
 
           /* ═══════════════════════════════════════════════
              BRANCH 1: Interactive reply (button / list tap)
@@ -757,6 +757,25 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ═══════════════════════════════════════════════
              BRANCH 2b: Order placement flow states
              ═══════════════════════════════════════════════ */
+          if (currentState === "wa_order_await_confirm" && msgType === "text" && msg.text?.body) {
+            const confirmStateText = msg.text.body.trim();
+            const confirmStateIntent = detectWaIntent(confirmStateText);
+            if (
+              ["greeting", "conversation", "general", "support"].includes(confirmStateIntent.intent) &&
+              !isCommerceConfirmationText(confirmStateText) &&
+              !isCommerceCancellationText(confirmStateText)
+            ) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "stale_order_state_reset",
+                detail: "Greeting/general message arrived while checkout was waiting for confirm/cancel; reset stale order state and routed to AI.",
+                payload: { previousState: currentState, text: confirmStateText, intent: confirmStateIntent },
+              });
+              await setConversationState(phone, "idle", {});
+              currentState = "idle";
+            }
+          }
           if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
             try {
@@ -1099,7 +1118,10 @@ async function handleProductCatalog(opts: {
     const maxProducts = Math.min((chatbot as any)?.catalogMaxProducts ?? 3, 5);
 
     /* Extract search term from text — strip common filler words */
-    const searchTerm = (detectedIntent?.productQuery ?? textBody)
+    const requestedProductQuery = detectedIntent?.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
+      ? textBody
+      : detectedIntent?.productQuery ?? textBody;
+    const searchTerm = requestedProductQuery
       .toLowerCase()
       .replace(/\b(what|is|are|do|you|have|tell|me|about|show|your|the|a|an|any|i|want|need|looking|for|price|of|rate|kitna|kya|hai|milta|chahiye|mujhe|ap|aap|please|pls|order|buy|purchase|lena|bhej|recommend|suggest|best)\b/g, " ")
       .replace(/\s+/g, " ").trim()
@@ -1113,7 +1135,7 @@ async function handleProductCatalog(opts: {
       phone,
       step: "catalog_triggered",
       detail: `Catalog sent for ${detectedIntent?.intent ?? "product intent"}.`,
-      payload: { searchTerm, detectedIntent, products: products.map((p) => p.name) },
+      payload: { searchTerm, requestedProductQuery, detectedIntent, products: products.map((p) => p.name) },
     });
 
     /* ── Send each product as a separate message with buttons ── */
@@ -1238,6 +1260,16 @@ function isValidCheckoutPhone(value: unknown): boolean {
   return digits.length >= 10 && digits.length <= 15;
 }
 
+function isCommerceConfirmationText(value: unknown): boolean {
+  const normalized = normalizeProductText(value);
+  return /^(confirm|confirmed|yes confirm|confirm order|order confirm|ji confirm|han confirm|haan confirm|ok confirm|book order|place order)$/.test(normalized);
+}
+
+function isCommerceCancellationText(value: unknown): boolean {
+  const normalized = normalizeProductText(value);
+  return /^(cancel|cancel order|order cancel|no cancel|nahi cancel|nai cancel|cancel karo|cancel krdo)$/.test(normalized);
+}
+
 function normalizeProductText(value: unknown): string {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -1251,45 +1283,99 @@ function normalizeVariantText(value: unknown): string {
     .replace(/\s+/g, "");
 }
 
+const PRODUCT_ALIASES: Record<string, string[]> = {
+  badam: ["almond", "almonds"],
+  almond: ["badam", "almonds"],
+  almonds: ["badam", "almond"],
+  pista: ["pistachio", "pistachios"],
+  pistachio: ["pista", "pistachios"],
+  pistachios: ["pista", "pistachio"],
+  kaju: ["cashew", "cashews"],
+  cashew: ["kaju", "cashews"],
+  cashews: ["kaju", "cashew"],
+  akhrot: ["walnut", "walnuts"],
+  walnut: ["akhrot", "walnuts"],
+  walnuts: ["akhrot", "walnut"],
+};
+
+const PRODUCT_ROOT_WORDS = new Set([
+  "badam", "almond", "almonds", "pista", "pistachio", "pistachios", "kaju", "cashew", "cashews",
+  "akhrot", "walnut", "walnuts", "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin",
+  "raisins", "munakka", "makhana", "peanut", "peanuts", "chilgoza",
+]);
+
+function normalizeCatalogProductQuery(query: string): string {
+  return normalizeProductText(query)
+    .replace(/\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/g, " ")
+    .replace(/\b(price|rate|qeemat|kitna|how much|available|chahiye|need|show|buy|order|yes|ji|han|haan|please|pls)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function queryWantsBundle(query: string): boolean {
+  return /\b(gift|box|combo|mix|mixed|assorted|portion|hamper|basket)\b/.test(normalizeProductText(query));
+}
+
+function isBundleProductName(name: string): boolean {
+  return /\b(gift|box|combo|mix|mixed|assorted|portion|hamper|basket)\b/.test(normalizeProductText(name));
+}
+
+function productRootTerms(query: string): string[] {
+  const q = normalizeCatalogProductQuery(query);
+  const roots = new Set<string>();
+  for (const token of q.split(/\s+/)) {
+    if (PRODUCT_ROOT_WORDS.has(token)) {
+      roots.add(token);
+      for (const alias of PRODUCT_ALIASES[token] ?? []) roots.add(alias);
+    }
+  }
+  return [...roots];
+}
+
 function expandProductSearchTerms(query: string): string[] {
-  const q = normalizeProductText(query);
-  const aliases: Record<string, string[]> = {
-    badam: ["almond", "almonds"],
-    almond: ["badam", "almonds"],
-    almonds: ["badam", "almond"],
-    pista: ["pistachio", "pistachios"],
-    pistachio: ["pista", "pistachios"],
-    pistachios: ["pista", "pistachio"],
-    kaju: ["cashew", "cashews"],
-    cashew: ["kaju", "cashews"],
-    cashews: ["kaju", "cashew"],
-    akhrot: ["walnut", "walnuts"],
-    walnut: ["akhrot", "walnuts"],
-    walnuts: ["akhrot", "walnut"],
-  };
+  const q = normalizeCatalogProductQuery(query) || normalizeProductText(query);
   const terms = new Set<string>([q]);
   for (const token of q.split(/\s+/)) {
-    for (const alias of aliases[token] ?? []) terms.add(alias);
+    for (const alias of PRODUCT_ALIASES[token] ?? []) terms.add(alias);
   }
   return [...terms].filter((t) => t.length > 1);
 }
 
-function productMatchScore(query: string, name: string, tags?: unknown): number {
+function productMatchAnalysis(query: string, name: string, tags?: unknown): { score: number; reason: string; excludedReason?: string; roots: string[] } {
   const expanded = expandProductSearchTerms(query);
   const q = expanded[0] ?? normalizeProductText(query);
   const n = normalizeProductText(name);
   const tagText = normalizeProductText(Array.isArray(tags) ? tags.join(" ") : tags);
-  if (!q || !n) return 0;
+  const roots = productRootTerms(query);
+  if (!q || !n) return { score: 0, reason: "empty_query_or_name", roots };
+  if (roots.length > 0 && isBundleProductName(name) && !queryWantsBundle(query)) {
+    return { score: 0, reason: "excluded_bundle_for_specific_product_query", excludedReason: "bundle_or_gift_product", roots };
+  }
+  if (roots.length > 0 && /\b(oil|butter|powder|paste)\b/.test(n) && !/\b(oil|butter|powder|paste)\b/.test(normalizeProductText(query))) {
+    return { score: 0, reason: "excluded_different_product_form", excludedReason: "different_product_form", roots };
+  }
   const terms = expanded.flatMap((term) => term.split(/\s+/)).filter((t) => t.length > 1);
   let score = 0;
   if (n === q) score += 100;
   if (n.includes(q)) score += 70;
+  for (const root of roots) {
+    if (n.split(/\s+/).includes(root)) score += 45;
+    else if (n.includes(root)) score += 25;
+    if (tagText.includes(root)) score += 12;
+  }
   for (const term of terms) {
     if (n.split(/\s+/).includes(term)) score += 18;
     else if (n.includes(term)) score += 8;
     if (tagText.includes(term)) score += 5;
   }
-  return score;
+  if (roots.length > 0 && !roots.some((root) => n.includes(root) || tagText.includes(root))) {
+    return { score: 0, reason: "excluded_missing_primary_product_root", excludedReason: "missing_primary_product_root", roots };
+  }
+  return { score, reason: score > 0 ? "matched_primary_product_terms" : "no_positive_match", roots };
+}
+
+function productMatchScore(query: string, name: string, tags?: unknown): number {
+  return productMatchAnalysis(query, name, tags).score;
 }
 
 function formatShopifyVariants(variants: unknown): { label: string; lines: string[]; cheapestPrice: number | null; options: Array<{ id: string; title: string; price: number; sku?: string; inventoryQuantity?: number }> } {
@@ -1321,6 +1407,7 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   const websiteUrl = "https://khanbabadryfruits.com";
   const results: Array<any> = [];
   const searchTerms = expandProductSearchTerms(query);
+  const matchDiagnostics: Array<{ title: string; score: number; reason: string; excludedReason?: string; source: string; roots?: string[] }> = [];
 
   try {
     const shopProds = await db.select({
@@ -1340,10 +1427,12 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       .orderBy(desc(shopifyProductsTable.inventoryQuantity))
       .limit(limit * 3);
 
-    for (const sp of shopProds
-      .map((sp: any) => ({ sp, score: productMatchScore(query, sp.title, sp.tags) }))
-      .filter((x: any) => x.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
+    const scoredShopify = shopProds
+      .map((sp: any) => ({ sp, match: productMatchAnalysis(query, sp.title, sp.tags) }));
+    matchDiagnostics.push(...scoredShopify.map((x: any) => ({ title: x.sp.title, score: x.match.score, reason: x.match.reason, excludedReason: x.match.excludedReason, source: "shopify", roots: x.match.roots })));
+    for (const sp of scoredShopify
+      .filter((x: any) => x.match.score > 0)
+      .sort((a: any, b: any) => b.match.score - a.match.score)
       .slice(0, limit)) {
       const variants = formatShopifyVariants(sp.sp.variants);
       const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(sp.sp.price);
@@ -1380,10 +1469,12 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       .orderBy(desc(productsTable.featured))
       .limit(limit * 2);
 
-    for (const p of dbProds
-      .map((p: any) => ({ p, score: productMatchScore(query, p.name, p.tags) }))
-      .filter((x: any) => x.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
+    const scoredLocal = dbProds
+      .map((p: any) => ({ p, match: productMatchAnalysis(query, p.name, p.tags) }));
+    matchDiagnostics.push(...scoredLocal.map((x: any) => ({ title: x.p.name, score: x.match.score, reason: x.match.reason, excludedReason: x.match.excludedReason, source: "local", roots: x.match.roots })));
+    for (const p of scoredLocal
+      .filter((x: any) => x.match.score > 0)
+      .sort((a: any, b: any) => b.match.score - a.match.score)
       .slice(0, limit - results.length)) {
       const variants = Array.isArray(p.p.variants)
         ? p.p.variants.filter((v: any) => Number(v.stock ?? 0) > 0).slice(0, 8).map((v: any) => `${v.value || v.name} — ${formatRupees(parseCatalogUnitPrice(v.price ?? p.p.price))}`)
@@ -1409,7 +1500,14 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
     step: "shopify_product_lookup",
     status: results.length ? "sent" : "failed",
     detail: results.length ? `Shopify/live catalog lookup found ${results.length} matching product(s).` : `No exact Shopify/live catalog match for "${query}".`,
-    payload: { query, count: results.length, products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
+    payload: {
+      query,
+      normalizedQuery: normalizeCatalogProductQuery(query),
+      searchTerms,
+      count: results.length,
+      products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })),
+      diagnostics: matchDiagnostics.slice(0, 20),
+    },
     failureReason: results.length ? null : "no_matching_shopify_product",
   });
 
@@ -1436,7 +1534,9 @@ async function buildEmergencyAiFallback(opts: {
   const { textBody, intent } = opts;
   const roman = /[a-z]/i.test(textBody) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(textBody);
   if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
-    const query = intent.productQuery ?? textBody;
+    const query = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
+      ? textBody
+      : intent.productQuery ?? textBody;
     const products = await searchProductsForWa(query, 3).catch(() => []);
     if (products.length > 0) {
       const lines = products.map((p) => {
@@ -2155,12 +2255,12 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   }
   if (state === "wa_order_await_confirm") {
     const lower = trimmed.toLowerCase();
-    if (isCancellationReply(lower)) {
+    if (isCommerceCancellationText(lower)) {
       await setConversationState(phone, "idle", {});
       await sendWaText(phone, "Order cancel kar diya gaya hai. Koi baat nahi 😊", waSettings);
       return;
     }
-    if (!isConfirmationReply(lower)) {
+    if (!isCommerceConfirmationText(lower)) {
       await sendWaText(phone, "Please reply *confirm* ya *cancel*.", waSettings);
       return;
     }
@@ -2549,6 +2649,8 @@ async function handleAiReply(opts: {
 - For any product/price/variant question, use the official catalog context if provided and answer only from that data.
 - For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
+- Product matching is strict: if customer asks one product (for example "1kg walnut"), answer only that product family and variants. Never include gift boxes, combos, mixed packs, or unrelated products unless customer explicitly asks for gift/combo/mix.
+- If a requested variant/weight is available, lead with that exact variant price. If unavailable, say it is unavailable and show only alternative variants of the same product.
 - If customer asks a broad need like "Mujhe dry fruits chahiye", first ask natural qualifying questions: budget, gift/use, quantity.
 - Never spam catalog/products for greetings, support, or general conversation.
 - If customer wants to order a named product, ask for variant/quantity and keep the conversation moving naturally.
@@ -2556,7 +2658,10 @@ async function handleAiReply(opts: {
 - Keep replies short, human, and conversion-focused.`;
     let catalogContextBlock = "";
     if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
-      const products = await searchProductsForWa(intent.productQuery ?? textBody, 4);
+      const catalogQuery = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
+        ? textBody
+        : intent.productQuery ?? textBody;
+      const products = await searchProductsForWa(catalogQuery, 4);
       if (products.length > 0) {
         catalogContextBlock = `\n\n[OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT]\nUse ONLY these products, variants, and prices. Never invent prices.\n${products.map((p, idx) => {
           const variants = p.variantLines?.length ? p.variantLines.map((v) => `    - ${v}`).join("\n") : `    - ${p.price}`;
@@ -2567,7 +2672,7 @@ async function handleAiReply(opts: {
           step: "catalog_result",
           status: "received",
           detail: `Catalog context preloaded with ${products.length} product(s) before OpenAI call.`,
-          payload: { query: intent.productQuery ?? textBody, products: products.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
+          payload: { query: catalogQuery, products: products.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
         });
       } else {
         await logWaProcessingStep({
@@ -2575,7 +2680,7 @@ async function handleAiReply(opts: {
           step: "catalog_result",
           status: "failed",
           detail: "No matching catalog products found before OpenAI call.",
-          payload: { query: intent.productQuery ?? textBody },
+          payload: { query: catalogQuery },
           failureReason: "catalog_no_match",
         });
       }
