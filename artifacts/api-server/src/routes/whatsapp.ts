@@ -90,13 +90,16 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
     "raisins", "munakka", "makhana", "dry fruit", "dry fruits", "nuts", "peanut", "peanuts", "chilgoza",
   ];
   const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "need", "show", "available", "recommend", "suggest", "best"];
+  const billWords = ["bill", "bil", "invoice", "receipt", "bna", "bana", "banao", "bnao", "bejo", "bhejo", "bhej do", "checkout", "total bna", "total bana"];
   if (has(["cancel order", "order cancel", "cancel kr", "cancel kar", "nahi chahiye"])) return { intent: "cancellation", confidence: 0.94, reason: "cancel keyword" };
   if (has(["track", "tracking", "where is my order", "order status", "mera order", "status", "delivery kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
   if (has(["complaint", "shikayat", "problem", "issue", "refund", "return", "bad quality", "damage"])) return { intent: "complaint", confidence: 0.9, reason: "complaint keyword" };
   if (has(["human", "agent", "representative", "real person", "admin se", "support se", "call me", "phone kar", "baat karni hai", "bat krni h", "bat krna h", "baat krna", "baat karna"])) return { intent: "conversation", confidence: 0.9, reason: "conversation/human support phrase" };
   if (has(["bulk", "wholesale", "20kg", "10kg", "5kg", "carton", "large quantity"])) return { intent: "bulk_order", confidence: 0.9, reason: "bulk order keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(billWords) && has(productWords)) return { intent: "order_start", confidence: 0.92, reason: "product + bill/checkout keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(billWords)) return { intent: "order_start", confidence: 0.82, reason: "bill/checkout keyword without product" };
   if (has(productWords) && has(["order", "buy", "purchase", "mangwana", "bhej", "checkout"])) return { intent: "order_start", confidence: 0.9, reason: "product + order keyword", productQuery: productWords.find((w) => t.includes(w)) };
-  if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
+  if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai", "bill bna", "bill bana", "bill bna k", "bill bana k"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
   if (has(productWords) && has(["recommend", "suggest", "best", "healthy", "gift", "kids", "energy"])) return { intent: "recommendation", confidence: 0.86, reason: "product recommendation keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(productWords) && has(["price", "rate", "qeemat", "kitna", "how much", "rs", "rupees"])) return { intent: "pricing", confidence: 0.9, reason: "product + price keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(productWords) && (has(productActionWords) || t.split(" ").length <= 4)) return { intent: "product_search", confidence: 0.82, reason: "clear product keyword", productQuery: productWords.find((w) => t.includes(w)) };
@@ -1441,7 +1444,7 @@ function parseCommerceOrderRequest(text: string, fallbackQuery?: string) {
     ? `${weightMatch[1]}${weightMatch[2].toLowerCase().startsWith("k") ? "KG" : "g"}`
     : undefined;
   const productQuery = (fallbackQuery || normalized
-    .replace(/\b(order|buy|purchase|mangwana|bhej|checkout|karna|krna|hai|chahiye|please|pls|mujhe|ap|aap)\b/g, " ")
+    .replace(/\b(order|buy|purchase|mangwana|bhej|bejo|checkout|bill|bil|invoice|receipt|bna|bana|banao|bnao|karna|krna|hai|chahiye|please|pls|mujhe|ap|aap|ke|k)\b/g, " ")
     .replace(/\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams|x|pcs|piece|pack)?\b/g, " ")
     .replace(/\s+/g, " ")
     .trim()) || normalized;
@@ -1497,7 +1500,14 @@ async function startCommerceOrderFromText(opts: {
 }): Promise<boolean> {
   const parsed = parseCommerceOrderRequest(opts.textBody, opts.detectedIntent.productQuery);
   if (!parsed.productQuery || parsed.productQuery.length < 2) {
-    await sendWaText(opts.phone, "Ji 😊 kis product ka order karna chahte hain? Product name aur weight bata dein, jaise *1KG Almond*.", opts.waSettings);
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "commerce_order_needs_product",
+      status: "received",
+      detail: "Customer asked for bill/order but product or variant was missing.",
+      payload: { textBody: opts.textBody, detectedIntent: opts.detectedIntent },
+    });
+    await sendWaText(opts.phone, "Ji 😊 bill bana deta hoon. Bas product, weight aur quantity confirm kar dein.\n\nExample: *1KG Badam 1 pack* ya *500g Kaju 2 pack*", opts.waSettings);
     return true;
   }
   const found = await findCommerceProductVariant(parsed.productQuery, parsed.variantTitle);
