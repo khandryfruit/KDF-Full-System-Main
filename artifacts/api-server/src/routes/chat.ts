@@ -81,7 +81,7 @@ async function getSameDayInfo(): Promise<string> {
   }
 }
 
-function buildSystemPrompt(chatbot: any, sameDayInfo = ""): string {
+function buildSystemPrompt(chatbot: any, sameDayInfo = "", globalAiSettings?: any, memorySummary = ""): string {
   const toolRules = `
 
 TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
@@ -113,6 +113,8 @@ When a customer wants to order, use the search_products tool to find the exact p
   return buildAiBrainSystemPrompt(chatbot, {
     channel: "website_chat",
     extraInstructions: `${toolRules}${orderInstructions}${sameDayInfo}`,
+    globalAiSettings,
+    memorySummary,
   }).systemPrompt;
 }
 
@@ -260,7 +262,10 @@ router.post("/chat/message", async (req, res) => {
     const sessionId = typeof rawSid === "string" ? rawSid.trim() : rawSid != null ? String(rawSid).trim() : "";
     if (!message?.trim()) return res.status(400).json({ error: "message is required" });
 
-    const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1);
+    const [[chatbot], [globalAiSettings]] = await Promise.all([
+      db.select().from(chatbotSettingsTable).limit(1),
+      db.select().from(aiSettingsTable).limit(1).catch(() => []),
+    ]);
     if (!chatbot?.isEnabled) return res.status(503).json({ error: "Chatbot is currently disabled." });
 
     let session = sessionId
@@ -277,7 +282,12 @@ router.post("/chat/message", async (req, res) => {
     const updatedHistory = [...history, userMsg];
 
     const sameDayInfo = await getSameDayInfo();
-    const systemPrompt = buildSystemPrompt(chatbot, sameDayInfo);
+    const memorySummary = [
+      `Session ID: ${session.sessionId}`,
+      userId ? `User ID: ${userId}` : "",
+      history.length ? `Recent memory:\n${history.slice(-8).map((m: any) => `${m.role}: ${String(m.content ?? "").slice(0, 240)}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n");
+    const systemPrompt = buildSystemPrompt(chatbot, sameDayInfo, globalAiSettings, memorySummary);
     const tools = buildTools(chatbot.orderingEnabled ?? false);
     const openaiMessages: any[] = [
       { role: "system", content: systemPrompt },

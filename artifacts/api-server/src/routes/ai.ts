@@ -5,6 +5,7 @@ import { adminMiddleware } from "../lib/auth";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
+import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 import {
   buildProductSeoPromptCompact,
   buildCategorySeoPrompt,
@@ -132,7 +133,6 @@ export async function getOpenAIClient() {
    BUILD SYSTEM PROMPT (with personality + human-like level)
 ═══════════════════════════════════════════════ */
 function buildSystemPrompt(s: typeof aiSettingsTable.$inferSelect): string {
-  const base = s.systemPrompt || "You are an expert eCommerce content writer for KDF NUTS.";
   const humanLevel = s.humanLikeLevel ?? 80;
   const personality = s.personality ?? "professional";
 
@@ -152,7 +152,17 @@ function buildSystemPrompt(s: typeof aiSettingsTable.$inferSelect): string {
     ? "Write clearly and naturally."
     : "Be concise and direct.";
 
-  return `${base}\n\nPersonality: ${personalityMap[personality] ?? personalityMap["professional"]}\n${humanInstructions}`;
+  return buildAiBrainSystemPrompt(null, {
+    channel: "marketing",
+    globalAiSettings: s,
+    extraInstructions: `Personality: ${personalityMap[personality] ?? personalityMap["professional"]}
+${humanInstructions}
+Tone: ${s.tone ?? "professional"}
+Language preference: ${s.language ?? "english"}
+Response length: ${s.responseLength ?? "medium"}
+Sales aggressiveness: ${s.salesAggressiveness ?? 60}/100
+Use this global prompt for content, SEO, WhatsApp copy, and ecommerce AI generation tasks unless a more specific official context is supplied.`,
+  }).systemPrompt;
 }
 
 /* ═══════════════════════════════════════════════

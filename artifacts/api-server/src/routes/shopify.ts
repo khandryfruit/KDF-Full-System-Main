@@ -16,6 +16,7 @@ import { sendWhatsAppMessage, normalizePhone } from "../lib/whatsapp";
 import { enqueueCampaignMessages } from "../lib/campaignQueue";
 import nodemailer from "nodemailer";
 import OpenAI from "openai";
+import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 import {
   verifyShopifyHmac,
   processShopifyWebhookPayload,
@@ -1250,10 +1251,17 @@ Requirements:
 - Make it feel personal and exclusive for this specific segment
 
 Return only the WhatsApp message text, nothing else.`;
+    const brainPrompt = buildAiBrainSystemPrompt(null, {
+      channel: "marketing",
+      globalAiSettings: aiSettings,
+      detectedIntent: "shopify_customer_segment_campaign",
+      extraInstructions: "Generate approved WhatsApp marketing copy only. Follow discount and tone rules from the global Admin AI Behaviour Instructions. Return only the message text.",
+      contextBlocks: [`Target segment: ${segDesc}${cityStr}`],
+    });
 
     const response = await openai.chat.completions.create({
       model: aiSettings.openaiModel ?? "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "system", content: brainPrompt.systemPrompt }, { role: "user", content: prompt }],
       max_tokens: 300,
     });
     const message = response.choices[0]?.message?.content?.trim() ?? "";
@@ -1741,10 +1749,17 @@ ${discountCode ? `Discount code: ${discountCode}` : ""}
 
 Return JSON with: subject (email subject line), headline (short catchy headline), bodyText (2-3 paragraph email body using {name} for personalization), ctaButtonText (call-to-action button text).
 Be enthusiastic but professional. Target Pakistani audience. Use PKR currency references if needed.`;
+    const brainPrompt = buildAiBrainSystemPrompt(null, {
+      channel: "marketing",
+      globalAiSettings: aiSettings,
+      detectedIntent: "shopify_email_campaign",
+      extraInstructions: "Generate marketing email copy only. Follow global Admin AI Behaviour Instructions for tone, discount rules, product claims, and premium brand style. Return valid JSON only.",
+      contextBlocks: [`Campaign name: ${name || "Seasonal Sale"}`, headline ? `Existing headline: ${headline}` : "", bodyText ? `Existing body: ${bodyText}` : "", discountCode ? `Discount code: ${discountCode}` : ""],
+    });
 
     const response = await openai.chat.completions.create({
       model: aiSettings.openaiModel ?? "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "system", content: brainPrompt.systemPrompt }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
       max_tokens: 800,
     });

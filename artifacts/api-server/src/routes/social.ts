@@ -1,9 +1,10 @@
 import { Router, type Request } from "express";
-import { db, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable, whatsappSettingsTable, waWebhookFailuresTable } from "@workspace/db";
+import { db, aiSettingsTable, socialSettingsTable, socialLogsTable, productsTable, socialLeadsTable, whatsappSettingsTable, waWebhookFailuresTable } from "@workspace/db";
 import { eq, desc, sql, and, asc } from "drizzle-orm";
 import { adminMiddleware, type AuthRequest } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
+import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
@@ -172,7 +173,16 @@ async function generateSocialAiReply(opts: {
       productCtx = `\n\n📦 AVAILABLE PRODUCTS (share relevant ones based on what customer asks):\n${list}\n\nAlways mention price. For DMs, share the order link. Be specific — don't list all products, pick the most relevant 2-3.`;
     }
 
-    const systemPrompt = (settings.systemPrompt ?? "") + productCtx + `\n\n${platformCtx} ${nameCtx}${postCtx}${commentInstruction}`;
+    const [globalAiSettings] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
+    const brainPrompt = buildAiBrainSystemPrompt(settings, {
+      channel: "support",
+      globalAiSettings,
+      detectedIntent: `${platform}_${type}`,
+      extraInstructions: `${platformCtx} ${commentInstruction}`,
+      memorySummary: nameCtx,
+      contextBlocks: [postCtx, productCtx],
+    });
+    const systemPrompt = brainPrompt.systemPrompt;
 
     const aiClient = await getOpenAIClient();
     const completion = await aiClient.chat.completions.create({

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
+import { db, aiSettingsTable, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
 import { ordersTable, orderItemsTable, usersTable, productsTable, shipmentsTable, adminNotificationsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable, shopifyStoresTable } from "@workspace/db";
 import { eq, desc, asc, sql, ilike, or, and, inArray } from "drizzle-orm";
@@ -86,11 +86,11 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   const has = (words: string[]) => words.some((w) => t.includes(w));
   const exact = (words: string[]) => words.includes(t);
   const productWords = [
-    "almond", "almonds", "badam", "pista", "pistachio", "pistachios", "kaju", "cashew", "cashews",
+    "almond", "almonds", "badam", "pista", "pistay", "pisty", "piste", "pistah", "pieta", "pietas", "peta", "pistachio", "pistachios", "kaju", "cashew", "cashews",
     "akhrot", "walnut", "walnuts", "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin",
     "raisins", "munakka", "makhana", "dry fruit", "dry fruits", "nuts", "peanut", "peanuts", "chilgoza",
   ];
-  const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "need", "show", "available", "recommend", "suggest", "best"];
+  const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "chaye", "chahye", "chaiye", "chahe", "need", "show", "available", "recommend", "suggest", "best"];
   const billWords = ["bill", "bil", "invoice", "receipt", "bna", "bana", "banao", "bnao", "bejo", "bhejo", "bhej do", "checkout", "total bna", "total bana"];
   if (has(["cancel order", "order cancel", "cancel kr", "cancel kar", "nahi chahiye"])) return { intent: "cancellation", confidence: 0.94, reason: "cancel keyword" };
   if (has(["track", "tracking", "where is my order", "order status", "mera order", "status", "delivery kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
@@ -1123,7 +1123,7 @@ async function handleProductCatalog(opts: {
       : detectedIntent?.productQuery ?? textBody;
     const searchTerm = requestedProductQuery
       .toLowerCase()
-      .replace(/\b(what|is|are|do|you|have|tell|me|about|show|your|the|a|an|any|i|want|need|looking|for|price|of|rate|kitna|kya|hai|milta|chahiye|mujhe|ap|aap|please|pls|order|buy|purchase|lena|bhej|recommend|suggest|best)\b/g, " ")
+      .replace(/\b(what|is|are|do|you|have|tell|me|about|show|your|the|a|an|any|i|want|need|looking|for|price|of|rate|kitna|kya|hai|milta|chahiye|chaye|chahye|chaiye|chahe|mujhe|muje|mjy|mje|ap|aap|please|pls|order|buy|purchase|lena|bhej|recommend|suggest|best)\b/g, " ")
       .replace(/\s+/g, " ").trim()
       .slice(0, 40);
     if (searchTerm.length < 2 && !detectedIntent?.productQuery) return false;
@@ -1287,9 +1287,16 @@ const PRODUCT_ALIASES: Record<string, string[]> = {
   badam: ["almond", "almonds"],
   almond: ["badam", "almonds"],
   almonds: ["badam", "almond"],
-  pista: ["pistachio", "pistachios"],
-  pistachio: ["pista", "pistachios"],
-  pistachios: ["pista", "pistachio"],
+  pista: ["pistachio", "pistachios", "pistay", "pisty", "piste", "pistah", "pieta", "pietas", "peta"],
+  pistay: ["pista", "pistachio", "pistachios"],
+  pisty: ["pista", "pistachio", "pistachios"],
+  piste: ["pista", "pistachio", "pistachios"],
+  pistah: ["pista", "pistachio", "pistachios"],
+  pieta: ["pista", "pistachio", "pistachios"],
+  pietas: ["pista", "pistachio", "pistachios"],
+  peta: ["pista", "pistachio", "pistachios"],
+  pistachio: ["pista", "pistachios", "pistay", "piste", "pieta"],
+  pistachios: ["pista", "pistachio", "pistay", "piste", "pieta"],
   kaju: ["cashew", "cashews"],
   cashew: ["kaju", "cashews"],
   cashews: ["kaju", "cashew"],
@@ -1299,7 +1306,7 @@ const PRODUCT_ALIASES: Record<string, string[]> = {
 };
 
 const PRODUCT_ROOT_WORDS = new Set([
-  "badam", "almond", "almonds", "pista", "pistachio", "pistachios", "kaju", "cashew", "cashews",
+  "badam", "almond", "almonds", "pista", "pistay", "pisty", "piste", "pistah", "pieta", "pietas", "peta", "pistachio", "pistachios", "kaju", "cashew", "cashews",
   "akhrot", "walnut", "walnuts", "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin",
   "raisins", "munakka", "makhana", "peanut", "peanuts", "chilgoza",
 ]);
@@ -1307,7 +1314,7 @@ const PRODUCT_ROOT_WORDS = new Set([
 function normalizeCatalogProductQuery(query: string): string {
   return normalizeProductText(query)
     .replace(/\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/g, " ")
-    .replace(/\b(price|rate|qeemat|kitna|how much|available|chahiye|need|show|buy|order|yes|ji|han|haan|please|pls)\b/g, " ")
+    .replace(/\b(price|rate|qeemat|kitna|how much|available|chahiye|chaye|chahye|chaiye|chahe|need|show|buy|order|yes|ji|han|haan|please|pls|mujhe|muje|mjy|mje)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1530,9 +1537,16 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
 async function buildEmergencyAiFallback(opts: {
   textBody: string;
   intent: ReturnType<typeof detectWaIntent>;
+  phone?: string;
 }): Promise<string> {
-  const { textBody, intent } = opts;
+  const { textBody, intent, phone } = opts;
   const roman = /[a-z]/i.test(textBody) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(textBody);
+  const state = phone ? await getConversationState(phone).catch(() => null) : null;
+  if (state?.state?.startsWith("wa_order_")) {
+    return roman
+      ? "Ji 😊 order ki detail safe hai, restart nahi kar raha. Bas ek moment technical issue aya hai; aap wahi next detail bhej dein, main order continue kar deta hoon."
+      : "جی 😊 order کی detail safe ہے، restart نہیں کر رہا۔ بس ایک moment technical issue آیا ہے؛ آپ وہی next detail بھیج دیں، میں order continue کر دیتا ہوں۔";
+  }
   if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
     const query = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
       ? textBody
@@ -2563,6 +2577,14 @@ async function handleAiReply(opts: {
       }
     }
 
+    const convState = await getConversationState(phone).catch(() => null);
+    const memorySummary = [
+      `Phone: ${phone}`,
+      customerName ? `Known customer name: ${customerName}` : "",
+      convState?.state ? `Active state: ${convState.state}` : "",
+      (convState as any)?.stateData ? `State data: ${String((convState as any).stateData).slice(0, 1200)}` : "",
+    ].filter(Boolean).join("\n");
+
     /* Conversation history from wa_messages */
     const history = await db.select()
       .from(whatsappLogsTable)
@@ -2685,11 +2707,14 @@ async function handleAiReply(opts: {
         });
       }
     }
+    const [globalAiSettings] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
     const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
       channel: "whatsapp",
       detectedIntent: `${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}`,
       extraInstructions: whatsappInstructions,
       contextBlocks: [orderContextBlock, catalogContextBlock],
+      globalAiSettings,
+      memorySummary,
     });
     const systemContent = brainPrompt.systemPrompt;
     await logWaProcessingStep({
@@ -2701,6 +2726,7 @@ async function handleAiReply(opts: {
         promptSource: brainPrompt.promptSource,
         promptLength: brainPrompt.promptLength,
         promptPreview: brainPrompt.promptPreview,
+        promptVersion: brainPrompt.promptVersion,
         detectedIntent: intent,
       },
     });
@@ -2798,7 +2824,7 @@ async function handleAiReply(opts: {
     log?.warn(aiErr, "AI auto-reply error");
     try {
       const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
-      const fallback = await buildEmergencyAiFallback({ textBody, intent });
+      const fallback = await buildEmergencyAiFallback({ textBody, intent, phone });
       await logWaProcessingStep({
         phone,
         step: "fallback_triggered",
@@ -3363,11 +3389,13 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
         }).join("\n")}\n[END CATALOG CONTEXT]`;
       }
     }
+    const [globalAiSettings] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
     const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
       channel: "admin_test",
       detectedIntent: `${detected.intent} (${detected.reason})`,
       extraInstructions: "Reply naturally in the customer's language. Never invent prices, variants, discounts, or totals. If catalog context is provided, answer only from that official data.",
       contextBlocks: [catalogContext],
+      globalAiSettings,
     });
     const aiClient = await getOpenAIClient();
     const completion = await aiClient.chat.completions.create({
@@ -3379,7 +3407,7 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
       max_tokens: 400,
     });
     const reply = completion.choices[0]?.message?.content?.trim() ?? "";
-    return res.json({ success: true, reply, model: chatbot.aiModel, promptLoaded: brainPrompt.promptLoaded, promptSource: brainPrompt.promptSource });
+    return res.json({ success: true, reply, model: chatbot.aiModel, promptLoaded: brainPrompt.promptLoaded, promptSource: brainPrompt.promptSource, promptVersion: brainPrompt.promptVersion });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e.message ?? "AI test failed" });
   }
@@ -3783,7 +3811,19 @@ router.get("/admin/whatsapp/logs", adminMiddleware as any, async (req, res) => {
 router.get("/admin/whatsapp/chatbot-settings", adminMiddleware as any, async (req, res) => {
   try {
     const [s] = await db.select().from(chatbotSettingsTable).limit(1);
-    return res.json(s ?? null);
+    const [globalAiSettings] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
+    if (!s) return res.json(null);
+    const brainPrompt = buildAiBrainSystemPrompt(s, { channel: "admin_test", globalAiSettings });
+    return res.json({
+      ...s,
+      aiBrain: {
+        promptLoaded: brainPrompt.promptLoaded,
+        promptSource: brainPrompt.promptSource,
+        promptVersion: brainPrompt.promptVersion,
+        promptLength: brainPrompt.promptLength,
+        promptPreview: brainPrompt.promptPreview,
+      },
+    });
   } catch { return res.status(500).json({ error: "Failed" }); }
 });
 

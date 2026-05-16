@@ -4023,10 +4023,18 @@ export default function WhatsAppPage() {
               </div>
 
               {/* System Prompt */}
+              {chatbotSettings?.aiBrain && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-xs text-blue-900 space-y-1.5">
+                  <p className="font-semibold text-sm">Global AI Behaviour Engine</p>
+                  <p>Source: <span className="font-medium">{chatbotSettings.aiBrain.promptSource}</span></p>
+                  <p>Version: <span className="font-mono">{chatbotSettings.aiBrain.promptVersion}</span></p>
+                  <p>Prompt length: {chatbotSettings.aiBrain.promptLength} chars</p>
+                </div>
+              )}
               <div className="space-y-1.5">
-                <Label className="text-sm">System Prompt (AI Behaviour Instructions)</Label>
+                <Label className="text-sm">Channel Prompt (WhatsApp / Website Override)</Label>
                 <Textarea value={chatbotForm.systemPrompt} onChange={e => setChatbotForm(f => ({ ...f, systemPrompt: e.target.value }))} rows={7} className="text-sm resize-y font-mono" placeholder="You are a helpful assistant for KDF NUTS..." />
-                <p className="text-xs text-muted-foreground">Defines how the AI behaves. Order context is automatically appended — you don't need to mention it here.</p>
+                <p className="text-xs text-muted-foreground">Global master behaviour comes from AI Content settings. This field is now a channel-specific override; order/cart/customer memory is injected automatically.</p>
               </div>
 
               {/* Fallback */}
