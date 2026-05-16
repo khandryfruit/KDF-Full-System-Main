@@ -130,6 +130,20 @@ function extractWeightHint(query: string): string | null {
   return `${num}${unit}`;
 }
 
+/** When customer asks for X, never match unrelated product families */
+const ROOT_TITLE_BLOCK: Record<string, RegExp> = {
+  almond: /\b(sunflower|sooraj|mukhi|pumpkin|melon|seed|giri|magaz|til|sesame|chia)\b/i,
+  almonds: /\b(sunflower|sooraj|mukhi|pumpkin|melon|seed|giri|magaz|til|sesame|chia)\b/i,
+  badam: /\b(sunflower|sooraj|mukhi|pumpkin|melon|seed|giri|magaz|til|sesame|chia)\b/i,
+  بادام: /\b(sunflower|sooraj|mukhi|pumpkin|seed|giri|magaz)\b/i,
+  pista: /\b(sunflower|sooraj|almond|badam|walnut|akhrot|cashew|kaju)\b/i,
+  pistachio: /\b(sunflower|sooraj|almond|badam|walnut|akhrot)\b/i,
+  kaju: /\b(sunflower|sooraj|almond|badam|walnut|pista|pistachio)\b/i,
+  cashew: /\b(sunflower|sooraj|almond|badam|walnut|pista)\b/i,
+  akhrot: /\b(sunflower|sooraj|almond|badam|pista|cashew|kaju)\b/i,
+  walnut: /\b(sunflower|sooraj|almond|badam|pista|cashew|kaju)\b/i,
+};
+
 function scoreProduct(query: string, title: string, tags?: unknown): number {
   const terms = expandAllSearchTerms(query);
   const q = normalizeCatalogQuery(query) || normalizeText(query);
@@ -140,6 +154,10 @@ function scoreProduct(query: string, title: string, tags?: unknown): number {
   if (roots.length > 0 && isBundleName(title) && !queryWantsBundle(query)) return 0;
   if (roots.length > 0 && /\b(oil|butter|powder|paste)\b/.test(n) && !/\b(oil|butter|powder|paste)\b/.test(normalizeText(query))) {
     return 0;
+  }
+  for (const root of roots) {
+    const block = ROOT_TITLE_BLOCK[root];
+    if (block && block.test(n)) return 0;
   }
 
   let score = 0;
@@ -304,17 +322,27 @@ export function formatShopifyCatalogForOpenAI(products: ShopifyCatalogProduct[])
 export function formatShopifyCatalogWhatsAppReply(products: ShopifyCatalogProduct[], roman = true): string {
   if (!products.length) {
     return roman
-      ? "Sorry, is product ka official data nahi mila. Please exact naam ya weight bhej dein."
-      : "معذرت، اس product کا official data نہیں ملا۔ براہ کرم exact نام یا weight بھیج دیں۔";
+      ? "Ji 😊 is product ka official catalog data abhi nahi mila. Please exact naam ya weight bhej dein (jaise badam 500g)."
+      : "جی 😊 اس product کا official catalog data ابھی نہیں ملا۔ براہ کرم exact نام یا weight بھیج دیں (جیسے badam 500g)۔";
   }
   const p = products[0];
   const lines = p.variantOptions.length
-    ? p.variantOptions.map((v, i) => `${i + 1}️⃣ ${v.title} — ${formatRupees(v.price)}${(v.inventoryQuantity ?? 0) > 0 ? "" : " (out of stock)"}`)
+    ? p.variantOptions.map((v, i) => {
+        const label = v.title.replace(/^default title$/i, "Standard");
+        return `${i + 1}️⃣ ${label} — ${formatRupees(v.price)}${(v.inventoryQuantity ?? 0) > 0 ? "" : " (out of stock)"}`;
+      })
     : [`1️⃣ ${p.price}`];
+
+  const familyHint = products.length > 1
+    ? (roman
+      ? `\n\nOther matching options:\n${products.slice(1, 3).map((x) => `• ${x.name}`).join("\n")}`
+      : `\n\nدیگر matching options:\n${products.slice(1, 3).map((x) => `• ${x.name}`).join("\n")}`)
+    : "";
+
   if (roman) {
-    return `Ji 😊\n\n*${p.name}*\nAvailable options:\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}\n\nKya aap order start karna chahte hain?`;
+    return `Ji 😊 hamare paas yeh options available hain:\n\n*${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}${familyHint}\n\nKaunsa size chahiye? Number reply kar dein (1, 2, 3).\nMain order mein madad kar sakta hoon 😊`;
   }
-  return `جی 😊\n\n*${p.name}*\nAvailable options:\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}\n\nکیا آپ order start کرنا چاہتے ہیں؟`;
+  return `جی 😊 ہمارے پاس یہ options دستیاب ہیں:\n\n*${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}${familyHint}\n\nکون سا سائز چاہیے؟ نمبر reply کر دیں (1، 2، 3)۔\nمیں آرڈر میں مدد کر سکتا ہوں 😊`;
 }
 
 export function toWebsiteChatProductCards(

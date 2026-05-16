@@ -34,11 +34,15 @@ import {
 } from "../lib/whatsappConversationMemory.js";
 import { isDeliveryOnlyMessage, isTrackingOnlyMessage, tryDeterministicWaReply, sendDeterministicWaReply } from "../lib/waIntentEngine.js";
 import {
+  buildHelpfulPromptReply,
   buildHumanWelcomeReply,
+  extractProductQueryFromMessage,
   isLikelyProductInquiry,
   isOrderAffirmationMessage,
+  isProductInquiryMessage,
   isPureGreetingMessage,
   isVariantMenuSelection,
+  productRootsInMessage,
   shouldUseProductDatabaseFirst,
   tryWaProductCatalogReply,
 } from "../lib/waProductBrain.js";
@@ -126,8 +130,12 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   if (has(["bulk", "wholesale", "20kg", "10kg", "5kg", "carton", "large quantity"])) return { intent: "bulk_order", confidence: 0.9, reason: "bulk order keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(billWords) && has(productWords)) return { intent: "order_start", confidence: 0.92, reason: "product + bill/checkout keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(billWords)) return { intent: "order_start", confidence: 0.82, reason: "bill/checkout keyword without product" };
-  if (has(productWords) && has(["order", "buy", "purchase", "mangwana", "bhej", "checkout"])) return { intent: "order_start", confidence: 0.9, reason: "product + order keyword", productQuery: productWords.find((w) => t.includes(w)) };
-  if (has(productWords) && has(["chahiye", "need", "lena", "lena hai", "mangwana", "bhej do"])) return { intent: "order_start", confidence: 0.88, reason: "product need/order phrase", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && has(["order", "buy", "purchase", "mangwana", "bhej", "checkout", "place order"])) {
+    return { intent: "order_start", confidence: 0.9, reason: "product + order keyword", productQuery: extractProductQueryFromMessage(text) };
+  }
+  if (has(productWords) && has(["chahiye", "need", "want", "looking for", "lena", "lena hai", "mangwana", "bhej do", "please"])) {
+    return { intent: "product_search", confidence: 0.9, reason: "product inquiry (need/want)", productQuery: extractProductQueryFromMessage(text) };
+  }
   if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai", "bill bna", "bill bana", "bill bna k", "bill bana k"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
   if (has(productWords) && has(["recommend", "suggest", "best", "healthy", "gift", "kids", "energy"])) return { intent: "recommendation", confidence: 0.86, reason: "product recommendation keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(productWords) && has(["price", "rate", "qeemat", "kitna", "how much", "rs", "rupees"])) return { intent: "pricing", confidence: 0.9, reason: "product + price keyword", productQuery: productWords.find((w) => t.includes(w)) };
@@ -897,30 +905,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               messageId: msgId,
               step: "intent_detected",
               detail: `Detected intent: ${detected.intent} (${detected.reason})`,
-              payload: { textBody, ...detected, route: "ai_chat" },
+              payload: { textBody, ...detected, route: "ai_chat", roots: productRootsInMessage(textBody) },
             });
-            if (await trySendHumanGreetingReply({ phone, textBody, waSettings })) continue;
-            if (await tryHandleVariantSelectionReply({ phone, textBody, waSettings, log })) continue;
-            if (await tryHandleOrderAffirmationReply({ phone, textBody, waSettings, log })) continue;
-            const aiChatDeterministic = await tryDeterministicWaReply({
-              phone,
-              textBody,
-              currentState,
-              detectedIntent: detected.intent,
-              productQuery: detected.productQuery,
-            });
-            if (aiChatDeterministic) {
-              await sendDeterministicWaReply({
-                phone,
-                textBody,
-                reply: aiChatDeterministic,
-                intent: detected.intent,
-                send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
-              });
+            if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
               continue;
             }
-            if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: detected, log })) {
-              continue;
+            if (detected.intent === "order_start" && (chatbot as any)?.orderingEnabled !== false) {
+              const started = await startCommerceOrderFromText({ phone, textBody, waSettings, detectedIntent: detected });
+              if (started) continue;
             }
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
@@ -935,29 +927,16 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { textBody, ...detected },
           });
 
-          if (
-            (detected.intent === "greeting" || isPureGreetingMessage(textBody)) &&
-            (isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords) || isPureGreetingMessage(textBody))
-          ) {
-            if (chatbot?.isEnabled) {
-              await trySendHumanGreetingReply({ phone, textBody, waSettings });
-              continue;
-            }
-            if ((chatbot as any)?.menuEnabled) {
-              await sendQuickOrderMenu(phone, waSettings);
-              continue;
-            }
-          }
-
-          if (await tryHandleVariantSelectionReply({ phone, textBody, waSettings, log })) {
-            continue;
-          }
-
-          if (await tryHandleOrderAffirmationReply({ phone, textBody, waSettings, log })) {
+          if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
             continue;
           }
 
           if (await handleQuickOrderNumber({ phone, textBody, currentState, waSettings, detectedIntent: detected })) {
+            continue;
+          }
+
+          if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
+            await sendQuickOrderMenu(phone, waSettings);
             continue;
           }
 
@@ -966,36 +945,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             if (started) continue;
           }
 
-          /* Greeting menu is only a fallback when AI is disabled. If AI is enabled, OpenAI must use admin prompt. */
-          if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
-            await sendQuickOrderMenu(phone, waSettings);
-            continue;
-          }
-
-          /* Deterministic replies: delivery, tracking, contextual price — never generic greeting */
-          const deterministicReply = await tryDeterministicWaReply({
-            phone,
-            textBody,
-            currentState,
-            detectedIntent: detected.intent,
-            productQuery: detected.productQuery,
-          });
-          if (deterministicReply) {
-            await sendDeterministicWaReply({
-              phone,
-              textBody,
-              reply: deterministicReply,
-              intent: detected.intent === "delivery" || isDeliveryOnlyMessage(textBody) ? "delivery" : detected.intent,
-              send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
-            });
-            continue;
-          }
-
-          if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: detected, log })) {
-            continue;
-          }
-
-          /* AI chatbot: all normal text must go through admin prompt + OpenAI. */
+          /* AI chatbot — only when product DB + deterministic paths could not answer */
           if (chatbot?.isEnabled) {
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
           } else {
@@ -1019,9 +969,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" = "simple"): number {
   const lower = text.toLowerCase();
   const words = text.trim().split(/\s+/).filter(Boolean).length;
-  const looksProduct = mode === "product" || /price|rate|product|almond|badam|pista|kaju|akhrot|bulk|kg|order|buy|catalog|available/.test(lower);
+  const looksProduct = mode === "product" || /price|rate|product|almond|badam|pista|kaju|akhrot|bulk|kg|order|buy|catalog|available|need|want/.test(lower);
   const looksComplex = mode === "complex" || words > 18 || /bulk|20kg|complaint|refund|return|urgent|problem|tracking|status|address|change/.test(lower);
-  const [min, max] = looksComplex ? [3000, 6000] : looksProduct ? [2000, 4000] : [1000, 2000];
+  const [min, max] = looksComplex ? [3000, 6000] : looksProduct ? [2000, 4500] : [2000, 3500];
   const jitter = Math.floor(Math.random() * (max - min + 1));
   return min + jitter;
 }
@@ -1610,7 +1560,8 @@ async function tryHandleVariantSelectionReply(opts: {
     return true;
   }
 
-  const product = stateData.product ?? stateData.lastOfferedProduct;
+  const mem = await loadConversationMemory(opts.phone);
+  const product = stateData.product ?? stateData.lastOfferedProduct ?? (mem.stateData as any)?.lastOfferedProduct ?? (mem.stateData as any)?.product;
   if (product?.variantOptions?.length) {
     await setConversationState(opts.phone, "wa_order_await_variant", {
       product,
@@ -1666,6 +1617,58 @@ async function trySendHumanGreetingReply(opts: {
   return true;
 }
 
+async function tryResolveWaCustomerMessage(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  currentState: string;
+  detectedIntent: ReturnType<typeof detectWaIntent>;
+  log?: any;
+}): Promise<boolean> {
+  if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
+    return true;
+  }
+  if (await tryHandleVariantSelectionReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
+    return true;
+  }
+  if (await tryHandleOrderAffirmationReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
+    return true;
+  }
+  const deterministicReply = await tryDeterministicWaReply({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    currentState: opts.currentState,
+    detectedIntent: opts.detectedIntent.intent,
+    productQuery: opts.detectedIntent.productQuery,
+  });
+  if (deterministicReply) {
+    await sendDeterministicWaReply({
+      phone: opts.phone,
+      textBody: opts.textBody,
+      reply: deterministicReply,
+      intent: opts.detectedIntent.intent,
+      send: async (p, m, t) => { await sendWaText(p, m, opts.waSettings, t); },
+    });
+    return true;
+  }
+  if (
+    isProductInquiryMessage(opts.textBody) ||
+    shouldUseProductDatabaseFirst(opts.detectedIntent.intent, opts.textBody) ||
+    isLikelyProductInquiry(opts.textBody, opts.detectedIntent.intent)
+  ) {
+    if (await trySendProductCatalogReply({
+      phone: opts.phone,
+      textBody: opts.textBody,
+      waSettings: opts.waSettings,
+      detectedIntent: opts.detectedIntent,
+      log: opts.log,
+    })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function trySendProductCatalogReply(opts: {
   phone: string;
   textBody: string;
@@ -1675,16 +1678,13 @@ async function trySendProductCatalogReply(opts: {
 }): Promise<boolean> {
   const { phone, textBody, waSettings, detectedIntent, log } = opts;
   if (isPureGreetingMessage(textBody) || detectedIntent.intent === "greeting") return false;
-  if (
-    !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody) &&
-    !isLikelyProductInquiry(textBody, detectedIntent.intent)
-  ) {
+  if (!isProductInquiryMessage(textBody) && !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody)) {
     return false;
   }
   try {
     const hit = await tryWaProductCatalogReply({
       textBody,
-      productQuery: detectedIntent.productQuery,
+      productQuery: detectedIntent.productQuery ?? extractProductQueryFromMessage(textBody),
     });
     if (!hit) return false;
 
@@ -1722,7 +1722,7 @@ async function trySendProductCatalogReply(opts: {
       source: "product_knowledge",
     };
 
-    if (variantCount > 1) {
+    if (variantCount >= 1) {
       await setConversationState(phone, "wa_order_await_variant", {
         ...mergeState,
         product: waProduct,
@@ -1798,13 +1798,9 @@ async function buildEmergencyAiFallback(opts: {
     if (handled) return "__VARIANT_HANDLED__";
   }
   if (intent.intent === "conversation" || intent.intent === "support" || intent.intent === "general") {
-    return roman
-      ? "Ji 😊 batayein — product, price, delivery, ya order status?"
-      : "جی 😊 بتائیں — product، price، delivery، یا order status؟";
+    return buildHelpfulPromptReply(textBody, Boolean(phone && (await loadConversationMemory(phone)).selectedProductName));
   }
-  return roman
-    ? "Ji 😊 aapka message receive ho gaya. Aap thori detail share kar dein, main madad karta hoon."
-    : "جی 😊 آپ کا message receive ہو گیا۔ تھوڑی detail share کر دیں، میں مدد کرتا ہوں۔";
+  return buildHelpfulPromptReply(textBody, false);
 }
 
 const QUICK_ORDER_CATEGORIES = [
