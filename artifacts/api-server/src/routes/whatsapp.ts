@@ -570,31 +570,37 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ── Order Confirm/Cancel is highest priority and must run even if bot mode is human/off. */
           try {
             const { processWhatsAppConfirmation, isConfirmationReply, isCancellationReply } = await import("../lib/ondriveEngine.js");
-            const confResult = await processWhatsAppConfirmation({
-              phone,
-              text: rawText,
-              interactionId,
-            });
-            if (confResult.handled) {
-              await logWaProcessingStep({
+            const preConvState = await getConversationState(phone);
+            const preState = preConvState?.state ?? "idle";
+            const isCheckoutState = String(preState).startsWith("wa_order_") || String(preState).startsWith("order_await_");
+            const isTemplateButton = Boolean(interactionId?.startsWith("confirm_order_") || interactionId?.startsWith("cancel_order_"));
+            if (!isCheckoutState || isTemplateButton) {
+              const confResult = await processWhatsAppConfirmation({
                 phone,
-                messageId: msgId,
-                step: "template_button_processed",
-                status: "sent",
-                detail: `Order button/text processed: ${confResult.action ?? "handled"}`,
-                payload: { orderId: confResult.orderId, action: confResult.action, rawText, interactionId },
+                text: rawText,
+                interactionId,
               });
-              log?.info({ phone, action: confResult.action, orderId: confResult.orderId }, "OnDrive: confirmation handled");
-              continue;
+              if (confResult.handled) {
+                await logWaProcessingStep({
+                  phone,
+                  messageId: msgId,
+                  step: "template_button_processed",
+                  status: "sent",
+                  detail: `Order button/text processed: ${confResult.action ?? "handled"}`,
+                  payload: { orderId: confResult.orderId, action: confResult.action, rawText, interactionId, preState },
+                });
+                log?.info({ phone, action: confResult.action, orderId: confResult.orderId }, "OnDrive: confirmation handled");
+                continue;
+              }
             }
-            if (isConfirmationReply(rawText) || isCancellationReply(rawText) || isConfirmationReply(interactionId ?? "") || isCancellationReply(interactionId ?? "")) {
+            if (!isCheckoutState && (isConfirmationReply(rawText) || isCancellationReply(rawText) || isConfirmationReply(interactionId ?? "") || isCancellationReply(interactionId ?? ""))) {
               await logWaProcessingStep({
                 phone,
                 messageId: msgId,
                 step: "template_button_processed",
                 status: "failed",
                 detail: "Customer clicked/replied confirm/cancel but no pending Shopify confirmation was found for this phone.",
-                payload: { rawText, interactionId },
+                payload: { rawText, interactionId, preState },
                 failureReason: "no_pending_order_confirmation_for_phone",
               });
             }

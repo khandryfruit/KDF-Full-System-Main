@@ -129,10 +129,31 @@ export function isConfirmationReply(text: string): boolean {
   });
 }
 
+function isExplicitOrderConfirmationReply(text: string): boolean {
+  const normalized = text.toLowerCase().trim().replace(/[_-]+/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return [
+    "confirm order",
+    "order confirm",
+    "yes confirm",
+    "yes please confirm",
+    "confirm krdo",
+    "confirm kar do",
+    "confirm kar dain",
+    "order bhejo",
+    "order send",
+    "proceed order",
+  ].some(k => normalized === k || normalized.includes(k));
+}
+
 export function isCancellationReply(text: string): boolean {
   const kws = ["cancel", "cancel order", "cancel_order", "no", "nahi", "nope", "dont", "don't", "stop", "reject", "nahi chahiye"];
   const normalized = text.toLowerCase().trim().replace(/[_-]+/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
   return kws.some(k => normalized === k || normalized.startsWith(k + " "));
+}
+
+function isExplicitOrderCancellationReply(text: string): boolean {
+  const normalized = text.toLowerCase().trim().replace(/[_-]+/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return ["cancel order", "order cancel", "cancel krdo", "cancel kar do", "nahi chahiye", "reject order"].some(k => normalized === k || normalized.includes(k));
 }
 
 /* ── Weight calculation using DB weight rules ── */
@@ -776,13 +797,13 @@ export async function processWhatsAppConfirmation(params: {
   const conf = ((confRes.rows ?? [])[0]) as Record<string, any> | undefined;
   if (!conf) return { handled: false };
 
-  /* Check confirmation keywords from visible text or static Meta button payload */
-  if (isConfirmationReply(text) || isConfirmationReply(normalizedInteraction)) {
+  /* Text confirmation must be explicit. Generic "yes/ok/ji" is reserved for active checkout state only. */
+  if (isExplicitOrderConfirmationReply(text) || isExplicitOrderConfirmationReply(normalizedInteraction)) {
     return await handleConfirmation(normalizedPhone, conf.shopify_order_id, "text_reply");
   }
 
   /* Check cancellation */
-  if (isCancellationReply(text) || isCancellationReply(normalizedInteraction)) {
+  if (isExplicitOrderCancellationReply(text) || isExplicitOrderCancellationReply(normalizedInteraction)) {
     await handleCancellation(normalizedPhone, conf.shopify_order_id);
     return { handled: true, action: "cancelled", orderId: conf.shopify_order_id };
   }
@@ -792,6 +813,24 @@ export async function processWhatsAppConfirmation(params: {
 
 async function handleConfirmation(phone: string, shopifyOrderId: string, method: string): Promise<{ handled: boolean; action: string; orderId: string }> {
   try {
+    const orderRes = await db.execute(sql`SELECT * FROM shopify_orders WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));
+    const order = ((orderRes.rows ?? [])[0]) as Record<string, any> | undefined;
+    if (!order) {
+      logger.error({ shopifyOrderId, phone, method }, "OnDrive: refusing confirmation because order row is missing");
+      await db.execute(sql`
+        UPDATE shopify_order_confirmations
+        SET status = 'failed', updated_at = NOW()
+        WHERE shopify_order_id = ${shopifyOrderId}
+          AND status = 'pending'
+      `).catch(() => {});
+      await sendWhatsAppMessage({
+        phone,
+        message: "Sorry, order confirmation complete nahi ho saki kyunki order record nahi mila. Hamari team ko alert kar diya gaya hai.",
+        templateName: "ondrive_confirm_failed",
+      }).catch(() => {});
+      return { handled: true, action: "order_missing", orderId: shopifyOrderId };
+    }
+
     /* Mark as confirmed once; duplicate Meta callbacks must not re-run side effects. */
     const updateRes = await db.execute(sql`
       UPDATE shopify_order_confirmations
@@ -818,6 +857,7 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
         return { handled: true, action: "already_cancelled", orderId: shopifyOrderId };
       }
       logger.warn({ shopifyOrderId, phone, status }, "OnDrive: confirmation click received but no pending confirmation row matched");
+      return { handled: true, action: "not_pending", orderId: shopifyOrderId };
     }
 
     /* Also update local shopify_orders status → confirmed */
@@ -828,15 +868,6 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
           updated_at = NOW()
       WHERE shopify_order_id = ${shopifyOrderId}
     `).catch(() => {});
-
-    /* Find the order in DB */
-    const orderRes = await db.execute(sql`SELECT * FROM shopify_orders WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));
-    const order = ((orderRes.rows ?? [])[0]) as Record<string, any> | undefined;
-
-    if (!order) {
-      await sendWhatsAppMessage({ phone, message: "Thank you 😊\n\n✅ Your order has been confirmed successfully.\n\nOur team is preparing your order now. You will receive packing and delivery updates soon 📦\n\n*Khan Dry Fruits*", templateName: "ondrive_confirm_ack" });
-      return { handled: true, action: "confirmed", orderId: shopifyOrderId };
-    }
 
     /* Send acknowledgement first */
     await sendWhatsAppMessage({
@@ -857,11 +888,7 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
           triggeredBy: "whatsapp_confirmation",
         });
         if (!result.success) {
-          await sendWhatsAppMessage({
-            phone,
-            message: `⚠️ Order *${order.order_number}* confirmed but auto-booking needs attention. Our team will contact you shortly.\n\nError: ${result.error}`,
-            templateName: "ondrive_booking_error",
-          }).catch(() => {});
+          logger.warn({ shopifyOrderId, orderNumber: order.order_number, error: result.error }, "OnDrive: auto-booking failed after confirmation");
         }
       });
     }
