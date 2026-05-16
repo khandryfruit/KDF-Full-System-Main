@@ -727,7 +727,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             continue;
           }
 
-          /* In ai_chat state — go straight to AI (skip menu check) */
+          /* In ai_chat state — go straight to AI (skip menu/static shortcuts) */
           if (currentState === "ai_chat") {
             const detected = detectWaIntent(textBody);
             await logWaProcessingStep({
@@ -737,19 +737,6 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: `Detected intent: ${detected.intent} (${detected.reason})`,
               payload: { textBody, ...detected, route: "ai_chat" },
             });
-            const deterministicReply = naturalIntentReply(detected.intent, textBody);
-            if (deterministicReply) {
-              await sendWhatsAppMessage({ phone, message: deterministicReply, templateName: "intent_reply" });
-              await logWaProcessingStep({
-                phone,
-                messageId: msgId,
-                step: "ai_reply_sent",
-                status: "sent",
-                detail: `Sent deterministic human-like reply for ${detected.intent} in ai_chat state.`,
-                payload: { detected, reply: deterministicReply },
-              });
-              continue;
-            }
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
           }
@@ -763,34 +750,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { textBody, ...detected },
           });
 
-          const deterministicReply = naturalIntentReply(detected.intent, textBody);
-          if (deterministicReply) {
-            await sendWhatsAppMessage({ phone, message: deterministicReply, templateName: "intent_reply" });
-            await logWaProcessingStep({
-              phone,
-              messageId: msgId,
-              step: "ai_reply_sent",
-              status: "sent",
-              detail: `Sent deterministic human-like reply for ${detected.intent}.`,
-              payload: { detected, reply: deterministicReply },
-            });
-            continue;
-          }
-
-          /* Greeting → send welcome menu (if menu enabled) */
-          if (detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
+          /* Greeting menu is only a fallback when AI is disabled. If AI is enabled, OpenAI must use admin prompt. */
+          if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
             await handleSendMenu(phone, waSettings, chatbot);
             await setConversationState(phone, "menu_shown");
             continue;
           }
 
-          /* ── Product catalog only for strong product intents. Never for greetings/general chat. ── */
-          if (chatbot?.isEnabled && (chatbot as any)?.catalogEnabled && shouldSendCatalogForIntent(detected.intent)) {
-            const catalogMatched = await handleProductCatalog({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
-            if (catalogMatched) continue;
-          }
-
-          /* AI chatbot fallback */
+          /* AI chatbot: all normal text must go through admin prompt + OpenAI. */
           if (chatbot?.isEnabled) {
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
           } else {
@@ -1512,7 +1479,7 @@ async function handleAiReply(opts: {
       payload: { textBody: textBody.slice(0, 500), model: chatbot?.aiModel ?? "gpt-4o-mini", chatbotEnabled: chatbot?.isEnabled, detectedIntent: intent },
     });
     /* Rate limit check */
-    const cooldownSec = chatbot.replyDelaySec ?? 30;
+    const cooldownSec = Number(chatbot.replyDelaySec ?? 0);
     const [lastAiReplyRow] = await db.select({ createdAt: whatsappLogsTable.createdAt })
       .from(whatsappLogsTable)
       .where(sql`phone = ${phone} AND template_name = 'ai_reply'`)
@@ -1520,15 +1487,13 @@ async function handleAiReply(opts: {
       .limit(1);
     if (lastAiReplyRow) {
       const secsSinceLast = (Date.now() - new Date(lastAiReplyRow.createdAt).getTime()) / 1000;
-      if (secsSinceLast < cooldownSec) {
+      if (cooldownSec > 0 && secsSinceLast < cooldownSec) {
         await logWaProcessingStep({
           phone,
-          step: "ai_skipped",
-          detail: `AI skipped by cooldown (${Math.round(secsSinceLast)}s/${cooldownSec}s).`,
+          step: "ai_cooldown_observed",
+          detail: `Cooldown window observed (${Math.round(secsSinceLast)}s/${cooldownSec}s), but AI continues so customer does not receive a missing/static reply.`,
           payload: { secsSinceLast, cooldownSec },
         });
-        log?.info({ phone, secsSinceLast, cooldownSec }, "AI reply rate-limited");
-        return;
       }
     }
 
@@ -1684,13 +1649,15 @@ Rules:
 - If customer wants tracking/order status, use track_order.
 - Keep replies short, human, and conversion-focused.`;
     const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
+    const promptSource = adminPrompt ? "Admin DB" : "Missing";
     const systemContent = `${salesSystem}\n\nAdmin business instructions (must be applied):\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
     await logWaProcessingStep({
       phone,
       step: "prompt_loaded",
-      detail: adminPrompt ? "AI Behaviour Instructions loaded and injected into WhatsApp prompt." : "No saved AI Behaviour Instructions found; using safe default business prompt.",
+      detail: adminPrompt ? "AI Behaviour Instructions loaded from Admin DB and injected as primary WhatsApp prompt context." : "No saved AI Behaviour Instructions found; using safe default business prompt.",
       payload: {
         promptLoaded: Boolean(adminPrompt),
+        promptSource,
         promptLength: adminPrompt.length,
         promptPreview: adminPrompt.slice(0, 800),
         detectedIntent: intent,
@@ -1732,6 +1699,19 @@ Rules:
     const allowToolUse = (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) || ["order_start", "tracking", "complaint"].includes(intent.intent);
 
     while (toolRound < 2) {
+      await logWaProcessingStep({
+        phone,
+        step: "openai_request_sent",
+        detail: `OpenAI request sent with model ${chatbot.aiModel ?? "gpt-4o-mini"}.`,
+        payload: {
+          model: chatbot.aiModel ?? "gpt-4o-mini",
+          toolRound,
+          toolChoice: allowToolUse ? "auto" : "none",
+          messages: currentMessages.length,
+          promptSource,
+          promptLoaded: Boolean(adminPrompt),
+        },
+      });
       const completion = await aiClient.chat.completions.create({
         model: chatbot.aiModel ?? "gpt-4o-mini",
         messages: currentMessages,
@@ -1742,6 +1722,20 @@ Rules:
 
       const choice = completion.choices[0];
       if (!choice) break;
+      await logWaProcessingStep({
+        phone,
+        step: "openai_response_returned",
+        status: "received",
+        detail: choice.message.tool_calls?.length
+          ? `OpenAI returned ${choice.message.tool_calls.length} tool call(s).`
+          : "OpenAI returned a text response.",
+        payload: {
+          model: completion.model,
+          finishReason: choice.finish_reason,
+          toolCalls: choice.message.tool_calls?.map((tc: any) => ({ name: tc.function?.name, arguments: tc.function?.arguments })) ?? [],
+          responsePreview: choice.message.content?.slice(0, 1000) ?? null,
+        },
+      });
 
       /* No tool call → plain text reply */
       if (!choice.message.tool_calls?.length) {
@@ -1768,31 +1762,26 @@ Rules:
           if (products.length === 0) {
             toolResult = "No products found for this query.";
           } else {
-            /* Send product cards immediately via WA */
-            const intro = customerName
-              ? `🛍️ *${customerName}*, yahan hain matching products:`
-              : `جی 😊 official Shopify catalog ke matching options yeh hain:`;
-            await sendWaText(phone, intro, waSettings);
-            await new Promise(r => setTimeout(r, 600));
-            for (let i = 0; i < products.length; i++) {
-              const p = products[i]!;
-              const card = formatProductCard(p, i);
-              await sendInteractiveButtons({
-                phone,
-                text: card,
-                buttons: [
-                  { id: `wa_order_${encodeURIComponent(p.name)}_${i}`, title: "🛒 Order Now" },
-                  { id: "main_menu", title: "🏠 Main Menu" },
-                ],
-                footer: "KDF NUTS — Premium Dry Fruits Pakistan",
-                settings: waSettings,
-                templateName: "ai_product_card",
-              });
-              if (i < products.length - 1) await new Promise(r => setTimeout(r, 500));
-            }
-            toolResult = `Showed ${products.length} products: ${products.map(p => p.name).join(", ")}`;
-            await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Products shown: ${products.map(p => p.name).join(", ")}]`, status: "sent" }).catch(() => {});
-            return; /* Products already sent */
+            toolResult = JSON.stringify({
+              found: true,
+              instruction: "Use only these official catalog products, variants, and prices. Do not invent prices.",
+              products: products.map((p) => ({
+                name: p.name,
+                price: p.price,
+                compareAt: p.compareAt,
+                variants: p.variantLines?.length ? p.variantLines : p.variants ? p.variants.split("\n") : [],
+                inStock: p.inStock,
+                source: p.source,
+                productUrl: p.productUrl,
+              })),
+            });
+            await logWaProcessingStep({
+              phone,
+              step: "catalog_result",
+              status: "received",
+              detail: `Catalog lookup returned ${products.length} product(s) to OpenAI for final reply.`,
+              payload: { query: args.query, products: products.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
+            });
           }
         } else if (tcFn.name === "calculate_order_total") {
           const total = await calculateWhatsAppOrderTotal({
@@ -1894,7 +1883,7 @@ Rules:
         detail: "AI produced no reply text.",
         failureReason: "ai_empty_reply",
       });
-      return;
+      throw new Error("ai_empty_reply");
     }
 
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
@@ -1904,7 +1893,7 @@ Rules:
       step: "ai_reply_sent",
       status: ok ? "sent" : "failed",
       detail: ok ? "AI reply sent to customer." : "AI generated a reply but WhatsApp send failed.",
-      payload: { reply: reply.slice(0, 1000) },
+      payload: { finalSentMessage: reply.slice(0, 1000), detectedIntent: intent, fallbackTriggered: false },
       failureReason: ok ? null : "ai_whatsapp_send_failed",
     });
   } catch (aiErr) {
@@ -1918,23 +1907,23 @@ Rules:
     });
     log?.warn(aiErr, "AI auto-reply error");
     try {
-      const intentFallback = naturalIntentReply(intent.intent, textBody);
-      if (intentFallback) {
-        const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
-        await sendWa({ phone, message: intentFallback, templateName: "ai_fallback" });
-      } else if (chatbot?.fallbackMessage) {
+      if (chatbot?.fallbackMessage) {
         const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
         const fallbackText = String(chatbot.fallbackMessage);
         const fallback = fallbackText.toLowerCase().includes("thank you for your message")
-          ? "Ji 😊 main yahin hoon. Aap apna sawal ya zaroorat bata dein, main madad karta hoon."
+          ? "AI response mein technical issue aa gaya hai. Hamari team ko alert kar diya gaya hai, please apna sawal yahin send kar dein."
           : fallbackText;
         await logWaProcessingStep({
           phone,
           step: "fallback_triggered",
           status: "failed",
-          detail: "Fallback was used because AI generation failed.",
-          payload: { detectedIntent: intent, fallbackPreview: fallback.slice(0, 500) },
-          failureReason: "ai_generation_failed",
+          detail: "Fallback was used only because OpenAI generation failed.",
+          payload: {
+            detectedIntent: intent,
+            fallbackPreview: fallback.slice(0, 500),
+            openAiError: aiErr instanceof Error ? aiErr.message : String(aiErr),
+          },
+          failureReason: aiErr instanceof Error ? aiErr.message : "ai_generation_failed",
         });
         await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
       }
