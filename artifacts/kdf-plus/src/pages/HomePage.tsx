@@ -1141,6 +1141,93 @@ function SmartBannerProductStrip({
   );
 }
 
+function SmartPromoBannerCard({
+  banner,
+  productCount,
+}: {
+  banner: Banner;
+  productCount: number;
+}) {
+  const [, setLocation] = useLocation();
+  const b = banner as any;
+  const desktopImg = b.imageUrl ? getProductImageSrc(b.imageUrl, { maxWidth: 1000 }) : "";
+  const mobileImg = b.mobileImageUrl ? getProductImageSrc(b.mobileImageUrl, { maxWidth: 700 }) : desktopImg;
+  const targetHref =
+    b.targetType === "product" && b.targetId ? `/products/${b.targetId}` :
+    b.targetType === "category" && b.targetId ? `/products?categoryId=${b.targetId}` :
+    b.linkUrl || "/products";
+  const bg = b.bgColor && String(b.bgColor).startsWith("#")
+    ? `linear-gradient(135deg, ${b.bgColor}, #0f172a)`
+    : dealThemeForBanner(b);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setLocation(targetHref)}
+      className="group relative min-h-[150px] overflow-hidden rounded-[1.4rem] p-5 text-left text-white shadow-[0_16px_44px_rgba(13,43,0,0.12)] ring-1 ring-black/[0.04] transition-all hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(13,43,0,0.17)] active:translate-y-0 sm:min-h-[178px] sm:p-6"
+      style={{ background: bg }}
+    >
+      {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:block" />}
+      {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:hidden" />}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.18),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.28),rgba(0,0,0,0.08))]" />
+      <div className="relative z-10 flex h-full flex-col justify-between gap-5">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/14 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/85 ring-1 ring-white/16 backdrop-blur">
+            <Sparkles className="h-3 w-3 text-amber-200" />
+            {b.label || "AI Smart Pick"}
+          </div>
+          <h3 className="max-w-[26rem] text-xl font-black leading-[1.04] tracking-tight sm:text-2xl">
+            {banner.title}
+          </h3>
+          {(b.healthBenefitText || banner.subtitle) && (
+            <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">
+              {b.healthBenefitText || banner.subtitle}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="rounded-full bg-white/14 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white/80 ring-1 ring-white/14">
+            {productCount > 0 ? `${productCount} matched products` : b.urgencyText || "Seasonal picks"}
+          </span>
+          <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-black text-[#0D2B00] shadow-lg transition-transform group-hover:translate-x-1">
+            {banner.cta || "Shop Now"} <ArrowRight className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SmartPromoBannerSection({
+  banners,
+  products,
+}: {
+  banners: Banner[];
+  products: Product[];
+}) {
+  if (!banners.length) return null;
+  return (
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#5FA800]">AI promotions</p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 sm:text-2xl">Smart seasonal picks</h2>
+        </div>
+        <Link href="/products" className="hidden rounded-full border border-[#5FA800]/25 px-4 py-2 text-sm font-black text-[#4d8a00] transition-colors hover:bg-[#5FA800]/10 sm:inline-flex">
+          View products
+        </Link>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {banners.slice(0, 2).map((banner) => {
+          const ids = Array.isArray((banner as any).relatedProductIds) ? (banner as any).relatedProductIds.map(Number) : [];
+          const count = ids.length || products.filter((p) => productMatchScore(p, banner as any) > 0).length;
+          return <SmartPromoBannerCard key={banner.id} banner={banner} productCount={count} />;
+        })}
+      </div>
+    </section>
+  );
+}
+
 function DealProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
   const [, setLocation] = useLocation();
@@ -1506,9 +1593,10 @@ export default function HomePage() {
     return [...byId.values()];
   }, [dealProducts, featuredProducts, allProducts]);
 
-  const smartBanner = useMemo(() => {
-    return banners.find((b: any) => b.aiMode && Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? null;
+  const smartBanners = useMemo(() => {
+    return banners.filter((b: any) => b.aiMode);
   }, [banners]);
+  const smartBanner = smartBanners.find((b: any) => Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? smartBanners[0] ?? null;
   const smartBannerProductIds = useMemo(() => {
     const ids = (smartBanner as any)?.relatedProductIds;
     return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0).slice(0, 12) : [];
@@ -1679,27 +1767,30 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Second promo banner */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <PromoBanner
-              badge="Gift Packs"
-              title="Perfect for Every Occasion"
-              subtitle="Eid, birthdays, corporate gifting — curated with love."
-              cta="Explore Gifts"
-              href="/category/gifting"
-              gradient="linear-gradient(135deg, #7b2d8b 0%, #c0392b 100%)"
-            />
-            <PromoBanner
-              badge="Bulk Orders"
-              title="Wholesale Prices for Bulk Buyers"
-              subtitle="Special rates on orders above 5kg. Contact us today."
-              cta="Contact Now"
-              href="/products"
-              gradient="linear-gradient(135deg, #1a5276 0%, #117a8b 100%)"
-            />
-          </div>
-        </section>
+        {smartBanners.length > 0 ? (
+          <SmartPromoBannerSection banners={smartBanners} products={heroSmartCatalog} />
+        ) : (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <PromoBanner
+                badge="Gift Packs"
+                title="Perfect for Every Occasion"
+                subtitle="Eid, birthdays, corporate gifting — curated with love."
+                cta="Explore Gifts"
+                href="/category/gifting"
+                gradient="linear-gradient(135deg, #7b2d8b 0%, #c0392b 100%)"
+              />
+              <PromoBanner
+                badge="Bulk Orders"
+                title="Wholesale Prices for Bulk Buyers"
+                subtitle="Special rates on orders above 5kg. Contact us today."
+                cta="Contact Now"
+                href="/products"
+                gradient="linear-gradient(135deg, #1a5276 0%, #117a8b 100%)"
+              />
+            </div>
+          </section>
+        )}
 
         {/* All products */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">

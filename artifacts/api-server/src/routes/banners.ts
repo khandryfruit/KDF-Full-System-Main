@@ -555,12 +555,6 @@ router.post("/banners", adminMiddleware as any, async (req, res) => {
       res.status(201).json(banner);
       return;
     }
-    if (picked.placement === "countdown_deal") {
-      const banner = await createCountdownBanner(title, picked);
-      req.log.info({ bannerId: banner?.id, placement: "countdown_deal" }, "countdown banner created");
-      res.status(201).json(banner);
-      return;
-    }
     const [banner] = await db
       .insert(bannersTable)
       .values({ ...(picked as any), title } as any)
