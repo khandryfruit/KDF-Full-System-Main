@@ -1012,6 +1012,13 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
     bottom: 7rem !important;
   }
 }
+/* Wide desktop — tuck FABs inside content column, not screen edge */
+@media (min-width: 1024px) {
+  .kdf-mobile-fab,
+  .kdf-mobile-fab-scroll {
+    right: max(1.5rem, calc((100vw - min(100vw, 100rem)) / 2 + 1rem)) !important;
+  }
+}
 
 /* ── Unified KDF product carousel (auto + manual swipe/drag) ── */
 .kdf-carousel {
@@ -1368,8 +1375,114 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   }
 }
 
+/* Full-width page shell — centered up to 1600px, balanced side margins */
+.kdf-page-shell {
+  width: 100%;
+  max-width: min(100%, 100rem);
+  margin-inline: auto;
+  padding-inline: clamp(0.75rem, 2.2vw, 2rem);
+  box-sizing: border-box;
+}
+@media (min-width: 1280px) {
+  .kdf-page-shell {
+    padding-inline: clamp(1.25rem, 2.8vw, 2.5rem);
+  }
+}
+
 .kdf-rec-strip {
   padding-inline: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Recommendation / related product grids */
+.kdf-rec-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+@media (min-width: 640px) {
+  .kdf-rec-grid {
+    gap: 0.75rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-rec-grid {
+    gap: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .kdf-rec-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1536px) {
+  .kdf-rec-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Compact cards in recommendation carousels / grids */
+.kdf-product-card--compact .kdf-product-card__body {
+  padding: 6px 8px 8px;
+}
+.kdf-product-card--compact .kdf-product-card__badge {
+  left: 6px;
+  top: 6px;
+}
+.kdf-product-card--compact .kdf-discount-badge {
+  height: 18px;
+  min-width: 34px;
+  font-size: 9px;
+  padding: 0 6px;
+}
+.kdf-product-card--compact button[class*="right-2"] {
+  right: 6px !important;
+  top: 6px !important;
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+.kdf-product-card--compact button[class*="right-2"] svg {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+/* Related-products mobile carousel — always 2 cards visible */
+.kdf-carousel--rec .kdf-carousel-slide--peek {
+  flex: 0 0 calc(50% - 5px);
+  max-width: calc(50% - 5px);
+  min-width: 0;
+}
+.kdf-carousel--rec .kdf-carousel-track {
+  gap: 10px;
+  padding: 4px 4px 12px 2px;
+}
+.kdf-carousel--rec .kdf-carousel-card {
+  border-radius: 16px;
+}
+.kdf-carousel--rec .kdf-product-card {
+  border-radius: 16px;
+}
+.kdf-carousel--rec .kdf-product-card__media {
+  aspect-ratio: 1 / 1;
+}
+
+/* PDP safe zone above sticky mobile CTA + bottom nav */
+.kdf-pdp-main {
+  padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 7.5rem);
+}
+@media (min-width: 640px) {
+  .kdf-pdp-main {
+    padding-bottom: 7rem;
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-pdp-main {
+    padding-bottom: 3rem;
+  }
 }
 
 /* Featured products — glass shell */

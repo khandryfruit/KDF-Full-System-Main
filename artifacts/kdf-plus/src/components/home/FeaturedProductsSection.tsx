@@ -16,7 +16,7 @@ export function FeaturedProductsSection({ products, loading }: FeaturedProductsS
   if (!loading && products.length === 0) return null;
 
   return (
-    <section className="kdf-home-section max-w-7xl mx-auto px-1 sm:px-6 lg:px-8 pb-6">
+    <section className="kdf-home-section kdf-page-shell px-1 sm:px-6 lg:px-8 pb-6">
       <div className="kdf-featured-shell overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-white/60 bg-gradient-to-r from-[#f8fbf4]/90 to-white/80 px-3 py-3 backdrop-blur-sm sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -43,7 +43,7 @@ export function FeaturedProductsSection({ products, loading }: FeaturedProductsS
             <PremiumProductCarousel products={products} loading={loading} resumeMs={4000} />
           </div>
 
-          <div className="hidden sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">
+          <div className="kdf-rec-grid hidden sm:grid">
             {loading
               ? Array.from({ length: 5 }).map((_, i) => (
                   <div key={i}>

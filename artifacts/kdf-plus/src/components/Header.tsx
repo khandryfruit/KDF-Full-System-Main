@@ -882,7 +882,7 @@ export function Header() {
               : "0 1px 0 rgba(0,0,0,0.06)",
           }}
         >
-          <div className="mx-auto max-w-7xl overflow-visible px-3.5 sm:px-5 lg:px-7 xl:px-8">
+          <div className="kdf-page-shell overflow-visible">
             {/* Top row */}
             <div className={`flex items-center gap-2.5 transition-all duration-300 sm:gap-3 lg:gap-4 xl:gap-5 ${shrunk ? "h-[54px] lg:h-[58px]" : "h-[60px] lg:h-[70px]"}`}>
 

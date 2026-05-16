@@ -96,7 +96,7 @@ export default function CartPage() {
         <title>{`Cart (${items.length}) — KDF Plus`}</title>
       </Helmet>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
+      <main className="kdf-page-shell px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
         <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight md:text-3xl" data-testid="text-cart-title">

@@ -11,9 +11,11 @@ interface ProductCardProps {
   product: Product;
   /** Premium hot-deals badge with subtle fire accent */
   hotDealBadge?: boolean;
+  /** Denser card for recommendation rows / 2-up mobile grids */
+  compact?: boolean;
 }
 
-function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
+function ProductCardInner({ product, hotDealBadge, compact }: ProductCardProps) {
   const { addItem, items, updateQty, removeItem } = useCart();
   const [wished, setWished] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
@@ -77,7 +79,9 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
   return (
     <>
       <Link href={`/products/${(product as any).slug || product.id}`} data-testid={`card-product-${product.id}`}>
-        <div className="kdf-product-card group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden bg-white box-border transition-[transform,box-shadow] duration-300 active:max-sm:scale-[0.99] sm:rounded-3xl sm:border sm:border-gray-100 sm:shadow-sm sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] md:shadow-md hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12">
+        <div
+          className={`kdf-product-card group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden bg-white box-border transition-[transform,box-shadow] duration-300 active:max-sm:scale-[0.99] sm:rounded-3xl sm:border sm:border-gray-100 sm:shadow-sm sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] md:shadow-md hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12${compact ? " kdf-product-card--compact" : ""}`}
+        >
 
           <button
             onClick={handleWish}
@@ -141,7 +145,7 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
               <p className="text-[10px] font-medium text-gray-400 sm:text-[11px]">{product.weight ?? product.unit}</p>
             )}
             <h3
-              className="line-clamp-2 text-[13px] font-semibold leading-snug text-gray-900 sm:text-sm md:text-base md:font-bold"
+              className={`line-clamp-2 font-semibold leading-snug text-gray-900 ${compact ? "text-[11px]" : "text-[13px] sm:text-sm md:text-base md:font-bold"}`}
               data-testid={`text-product-name-${product.id}`}
             >
               {product.name}

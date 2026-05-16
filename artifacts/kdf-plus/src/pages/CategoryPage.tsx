@@ -46,7 +46,7 @@ export default function CategoryPage() {
         <link rel="canonical" href={`/kdf-plus/category/${params.slug}`} />
       </Helmet>
 
-      <main className="max-w-7xl mx-auto box-border overflow-x-hidden px-2.5 py-6 pb-24 sm:px-6 lg:px-8 sm:pb-6">
+      <main className="kdf-page-shell box-border overflow-x-hidden px-2.5 py-6 pb-24 sm:px-6 lg:px-8 sm:pb-6">
         <div className="mb-6 flex items-center gap-3">
           <Link href="/products">
             <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="link-back-products">

@@ -191,7 +191,7 @@ export default function ProductsPage() {
         <link rel="canonical" href="/kdf-plus/products" />
       </Helmet>
 
-      <main className="kdf-home-section max-w-7xl mx-auto box-border overflow-x-hidden px-1.5 py-6 pb-28 sm:px-6 lg:px-8 sm:pb-6">
+      <main className="kdf-home-section kdf-page-shell box-border overflow-x-hidden px-1.5 py-6 pb-28 sm:px-6 lg:px-8 sm:pb-6">
         {/* Top Bar */}
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <div>

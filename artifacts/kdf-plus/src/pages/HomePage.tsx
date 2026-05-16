@@ -309,7 +309,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+      <div className="kdf-page-shell px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <Skeleton className={`w-full ${HERO_FRAME_CLASS}`} />
       </div>
     );
@@ -319,7 +319,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
   if (!heroSlides.length) {
     const s = BANNER_AI_SLIDES[fallbackIdx];
     return (
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+      <div className="kdf-page-shell px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div
           className={`${HERO_FRAME_CLASS} relative flex cursor-pointer flex-col justify-end overflow-hidden transition-opacity active:opacity-95 sm:justify-center`}
           style={{
@@ -391,7 +391,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
 
   return (
     <div
-      className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4"
+      className="kdf-page-shell px-3 sm:px-6 lg:px-8 py-3 sm:py-4"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -856,7 +856,7 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
 
   return (
     <section className="py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="kdf-page-shell px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${GREEN}15` }}>
@@ -989,7 +989,7 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
 function TrustStrip() {
   return (
     <section className="kdf-trust-strip" aria-label="Why customers trust KDF">
-      <div className="kdf-home-section max-w-7xl mx-auto px-1.5 sm:px-6 lg:px-8 py-3">
+      <div className="kdf-home-section kdf-page-shell px-1.5 sm:px-6 lg:px-8 py-3">
         <p className="mb-2 px-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">
           Trust & quality
         </p>
@@ -1016,7 +1016,7 @@ function TrustStrip() {
 function DeliveryBenefitsStrip() {
   return (
     <section className="kdf-delivery-strip" aria-label="Delivery benefits">
-      <div className="kdf-home-section max-w-7xl mx-auto px-1.5 sm:px-6 lg:px-8 py-3">
+      <div className="kdf-home-section kdf-page-shell px-1.5 sm:px-6 lg:px-8 py-3">
         <p className="mb-2 px-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]/80">
           Delivery
         </p>
@@ -1184,7 +1184,7 @@ function CountdownDealSection({
   const shouldShowMatchedItems = showCategories ? shownCategories.length > 0 : loading || shownProducts.length > 0;
 
   return (
-    <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-8 sm:pb-9">
+    <section className="kdf-page-shell px-2 sm:px-6 lg:px-8 pb-8 sm:pb-9">
       <div className="overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-[0_14px_38px_rgba(13,43,0,0.08)] ring-1 ring-black/[0.03] sm:rounded-[1.5rem]">
         <div
           className="kdf-promo-banner-compact relative overflow-hidden px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
@@ -1554,7 +1554,7 @@ export default function HomePage() {
         )}
 
         {/* Categories */}
-        <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-10">
+        <section className="kdf-page-shell px-2 sm:px-6 lg:px-8 py-10">
           <SectionHeader
             icon={Tag}
             title="Shop by Category"
@@ -1590,7 +1590,7 @@ export default function HomePage() {
         )}
 
         {/* New Arrivals */}
-        <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-10">
+        <section className="kdf-home-section kdf-page-shell px-2 sm:px-6 lg:px-8 pb-10">
           <div className="overflow-hidden bg-white rounded-xl p-2 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               icon={TrendingUp}
@@ -1604,7 +1604,7 @@ export default function HomePage() {
         </section>
 
         {/* All products */}
-        <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-14">
+        <section className="kdf-home-section kdf-page-shell px-2 sm:px-6 lg:px-8 pb-14">
           <div className="overflow-hidden bg-white rounded-xl p-3 shadow-sm border border-gray-100 max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none sm:rounded-2xl sm:p-7">
             <SectionHeader
               title="All Products"

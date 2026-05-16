@@ -54,21 +54,21 @@ export function ProductRecommendationStrip({
   title,
   subtitle,
   products,
-  compact = false,
+  compact = true,
 }: {
   title: string;
   subtitle?: string;
   products: Product[];
   compact?: boolean;
 }) {
-  const visible = useMemo(() => products.slice(0, compact ? 8 : 12), [products, compact]);
+  const visible = useMemo(() => products.slice(0, 12), [products]);
   if (visible.length === 0) return null;
 
   return (
-    <section className="kdf-rec-strip space-y-2">
+    <section className="kdf-rec-strip w-full min-w-0 space-y-3">
       <div className="flex items-end justify-between gap-2 px-0.5">
         <div>
-          <p className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#5FA800]">
+          <p className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#5FA800] sm:text-[11px]">
             <Sparkles className="h-3 w-3" />
             {title}
           </p>
@@ -76,13 +76,19 @@ export function ProductRecommendationStrip({
         </div>
       </div>
 
-      <div className="max-sm:-mx-0.5 sm:hidden">
-        <KdfProductCarousel products={visible} mode="peek" resumeMs={4000} />
+      <div className="sm:hidden">
+        <KdfProductCarousel
+          products={visible}
+          mode="peek"
+          resumeMs={4000}
+          className="kdf-carousel--rec"
+          compact={compact}
+        />
       </div>
 
-      <div className="hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3">
+      <div className="kdf-rec-grid hidden sm:grid">
         {visible.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard key={product.id} product={product} compact={compact} />
         ))}
       </div>
     </section>

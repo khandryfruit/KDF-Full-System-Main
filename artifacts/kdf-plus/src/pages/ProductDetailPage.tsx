@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
+import { ProductCard } from "@/components/ProductCard";
+import { KdfProductCarousel } from "@/components/carousel/KdfProductCarousel";
 import { MobilePurchaseSheet, type PurchaseIntent } from "@/components/purchase/MobilePurchaseSheet";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -276,49 +278,32 @@ function ShippingTab() {
 
 /* ── Related Products ── */
 function RelatedProducts({ currentId }: { currentId: number }) {
-  const [, setLocation] = useLocation();
   const { data } = useListProducts(
-    { limit: 7 },
-    { query: { queryKey: ["products", "related-pool"], staleTime: 60_000 } },
+    { limit: 12 },
+    { query: { queryKey: ["products", "related-bottom"], staleTime: 60_000 } },
   );
   const products = useMemo(
     () =>
       normalizeProductsListResponse(data)
         .items.filter((p: any) => p.id !== currentId)
-        .slice(0, 6),
+        .slice(0, 12),
     [data, currentId],
   );
   if (products.length === 0) return null;
 
   return (
-    <div className="mt-10 md:mt-14">
+    <section className="mt-10 md:mt-14 pb-4">
       <Separator className="mb-8" />
       <h2 className="mb-5 text-xl font-black tracking-tight md:text-2xl">You May Also Like</h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-5">
-        {products.map((p: any) => {
-          const rPrice = Number(p.price);
-          const rOld = p.originalPrice ? Number(p.originalPrice) : null;
-          const rDisc = rOld && rOld > rPrice ? Math.round(((rOld - rPrice) / rOld) * 100) : null;
-          const img = p.images?.[0];
-          return (
-            <div key={p.id} onClick={() => setLocation(`/products/${(p as any).slug || p.id}`)} className="group cursor-pointer overflow-hidden rounded-3xl border border-gray-100/90 bg-white shadow-sm ring-1 ring-black/[0.03] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[#5FA800]/30 hover:shadow-2xl hover:shadow-[#5FA800]/12 active:scale-[0.99] md:rounded-[1.75rem] md:hover:-translate-y-1.5">
-              <div className="aspect-square bg-muted/20 overflow-hidden relative">
-                {img ? <img src={getProductImageSrc(img)} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-muted" /></div>}
-                {rDisc && <span className="absolute top-2 left-2 bg-[#F58300] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{rDisc}% OFF</span>}
-              </div>
-              <div className="p-3">
-                <p className="text-xs font-semibold text-foreground truncate mb-1">{p.name}</p>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-black text-primary">Rs. {rPrice.toLocaleString()}</span>
-                  {rOld && <span className="text-xs text-muted-foreground line-through">Rs. {rOld.toLocaleString()}</span>}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="sm:hidden">
+        <KdfProductCarousel products={products} mode="peek" resumeMs={4000} className="kdf-carousel--rec" compact />
       </div>
-    </div>
+      <div className="kdf-rec-grid hidden sm:grid">
+        {products.map((p: any) => (
+          <ProductCard key={p.id} product={p} compact />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -490,7 +475,7 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <main className="kdf-page-shell py-8 sm:py-10">
         <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-x-10 lg:gap-y-8 xl:gap-x-12">
           <Skeleton className="mx-auto aspect-square w-full max-w-[min(100%,28rem)] rounded-2xl lg:mx-0" />
           <div className="min-w-0 space-y-4"><Skeleton className="h-8 w-3/4" /><Skeleton className="h-6 w-1/4" /><Skeleton className="h-24 w-full" /><Skeleton className="h-12 w-full" /></div>
@@ -501,7 +486,7 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+      <main className="kdf-page-shell px-4 sm:px-6 lg:px-8 py-16 text-center">
         <p className="text-4xl mb-4">🔍</p>
         <h2 className="text-xl font-semibold mb-2">Product not found</h2>
         <Button onClick={() => setLocation("/products")} data-testid="button-back-products">Browse Products</Button>
@@ -599,7 +584,7 @@ export default function ProductDetailPage() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-3 py-3 pb-36 sm:px-6 sm:py-10 sm:pb-28 lg:px-8 lg:pb-12">
+      <main className="kdf-page-shell kdf-pdp-main py-3 sm:py-10">
         {/* Breadcrumb */}
         <nav className="mb-8 hidden flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:mb-9 lg:flex">
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
@@ -889,7 +874,7 @@ export default function ProductDetailPage() {
           />
         </div>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <div className="mt-8 space-y-10">
           <ProductRecommendationStrip
             title="Related products"
             subtitle="Selected by category, tags, stock and sales"

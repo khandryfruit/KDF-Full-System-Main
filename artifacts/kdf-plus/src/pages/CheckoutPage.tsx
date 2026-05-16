@@ -358,7 +358,7 @@ export default function CheckoutPage() {
         <title>Checkout — KDF Plus</title>
       </Helmet>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
+      <main className="kdf-page-shell px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
         <div className="mb-6 flex flex-col gap-4 md:mb-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight md:text-3xl">Checkout</h1>

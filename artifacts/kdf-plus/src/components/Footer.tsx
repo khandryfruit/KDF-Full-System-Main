@@ -462,7 +462,7 @@ function NewsletterBand({
         </div>
       )}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-14 lg:px-8">
+      <div className="relative z-10 kdf-page-shell px-3 py-5 sm:px-6 sm:py-14 lg:px-8">
         <MoodCollectionSlider />
         <div className="grid gap-4 sm:gap-10 lg:grid-cols-12 lg:items-center">
           <div className="lg:col-span-6">
@@ -737,7 +737,7 @@ export function Footer() {
         </div>
         )}
 
-        <div className="relative mx-auto max-w-7xl px-3 py-8 sm:px-6 sm:py-16 lg:px-8">
+        <div className="relative kdf-page-shell px-3 py-8 sm:px-6 sm:py-16 lg:px-8">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden />
           {/* Brand + columns */}
           <div className="grid gap-7 sm:gap-14 lg:grid-cols-12">

@@ -13,6 +13,8 @@ export interface KdfProductCarouselProps {
   fadeColor?: string;
   loopCopies?: 2 | 3;
   resumeMs?: number;
+  /** Denser cards for recommendation strips */
+  compact?: boolean;
 }
 
 export function KdfProductCarousel({
@@ -23,6 +25,7 @@ export function KdfProductCarousel({
   fadeColor = "#fff",
   loopCopies = 3,
   resumeMs = 4000,
+  compact = false,
 }: KdfProductCarouselProps) {
   const [centerMod, setCenterMod] = useState(0);
 
@@ -115,7 +118,7 @@ export function KdfProductCarousel({
             return (
               <div key={product.id + "-" + i} data-slide-mod={mod} className={slideClass}>
                 <div className="kdf-carousel-card">
-                  <ProductCard product={product} />
+                  <ProductCard product={product} compact={compact} />
                 </div>
               </div>
             );

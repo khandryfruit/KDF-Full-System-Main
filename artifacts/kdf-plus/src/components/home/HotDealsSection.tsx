@@ -108,7 +108,7 @@ export function HotDealsSection({ products, extraPool = [], loading }: HotDealsS
   if (!loading && smartProducts.length === 0) return null;
 
   return (
-    <section className="kdf-home-section max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-8">
+    <section className="kdf-home-section kdf-page-shell px-2 sm:px-6 lg:px-8 pb-8">
       <div className="overflow-hidden rounded-2xl border border-gray-100/80 bg-white shadow-[0_8px_28px_rgba(13,43,0,0.06)] max-sm:border-0 max-sm:shadow-[0_6px_22px_rgba(13,43,0,0.05)] sm:ring-1 sm:ring-black/[0.03]">
         <HotDealsHero maxDiscount={maxDiscount} />
 

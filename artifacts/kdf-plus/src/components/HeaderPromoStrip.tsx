@@ -17,7 +17,7 @@ export function HeaderPromoStrip() {
 
   return (
     <div className="w-full bg-[#0d2b00]/[0.06] border-b border-gray-200/80">
-      <div className="max-w-7xl mx-auto flex items-center gap-3 overflow-x-auto px-3 sm:px-6 py-1.5 [scrollbar-width:thin]">
+      <div className="kdf-page-shell flex items-center gap-3 overflow-x-auto px-3 sm:px-6 py-1.5 [scrollbar-width:thin]">
         {rows.map((b) => {
           const href = b.linkUrl?.trim() || "/products";
           const safeHref = href.startsWith("/") ? href : `/${href}`;
