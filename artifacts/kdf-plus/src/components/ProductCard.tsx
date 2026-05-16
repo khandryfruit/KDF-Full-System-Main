@@ -11,12 +11,9 @@ interface ProductCardProps {
   product: Product;
   /** Premium hot-deals badge with subtle fire accent */
   hotDealBadge?: boolean;
-  /** Featured carousel / homepage premium layout */
-  variant?: "default" | "featured";
 }
 
-function ProductCardInner({ product, hotDealBadge, variant = "default" }: ProductCardProps) {
-  const isFeatured = variant === "featured";
+function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
   const { addItem, items, updateQty, removeItem } = useCart();
   const [wished, setWished] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
@@ -80,13 +77,7 @@ function ProductCardInner({ product, hotDealBadge, variant = "default" }: Produc
   return (
     <>
       <Link href={`/products/${(product as any).slug || product.id}`} data-testid={`card-product-${product.id}`}>
-        <div
-          className={`group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white box-border transition-[transform,box-shadow] duration-300 max-sm:rounded-xl active:max-sm:scale-[0.99] sm:rounded-3xl sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12 ${
-            isFeatured
-              ? "kdf-product-card--featured border-white/80 shadow-[0_8px_28px_rgba(13,43,0,0.07)] max-sm:shadow-[0_6px_20px_rgba(13,43,0,0.06)]"
-              : "border-gray-100 shadow-sm max-sm:shadow-[0_2px_12px_rgba(15,23,42,0.06)] md:shadow-md"
-          }`}
-        >
+        <div className="group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-[transform,box-shadow] duration-300 box-border max-sm:rounded-xl max-sm:shadow-[0_2px_12px_rgba(15,23,42,0.06)] sm:rounded-3xl sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] md:shadow-md hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12 active:max-sm:scale-[0.99]">
 
           <button
             onClick={handleWish}
@@ -123,19 +114,11 @@ function ProductCardInner({ product, hotDealBadge, variant = "default" }: Produc
             </div>
           )}
 
-          <div
-            className={`relative w-full overflow-hidden sm:aspect-square ${
-              isFeatured ? "max-sm:h-[220px] max-sm:min-h-[200px]" : "max-sm:h-[200px] max-sm:min-h-[180px]"
-            }`}
-            style={{ background: "linear-gradient(135deg, #f0f7e6 0%, #e6f2d9 100%)" }}
-          >
+          <div className="relative aspect-square w-full overflow-hidden bg-white">
             {(!imageUrl || imgError) && (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
-                <span className="text-4xl font-black max-sm:text-3xl" style={{ color: "#5FA800", opacity: 0.25 }}>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-50">
+                <span className="text-4xl font-black max-sm:text-3xl" style={{ color: "#5FA800", opacity: 0.2 }}>
                   {initial}
-                </span>
-                <span className="line-clamp-2 px-2 text-center text-[9px] font-semibold leading-tight text-gray-400 sm:text-[10px]">
-                  {product.name}
                 </span>
               </div>
             )}
@@ -147,24 +130,18 @@ function ProductCardInner({ product, hotDealBadge, variant = "default" }: Produc
                 decoding="async"
                 sizes="(max-width: 640px) 49vw, (max-width: 1024px) 33vw, 280px"
                 onError={() => setImgError(true)}
-                className={`absolute inset-0 h-full w-full max-sm:transition-none md:transition-transform md:duration-500 md:ease-out md:group-hover:scale-[1.04] ${
-                  isFeatured ? "object-contain p-2.5 sm:object-cover sm:p-0" : "object-contain p-2 sm:object-cover sm:p-0"
-                }`}
+                className="absolute inset-0 h-full w-full object-contain p-0.5 max-sm:transition-none sm:p-1 md:transition-transform md:duration-500 md:ease-out md:group-hover:scale-[1.04]"
                 data-testid={`img-product-${product.id}`}
               />
             )}
           </div>
 
-          <div
-            className={`flex flex-1 flex-col gap-0.5 sm:gap-1 sm:p-3.5 md:p-5 ${
-              isFeatured ? "p-2.5 max-sm:pt-2" : "p-2.5"
-            }`}
-          >
+          <div className="flex flex-col gap-0.5 p-2 sm:gap-1 sm:p-3.5 md:p-5">
             {(product.weight ?? product.unit) && (
               <p className="text-[10px] font-medium text-gray-400 sm:text-[11px]">{product.weight ?? product.unit}</p>
             )}
             <h3
-              className="line-clamp-2 flex-1 text-[13px] font-semibold leading-snug text-gray-900 sm:text-sm md:text-base md:font-bold"
+              className="line-clamp-2 text-[13px] font-semibold leading-snug text-gray-900 sm:text-sm md:text-base md:font-bold"
               data-testid={`text-product-name-${product.id}`}
             >
               {product.name}
@@ -180,7 +157,7 @@ function ProductCardInner({ product, hotDealBadge, variant = "default" }: Produc
               </div>
             )}
 
-            <div className="mt-auto flex items-center justify-between pt-1">
+            <div className="mt-1 flex items-center justify-between pt-0.5">
               <div className="min-w-0">
                 <span
                   className="text-[13px] font-bold text-gray-900 sm:text-sm md:text-lg"

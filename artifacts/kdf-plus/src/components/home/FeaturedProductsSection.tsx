@@ -90,7 +90,7 @@ function FeaturedCarouselMobile({ products, loading }: { products: Product[]; lo
         <div className="flex gap-2.5">
           {slides[0]!.map((p) => (
             <div key={p.id} className="kdf-featured-carousel-card min-w-0 flex-1">
-              <ProductCard product={p} variant="featured" />
+              <ProductCard product={p} />
             </div>
           ))}
           {slides[0]!.length === 1 && <div className="kdf-featured-carousel-card min-w-0 flex-1" aria-hidden />}
@@ -119,7 +119,7 @@ function FeaturedCarouselMobile({ products, loading }: { products: Product[]; lo
           >
             {pair.map((p) => (
               <div key={p.id} className="kdf-featured-carousel-card">
-                <ProductCard product={p} variant="featured" />
+                <ProductCard product={p} />
               </div>
             ))}
             {pair.length === 1 && <div className="kdf-featured-carousel-card" aria-hidden />}
@@ -185,7 +185,7 @@ export function FeaturedProductsSection({ products, loading }: FeaturedProductsS
                   </div>
                 ))
               : products.map((p) => (
-                  <ProductCard key={p.id} product={p} variant="featured" />
+                  <ProductCard key={p.id} product={p} />
                 ))}
           </div>
         </div>

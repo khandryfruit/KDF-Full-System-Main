@@ -559,10 +559,6 @@ html.kdf-variant-sheet-open .kdf-suppress-for-fullscreen-sheet {
   min-width: 0;
   max-width: calc(50% - 5px);
 }
-.kdf-product-card--featured {
-  transform: translateZ(0);
-}
-
 /* Full-width mobile product grids — edge-to-edge, 2 columns */
 .kdf-product-grid {
   display: grid;
@@ -604,8 +600,9 @@ html.kdf-variant-sheet-open .kdf-suppress-for-fullscreen-sheet {
   50% { opacity: 0.55; transform: scale(1.08); }
 }
 @keyframes kdf-hot-flame {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.5)); }
-  50% { transform: scale(1.06); filter: drop-shadow(0 0 14px rgba(251, 146, 60, 0.75)); }
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.45)); }
+  40% { transform: scale(1.05); filter: drop-shadow(0 0 12px rgba(251, 146, 60, 0.7)); }
+  70% { transform: scale(0.98); filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.5)); }
 }
 @keyframes kdf-hot-spark {
   0%, 100% { opacity: 0.15; transform: translateY(0); }
@@ -644,6 +641,86 @@ html.kdf-variant-sheet-open .kdf-suppress-for-fullscreen-sheet {
 .kdf-hot-deals-title-glow {
   animation: kdf-hot-title-glow 3.5s ease-in-out infinite;
 }
+/* Compact promo banners (Hot Deals + countdown) */
+.kdf-promo-banner-compact {
+  min-height: 0;
+  max-height: 260px;
+}
+@media (min-width: 640px) {
+  .kdf-promo-banner-compact {
+    max-height: 300px;
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-promo-banner-compact {
+    max-height: none;
+  }
+}
+
+/* Premium glass countdown */
+@keyframes kdf-timer-unit-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2), 0 4px 14px rgba(0, 0, 0, 0.15); }
+  50% { box-shadow: 0 0 0 1px rgba(255, 200, 120, 0.35), 0 4px 18px rgba(245, 131, 0, 0.2); }
+}
+.kdf-countdown-glass {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.kdf-countdown-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 46px;
+  padding: 5px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: kdf-timer-unit-pulse 1s ease-in-out infinite;
+}
+.kdf-countdown-digit {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.125rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.kdf-countdown-label {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.kdf-countdown-sep {
+  font-family: ui-monospace, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  padding-bottom: 14px;
+  line-height: 1;
+}
+@media (min-width: 640px) {
+  .kdf-countdown-digit {
+    font-size: 1.25rem;
+  }
+  .kdf-countdown-unit {
+    min-width: 52px;
+    padding: 6px 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kdf-countdown-unit {
+    animation: none;
+  }
+}
+
 .kdf-hot-deals-timer-cell {
   display: flex;
   flex-direction: column;

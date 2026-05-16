@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ProductCard";
 import { HotDealsSection } from "@/components/home/HotDealsSection";
 import { FeaturedProductsSection } from "@/components/home/FeaturedProductsSection";
+import { PremiumCountdown } from "@/components/home/PremiumCountdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -102,45 +103,7 @@ function CountdownTimer({ endAt }: { endAt: string }) {
 }
 
 function DealCountdownTimer({ endAt, onClick }: { endAt: string; onClick?: () => void }) {
-  const calc = () => {
-    const diff = Math.max(0, Math.floor((new Date(endAt).getTime() - Date.now()) / 1000));
-    return {
-      d: Math.floor(diff / 86400),
-      h: Math.floor((diff % 86400) / 3600),
-      m: Math.floor((diff % 3600) / 60),
-      s: diff % 60,
-      done: diff === 0,
-      urgent: diff > 0 && diff < 24 * 3600,
-    };
-  };
-  const [t, setT] = useState(calc);
-  useEffect(() => {
-    if (t.done) return;
-    const id = setInterval(() => setT(calc()), 1000);
-    return () => clearInterval(id);
-  }, [endAt, t.done]);
-  if (t.done) return null;
-  const cells = [
-    ["Days", t.d],
-    ["Hours", t.h],
-    ["Minutes", t.m],
-    ["Seconds", t.s],
-  ] as const;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-2xl border border-white/15 bg-white/[0.08] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-md transition-all hover:bg-white/[0.13] active:scale-[0.98] sm:gap-2 ${t.urgent ? "animate-pulse" : ""}`}
-      aria-label="Countdown timer"
-    >
-      {cells.map(([label, value]) => (
-        <div key={label} className="min-w-[42px] rounded-xl bg-white/[0.14] px-2 py-1.5 text-center ring-1 ring-white/15 transition-transform hover:-translate-y-0.5 sm:min-w-[54px] sm:px-2.5">
-          <div className="font-mono text-base font-black leading-none text-white tabular-nums sm:text-lg">{String(value).padStart(2, "0")}</div>
-          <div className="mt-0.5 text-[7px] font-black uppercase tracking-wider text-white/65 sm:text-[8px]">{label}</div>
-        </div>
-      ))}
-    </button>
-  );
+  return <PremiumCountdown endAt={endAt} showDays onClick={onClick} />;
 }
 
 function dealThemeForBanner(banner: any) {
@@ -1274,33 +1237,42 @@ function CountdownDealSection({
     <section className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pb-8 sm:pb-9">
       <div className="overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-[0_14px_38px_rgba(13,43,0,0.08)] ring-1 ring-black/[0.03] sm:rounded-[1.5rem]">
         <div
-          className="relative overflow-hidden px-4 py-5 sm:px-7 sm:py-6 lg:px-8"
+          className="kdf-promo-banner-compact relative overflow-hidden px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
           style={{ background: bg, color: textColor }}
         >
-          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-30 sm:block" />}
-          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-28 sm:hidden" />}
-          <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/18 blur-3xl" />
-          <div className="absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[#F58300]/18 blur-3xl" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/42 via-black/16 to-black/26" />
-          <div className="relative z-10 grid gap-4 lg:grid-cols-[1.15fr_auto_auto] lg:items-center">
+          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-25 sm:block" />}
+          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-22 sm:hidden" />}
+          <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+          <div className="absolute -bottom-14 left-4 h-36 w-36 rounded-full bg-[#F58300]/15 blur-2xl" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/20 to-black/28" />
+          <div className="relative z-10 flex flex-col gap-2.5 sm:gap-3 lg:grid lg:grid-cols-[1.15fr_auto_auto] lg:items-center lg:gap-4">
             <div className="min-w-0 lg:max-w-xl">
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/90 backdrop-blur">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-white/90 backdrop-blur sm:text-[9px]">
                 <Sparkles className="h-3 w-3 text-orange-300" /> {customerMarketingText(b.label, "KDF Premium")}
               </div>
-              <h2 className="text-xl font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.9rem]">{customerMarketingText(banner.title, "Fresh Premium Nuts & Dry Fruits")}</h2>
-              {supportingText && <p className="mt-1 max-w-xl text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">{supportingText}</p>}
+              <h2 className="text-[1.35rem] font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.75rem]">
+                {customerMarketingText(banner.title, "Fresh Premium Nuts & Dry Fruits")}
+              </h2>
+              {supportingText && (
+                <p className="mt-0.5 line-clamp-2 max-w-xl text-xs font-medium leading-snug text-white/75 sm:text-sm">
+                  {supportingText}
+                </p>
+              )}
             </div>
-            <div className="flex items-center lg:justify-center">
-              {b.showTimer !== false && b.countdownEndAt && <DealCountdownTimer endAt={String(b.countdownEndAt)} onClick={() => setLocation(targetHref)} />}
+            <div className="flex shrink-0 items-center lg:justify-center">
+              {b.showTimer !== false && b.countdownEndAt && (
+                <DealCountdownTimer endAt={String(b.countdownEndAt)} onClick={() => setLocation(targetHref)} />
+              )}
             </div>
             <div className="flex items-center justify-start lg:justify-end">
               <button
                 type="button"
                 onClick={() => setLocation(targetHref)}
-                className="inline-flex min-h-[38px] items-center gap-2 rounded-full px-4 py-2 text-xs font-black shadow-[0_14px_26px_rgba(0,0,0,0.20)] ring-1 ring-white/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(0,0,0,0.24)] active:translate-y-0 sm:text-sm"
+                className="inline-flex h-10 min-h-0 items-center gap-1.5 rounded-full px-4 text-xs font-black shadow-[0_10px_22px_rgba(0,0,0,0.18)] ring-1 ring-white/20 transition-all hover:-translate-y-0.5 active:translate-y-0 sm:h-11 sm:px-5 sm:text-sm"
                 style={{ backgroundColor: btnBg, color: btnText }}
               >
-                <ShoppingBag className="h-4 w-4" /> {customerMarketingText(banner.cta, "Explore Deals")}
+                <ShoppingBag className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                {customerMarketingText(banner.cta, "Shop Now")} →
               </button>
             </div>
           </div>
@@ -1321,7 +1293,7 @@ function CountdownDealSection({
               <div className="kdf-product-grid">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i}>
-                    <Skeleton className="mb-2 h-[200px] rounded-xl sm:aspect-square sm:rounded-2xl" />
+                    <Skeleton className="mb-2 aspect-square rounded-xl sm:rounded-2xl" />
                     <Skeleton className="h-3 w-3/4 rounded" />
                   </div>
                 ))}
@@ -1329,7 +1301,7 @@ function CountdownDealSection({
             ) : (
               <div className="kdf-product-grid">
                 {shownProducts.map((p) => (
-                  <ProductCard key={p.id} product={p} hotDealBadge variant="featured" />
+                  <ProductCard key={p.id} product={p} hotDealBadge />
                 ))}
               </div>
             )}
