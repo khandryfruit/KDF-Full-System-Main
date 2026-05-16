@@ -981,25 +981,25 @@ export function Footer() {
                       </span>
                     ) : null}
                   </div>
-                  <div className={`grid gap-4 ${showAndroidBtn && showIosBtn ? "sm:grid-cols-2" : ""}`}>
+                  <div className={`grid gap-2 ${showAndroidBtn && showIosBtn ? "grid-cols-2" : ""} sm:gap-4`}>
                     {showAndroidBtn && (
                       <a
                         href={String(appLinks?.androidLink || "#")}
                         target={appLinks?.androidLink ? "_blank" : undefined}
                         rel="noreferrer"
-                        className="kdf-app-badge group relative flex min-h-[56px] items-center justify-center overflow-hidden rounded-xl border border-white/[0.1] bg-black/35 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                        className="kdf-app-badge group relative flex min-h-[48px] items-center justify-center overflow-hidden rounded-lg border border-white/[0.1] bg-black/35 px-2 py-2 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] sm:min-h-[56px] sm:rounded-xl sm:px-3 sm:py-3 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                       >
                         <span className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:opacity-0 kdf-app-badge-shine" aria-hidden />
                         {(() => {
                           const custom = String(appLinks?.androidBadgePath ?? "").trim();
                           if (custom) {
                             return (
-                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Get it on Google Play" className="h-11 w-auto max-w-full object-contain" loading="lazy" decoding="async" />
+                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Get it on Google Play" className="h-8 w-auto max-w-full object-contain sm:h-11" loading="lazy" decoding="async" />
                             );
                           }
                           if (useOfficialBadges) {
                             return (
-                              <img src={OFFICIAL_PLAY_BADGE} alt="Get it on Google Play" className="h-12 w-auto object-contain" loading="lazy" decoding="async" />
+                              <img src={OFFICIAL_PLAY_BADGE} alt="Get it on Google Play" className="h-9 w-auto max-w-full object-contain sm:h-12" loading="lazy" decoding="async" />
                             );
                           }
                           return (
@@ -1020,19 +1020,19 @@ export function Footer() {
                         href={String(appLinks?.iosLink || "#")}
                         target={appLinks?.iosLink ? "_blank" : undefined}
                         rel="noreferrer"
-                        className="kdf-app-badge group relative flex min-h-[56px] items-center justify-center overflow-hidden rounded-xl border border-white/[0.1] bg-black/35 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                        className="kdf-app-badge group relative flex min-h-[48px] items-center justify-center overflow-hidden rounded-lg border border-white/[0.1] bg-black/35 px-2 py-2 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-[0_0_40px_-12px_rgba(95,168,0,0.55)] sm:min-h-[56px] sm:rounded-xl sm:px-3 sm:py-3 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                       >
                         <span className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:opacity-0 kdf-app-badge-shine" aria-hidden />
                         {(() => {
                           const custom = String(appLinks?.iosBadgePath ?? "").trim();
                           if (custom) {
                             return (
-                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Download on the App Store" className="h-10 w-auto max-w-full object-contain" loading="lazy" decoding="async" />
+                              <img src={getProductImageSrc(custom, { maxWidth: 520 })} alt="Download on the App Store" className="h-8 w-auto max-w-full object-contain sm:h-10" loading="lazy" decoding="async" />
                             );
                           }
                           if (useOfficialBadges) {
                             return (
-                              <img src={OFFICIAL_APP_STORE_BADGE} alt="Download on the App Store" className="h-10 w-auto object-contain" loading="lazy" decoding="async" />
+                              <img src={OFFICIAL_APP_STORE_BADGE} alt="Download on the App Store" className="h-8 w-auto max-w-full object-contain sm:h-10" loading="lazy" decoding="async" />
                             );
                           }
                           return (
