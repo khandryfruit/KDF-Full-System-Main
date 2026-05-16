@@ -480,6 +480,20 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                       {(banner.subtitle || "").replace(/\boofer\b/gi, "offer")}
                     </p>
                   )}
+                  {((banner as any).healthBenefitText || (banner as any).urgencyText) && (
+                    <div className="mb-3 flex max-w-xl flex-wrap gap-2 text-[11px] font-bold text-white/90 sm:mb-4 sm:text-xs">
+                      {(banner as any).healthBenefitText && (
+                        <span className="rounded-full border border-white/20 bg-white/12 px-3 py-1 backdrop-blur-md">
+                          {(banner as any).healthBenefitText}
+                        </span>
+                      )}
+                      {(banner as any).urgencyText && (
+                        <span className="rounded-full border border-amber-200/30 bg-amber-400/18 px-3 py-1 text-amber-50 backdrop-blur-md">
+                          {(banner as any).urgencyText}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {(banner as any).countdownEndAt && (
                     <div className="mb-3 sm:mb-5" onClick={e => e.stopPropagation()}>
                       <CountdownTimer endAt={(banner as any).countdownEndAt} />
@@ -1065,6 +1079,45 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
   );
 }
 
+function SmartBannerProductStrip({
+  banner,
+  products,
+  loading,
+}: {
+  banner?: Banner | null;
+  products: Product[];
+  loading: boolean;
+}) {
+  if (!banner || (!loading && products.length === 0)) return null;
+  const b = banner as any;
+  const title = b.healthBenefitText || b.urgencyText || "Picked for this banner";
+  return (
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+      <div className="rounded-2xl border border-emerald-100 bg-white/92 p-4 shadow-sm sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#5FA800]">
+              Smart picks
+            </p>
+            <h2 className="mt-1 text-lg font-black text-gray-950 sm:text-2xl">
+              {title}
+            </h2>
+            {b.urgencyText && (
+              <p className="mt-1 text-xs font-semibold text-gray-500 sm:text-sm">
+                {b.urgencyText}
+              </p>
+            )}
+          </div>
+          <Link href="/products" className="hidden rounded-full border border-[#5FA800]/25 px-4 py-2 text-sm font-black text-[#4d8a00] sm:inline-flex">
+            View all
+          </Link>
+        </div>
+        <ProductCarousel products={products} loading={loading} skeletonCount={4} />
+      </div>
+    </section>
+  );
+}
+
 function DealProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
   const [, setLocation] = useLocation();
@@ -1422,6 +1475,25 @@ export default function HomePage() {
     return [...byId.values()];
   }, [dealProducts, featuredProducts, allProducts]);
 
+  const smartBanner = useMemo(() => {
+    return banners.find((b: any) => b.aiMode && Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? null;
+  }, [banners]);
+  const smartBannerProductIds = useMemo(() => {
+    const ids = (smartBanner as any)?.relatedProductIds;
+    return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0).slice(0, 12) : [];
+  }, [smartBanner]);
+  const { data: smartBannerProductsData, isLoading: smartBannerProductsLoading } = useQuery<any>({
+    queryKey: ["smart-banner-products", smartBannerProductIds.join(",")],
+    queryFn: () => fetch(`/api/products?ids=${smartBannerProductIds.join(",")}&limit=${Math.max(1, smartBannerProductIds.length)}`).then(r => r.ok ? r.json() : { items: [] }),
+    enabled: smartBannerProductIds.length > 0,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
+  });
+  const smartBannerProducts = useMemo(
+    () => normalizeProductsListResponse(smartBannerProductsData).items as Product[],
+    [smartBannerProductsData],
+  );
+
   const noBanners = banners.length === 0;
   const hasAnyCatalog =
     dealProducts.length > 0 || featuredProducts.length > 0 || allProducts.length > 0;
@@ -1485,6 +1557,12 @@ export default function HomePage() {
         ) : (
           <HeroBanner banners={banners} loading={heroLoading} smartCatalog={heroSmartCatalog} />
         )}
+
+        <SmartBannerProductStrip
+          banner={smartBanner}
+          products={smartBannerProducts}
+          loading={smartBannerProductsLoading}
+        />
 
         <CountdownDealSection
           banner={countdownBanner}

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   Plus, Edit, Trash2, Upload, ImageOff, Loader2, AlertCircle,
   CheckCircle2, Package, LayoutGrid, Link2, ChevronDown, Search, Video, X,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -540,6 +541,7 @@ const EMPTY_FORM = {
   videoAutoplay: true,
   videoMuted: true,
   videoLoop: true,
+  label: "",
   cta: "Shop Now",
   sortOrder: 0,
   active: true,
@@ -551,6 +553,17 @@ const EMPTY_FORM = {
   countdownEndAt: "",
   startDate: "",
   endDate: "",
+  aiMode: false,
+  aiAutoUpdate: false,
+  aiCampaign: "healthy_lifestyle",
+  aiPrompt: "",
+  aiRefreshCadence: "daily",
+  approvedPromotionText: "",
+  healthBenefitText: "",
+  urgencyText: "",
+  relatedKeywords: "",
+  relatedProductIds: [] as number[],
+  bannerStyle: "premium",
 };
 
 /* ── Promo Card Constants ───────────────────────────── */
@@ -610,6 +623,17 @@ const COUNTDOWN_EMPTY_FORM = {
 };
 
 const ICON_SUGGESTIONS = ["🚚", "🎁", "📦", "⚡", "🔥", "💎", "🌟", "🎉", "🎯", "🛍️", "💰", "🏷️"];
+const AI_CAMPAIGNS = [
+  ["ramadan", "Ramadan"],
+  ["eid", "Eid"],
+  ["winter", "Winter"],
+  ["summer", "Summer"],
+  ["healthy_lifestyle", "Healthy Lifestyle"],
+  ["back_to_school", "Back to School"],
+  ["gift_season", "Gift Season"],
+  ["weekend_deals", "Weekend Deals"],
+  ["bulk_buying", "Bulk Buying"],
+] as const;
 
 export default function BannersPage() {
   /* ── Shared state ── */
@@ -648,6 +672,7 @@ export default function BannersPage() {
   const [heroOpen, setHeroOpen] = useState(false);
   const [heroEditId, setHeroEditId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   function openHeroAdd() { setFormData({ ...EMPTY_FORM }); setHeroEditId(null); setHeroOpen(true); }
   function openHeroEdit(banner: any) {
@@ -661,6 +686,7 @@ export default function BannersPage() {
       videoAutoplay: banner.videoAutoplay ?? true,
       videoMuted: banner.videoMuted ?? true,
       videoLoop: banner.videoLoop ?? true,
+      label: banner.label ?? "",
       cta: banner.cta ?? "Shop Now",
       sortOrder: banner.sortOrder ?? 0,
       active: banner.active ?? true,
@@ -672,6 +698,17 @@ export default function BannersPage() {
       countdownEndAt: banner.countdownEndAt ? new Date(banner.countdownEndAt).toISOString().slice(0, 16) : "",
       startDate: banner.startDate ? new Date(banner.startDate).toISOString().slice(0, 16) : "",
       endDate: banner.endDate ? new Date(banner.endDate).toISOString().slice(0, 16) : "",
+      aiMode: banner.aiMode ?? false,
+      aiAutoUpdate: banner.aiAutoUpdate ?? false,
+      aiCampaign: banner.aiCampaign ?? "healthy_lifestyle",
+      aiPrompt: banner.aiPrompt ?? "",
+      aiRefreshCadence: banner.aiRefreshCadence ?? "daily",
+      approvedPromotionText: banner.approvedPromotionText ?? "",
+      healthBenefitText: banner.healthBenefitText ?? "",
+      urgencyText: banner.urgencyText ?? "",
+      relatedKeywords: Array.isArray(banner.relatedKeywords) ? banner.relatedKeywords.join(", ") : "",
+      relatedProductIds: Array.isArray(banner.relatedProductIds) ? banner.relatedProductIds.map(Number) : [],
+      bannerStyle: banner.bannerStyle ?? "premium",
     });
     setHeroEditId(banner.id);
     setHeroOpen(true);
@@ -692,11 +729,12 @@ export default function BannersPage() {
       countdownEndAt: rest.countdownEndAt ? new Date(rest.countdownEndAt).toISOString() : undefined,
       startDate: rest.startDate ? new Date(rest.startDate).toISOString() : undefined,
       endDate: rest.endDate ? new Date(rest.endDate).toISOString() : undefined,
+      relatedKeywords: rest.relatedKeywords ? String(rest.relatedKeywords).split(",").map((v) => v.trim()).filter(Boolean) : [],
     };
   }
   function handleHeroSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.imageUrl && !formData.videoUrl) {
+    if (!formData.aiMode && !formData.imageUrl && !formData.videoUrl) {
       toast({ variant: "destructive", title: "Please upload a banner image or video" });
       return;
     }
@@ -764,6 +802,45 @@ export default function BannersPage() {
           },
         },
       );
+    }
+  }
+
+  async function generateSmartHeroCopy() {
+    setAiGenerating(true);
+    try {
+      const body = buildHeroPayload();
+      const url = heroEditId ? `/api/admin/banners/${heroEditId}/ai-generate` : "/api/admin/banners/ai-preview";
+      const res = await fetch(apiPublicUrl(url), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("kdf_admin_token") ?? ""}`,
+        },
+        body: JSON.stringify({ ...body, aiMode: true, aiAutoUpdate: formData.aiAutoUpdate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "AI generation failed");
+      const generated = data.banner ?? data;
+      setFormData((prev) => ({
+        ...prev,
+        aiMode: true,
+        title: generated.title ?? prev.title,
+        subtitle: generated.subtitle ?? prev.subtitle,
+        label: generated.label ?? prev.label,
+        cta: generated.cta ?? prev.cta,
+        healthBenefitText: generated.healthBenefitText ?? prev.healthBenefitText,
+        urgencyText: generated.urgencyText ?? prev.urgencyText,
+        relatedKeywords: Array.isArray(generated.relatedKeywords) ? generated.relatedKeywords.join(", ") : prev.relatedKeywords,
+        relatedProductIds: Array.isArray(generated.relatedProductIds) ? generated.relatedProductIds.map(Number) : prev.relatedProductIds,
+        targetType: generated.targetType ?? prev.targetType,
+        targetId: generated.targetId ?? prev.targetId,
+      }));
+      invalidateBanners();
+      toast({ title: "AI banner generated", description: generated.safetyNotes ?? generated.aiSafetyNotes ?? "Strict offer rules applied." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "AI generation failed", description: e.message });
+    } finally {
+      setAiGenerating(false);
     }
   }
 
@@ -1085,10 +1162,64 @@ export default function BannersPage() {
                     </div>
                   )}
                 </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label className="flex items-center gap-2 text-sm font-bold text-emerald-900"><Sparkles className="w-4 h-4" /> AI Smart Banner</Label>
+                      <p className="text-xs text-emerald-800 mt-1">AI can generate seasonal copy, match products, and refresh safely. It never invents discounts; only approved promotions can be used.</p>
+                    </div>
+                    <Switch checked={formData.aiMode} onCheckedChange={(c) => setFormData({ ...formData, aiMode: c })} />
+                  </div>
+                  {formData.aiMode && (
+                    <div className="space-y-4">
+                      <div className="grid md:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Campaign</Label>
+                          <select value={formData.aiCampaign} onChange={(e) => setFormData({ ...formData, aiCampaign: e.target.value })} className="w-full h-10 px-3 border rounded-lg bg-background text-sm">
+                            {AI_CAMPAIGNS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Refresh</Label>
+                          <select value={formData.aiRefreshCadence} onChange={(e) => setFormData({ ...formData, aiRefreshCadence: e.target.value })} className="w-full h-10 px-3 border rounded-lg bg-background text-sm">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="seasonal">Seasonal</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-3 pt-6">
+                          <Switch checked={formData.aiAutoUpdate} onCheckedChange={(c) => setFormData({ ...formData, aiAutoUpdate: c })} />
+                          <div><Label className="text-xs">Auto update</Label><p className="text-[11px] text-muted-foreground">Scheduler refreshes copy</p></div>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Approved Promotion Text</Label>
+                        <Input value={formData.approvedPromotionText} onChange={(e) => setFormData({ ...formData, approvedPromotionText: e.target.value })} placeholder="Example: Free delivery above Rs.5000 (leave empty for health/seasonal copy)" />
+                        <p className="text-[11px] text-muted-foreground">AI may mention only this or active approved coupons from admin. No fake offers.</p>
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-3">
+                        <div className="space-y-1.5"><Label className="text-xs">AI Prompt / Direction</Label><Input value={formData.aiPrompt} onChange={(e) => setFormData({ ...formData, aiPrompt: e.target.value })} placeholder="Focus almonds, Eid gifts, healthy snacks..." /></div>
+                        <div className="space-y-1.5"><Label className="text-xs">Product Keywords</Label><Input value={formData.relatedKeywords} onChange={(e) => setFormData({ ...formData, relatedKeywords: e.target.value })} placeholder="almond, pistachio, gift pack" /></div>
+                      </div>
+                      <ProductMultiSelector value={formData.relatedProductIds} onChange={(ids) => setFormData({ ...formData, relatedProductIds: ids })} />
+                      <Button type="button" variant="outline" className="w-full gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-100" onClick={generateSmartHeroCopy} disabled={aiGenerating}>
+                        {aiGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        Generate Safe AI Banner Copy
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-3">
+                  <div className="space-y-1.5"><Label>Label</Label><Input value={formData.label} onChange={(e) => setFormData({ ...formData, label: e.target.value })} placeholder="Eid Gifts / Healthy Picks" /></div>
                   <div className="space-y-1.5"><Label>Title *</Label><Input required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Summer Sale — Premium Nuts" /></div>
                   <div className="space-y-1.5"><Label>Subtitle</Label><Input value={formData.subtitle} onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })} placeholder="Up to 30% off on selected products" /></div>
                   <div className="space-y-1.5"><Label>CTA Button Text</Label><Input value={formData.cta} onChange={(e) => setFormData({ ...formData, cta: e.target.value })} placeholder="Shop Now" /></div>
+                  {formData.aiMode && (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="space-y-1.5"><Label className="text-xs">Health Benefit Text</Label><Input value={formData.healthBenefitText} onChange={(e) => setFormData({ ...formData, healthBenefitText: e.target.value })} placeholder="Natural energy and better snacking" /></div>
+                      <div className="space-y-1.5"><Label className="text-xs">Urgency Text</Label><Input value={formData.urgencyText} onChange={(e) => setFormData({ ...formData, urgencyText: e.target.value })} placeholder="Fresh seasonal picks updated daily" /></div>
+                    </div>
+                  )}
                 </div>
                 <div className="h-px bg-border" />
                 <TargetTypeSelector value={formData.targetType} onChange={(v) => setFormData({ ...formData, targetType: v, targetId: null, targetLabel: "", linkUrl: "" })} />

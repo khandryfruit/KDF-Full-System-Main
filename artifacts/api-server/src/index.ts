@@ -11,6 +11,7 @@ import { processOrderAutomationRetries } from "./lib/orderAutomationRetry.js";
 import { startRiderReportScheduler } from "./lib/riderDailyReport.js";
 import { startMetaTemplateSyncScheduler } from "./lib/metaTemplateSync.js";
 import { startWhatsappHealthAlertScheduler } from "./lib/whatsappHealth.js";
+import { startSmartBannerScheduler } from "./routes/banners.js";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -100,6 +101,7 @@ warmUpDb()
       startRiderReportScheduler(); /* rider daily report at 8 PM PKT */
       startMetaTemplateSyncScheduler(30); /* Meta → DB template sync every 30 min */
       startWhatsappHealthAlertScheduler(5); /* WhatsApp health alerts + dashboard popups */
+      startSmartBannerScheduler(60); /* AI homepage banners daily/weekly refresh checks */
     });
     server.on("error", (err) => {
       logger.error({ err }, "HTTP server listen error");
