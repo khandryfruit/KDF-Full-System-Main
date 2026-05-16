@@ -54,6 +54,79 @@ async function logWaProcessingStep(opts: {
   } as any).catch(() => {});
 }
 
+type WaIntent =
+  | "greeting"
+  | "conversation"
+  | "product_search"
+  | "pricing"
+  | "recommendation"
+  | "bulk_order"
+  | "order_start"
+  | "tracking"
+  | "cancellation"
+  | "complaint"
+  | "human_agent"
+  | "support"
+  | "general";
+
+function normalizeIntentText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectWaIntent(text: string): { intent: WaIntent; confidence: number; reason: string; productQuery?: string } {
+  const t = normalizeIntentText(text);
+  const has = (words: string[]) => words.some((w) => t.includes(w));
+  const exact = (words: string[]) => words.includes(t);
+  const productWords = [
+    "almond", "almonds", "badam", "pista", "pistachio", "pistachios", "kaju", "cashew", "cashews",
+    "akhrot", "walnut", "walnuts", "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin",
+    "raisins", "munakka", "makhana", "dry fruit", "dry fruits", "nuts", "peanut", "peanuts", "chilgoza",
+  ];
+  const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "need", "show", "available", "recommend", "suggest", "best"];
+  if (has(["cancel order", "order cancel", "cancel kr", "cancel kar", "nahi chahiye"])) return { intent: "cancellation", confidence: 0.94, reason: "cancel keyword" };
+  if (has(["track", "tracking", "where is my order", "order status", "mera order", "status", "delivery kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
+  if (has(["complaint", "shikayat", "problem", "issue", "refund", "return", "bad quality", "damage"])) return { intent: "complaint", confidence: 0.9, reason: "complaint keyword" };
+  if (has(["human", "agent", "representative", "real person", "admin se", "support se", "call me", "phone kar", "baat karni hai", "bat krni h", "bat krna h", "baat krna", "baat karna"])) return { intent: "conversation", confidence: 0.9, reason: "conversation/human support phrase" };
+  if (has(["bulk", "wholesale", "20kg", "10kg", "5kg", "carton", "large quantity"])) return { intent: "bulk_order", confidence: 0.9, reason: "bulk order keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && has(["order", "buy", "purchase", "mangwana", "bhej", "checkout"])) return { intent: "order_start", confidence: 0.9, reason: "product + order keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
+  if (has(productWords) && has(["recommend", "suggest", "best", "healthy", "gift", "kids", "energy"])) return { intent: "recommendation", confidence: 0.86, reason: "product recommendation keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && has(["price", "rate", "qeemat", "kitna", "how much", "rs", "rupees"])) return { intent: "pricing", confidence: 0.9, reason: "product + price keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && (has(productActionWords) || t.split(" ").length <= 4)) return { intent: "product_search", confidence: 0.82, reason: "clear product keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (exact(["hi", "hello", "hey", "salam", "salaam", "assalam", "assalam o alaikum", "aoa", "helo", "hii"])) return { intent: "greeting", confidence: 0.88, reason: "greeting only" };
+  if (has(["help", "madad", "support", "poochna", "sawal", "question"])) return { intent: "support", confidence: 0.72, reason: "support keyword" };
+  return { intent: "general", confidence: 0.45, reason: "no strong deterministic intent" };
+}
+
+function shouldSendCatalogForIntent(intent: WaIntent): boolean {
+  return ["product_search", "pricing", "recommendation", "bulk_order"].includes(intent);
+}
+
+function naturalIntentReply(intent: WaIntent, text: string): string | null {
+  const roman = /[a-z]/i.test(text) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(text);
+  if (intent === "conversation" || intent === "support") {
+    return roman
+      ? "Ji bilkul 😊\n\nKis baare mein baat karna chahte hain?\nMain madad ke liye yahin hoon 👍"
+      : "جی بالکل 😊\n\nکس بارے میں بات کرنا چاہتے ہیں؟\nمیں مدد کے لیے موجود ہوں 👍";
+  }
+  if (intent === "greeting") {
+    return roman
+      ? "Assalam o Alaikum 😊\n\nKhan Dry Fruits mein khush aamdeed. Aap kis cheez mein madad chahte hain?"
+      : "وعلیکم السلام 😊\n\nKhan Dry Fruits میں خوش آمدید۔ آپ کس چیز میں مدد چاہتے ہیں؟";
+  }
+  if (intent === "human_agent") {
+    return roman
+      ? "Ji, main aapko support team se connect kar deta hoon 😊\n\nApna masla ya sawal yahin likh dein, team dekh legi."
+      : "جی، میں آپ کو سپورٹ ٹیم سے connect کر دیتا ہوں 😊\n\nاپنا سوال یا مسئلہ یہاں لکھ دیں۔";
+  }
+  return null;
+}
+
 /* ─── Public: Chat Button Config ────────────────────── */
 router.get("/whatsapp/chat-config", async (req, res) => {
   try {
@@ -651,26 +724,57 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           /* In ai_chat state — go straight to AI (skip menu check) */
           if (currentState === "ai_chat") {
-            await handleAiReply({ phone, textBody, chatbot, waSettings, log });
+            const detected = detectWaIntent(textBody);
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "intent_detected",
+              detail: `Detected intent: ${detected.intent} (${detected.reason})`,
+              payload: { textBody, ...detected, route: "ai_chat" },
+            });
+            await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
           }
 
-          /* ── Product catalog intent check (before greeting/AI) ── */
-          if (chatbot?.isEnabled && (chatbot as any)?.catalogEnabled) {
-            const catalogMatched = await handleProductCatalog({ phone, textBody, chatbot, waSettings, log });
-            if (catalogMatched) continue;
+          const detected = detectWaIntent(textBody);
+          await logWaProcessingStep({
+            phone,
+            messageId: msgId,
+            step: "intent_detected",
+            detail: `Detected intent: ${detected.intent} (${detected.reason})`,
+            payload: { textBody, ...detected },
+          });
+
+          const deterministicReply = naturalIntentReply(detected.intent, textBody);
+          if (deterministicReply) {
+            await sendWhatsAppMessage({ phone, message: deterministicReply, templateName: "intent_reply" });
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "ai_reply_sent",
+              status: "sent",
+              detail: `Sent deterministic human-like reply for ${detected.intent}.`,
+              payload: { detected, reply: deterministicReply },
+            });
+            continue;
           }
 
           /* Greeting → send welcome menu (if menu enabled) */
-          if ((chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
+          if (detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
             await handleSendMenu(phone, waSettings, chatbot);
             await setConversationState(phone, "menu_shown");
             continue;
           }
 
+          /* ── Product catalog only for strong product intents. Never for greetings/general chat. ── */
+          if (chatbot?.isEnabled && (chatbot as any)?.catalogEnabled && shouldSendCatalogForIntent(detected.intent)) {
+            const catalogMatched = await handleProductCatalog({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
+            if (catalogMatched) continue;
+          }
+
           /* AI chatbot fallback */
           if (chatbot?.isEnabled) {
-            await handleAiReply({ phone, textBody, chatbot, waSettings, log });
+            await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
           } else {
             await logWaProcessingStep({
               phone,
@@ -917,33 +1021,22 @@ async function handleProductCatalog(opts: {
   chatbot: any;
   waSettings: any;
   log?: any;
+  detectedIntent?: ReturnType<typeof detectWaIntent>;
 }): Promise<boolean> {
-  const { phone, textBody, chatbot, waSettings, log } = opts;
+  const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
   try {
-    /* ── Detect product intent keywords ── */
-    const PRODUCT_KEYWORDS = [
-      "product", "products", "item", "items", "almond", "almonds", "cashew", "cashews",
-      "pistachio", "pistachios", "walnut", "walnuts", "peanut", "peanuts", "raisin", "raisins",
-      "pine nut", "pine nuts", "dried", "dry fruit", "dry fruits", "nut", "nuts", "makhana",
-      "anjeer", "fig", "figs", "dates", "khajoor", "apricot", "khumani", "mix", "mixed",
-      "gift", "pack", "bundle", "snack", "snacks", "kaju", "badam", "pista", "akhrot",
-      "munakka", "kishmish", "price", "rate", "kitna", "cost", "how much", "cheap", "budget",
-      "best seller", "bestseller", "popular", "sale", "discount", "offer", "buy", "order",
-      "purchase", "shop", "shopping", "catalog", "catalogue", "list", "kya hai", "kya milta",
-    ];
-    const lowerText = textBody.toLowerCase();
-    const isProductQuery = PRODUCT_KEYWORDS.some(kw => lowerText.includes(kw));
-    if (!isProductQuery) return false;
+    if (detectedIntent && !shouldSendCatalogForIntent(detectedIntent.intent)) return false;
 
     /* ── Search products: Shopify first, then custom DB ── */
     const maxProducts = Math.min((chatbot as any)?.catalogMaxProducts ?? 3, 5);
 
     /* Extract search term from text — strip common filler words */
-    const searchTerm = textBody
+    const searchTerm = (detectedIntent?.productQuery ?? textBody)
       .toLowerCase()
-      .replace(/\b(what|is|are|do|you|have|tell|me|about|show|your|the|a|an|any|i|want|need|looking|for|price|of|rate|kitna|kya|hai|milta|chahiye|mujhe|ap|aap|please|pls)\b/g, " ")
+      .replace(/\b(what|is|are|do|you|have|tell|me|about|show|your|the|a|an|any|i|want|need|looking|for|price|of|rate|kitna|kya|hai|milta|chahiye|mujhe|ap|aap|please|pls|order|buy|purchase|lena|bhej|recommend|suggest|best)\b/g, " ")
       .replace(/\s+/g, " ").trim()
       .slice(0, 40);
+    if (searchTerm.length < 2 && !detectedIntent?.productQuery) return false;
 
     let products: Array<{ name: string; price: string; description: string | null; imageUrl: string | null; productUrl: string }> = [];
 
@@ -968,16 +1061,8 @@ async function handleProductCatalog(opts: {
         )
         .limit(maxProducts * 2);
 
-      /* If no keyword match, fall back to featured/in-stock */
       const source = dbProducts.filter((p: any) => p.stock > 0);
-      const finalSource = source.length > 0 ? source : await db.select({
-        id: productsTable.id, name: productsTable.name, price: productsTable.price,
-        description: productsTable.description, images: productsTable.images, slug: productsTable.slug,
-        stock: productsTable.stock, featured: productsTable.featured,
-      }).from(productsTable)
-        .where(sql`active = true AND stock > 0`)
-        .orderBy(desc(productsTable.featured))
-        .limit(maxProducts);
+      const finalSource = source;
 
       products = finalSource.slice(0, maxProducts).map((p: any) => ({
         name: p.name,
@@ -991,9 +1076,15 @@ async function handleProductCatalog(opts: {
     }
 
     if (products.length === 0) return false;
+    await logWaProcessingStep({
+      phone,
+      step: "catalog_triggered",
+      detail: `Catalog sent for ${detectedIntent?.intent ?? "product intent"}.`,
+      payload: { searchTerm, detectedIntent, products: products.map((p) => p.name) },
+    });
 
     /* ── Send each product as a separate message with buttons ── */
-    const intro = `🛍️ *KDF NUTS Product Catalog* 🥜\n\nYہاں کچھ products ہیں جو آپ کے لیے match کرتے ہیں:`;
+    const intro = `🛍️ *Matching products* 🥜\n\nAapki request ke mutabiq yeh items mile hain:`;
     await sendWhatsAppMessage({ phone, message: intro, templateName: "catalog_intro" });
     await new Promise(r => setTimeout(r, 800));
 
@@ -1269,14 +1360,16 @@ async function handleAiReply(opts: {
   chatbot: any;
   waSettings: any;
   log?: any;
+  detectedIntent?: ReturnType<typeof detectWaIntent>;
 }): Promise<void> {
-  const { phone, textBody, chatbot, waSettings, log } = opts;
+  const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
+  const intent = detectedIntent ?? detectWaIntent(textBody);
   try {
     await logWaProcessingStep({
       phone,
       step: "ai_triggered",
       detail: "AI reply pipeline started.",
-      payload: { textBody: textBody.slice(0, 500), model: chatbot?.aiModel ?? "gpt-4o-mini", chatbotEnabled: chatbot?.isEnabled },
+      payload: { textBody: textBody.slice(0, 500), model: chatbot?.aiModel ?? "gpt-4o-mini", chatbotEnabled: chatbot?.isEnabled, detectedIntent: intent },
     });
     /* Rate limit check */
     const cooldownSec = chatbot.replyDelaySec ?? 30;
@@ -1414,7 +1507,19 @@ async function handleAiReply(opts: {
       },
     ];
 
-    const systemContent = (chatbot.systemPrompt ?? `You are KDF NUTS AI assistant — Pakistan's premium dry fruits store. Reply in the same language as the customer (Urdu/English/Roman Urdu). Be friendly, concise, and helpful. Always use tools to show real products and order info. Never make up prices.`) + orderContextBlock;
+    const salesSystem = `You are a premium human WhatsApp sales representative for Khan Dry Fruits.
+Rules:
+- Reply naturally in the customer's language (Urdu, Roman Urdu, or English).
+- Never use generic auto-responder lines like "Thank you for your message" unless it truly fits.
+- For conversation/support intent, ask what they want to discuss and offer help warmly.
+- Only show/search products when the detected intent is product_search, pricing, recommendation, bulk_order, or order_start.
+- Never spam catalog/products for greetings, support, or general conversation.
+- If customer asks price/product availability, use search_products and show only matching items.
+- If customer wants to order a named product, use start_order.
+- If customer wants tracking/order status, use track_order.
+- Keep replies short, human, and conversion-focused.`;
+    const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
+    const systemContent = `${salesSystem}\n\nAdmin business instructions:\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemContent },
@@ -1431,6 +1536,16 @@ async function handleAiReply(opts: {
     if (!lastMsg || lastMsg.role !== "user" || lastMsg.content !== textBody) {
       messages.push({ role: "user", content: textBody });
     }
+    await logWaProcessingStep({
+      phone,
+      step: "ai_prompt_built",
+      detail: `AI prompt built for intent ${intent.intent}.`,
+      payload: {
+        intent,
+        promptPreview: systemContent.slice(0, 1200),
+        historyMessages: messages.length,
+      },
+    });
 
     const aiClient = await getOpenAIClient();
 
@@ -1444,7 +1559,7 @@ async function handleAiReply(opts: {
         model: chatbot.aiModel ?? "gpt-4o-mini",
         messages: currentMessages,
         tools,
-        tool_choice: "auto",
+        tool_choice: shouldSendCatalogForIntent(intent.intent) || ["order_start", "tracking", "complaint"].includes(intent.intent) ? "auto" : "none",
         max_completion_tokens: 600,
       });
 
@@ -1467,6 +1582,11 @@ async function handleAiReply(opts: {
         let toolResult = "";
 
         if (tcFn.name === "search_products") {
+          if (!shouldSendCatalogForIntent(intent.intent) && intent.intent !== "order_start") {
+            toolResult = "Product search blocked because customer did not ask for products.";
+            toolResults.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
+            continue;
+          }
           const products = await searchProductsForWa(args.query ?? "", Math.min(args.limit ?? 3, 5));
           if (products.length === 0) {
             toolResult = "No products found for this query.";
@@ -1587,9 +1707,16 @@ async function handleAiReply(opts: {
     });
     log?.warn(aiErr, "AI auto-reply error");
     try {
-      if (chatbot?.fallbackMessage) {
+      const intentFallback = naturalIntentReply(intent.intent, textBody);
+      if (intentFallback) {
         const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
-        await sendWa({ phone, message: chatbot.fallbackMessage, templateName: "ai_fallback" });
+        await sendWa({ phone, message: intentFallback, templateName: "ai_fallback" });
+      } else if (chatbot?.fallbackMessage) {
+        const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
+        const fallback = String(chatbot.fallbackMessage).includes("Thank you for your message")
+          ? "Ji 😊 main yahin hoon. Aap apna sawal ya zaroorat bata dein, main madad karta hoon."
+          : chatbot.fallbackMessage;
+        await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
       }
     } catch { /* ignore fallback errors */ }
   }
