@@ -8,52 +8,13 @@ import {
   toWhatsAppCatalogProducts,
   type ShopifyCatalogProduct,
 } from "./shopifyProductKnowledge.js";
-import { expandFamilyTerms, primaryFamilyLabel, resolveQueryFamilies } from "./catalogProductMatcher.js";
+import { expandFamilyTerms, resolveQueryFamilies } from "./catalogProductMatcher.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
+import { listProductsForCustomerQuery, resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 
-export type WaSalesCategory = {
-  id: string;
-  emoji: string;
-  labelEn: string;
-  labelUr: string;
-  /** Roots used for family matching */
-  families: string[];
-};
-
-/** Shown first in catalog menu — entire Shopify catalog */
-export const ALL_PRODUCTS_CATEGORY: WaSalesCategory = {
-  id: "all",
-  emoji: "📋",
-  labelEn: "All Products",
-  labelUr: "تمام Products",
-  families: [],
-};
-
-/** Specific categories first; mixed/gift last so items classify correctly */
-export const WA_SALES_CATEGORIES: WaSalesCategory[] = [
-  { id: "almonds", emoji: "🥜", labelEn: "Almonds", labelUr: "بادام", families: ["almond", "almonds", "badam", "بادام", "kagzi", "kagazi", "mamra", "gurbandi", "american almond", "australian almond"] },
-  { id: "pistachio", emoji: "🌰", labelEn: "Pistachio", labelUr: "پستہ", families: ["pista", "pistachio", "pistachios", "پستہ", "پستے"] },
-  { id: "cashew", emoji: "🌰", labelEn: "Cashew", labelUr: "کاجو", families: ["kaju", "cashew", "cashews", "کاجو"] },
-  { id: "walnut", emoji: "🌰", labelEn: "Walnuts", labelUr: "اخروٹ", families: ["akhrot", "walnut", "walnuts", "اخروٹ"] },
-  { id: "dates", emoji: "🌴", labelEn: "Dates", labelUr: "کھجور", families: ["khajoor", "dates", "date", "کھجور", "chuara", "ajwa", "mazafati", "kalmi", "sukkari", "rabbi", "amber"] },
-  { id: "hazelnut", emoji: "🌰", labelEn: "Hazelnuts", labelUr: "ہیزلنٹ", families: ["hazelnut", "hazelnuts", "filbert", "fındık"] },
-  { id: "berries", emoji: "🍇", labelEn: "Berries", labelUr: "بیریز", families: ["berry", "berries", "goji", "cranberry", "blueberry", "strawberry"] },
-  { id: "raisins", emoji: "🍇", labelEn: "Raisins", labelUr: "کشمش", families: ["kishmish", "raisin", "raisins", "munakka", "کشمش"] },
-  { id: "figs", emoji: "🫐", labelEn: "Figs", labelUr: "انجیر", families: ["anjeer", "fig", "figs", "انجیر"] },
-  { id: "peanuts", emoji: "🥜", labelEn: "Peanuts", labelUr: "مونگ پھلی", families: ["peanut", "peanuts", "mungphali"] },
-  { id: "seeds", emoji: "🌻", labelEn: "Seeds", labelUr: "بیج", families: ["sunflower", "pumpkin", "chia", "sesame", "til", "melon", "flax"] },
-  { id: "pine", emoji: "🌲", labelEn: "Chilgoza", labelUr: "چلغوزہ", families: ["chilgoza", "pine nut", "pine nuts"] },
-  { id: "makhana", emoji: "🪷", labelEn: "Makhana", labelUr: "مکھانہ", families: ["makhana", "foxnut"] },
-  { id: "honey", emoji: "🍯", labelEn: "Honey", labelUr: "شہد", families: ["honey", "shahad", "شہد"] },
-  { id: "oils", emoji: "🫒", labelEn: "Oils & Butters", labelUr: "آئل", families: ["oil", "butter", "paste", "ghee"] },
-  { id: "apricot", emoji: "🍑", labelEn: "Apricot & Dried Fruit", labelUr: "خوبانی", families: ["apricot", "khubani", "prune", "plum"] },
-  { id: "saffron", emoji: "🌸", labelEn: "Saffron", labelUr: "زعفران", families: ["saffron", "zafran", "zaffran"] },
-  { id: "mixed", emoji: "🎁", labelEn: "Mixed & Gift Packs", labelUr: "مکس / گفٹ", families: ["mix", "mixed", "combo", "hamper", "gift box", "gift pack", "assorted"] },
-  { id: "spices", emoji: "🌶️", labelEn: "Spices", labelUr: "مصالحہ", families: ["spice", "spices", "masala", "cumin", "zeera", "haldi", "turmeric"] },
-  { id: "tea", emoji: "🍵", labelEn: "Tea & Herbs", labelUr: "چائے", families: ["tea", "chai", "herb", "herbal", "green tea"] },
-  { id: "chocolate", emoji: "🍫", labelEn: "Chocolate & Sweets", labelUr: "چاکلیٹ", families: ["chocolate", "cocoa", "sweet", "candy"] },
-  { id: "coconut", emoji: "🥥", labelEn: "Coconut", labelUr: "ناریل", families: ["coconut", "narial", "nariel"] },
-];
+export type { WaSalesCategory } from "./waCategoryDefinitions.js";
+export { ALL_PRODUCTS_CATEGORY, WA_SALES_CATEGORIES, getCategoryById } from "./waCategoryDefinitions.js";
+import { ALL_PRODUCTS_CATEGORY, WA_SALES_CATEGORIES, getCategoryById, type WaSalesCategory } from "./waCategoryDefinitions.js";
 
 function formatRupees(value: unknown): string {
   const n = Number.parseFloat(String(value ?? "0"));
@@ -64,26 +25,20 @@ export function isRomanUrduSales(text: string): boolean {
   return /[a-z]/i.test(text) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(text);
 }
 
-/** Map customer query to a sales category */
+/** Map customer query to a sales category (always a real WA_SALES_CATEGORIES id) */
 export function resolveSalesCategoryFromQuery(query: string): WaSalesCategory | null {
+  const catId = resolveCanonicalCategoryId(query);
+  if (catId) return getCategoryById(catId);
+
   const roots = resolveQueryFamilies(query);
   if (!roots.length) return null;
 
   for (const cat of WA_SALES_CATEGORIES) {
-    if (roots.some((r) => cat.families.some((f) => f === r || r.includes(f) || f.includes(r)))) {
-      return cat;
-    }
-    if (cat.families.some((f) => roots.includes(f))) return cat;
+    if (roots.some((r) => cat.families.includes(r))) return cat;
+    if (cat.families.some((f) => roots.some((r) => r === f || (f.length >= 4 && r.includes(f))))) return cat;
   }
 
-  const primary = roots[0]!;
-  return {
-    id: primary,
-    emoji: "🥜",
-    labelEn: primaryFamilyLabel(roots),
-    labelUr: primaryFamilyLabel(roots),
-    families: roots,
-  };
+  return null;
 }
 
 function normalizeCatalogBlob(product: ShopifyCatalogProduct): string {
@@ -248,25 +203,37 @@ export async function getCatalogIndexStats(): Promise<{
   };
 }
 
-/** Search catalog for a category — uses full index when family match */
-export async function searchCategoryProducts(query: string, limit = 80): Promise<{
+/** Search catalog for a category — ONLY indexed category products (no random fallback) */
+export async function searchCategoryProducts(query: string, _limit = 80): Promise<{
   category: WaSalesCategory | null;
   products: ShopifyCatalogProduct[];
   query: string;
   roots: string[];
 }> {
   const q = String(query ?? "").trim();
-  const roots = productRootTermsFromQuery(q);
-  const category = resolveSalesCategoryFromQuery(q);
+  const listed = await listProductsForCustomerQuery(q);
 
-  if (category) {
-    const { products: allInCat } = await listProductsByCategoryId(category.id);
-    if (allInCat.length > 0) {
-      return { category, products: allInCat, query: q, roots };
-    }
+  if (listed.category && listed.products.length > 0) {
+    return {
+      category: listed.category,
+      products: listed.products,
+      query: q,
+      roots: listed.roots,
+    };
   }
 
-  const products = await searchShopifyCatalog(q, Math.min(limit, 100));
+  const category = resolveSalesCategoryFromQuery(q);
+  if (category) {
+    return { category, products: listed.products, query: q, roots: listed.roots };
+  }
+
+  const roots = productRootTermsFromQuery(q);
+  if (roots.length === 0) {
+    return { category: null, products: [], query: q, roots };
+  }
+
+  const { searchShopifyCatalog } = await import("./shopifyProductKnowledge.js");
+  const products = await searchShopifyCatalog(q, 50);
   return { category, products, query: q, roots };
 }
 
@@ -379,10 +346,14 @@ export function formatCategoryProductListReply(opts: {
     ? (roman ? "\n\nReply *next* for more products in this category ➡️" : "\n\nمزید products کے لیے *next* reply کریں ➡️")
     : "";
 
+  const header = category
+    ? (roman ? `🥜 Available ${category.labelEn}:` : `🥜 Available ${category.labelUr}:`)
+    : label;
+
   if (roman) {
-    return `Ji 😊 yeh ${category?.labelEn ?? "products"} available hain (${total} total):\n\n${label}\n\n${lines.join("\n\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n\nProduct number select karein (1, 2, 3…)`;
+    return `${header}\n\n${lines.join("\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n*${total} products* — Reply with number to see sizes & prices 😊`;
   }
-  return `جی 😊 yeh ${category?.labelUr ?? "products"} available hain (${total} total):\n\n${label}\n\n${lines.join("\n\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n\nProduct number select کریں (1، 2، 3…)`;
+  return `${header}\n\n${lines.join("\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n*${total} products* — سائز اور قیمت کے لیے نمبر reply کریں 😊`;
 }
 
 /** Variant menu after product selection (step 2) */
@@ -434,8 +405,7 @@ export async function buildCatalogBrowseReply(opts: {
   if (!products.length) return null;
 
   const top = products[0]!;
-  const minScore = roots.length > 0 ? 35 : 20;
-  if ((top.score ?? 0) < minScore) return null;
+  if (!category && roots.length > 0 && (top.score ?? 0) < 35) return null;
 
   const roman = isRomanUrduSales(textBody);
   const waProducts = toWhatsAppCatalogProducts(products);

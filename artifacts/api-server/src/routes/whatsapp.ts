@@ -4635,6 +4635,7 @@ router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (r
       aliasSample,
       salesCategories: (await import("../lib/waSalesAgent.js")).listAllCategoryDefinitions(),
       catalogIndexStats: await (await import("../lib/waSalesAgent.js")).getCatalogIndexStats(),
+      catalogIndexProof: await (await import("../lib/waCategoryIndex.js")).getCatalogIndexProof(),
       features: [
         "Category browse → product → variant → order (premium sales flow)",
         "Multi-language aliases (Urdu / Roman / English)",
@@ -4759,18 +4760,48 @@ router.get("/admin/whatsapp/product-knowledge/products", adminMiddleware as any,
   }
 });
 
+router.get("/admin/whatsapp/product-knowledge/verify", adminMiddleware as any, async (_req, res) => {
+  try {
+    const { getCatalogIndexProof } = await import("../lib/waCategoryIndex.js");
+    const { getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
+    const proof = await getCatalogIndexProof();
+    const stats = await getShopifyCatalogStats();
+    const healthy =
+      proof.totalActiveProducts >= 300 &&
+      stats.indexedProducts >= Math.floor(proof.totalActiveProducts * 0.95) &&
+      stats.aliasRows >= proof.totalActiveProducts * 3 &&
+      proof.almondCategoryCount > 0;
+    return res.json({
+      healthy,
+      message: healthy
+        ? `Index OK: ${proof.totalActiveProducts} products, ${proof.totalVariants} variants, ${stats.aliasRows} aliases`
+        : "Index incomplete — run Rebuild Index in admin",
+      stats,
+      proof,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Verify failed" });
+  }
+});
+
 router.post("/admin/whatsapp/product-knowledge/rebuild", adminMiddleware as any, async (req, res) => {
   try {
     const { rebuildShopifyProductAliases } = await import("../lib/shopifyProductSearch.js");
     const { getShopifyCatalogStats, invalidateCatalogCache } = await import("../lib/shopifyProductKnowledge.js");
+    const { invalidateFullCatalogIndex } = await import("../lib/waSalesAgent.js");
+    const { getCatalogIndexProof } = await import("../lib/waCategoryIndex.js");
     invalidateCatalogCache();
+    invalidateFullCatalogIndex();
     const result = await rebuildShopifyProductAliases();
+    invalidateFullCatalogIndex();
     const stats = await getShopifyCatalogStats();
+    const proof = await getCatalogIndexProof();
     return res.json({
       success: true,
       message: `Product Knowledge index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
       ...result,
       stats,
+      proof,
     });
   } catch (e: any) {
     return res.status(500).json({ error: e.message ?? "Rebuild failed" });
@@ -4785,7 +4816,9 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
     const { searchShopifyCatalogWithDebug, formatShopifyCatalogForOpenAI, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
     const { productRootsInMessage, tryWaProductCatalogReply } = await import("../lib/waProductBrain.js");
     const { resolveSalesCategoryFromQuery } = await import("../lib/waSalesAgent.js");
+    const { listProductsForCustomerQuery, resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
     const { products, debug } = await searchShopifyCatalogWithDebug(query, limit);
+    const categoryListing = await listProductsForCustomerQuery(query);
     const browseHit = await tryWaProductCatalogReply({ textBody: query, productQuery: query }).catch(() => null);
     const totalMatches = await countShopifyCatalogMatches(query);
     const roman = /[a-z]/i.test(query) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(query);
@@ -4796,6 +4829,9 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
       totalMatches,
       debug,
       salesCategory: resolveSalesCategoryFromQuery(query),
+      canonicalCategoryId: resolveCanonicalCategoryId(query),
+      categoryProductCount: categoryListing.products.length,
+      categoryProductNames: categoryListing.products.slice(0, 15).map((p) => p.name),
       browseMode: browseHit?.mode ?? null,
       matchedAliasRoots: roots,
       whatsappReplyPreview: browseHit?.reply ?? null,

@@ -8,6 +8,12 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   almond: ["badam", "almonds", "بادام"],
   almonds: ["badam", "almond", "بادام"],
   بادام: ["badam", "almond", "almonds"],
+  mamra: ["almond", "badam", "mamra almond"],
+  kagzi: ["kagazi", "almond", "badam", "kaghzi"],
+  kagazi: ["kagzi", "almond", "badam"],
+  kaghzi: ["kagzi", "kaghazi", "almond"],
+  gurbandi: ["almond", "badam"],
+  desi: ["almond", "badam"],
   pista: ["pistachio", "pistachios", "pistay", "پستہ", "پستے"],
   pistachio: ["pista", "pistachios", "پستہ"],
   pistachios: ["pista", "pistachio", "پستہ"],
@@ -120,6 +126,8 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
     rows.push({ shopifyProductId: productId, alias: a, aliasType, locale });
   };
 
+  const { WA_SALES_CATEGORIES } = await import("./waCategoryDefinitions.js");
+
   for (const p of products) {
     const id = p.shopifyProductId;
     pushAlias(id, p.title, "title");
@@ -135,10 +143,25 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
       }
     }
     const titleNorm = normalizeAliasText(p.title);
+    const tagNorm = p.tags ? normalizeAliasText(p.tags) : "";
+    const blob = `${titleNorm} ${tagNorm}`;
+
     for (const [root, synonyms] of Object.entries(WA_PRODUCT_ALIASES)) {
-      if (titleNorm.includes(root) || (p.tags && normalizeAliasText(p.tags).includes(root))) {
+      if (titleNorm.includes(root) || tagNorm.includes(root)) {
         pushAlias(id, root, "synonym_root");
         for (const syn of synonyms) pushAlias(id, syn, "synonym");
+      }
+    }
+
+    for (const cat of WA_SALES_CATEGORIES) {
+      const hit = cat.families.some((f) => f.length >= 3 && blob.includes(f));
+      if (hit) {
+        pushAlias(id, cat.id, "category_id");
+        pushAlias(id, cat.labelEn.toLowerCase(), "category_label");
+        pushAlias(id, cat.labelUr, "category_label_ur");
+        for (const f of cat.families) {
+          if (f.length >= 3) pushAlias(id, f, "category_family");
+        }
       }
     }
     const variants = Array.isArray(p.variants) ? p.variants : [];
@@ -171,6 +194,8 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
   try {
     const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
     invalidateCatalogCache();
+    const { invalidateFullCatalogIndex } = await import("./waSalesAgent.js");
+    invalidateFullCatalogIndex();
   } catch { /* ok */ }
 
   return { indexed: products.length, aliases: inserted };

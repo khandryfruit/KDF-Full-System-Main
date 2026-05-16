@@ -99,9 +99,10 @@ warmUpDb()
           const { getShopifyCatalogStats } = await import("./lib/shopifyProductKnowledge.js");
           const { rebuildShopifyProductAliases } = await import("./lib/shopifyProductSearch.js");
           const stats = await getShopifyCatalogStats();
-          if (stats.activeProducts > 0 && (stats.aliasRows === 0 || stats.indexedProducts < Math.floor(stats.activeProducts * 0.9))) {
-            await rebuildShopifyProductAliases();
-            logger.info({ ...stats }, "Shopify Product Knowledge index auto-rebuilt on startup");
+          const minAliases = Math.floor(stats.activeProducts * 5);
+          if (stats.activeProducts > 0 && (stats.aliasRows === 0 || stats.aliasRows < minAliases || stats.indexedProducts < Math.floor(stats.activeProducts * 0.95))) {
+            const result = await rebuildShopifyProductAliases();
+            logger.info({ ...stats, rebuild: result }, "Shopify Product Knowledge index auto-rebuilt on startup");
           }
         } catch (err) {
           logger.warn({ err }, "Shopify Product Knowledge startup rebuild skipped");
