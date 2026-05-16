@@ -473,7 +473,18 @@ router.get("/products/:id", async (req, res) => {
       [product] = await db.select().from(productsTable).where(ilike(productsTable.slug, param)).limit(1);
     }
 
-    req.log.info({ param, found: !!product, slug: product?.slug }, "product detail lookup");
+    req.log.info(
+      {
+        param,
+        found: !!product,
+        slug: product?.slug,
+        variantCount: Array.isArray(product?.variants) ? product.variants.length : 0,
+        variantValues: Array.isArray(product?.variants)
+          ? (product.variants as { value?: string }[]).map((v) => v.value).filter(Boolean)
+          : [],
+      },
+      "product detail lookup",
+    );
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
     // If the requested param differs from the canonical slug, handle accordingly.
@@ -505,6 +516,16 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
     if (!name || !price) { res.status(400).json({ error: "name and price are required" }); return; }
     const baseSlug = rawSlug?.trim() ? rawSlug.trim() : name;
     const slug = await ensureUniqueSlug(baseSlug);
+    if (Array.isArray(rest.variants)) {
+      req.log.info(
+        {
+          name,
+          variantCount: rest.variants.length,
+          variantValues: rest.variants.map((v: { value?: string }) => v.value).filter(Boolean),
+        },
+        "product create variants",
+      );
+    }
     const [product] = await db.insert(productsTable).values({ name, price, stock: stock ?? 0, slug, ...rest }).returning();
     res.status(201).json(product);
     // Auto-index after response sent
@@ -538,6 +559,17 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
     const updateData: any = { ...rest, updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
     if (finalSlug !== undefined) updateData.slug = finalSlug;
+
+    if (Array.isArray(updateData.variants)) {
+      req.log.info(
+        {
+          productId: id,
+          variantCount: updateData.variants.length,
+          variantValues: updateData.variants.map((v: { value?: string }) => v.value).filter(Boolean),
+        },
+        "product update variants",
+      );
+    }
 
     const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, id)).returning();
     if (!product) { res.status(404).json({ error: "Not found" }); return; }

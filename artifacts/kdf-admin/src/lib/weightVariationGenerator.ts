@@ -176,3 +176,61 @@ export function effectiveProductStock(
   }
   return variants.reduce((s, v) => s + (v.stock || 0), 0);
 }
+
+/** Config shape shared by admin auto-calculator panel and save handler */
+export interface AutoWeightVariantConfig {
+  baseWeightGrams: number;
+  basePrice: number;
+  baseStock: number;
+  selectedGrams: number[];
+  stockMode: VariantStockMode;
+  priceMode: VariantPriceMode;
+  customPrices: Record<number, string>;
+  individualStocks: Record<number, string>;
+}
+
+export function buildAutoWeightVariants(
+  config: AutoWeightVariantConfig,
+  createId?: () => string
+): WeightVariantInput[] {
+  const sorted = [...new Set(config.selectedGrams)].sort((a, b) => a - b);
+  if (!sorted.length || config.basePrice <= 0 || config.baseWeightGrams <= 0) return [];
+
+  return generateWeightVariants({
+    baseWeightGrams: config.baseWeightGrams,
+    basePrice: config.basePrice,
+    baseStock: config.baseStock,
+    weightGramsList: sorted,
+    stockMode: config.stockMode,
+    priceMode: config.priceMode,
+    customPrices: Object.fromEntries(
+      Object.entries(config.customPrices)
+        .map(([g, p]) => [Number(g), parseFloat(p)])
+        .filter(([, p]) => Number.isFinite(p))
+    ) as Record<number, number>,
+    individualStocks: Object.fromEntries(
+      Object.entries(config.individualStocks)
+        .map(([g, s]) => [Number(g), parseInt(s, 10)])
+        .filter(([, s]) => Number.isFinite(s))
+    ) as Record<number, number>,
+    createId,
+  });
+}
+
+/** Keep stable variant IDs when regenerating weight options (cart / PDP selection). */
+export function mergeWeightVariantsPreservingIds(
+  existing: WeightVariantInput[],
+  generated: WeightVariantInput[]
+): WeightVariantInput[] {
+  const nonWeight = existing.filter((v) => v.name !== "Weight");
+  const byValue = new Map(
+    existing
+      .filter((v) => v.name === "Weight" && v.value)
+      .map((v) => [v.value.toUpperCase().replace(/\s/g, ""), v])
+  );
+  const merged = generated.map((g) => {
+    const prev = byValue.get(g.value.toUpperCase().replace(/\s/g, ""));
+    return prev ? { ...g, id: prev.id, sku: g.sku || prev.sku } : g;
+  });
+  return [...nonWeight, ...merged];
+}

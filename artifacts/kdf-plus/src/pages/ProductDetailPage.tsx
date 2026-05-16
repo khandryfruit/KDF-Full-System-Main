@@ -476,7 +476,7 @@ export default function ProductDetailPage() {
     if (!product) return;
     if ((product as any).variants && (product as any).variants.length > 0) {
       const first = (product as any).variants.find((v: any) => v.stock !== 0) ?? (product as any).variants[0];
-      setSelectedVariant(first.id);
+      setSelectedVariant(String(first.id));
     } else {
       setSelectedVariant(undefined);
     }
@@ -511,7 +511,7 @@ export default function ProductDetailPage() {
 
   const productVariants = (((product as any).variants ?? []) as any[]);
   const images: string[] = (product.images && product.images.length > 0 ? product.images : [""]) as string[];
-  const activeVariant = productVariants.find((v: any) => v.id === selectedVariant);
+  const activeVariant = productVariants.find((v: any) => String(v.id) === String(selectedVariant ?? ""));
   const price = activeVariant?.price ? parseFloat(activeVariant.price) : parseFloat(product.price);
   const originalPrice = product.originalPrice ? parseFloat(product.originalPrice) : null;
   const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : null;
@@ -542,7 +542,7 @@ export default function ProductDetailPage() {
     setPurchaseSheetOpen(true);
   };
   const handleVariantChange = (variantId: string) => {
-    const next = productVariants.find((v: any) => v.id === variantId);
+    const next = productVariants.find((v: any) => String(v.id) === String(variantId));
     const nextStock = next?.stock != null ? Number(next.stock) : Number(product.stock);
     setSelectedVariant(variantId);
     setQty((current) => Math.max(1, Math.min(current, Math.max(nextStock, 1))));
@@ -737,7 +737,7 @@ export default function ProductDetailPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {items.map((v) => {
-                        const isSelected = selectedVariant === v.id; const outOfStock = v.stock === 0;
+                        const isSelected = String(selectedVariant) === String(v.id); const outOfStock = v.stock === 0;
                         return (
                           <button key={v.id} onClick={() => !outOfStock && handleVariantChange(v.id)} disabled={outOfStock}
                             className={`relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all hover:scale-[1.02] active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:scale-100 ${isSelected ? "text-white border-transparent shadow-md" : outOfStock ? "text-gray-300 border-gray-200 cursor-not-allowed" : "text-gray-700 border-gray-200 hover:border-[#5FA800]/60 hover:text-[#5FA800]"}`}

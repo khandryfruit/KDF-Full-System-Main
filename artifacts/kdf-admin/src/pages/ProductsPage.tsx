@@ -46,8 +46,10 @@ import {
   type AutoVariationConfig,
 } from "@/components/products/AutoWeightVariationPanel";
 import {
+  buildAutoWeightVariants,
   effectiveProductStock,
   inferBaseFromVariants,
+  mergeWeightVariantsPreservingIds,
   parseWeightToGrams,
   type VariantStockMode,
 } from "@/lib/weightVariationGenerator";
@@ -746,8 +748,18 @@ export default function ProductsPage() {
 
   const [form, setForm] = useState(emptyForm());
   const [autoVariationEnabled, setAutoVariationEnabled] = useState(false);
-  const [autoVarConfig, setAutoVarConfig] = useState<AutoVariationConfig>(defaultAutoVariationConfig);
+  const [autoVarConfig, setAutoVarConfig] = useState<AutoVariationConfig>(() => defaultAutoVariationConfig());
   const [variantStockMode, setVariantStockMode] = useState<VariantStockMode>("shared");
+
+  const resolveVariantsForSave = (): ProductVariant[] => {
+    if (!autoVariationEnabled) return form.variants;
+    const generated = buildAutoWeightVariants({
+      ...autoVarConfig,
+      basePrice: autoVarConfig.basePrice || parseFloat(form.price) || 0,
+    });
+    if (!generated.length) return form.variants;
+    return mergeWeightVariantsPreservingIds(form.variants, generated);
+  };
 
   const handleOpenAdd = () => {
     setForm(emptyForm());
@@ -870,10 +882,19 @@ export default function ProductsPage() {
       setActiveTab("basic");
       return;
     }
+    const variantsToSave = resolveVariantsForSave();
+    const stockModeForSave = autoVariationEnabled ? autoVarConfig.stockMode : variantStockMode;
     const effectiveStock =
-      form.variants.length > 0
-        ? effectiveProductStock(form.variants, variantStockMode, autoVarConfig.baseStock)
+      variantsToSave.length > 0
+        ? effectiveProductStock(variantsToSave, stockModeForSave, autoVarConfig.baseStock)
         : form.stock;
+    const baseWeightVariant = variantsToSave.find(
+      (v) => v.name === "Weight" && parseWeightToGrams(v.value) === autoVarConfig.baseWeightGrams
+    );
+    const resolvedPrice =
+      autoVariationEnabled && baseWeightVariant?.price
+        ? baseWeightVariant.price
+        : form.price;
     // Sanitize slug before submission — same rules as generateSlugFromName on the server
     const rawSlug = form.slug || form.name;
     const cleanSlug = rawSlug
@@ -885,6 +906,8 @@ export default function ProductsPage() {
       .replace(/^-|-$/g, "");
     const payload = {
       ...form,
+      variants: variantsToSave,
+      price: resolvedPrice,
       slug: cleanSlug,
       stock: effectiveStock,
       originalPrice: form.originalPrice || undefined,

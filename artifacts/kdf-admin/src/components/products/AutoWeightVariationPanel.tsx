@@ -336,6 +336,9 @@ export function AutoWeightVariationPanel({
             <Zap className="w-4 h-4 mr-1.5" />
             Generate {sortedSelected.length} variations
           </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Weight options are also saved automatically when you click Update Product — Generate updates the form preview immediately.
+          </p>
         </div>
       )}
     </div>
