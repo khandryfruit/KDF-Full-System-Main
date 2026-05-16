@@ -295,8 +295,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           const msgType: string = msg.type ?? "text";
           const listReplyId: string | undefined    = msg.interactive?.list_reply?.id;
           const buttonReplyId: string | undefined  = msg.interactive?.button_reply?.id;
-          const interactionId  = listReplyId ?? buttonReplyId;
-          const interactionTitle: string | undefined = msg.interactive?.list_reply?.title ?? msg.interactive?.button_reply?.title;
+          const legacyButtonPayload: string | undefined = msg.button?.payload;
+          const interactionId  = listReplyId ?? buttonReplyId ?? legacyButtonPayload;
+          const interactionTitle: string | undefined = msg.interactive?.list_reply?.title ?? msg.interactive?.button_reply?.title ?? msg.button?.text;
 
           /* ── Extract rich content based on message type ── */
           let rawText = "";

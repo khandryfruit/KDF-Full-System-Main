@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./whatsapp";
 import { sendLifecycleWhatsApp } from "./waTemplateEvents.js";
+import { hasOrderConfirmationBeenSent } from "./ondriveEngine.js";
 import { logger } from "./logger";
 
 const RETRY_INTERVAL_MS = 60_000;
@@ -87,6 +88,19 @@ async function processFailedMessageRetries() {
     }>) {
       const trigger = row.triggerEvent ?? row.templateName;
       if (!row.phone || !trigger || trigger === "incoming") continue;
+      if (row.shopifyOrderId && ["order_confirmation", "order_confirmed", "order_confirmed_wa", "order_confirm", "order_confromd_"].includes(trigger)) {
+        const alreadySent = await hasOrderConfirmationBeenSent(row.shopifyOrderId);
+        if (alreadySent) {
+          await db.execute(sql`
+            UPDATE whatsapp_logs
+            SET retry_count = COALESCE(retry_count, 0) + 1,
+                last_retry_at = NOW(),
+                response = ${JSON.stringify({ templateAutoRetrySkipped: true, reason: "order_confirmation_already_sent", lastRetryAt: new Date().toISOString() })}
+            WHERE id = ${row.id}
+          `).catch(() => {});
+          continue;
+        }
+      }
 
       let params = ["Customer", row.shopifyOrderId ?? "Order", "Rs. 0", "Cash on delivery"];
       if (row.shopifyOrderId) {

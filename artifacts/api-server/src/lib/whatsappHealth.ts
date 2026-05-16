@@ -104,6 +104,21 @@ export async function buildWhatsappHealthReport() {
     WHERE shopify_order_id IS NOT NULL OR trigger_event IN ('order_confirmed', 'order_confirmed_wa', 'payment_wa', 'status_wa', 'cancelled_wa')
   `).catch(() => ({ rows: [] }));
 
+  const orderAutomationResult = await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (
+        WHERE event_type = 'order_confirmed_wa'
+          AND status = 'skipped'
+          AND message ILIKE '%duplicate%'
+          AND created_at >= ${since24h}
+      )::int AS duplicate_confirmation_skipped_24h,
+      MAX(created_at) FILTER (
+        WHERE event_type = 'order_confirmed_wa'
+          AND status IN ('success', 'skipped', 'failed')
+      ) AS last_order_automation_at
+    FROM order_automation_logs
+  `).catch(() => ({ rows: [] }));
+
   const hmacFailures24h = webhookFailures.filter((f: any) => String(f.error ?? "").includes("invalid_hmac") && new Date(f.createdAt).getTime() >= since24h.getTime()).length;
   const latestWebhookFailure = webhookFailures[0] as any;
   const failureClassifications = [
@@ -176,12 +191,18 @@ export async function buildWhatsappHealthReport() {
     recentFailures,
     webhookFailures,
     rejectedTemplates,
-    orderMonitoring: asRows(orderWaResult)[0] ?? {
+    orderMonitoring: {
+      ...(asRows(orderWaResult)[0] ?? {
       orders_with_wa_24h: 0,
       order_wa_failed_24h: 0,
       order_wa_sent_24h: 0,
       order_wa_pending_stuck: 0,
       order_wa_retry_attempts: 0,
+      }),
+      ...(asRows(orderAutomationResult)[0] ?? {
+        duplicate_confirmation_skipped_24h: 0,
+        last_order_automation_at: null,
+      }),
     },
   };
 }

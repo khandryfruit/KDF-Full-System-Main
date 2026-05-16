@@ -72,6 +72,11 @@ export async function processOrderAutomationRetries(): Promise<{
             AND l.status = 'success'
         )
         AND NOT EXISTS (
+          SELECT 1 FROM shopify_order_confirmations c
+          WHERE (c.shopify_order_db_id = o.id OR c.shopify_order_id = o.shopify_order_id)
+            AND c.last_sent_at IS NOT NULL
+        )
+        AND NOT EXISTS (
           SELECT 1 FROM order_automation_logs l
           WHERE l.shopify_order_db_id = o.id
             AND l.event_type = 'order_confirmed_wa'

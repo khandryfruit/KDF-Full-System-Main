@@ -5,7 +5,12 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { isLahoreShippingAddress, parseShippingAddress } from "./lahoreShipping.js";
 import { assignLahoreOrderWithNotifications } from "./lahoreOrderAssign.js";
-import { sendOrderConfirmationWA, upsertOrderConfirmationRecord } from "./ondriveEngine.js";
+import {
+  claimOrderConfirmationSend,
+  hasOrderConfirmationBeenSent,
+  markOrderConfirmationSendResult,
+  sendOrderConfirmationWA,
+} from "./ondriveEngine.js";
 import {
   sendPremiumOrderConfirmed,
   sendPremiumPaymentConfirmed,
@@ -93,33 +98,51 @@ export async function runShopifyOrderAutomation(
   /* ── LAHORE: order confirmed + rider assign + tracking ── */
   if (isLahore) {
     if (phone) {
-      const confirmRes = await sendPremiumOrderConfirmed(waCtx);
-      await upsertOrderConfirmationRecord({
+      const claim = await claimOrderConfirmationSend({
         shopifyOrderId: input.shopifyOrderId,
         orderNumber: input.orderNumber,
         shopifyOrderDbId: input.shopifyOrderDbId,
         phone,
         customerName: input.customerName ?? "Customer",
-        messageId: confirmRes.messageId ?? null,
       });
-      await logOrderAutomation({
-        shopifyOrderDbId: input.shopifyOrderDbId,
-        shopifyOrderId: input.shopifyOrderId,
-        orderNumber: input.orderNumber,
-        eventType: "order_confirmed_wa",
-        status: confirmRes.success ? "success" : "failed",
-        message: confirmRes.success ? "Premium order confirmed sent" : confirmRes.error,
-        errorMessage: confirmRes.error,
-        scheduleRetry: !confirmRes.success,
-      });
-      if (confirmRes.success) {
-        await db.execute(sql`
-          UPDATE shopify_orders
-          SET wa_notification_sent = TRUE,
-              wa_last_message = ${"Order confirmation sent"},
-              updated_at = NOW()
-          WHERE id = ${input.shopifyOrderDbId}
-        `).catch(() => {});
+      if (claim.allowed) {
+        const confirmRes = await sendPremiumOrderConfirmed(waCtx);
+        await markOrderConfirmationSendResult({
+          shopifyOrderId: input.shopifyOrderId,
+          success: confirmRes.success,
+          messageId: confirmRes.messageId ?? null,
+          error: confirmRes.error ?? null,
+        });
+        await logOrderAutomation({
+          shopifyOrderDbId: input.shopifyOrderDbId,
+          shopifyOrderId: input.shopifyOrderId,
+          orderNumber: input.orderNumber,
+          eventType: "order_confirmed_wa",
+          status: confirmRes.success ? "success" : "failed",
+          message: confirmRes.success ? "Premium order confirmed sent" : confirmRes.error,
+          errorMessage: confirmRes.error,
+          waMessageId: confirmRes.messageId ?? null,
+          scheduleRetry: !confirmRes.success,
+        });
+        if (confirmRes.success) {
+          await db.execute(sql`
+            UPDATE shopify_orders
+            SET wa_notification_sent = TRUE,
+                wa_last_message = ${"Order confirmation sent"},
+                updated_at = NOW()
+            WHERE id = ${input.shopifyOrderDbId}
+          `).catch(() => {});
+        }
+      } else {
+        await logOrderAutomation({
+          shopifyOrderDbId: input.shopifyOrderDbId,
+          shopifyOrderId: input.shopifyOrderId,
+          orderNumber: input.orderNumber,
+          eventType: "order_confirmed_wa",
+          status: "skipped",
+          message: claim.reason ?? "Duplicate order confirmation skipped",
+          scheduleRetry: false,
+        });
       }
     } else {
       await logOrderAutomation({
@@ -200,17 +223,34 @@ export async function runShopifyOrderAutomation(
     return { routed: "skipped", message: "No customer phone — skipping WA confirmation" };
   }
 
+  const claim = await claimOrderConfirmationSend({
+    shopifyOrderId: input.shopifyOrderId,
+    orderNumber: input.orderNumber,
+    shopifyOrderDbId: input.shopifyOrderDbId,
+    phone,
+    customerName: input.customerName ?? "Customer",
+  });
+  if (!claim.allowed) {
+    await logOrderAutomation({
+      shopifyOrderDbId: input.shopifyOrderDbId,
+      shopifyOrderId: input.shopifyOrderId,
+      orderNumber: input.orderNumber,
+      eventType: "order_confirmed_wa",
+      status: "skipped",
+      message: claim.reason ?? "Duplicate order confirmation skipped",
+      scheduleRetry: false,
+    });
+    return { routed: "wa_confirmation", message: claim.reason ?? "WA confirmation already sent" };
+  }
+
   const premium = await sendPremiumOrderConfirmed(waCtx);
   let success = premium.success;
   let errMsg = premium.error;
 
   if (success) {
-    await upsertOrderConfirmationRecord({
+    await markOrderConfirmationSendResult({
       shopifyOrderId: input.shopifyOrderId,
-      orderNumber: input.orderNumber,
-      shopifyOrderDbId: input.shopifyOrderDbId,
-      phone,
-      customerName: input.customerName ?? "Customer",
+      success: true,
       messageId: premium.messageId ?? null,
     });
   }
@@ -231,6 +271,14 @@ export async function runShopifyOrderAutomation(
     errMsg = legacy.error;
   }
 
+  if (!success) {
+    await markOrderConfirmationSendResult({
+      shopifyOrderId: input.shopifyOrderId,
+      success: false,
+      error: errMsg ?? "WA confirmation failed",
+    });
+  }
+
   await logOrderAutomation({
     shopifyOrderDbId: input.shopifyOrderDbId,
     shopifyOrderId: input.shopifyOrderId,
@@ -239,6 +287,7 @@ export async function runShopifyOrderAutomation(
     status: success ? "success" : "failed",
     message: success ? "Order confirmation sent" : errMsg,
     errorMessage: errMsg,
+    waMessageId: premium.messageId ?? null,
     scheduleRetry: !success,
   });
 
@@ -290,11 +339,22 @@ export async function retryAutomationLog(logId: number): Promise<{ ok: boolean; 
   }
 
   if (eventType === "order_confirmed_wa") {
+    if (await hasOrderConfirmationBeenSent(String(order.shopify_order_id), Number(order.id))) {
+      return { ok: true, message: "Skipped duplicate: order confirmation already sent" };
+    }
     const phone = resolveCustomerPhone(
       order.customer_phone as string,
       order.shipping_address,
     );
     if (!phone) return { ok: false, message: "No phone" };
+    const claim = await claimOrderConfirmationSend({
+      shopifyOrderId: String(order.shopify_order_id),
+      orderNumber: String(order.order_number),
+      shopifyOrderDbId: Number(order.id),
+      phone,
+      customerName: String(order.customer_name ?? "Customer"),
+    });
+    if (!claim.allowed) return { ok: true, message: claim.reason ?? "Skipped duplicate confirmation" };
     const res = await sendPremiumOrderConfirmed({
       orderNumber: String(order.order_number),
       customerName: String(order.customer_name ?? "Customer"),
@@ -306,6 +366,12 @@ export async function retryAutomationLog(logId: number): Promise<{ ok: boolean; 
       isPaid: order.financial_status === "paid",
       shopifyOrderId: String(order.shopify_order_id),
       shopifyOrderDbId: Number(order.id),
+    });
+    await markOrderConfirmationSendResult({
+      shopifyOrderId: String(order.shopify_order_id),
+      success: res.success,
+      messageId: res.messageId ?? null,
+      error: res.error ?? null,
     });
     return { ok: res.success, message: res.error ?? "Sent" };
   }

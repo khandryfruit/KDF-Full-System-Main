@@ -270,6 +270,124 @@ export async function upsertOrderConfirmationRecord(params: {
   `).catch(() => {});
 }
 
+export async function hasOrderConfirmationBeenSent(shopifyOrderId: string, shopifyOrderDbId?: number | null): Promise<boolean> {
+  const rows = await db.execute(sql`
+    SELECT 1
+    FROM shopify_order_confirmations c
+    WHERE c.shopify_order_id = ${shopifyOrderId}
+      AND c.last_sent_at IS NOT NULL
+      AND c.status IN ('pending', 'confirmed', 'booked', 'cancelled')
+    LIMIT 1
+  `).catch(() => ({ rows: [] }));
+  if ((rows.rows ?? []).length > 0) return true;
+
+  const sentLog = await db.execute(sql`
+    SELECT 1
+    FROM whatsapp_logs
+    WHERE status = 'sent'
+      AND shopify_order_id = ${shopifyOrderId}
+      AND (
+        trigger_event IN ('order_confirmation', 'order_confirmed', 'order_confirmed_wa', 'order_confirm')
+        OR template_name IN ('order_confirmation', 'order_confirmed', 'order_confirmed_wa', 'order_confirm', 'order_confromd_')
+      )
+    LIMIT 1
+  `).catch(() => ({ rows: [] }));
+  if ((sentLog.rows ?? []).length > 0) return true;
+
+  if (shopifyOrderDbId) {
+    const orderFlag = await db.execute(sql`
+      SELECT 1 FROM shopify_orders
+      WHERE id = ${shopifyOrderDbId}
+        AND COALESCE(wa_notification_sent, FALSE) = TRUE
+      LIMIT 1
+    `).catch(() => ({ rows: [] }));
+    if ((orderFlag.rows ?? []).length > 0) return true;
+  }
+  return false;
+}
+
+export async function claimOrderConfirmationSend(params: {
+  shopifyOrderId: string;
+  orderNumber: string;
+  shopifyOrderDbId?: number | null;
+  phone: string;
+  customerName: string;
+}): Promise<{ allowed: boolean; reason?: string }> {
+  if (await hasOrderConfirmationBeenSent(params.shopifyOrderId, params.shopifyOrderDbId)) {
+    return { allowed: false, reason: "Order confirmation already sent for this Shopify order" };
+  }
+
+  const normalizedPhone = normalizePhone(params.phone);
+  const inserted = await db.execute(sql`
+    INSERT INTO shopify_order_confirmations
+      (shopify_order_id, shopify_order_number, shopify_order_db_id, customer_phone, customer_name,
+       status, auto_book_enabled, updated_at)
+    VALUES
+      (${params.shopifyOrderId}, ${params.orderNumber}, ${params.shopifyOrderDbId ?? null}, ${normalizedPhone},
+       ${params.customerName}, 'sending', TRUE, NOW())
+    ON CONFLICT (shopify_order_id) DO NOTHING
+    RETURNING id
+  `).catch(() => ({ rows: [] }));
+
+  if ((inserted.rows ?? []).length > 0) return { allowed: true };
+
+  const existing = await db.execute(sql`
+    SELECT status, last_sent_at, wa_message_id, updated_at
+    FROM shopify_order_confirmations
+    WHERE shopify_order_id = ${params.shopifyOrderId}
+    LIMIT 1
+  `).catch(() => ({ rows: [] }));
+  const row = (existing.rows ?? [])[0] as any;
+  if (!row) return { allowed: false, reason: "Confirmation lock could not be created" };
+  if (row.last_sent_at || row.wa_message_id || ["pending", "confirmed", "booked", "cancelled"].includes(String(row.status))) {
+    return { allowed: false, reason: "Order confirmation already sent or waiting for customer reply" };
+  }
+  if (String(row.status) === "sending") {
+    const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : Date.now();
+    if (Date.now() - updatedAt > 10 * 60 * 1000) {
+      await db.execute(sql`
+        UPDATE shopify_order_confirmations
+        SET status = 'sending',
+            customer_phone = ${normalizedPhone},
+            customer_name = ${params.customerName},
+            updated_at = NOW()
+        WHERE shopify_order_id = ${params.shopifyOrderId}
+      `).catch(() => {});
+      return { allowed: true };
+    }
+    return { allowed: false, reason: "Order confirmation send already in progress" };
+  }
+  await db.execute(sql`
+    UPDATE shopify_order_confirmations
+    SET status = 'sending',
+        customer_phone = ${normalizedPhone},
+        customer_name = ${params.customerName},
+        shopify_order_db_id = COALESCE(shopify_order_db_id, ${params.shopifyOrderDbId ?? null}),
+        updated_at = NOW()
+    WHERE shopify_order_id = ${params.shopifyOrderId}
+      AND status = 'failed'
+  `).catch(() => {});
+  return { allowed: true };
+}
+
+export async function markOrderConfirmationSendResult(params: {
+  shopifyOrderId: string;
+  success: boolean;
+  messageId?: string | null;
+  error?: string | null;
+}) {
+  await db.execute(sql`
+    UPDATE shopify_order_confirmations
+    SET status = ${params.success ? "pending" : "failed"},
+        wa_message_id = COALESCE(${params.messageId ?? null}, wa_message_id),
+        last_sent_at = CASE WHEN ${params.success} THEN NOW() ELSE last_sent_at END,
+        confirmation_reply = CASE WHEN ${params.success} THEN confirmation_reply ELSE ${params.error ?? "send_failed"} END,
+        retry_count = CASE WHEN ${params.success} THEN retry_count ELSE retry_count + 1 END,
+        updated_at = NOW()
+    WHERE shopify_order_id = ${params.shopifyOrderId}
+  `).catch(() => {});
+}
+
 export async function sendOrderConfirmationWA(params: {
   phone: string;
   orderNumber: string;
@@ -357,13 +475,11 @@ export async function sendOrderConfirmationWA(params: {
     }
 
     /* Store pending confirmation record */
-    await upsertOrderConfirmationRecord({
+    await markOrderConfirmationSendResult({
       shopifyOrderId,
-      orderNumber,
-      shopifyOrderDbId,
-      phone: normalizedPhone,
-      customerName,
+      success,
       messageId,
+      error: success ? null : "WhatsApp send failed",
     });
 
     return { success, messageId, error: success ? undefined : "WhatsApp send failed" };
@@ -680,7 +796,8 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
       UPDATE shopify_order_confirmations
       SET status = 'confirmed', confirmation_reply = ${method},
           confirmation_received_at = NOW(), updated_at = NOW()
-      WHERE shopify_order_id = ${shopifyOrderId} AND customer_phone = ${phone}
+      WHERE shopify_order_id = ${shopifyOrderId}
+        AND (customer_phone = ${phone} OR ${method} = 'button_click')
     `).catch(() => {});
 
     /* Also update local shopify_orders status → confirmed */
@@ -697,12 +814,17 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
     const order = ((orderRes.rows ?? [])[0]) as Record<string, any> | undefined;
 
     if (!order) {
-      await sendWhatsAppMessage({ phone, message: "✅ Order confirmed! We're processing your shipment. You'll receive tracking details shortly. Thank you! 🥜", templateName: "ondrive_confirm_ack" });
+      await sendWhatsAppMessage({ phone, message: "Thank you 😊\n\n✅ Your order has been confirmed successfully.\n\nOur team is preparing your order now. You will receive packing and delivery updates soon 📦\n\n*Khan Dry Fruits*", templateName: "ondrive_confirm_ack" });
       return { handled: true, action: "confirmed", orderId: shopifyOrderId };
     }
 
     /* Send acknowledgement first */
-    await sendWhatsAppMessage({ phone, message: `✅ *Order ${order.order_number} Confirmed!*\n\n🎉 Great! We're booking your shipment right now.\n⏱️ You'll receive your tracking number in a few seconds.\n\nThank you for choosing *Khan Dry Fruits* 🥜`, templateName: "ondrive_confirm_ack" });
+    await sendWhatsAppMessage({
+      phone,
+      message: `Thank you 😊\n\n✅ Your order *${order.order_number}* has been confirmed successfully.\n\nOur team is preparing your order now. You will receive packing and delivery updates soon 📦\n\n*Khan Dry Fruits*`,
+      templateName: "ondrive_confirm_ack",
+      shopifyOrderId,
+    });
 
     /* Check auto-book enabled */
     const confRes = await db.execute(sql`SELECT auto_book_enabled FROM shopify_order_confirmations WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));
