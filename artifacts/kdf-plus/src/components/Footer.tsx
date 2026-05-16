@@ -315,38 +315,38 @@ function ScrollToTop() {
 function MoodCollectionSlider() {
   const items = [...MOOD_COLLECTIONS, ...MOOD_COLLECTIONS];
   return (
-    <div className="mb-8 overflow-hidden rounded-[1.4rem] border border-white/[0.08] bg-white/[0.035] px-3 py-4 shadow-[0_22px_80px_-46px_rgba(95,168,0,0.55)] backdrop-blur-xl ring-1 ring-white/[0.04] sm:px-4">
-      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-5 overflow-hidden rounded-[1rem] border border-white/[0.07] bg-white/[0.028] px-2.5 py-3 shadow-[0_14px_46px_-34px_rgba(95,168,0,0.48)] backdrop-blur-md ring-1 ring-white/[0.035] sm:mb-8 sm:rounded-[1.4rem] sm:px-4 sm:py-4 sm:backdrop-blur-xl">
+      <div className="mb-2.5 flex flex-col gap-1 sm:mb-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-orange-100">
+          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-400/20 bg-orange-400/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-orange-100 sm:gap-2 sm:px-3 sm:py-1 sm:text-[10px]">
             <Sparkles className="h-3 w-3 text-orange-300" aria-hidden /> Most popular collections
           </p>
-          <h3 className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">Shop by Mood</h3>
-          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Explore premium categories curated for every lifestyle</p>
+          <h3 className="mt-1.5 text-lg font-black tracking-tight text-white sm:mt-2 sm:text-2xl">Shop by Mood</h3>
+          <p className="mt-0.5 max-w-[18rem] text-[11px] leading-snug text-slate-500 sm:mt-1 sm:max-w-none sm:text-sm">Premium categories curated for every lifestyle</p>
         </div>
         <Link href="/categories" className="hidden items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#9fe870] transition-colors hover:text-white sm:inline-flex">
           Explore collections <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#08111b] to-transparent" aria-hidden />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#08111b] to-transparent" aria-hidden />
-        <div className="kdf-mood-track flex w-max gap-3 overflow-visible py-1">
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-[#08111b] to-transparent sm:w-10" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-[#08111b] to-transparent sm:w-10" aria-hidden />
+        <div className="kdf-mood-track flex w-max gap-2 overflow-visible py-0.5 sm:gap-3 sm:py-1">
           {items.map((item, index) => (
             <Link
               key={`${item.title}-${index}`}
               href={item.href}
-              className="group flex min-w-[180px] max-w-[220px] items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.055] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#5FA800]/35 hover:bg-white/[0.085] hover:shadow-[0_18px_45px_-26px_rgba(95,168,0,0.75)] motion-reduce:transition-none"
+              className="group flex min-w-[132px] max-w-[150px] items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.045] px-2.5 py-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] backdrop-blur-sm transition-all duration-200 active:scale-[0.98] hover:border-[#5FA800]/30 hover:bg-white/[0.075] sm:min-w-[180px] sm:max-w-[220px] sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md sm:hover:-translate-y-1 sm:hover:scale-[1.03] sm:hover:shadow-[0_18px_45px_-26px_rgba(95,168,0,0.75)] motion-reduce:transition-none"
               aria-label={`Shop ${item.title}`}
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.08] text-xl ring-1 ring-white/[0.08] transition-transform group-hover:scale-105">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-base ring-1 ring-white/[0.07] transition-transform group-hover:scale-105 sm:h-11 sm:w-11 sm:rounded-xl sm:text-xl">
                 {item.emoji}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-black text-white">{item.title}</span>
-                <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-500">{item.desc}</span>
+                <span className="block truncate text-xs font-black text-white sm:text-sm">{item.title}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500 sm:text-[11px]">{item.desc}</span>
               </span>
-              <ArrowRight className="h-4 w-4 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800] sm:h-4 sm:w-4" />
             </Link>
           ))}
         </div>
@@ -413,7 +413,7 @@ function NewsletterBand({
     <section
       ref={bandRef}
       onMouseMove={onMove}
-      className="kdf-nl-band relative isolate mt-16 overflow-hidden border-y border-white/[0.06]"
+      className="kdf-nl-band relative isolate mt-8 overflow-hidden border-y border-white/[0.06] sm:mt-16"
       style={{
         background: `linear-gradient(135deg, ${VOID} 0%, ${DEEP} 45%, #0a1628 100%)`,
         ["--fx" as string]: "0.5",
@@ -444,7 +444,7 @@ function NewsletterBand({
         }}
       />
       {!reduced && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 hidden overflow-hidden sm:block">
           {["🥜", "🌰", "🍇", "🌴", "✨", "🍯", "🫐", "🥭"].map((emoji, i) => (
             <span
               key={i}
@@ -462,33 +462,33 @@ function NewsletterBand({
         </div>
       )}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-7xl px-3 py-7 sm:px-6 sm:py-14 lg:px-8">
         <MoodCollectionSlider />
-        <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+        <div className="grid gap-6 sm:gap-10 lg:grid-cols-12 lg:items-center">
           <div className="lg:col-span-6">
-            <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">
+            <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300 sm:gap-2 sm:px-3 sm:py-1 sm:text-[10px]">
               <Sparkles className="h-3 w-3" style={{ color: ORANGE }} aria-hidden />
               KDF newsletter
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200/90">
+            <div className="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
+              <span className="kdf-badge-pill inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-200/90 sm:gap-1.5 sm:px-2.5 sm:text-[10px]">
                 <Leaf className="h-3 w-3" aria-hidden /> Seasonal offers
               </span>
-              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100/90">
+              <span className="kdf-badge-pill inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100/90 sm:gap-1.5 sm:px-2.5 sm:text-[10px]">
                 <Gift className="h-3 w-3" aria-hidden /> Gift packs
               </span>
-              <span className="kdf-badge-pill inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-200/90">
+              <span className="kdf-badge-pill inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-200/90 sm:gap-1.5 sm:px-2.5 sm:text-[10px]">
                 <BadgeCheck className="h-3 w-3 text-sky-300" aria-hidden /> Premium quality
               </span>
             </div>
-            <h2 className="mt-4 text-balance text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
+            <h2 className="mt-3 text-balance text-xl font-black tracking-tight text-white sm:mt-4 sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
               {headline}
             </h2>
-            <p className="mt-3 max-w-lg text-pretty text-sm leading-relaxed text-slate-400 sm:text-base">{sub}</p>
+            <p className="mt-2 max-w-lg text-pretty text-xs leading-relaxed text-slate-400 sm:mt-3 sm:text-base">{sub}</p>
 
-            <div className="mt-5 min-h-[1.5rem] text-sm font-medium text-slate-200/90">
+            <div className="mt-3 min-h-[1.25rem] text-xs font-medium text-slate-200/90 sm:mt-5 sm:min-h-[1.5rem] sm:text-sm">
               <span className="inline-flex items-center gap-2 text-[#7fe045]">
-                <Zap className="h-4 w-4 shrink-0 motion-reduce:animate-none kdf-pulse-glow" aria-hidden />
+                <Zap className="h-3.5 w-3.5 shrink-0 motion-reduce:animate-none kdf-pulse-glow sm:h-4 sm:w-4" aria-hidden />
                 <span key={lineIdx} className="motion-reduce:animate-none kdf-fade-up">
                   {rotating[lineIdx % rotating.length]}
                 </span>
@@ -496,9 +496,9 @@ function NewsletterBand({
             </div>
 
             {premium.aiTipsEnabled !== false && (
-              <div className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 backdrop-blur-md">
+              <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 backdrop-blur-sm sm:mt-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Healthy tip</p>
-                <p key={tipIdx} className="mt-1 text-xs leading-relaxed text-slate-300 motion-reduce:animate-none kdf-fade-up">
+                <p key={tipIdx} className="mt-1 text-[11px] leading-relaxed text-slate-300 motion-reduce:animate-none kdf-fade-up sm:text-xs">
                   {tips[tipIdx % tips.length]}
                 </p>
               </div>
@@ -518,26 +518,26 @@ function NewsletterBand({
               </div>
             ) : (
               <form onSubmit={onSubmit} className="space-y-3">
-                <div className="kdf-nl-form-shell group relative rounded-2xl border border-white/[0.14] bg-gradient-to-br from-white/[0.09] to-white/[0.03] p-[1px] shadow-[0_0_0_1px_rgba(95,168,0,0.12),0_24px_80px_-40px_rgba(245,131,0,0.35)] backdrop-blur-xl ring-1 ring-white/[0.06] transition-[box-shadow,transform] duration-500 ease-out hover:shadow-[0_0_0_1px_rgba(95,168,0,0.28),0_28px_90px_-36px_rgba(95,168,0,0.45)] motion-reduce:transition-none">
+                <div className="kdf-nl-form-shell group relative rounded-xl border border-white/[0.12] bg-gradient-to-br from-white/[0.08] to-white/[0.025] p-[1px] shadow-[0_12px_42px_-30px_rgba(245,131,0,0.38)] backdrop-blur-md ring-1 ring-white/[0.05] transition-[box-shadow,transform] duration-500 ease-out hover:shadow-[0_0_0_1px_rgba(95,168,0,0.28),0_28px_90px_-36px_rgba(95,168,0,0.45)] sm:rounded-2xl sm:shadow-[0_0_0_1px_rgba(95,168,0,0.12),0_24px_80px_-40px_rgba(245,131,0,0.35)] sm:backdrop-blur-xl motion-reduce:transition-none">
                   <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100 motion-reduce:opacity-0 kdf-nl-shimmer" aria-hidden />
                   <div className="relative rounded-[15px] bg-[#060d18]/85 p-1 ring-1 ring-white/[0.04] backdrop-blur-xl focus-within:ring-[#5FA800]/40">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                     <div className="relative flex-1">
-                      <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 sm:left-4 sm:h-4 sm:w-4" />
                       <input
                         type="email"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         placeholder="you@email.com"
                         required
-                        className="w-full rounded-xl border border-transparent bg-[#0b1220]/80 py-3.5 pl-11 pr-4 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#5FA800]/40"
+                        className="w-full rounded-xl border border-transparent bg-[#0b1220]/80 py-3 pl-10 pr-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#5FA800]/40 sm:py-3.5 sm:pl-11 sm:pr-4"
                         autoComplete="email"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={subState === "loading"}
-                      className="group relative flex shrink-0 items-center justify-center gap-2 overflow-hidden rounded-xl px-7 py-3.5 text-sm font-black text-white shadow-[0_12px_40px_rgba(245,131,0,0.25)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 sm:min-w-[160px] motion-reduce:transition-none"
+                      className="group relative flex shrink-0 items-center justify-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-black text-white shadow-[0_10px_28px_rgba(245,131,0,0.22)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 sm:min-w-[160px] sm:px-7 sm:py-3.5 motion-reduce:transition-none"
                       style={{ background: `linear-gradient(135deg, ${ORANGE}, #c45f00)` }}
                     >
                       <span className="pointer-events-none absolute inset-0 translate-x-[-100%] bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-[100%] motion-reduce:hidden" />
@@ -716,20 +716,20 @@ export function Footer() {
       <footer className="relative border-t border-white/[0.06] bg-[#020617] text-slate-300" style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}>
         {premium.showTrustStrip !== false && (
         <div className="border-b border-white/[0.05] bg-[#030b14]">
-          <div className="mx-auto flex max-w-7xl gap-3 overflow-x-auto px-4 py-5 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none">
+          <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-3 py-3.5 sm:gap-3 sm:px-6 sm:py-5 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory md:snap-none">
             {mergeTrustBadges(premium).map(({ icon: Icon, label, sub }, i) => (
               <div
                 key={label}
-                className="kdf-trust-card group flex min-w-[210px] shrink-0 snap-start items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3.5 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/25 hover:shadow-[0_16px_48px_-28px_rgba(95,168,0,0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                className="kdf-trust-card group flex min-w-[168px] shrink-0 snap-start items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 backdrop-blur-sm transition-transform duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/25 hover:shadow-[0_16px_48px_-28px_rgba(95,168,0,0.4)] sm:min-w-[210px] sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3.5 sm:backdrop-blur-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 style={{ animationDelay: `${i * 70}ms` }}
               >
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-[#5FA800]/30 transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none" style={{ background: `${GREEN}22` }}>
+                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-[#5FA800]/25 transition-transform duration-300 group-hover:scale-105 sm:h-11 sm:w-11 sm:rounded-xl motion-reduce:transition-none" style={{ background: `${GREEN}1c` }}>
                   <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 blur-md transition-opacity group-hover:opacity-70 motion-reduce:opacity-0" style={{ background: `radial-gradient(circle, ${GREEN} 0%, transparent 70%)` }} aria-hidden />
-                  <Icon className="relative h-4 w-4" style={{ color: GREEN }} />
+                  <Icon className="relative h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: GREEN }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">{label}</p>
-                  <p className="text-[10px] text-slate-500">{sub}</p>
+                  <p className="truncate text-[11px] font-bold text-white sm:text-xs">{label}</p>
+                  <p className="truncate text-[9px] text-slate-500 sm:text-[10px]">{sub}</p>
                 </div>
               </div>
             ))}
@@ -737,47 +737,47 @@ export function Footer() {
         </div>
         )}
 
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-3 py-8 sm:px-6 sm:py-16 lg:px-8">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden />
           {/* Brand + columns */}
-          <div className="grid gap-14 lg:grid-cols-12">
+          <div className="grid gap-7 sm:gap-14 lg:grid-cols-12">
             <div className="lg:col-span-3">
               <div className="flex items-center gap-3">
                 {logoUrl ? (
-                  <img src={logoUrl} alt={siteName} className="h-11 w-auto max-w-[140px] object-contain brightness-110" loading="lazy" />
+                  <img src={logoUrl} alt={siteName} className="h-9 w-auto max-w-[120px] object-contain brightness-110 sm:h-11 sm:max-w-[140px]" loading="lazy" />
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl font-black text-white shadow-lg ring-1 ring-white/10" style={{ background: `linear-gradient(145deg, ${GREEN}, #2d5a00)` }}>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl font-black text-white shadow-lg ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl" style={{ background: `linear-gradient(145deg, ${GREEN}, #2d5a00)` }}>
                     K
                   </div>
                 )}
                 <div>
-                  <span className="text-lg font-black tracking-tight text-white">{siteName}</span>
+                  <span className="text-base font-black tracking-tight text-white sm:text-lg">{siteName}</span>
                   <p className="kdf-tagline text-xs font-medium text-slate-500">{tagline}</p>
                 </div>
               </div>
-              <p className="mt-5 max-w-md text-sm leading-relaxed text-slate-400">{description}</p>
+              <p className="mt-3 max-w-md text-xs leading-relaxed text-slate-400 sm:mt-5 sm:text-sm">{description}</p>
 
-              <ul className="mt-6 space-y-3">
-                <li className="flex gap-3 text-sm">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06]">
+              <ul className="mt-4 space-y-2 sm:mt-6 sm:space-y-3">
+                <li className="flex gap-2.5 text-xs sm:gap-3 sm:text-sm">
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06] sm:h-8 sm:w-8">
                     <MapPin className="h-3.5 w-3.5" style={{ color: GREEN }} />
                   </span>
                   <span className="leading-snug text-slate-400">{address}</span>
                 </li>
-                <li className="flex items-center gap-3 text-sm">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06]">
+                <li className="flex items-center gap-2.5 text-xs sm:gap-3 sm:text-sm">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06] sm:h-8 sm:w-8">
                     <Phone className="h-3.5 w-3.5" style={{ color: GREEN }} />
                   </span>
                   <a href={`tel:${phone.replace(/\s/g, "")}`} className="text-slate-400 transition-colors hover:text-white">{phone}</a>
                 </li>
-                <li className="flex items-center gap-3 text-sm">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06]">
+                <li className="flex items-center gap-2.5 text-xs sm:gap-3 sm:text-sm">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06] sm:h-8 sm:w-8">
                     <Mail className="h-3.5 w-3.5" style={{ color: GREEN }} />
                   </span>
                   <a href={`mailto:${emailAddr}`} className="text-slate-400 transition-colors hover:text-white">{emailAddr}</a>
                 </li>
-                <li className="flex gap-3 text-sm text-slate-500">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06]">
+                <li className="flex gap-2.5 text-xs text-slate-500 sm:gap-3 sm:text-sm">
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.06] sm:h-8 sm:w-8">
                     <Clock className="h-3.5 w-3.5" style={{ color: GREEN }} />
                   </span>
                   <span className="leading-snug">Live care Mon–Sat 9–8 · Sun 11–6</span>
@@ -788,25 +788,25 @@ export function Footer() {
                 href={`https://wa.me/${phone.replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#25D366]/40 bg-[#25D366]/10 px-5 py-2.5 text-sm font-bold text-white shadow-[0_0_24px_-8px_rgba(37,211,102,0.5)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] motion-reduce:transition-none"
+                className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#25D366]/40 bg-[#25D366]/10 px-4 py-2 text-xs font-bold text-white shadow-[0_0_18px_-10px_rgba(37,211,102,0.5)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] sm:mt-6 sm:px-5 sm:py-2.5 sm:text-sm sm:shadow-[0_0_24px_-8px_rgba(37,211,102,0.5)] motion-reduce:transition-none"
               >
                 <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
                 WhatsApp us
               </a>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <a href={`tel:${phone.replace(/\s/g, "")}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4">
+                <a href={`tel:${phone.replace(/\s/g, "")}`} className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white sm:rounded-xl">
                   <Phone className="h-3.5 w-3.5" /> Call
                 </a>
-                <a href={`mailto:${emailAddr}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white">
+                <a href={`mailto:${emailAddr}`} className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white sm:rounded-xl">
                   <Mail className="h-3.5 w-3.5" /> Email
                 </a>
-                <Link href="/track" className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border border-[#5FA800]/25 bg-[#5FA800]/10 px-3 py-2 text-xs font-bold text-[#c8f090] transition-colors hover:bg-[#5FA800]/16">
+                <Link href="/track" className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-[#5FA800]/25 bg-[#5FA800]/10 px-3 py-2 text-xs font-bold text-[#c8f090] transition-colors hover:bg-[#5FA800]/16 sm:rounded-xl">
                   <Package className="h-3.5 w-3.5" /> Track order
                 </Link>
               </div>
 
-              <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Social</p>
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 sm:mt-6">Social</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {socialLinks.length > 0 ? (
                   socialLinks.map((s) => {
@@ -869,17 +869,17 @@ export function Footer() {
             </div>
 
             {/* Mobile accordions */}
-            <Accordion type="multiple" className="space-y-2 lg:col-span-5 lg:hidden">
+            <Accordion type="multiple" className="space-y-1.5 lg:col-span-5 lg:hidden">
               {menus.map(menu => (
                 <AccordionItem
                   key={menu.id}
                   value={`footer-menu-${menu.id}`}
-                  className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] border-b-0 data-[state=open]:bg-white/[0.05]"
+                  className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.018] border-b-0 data-[state=open]:bg-white/[0.045]"
                 >
-                  <AccordionTrigger className="px-4 py-3.5 text-sm font-bold text-white hover:no-underline [&>svg]:text-slate-500">
+                  <AccordionTrigger className="px-3.5 py-2.5 text-sm font-bold text-white hover:no-underline [&>svg]:text-slate-500">
                     {menu.title}
                   </AccordionTrigger>
-                  <AccordionContent className="border-t border-white/[0.06] px-2 pb-2">
+                  <AccordionContent className="border-t border-white/[0.06] px-2 pb-1.5">
                     <ul className="space-y-0.5 pt-1">
                       {(menu.items ?? []).map(item => (
                         <FooterLinkItem key={item.label + item.linkValue} {...item} />
@@ -890,24 +890,24 @@ export function Footer() {
               ))}
             </Accordion>
 
-            <div className="space-y-8 lg:col-span-4">
-              <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 shadow-[0_24px_80px_-48px_rgba(95,168,0,0.55)] backdrop-blur-xl ring-1 ring-[#5FA800]/10">
-                <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            <div className="space-y-5 sm:space-y-8 lg:col-span-4">
+              <div className="rounded-xl border border-white/[0.07] bg-gradient-to-br from-white/[0.045] to-white/[0.015] p-3 shadow-[0_16px_48px_-36px_rgba(95,168,0,0.5)] backdrop-blur-md ring-1 ring-[#5FA800]/10 sm:rounded-2xl sm:p-4 sm:shadow-[0_24px_80px_-48px_rgba(95,168,0,0.55)] sm:backdrop-blur-xl">
+                <h3 className="mb-2.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:mb-3 sm:text-[11px] sm:tracking-[0.18em]">
                   <ShoppingBag className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
                   Product shortcuts
                 </h3>
-                <ul className="grid grid-cols-2 gap-1.5">
+                <ul className="grid grid-cols-2 gap-1">
                   {PRODUCT_SHORTCUTS.map((row) => (
                     <li key={row.label + row.href}>
                       <Link
                         href={row.href}
-                        className="group flex items-center justify-between gap-2 rounded-xl border border-transparent px-2.5 py-2 text-sm text-slate-300 transition-all hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
+                        className="group flex items-center justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-xs text-slate-300 transition-all hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white sm:rounded-xl sm:px-2.5 sm:py-2 sm:text-sm"
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-300/90 opacity-80 group-hover:opacity-100" aria-hidden />
+                          <Leaf className="h-3 w-3 shrink-0 text-emerald-300/90 opacity-80 group-hover:opacity-100 sm:h-3.5 sm:w-3.5" aria-hidden />
                           <span className="truncate">{row.label}</span>
                         </span>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+                        <ArrowRight className="h-3 w-3 shrink-0 text-slate-600 transition-transform group-hover:translate-x-0.5 group-hover:text-[#5FA800] sm:h-3.5 sm:w-3.5" />
                       </Link>
                     </li>
                   ))}
@@ -916,7 +916,7 @@ export function Footer() {
 
               {showBlogCol && (
                 <div>
-                  <div className="mb-4 flex items-center justify-between gap-2">
+                  <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
                       {customerFooterText(premium.footerBlogTitle, "KDF Journal")}
                     </h3>
@@ -925,7 +925,7 @@ export function Footer() {
                       <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                     </Link>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-1">
                     {blogPosts.slice(0, blogLimit).map(post => (
                       <BlogCardLux key={String(post.id)} post={post} showAiTag={false} />
                     ))}
@@ -953,10 +953,10 @@ export function Footer() {
               )}
 
               {!qrError && (
-                <div className="rounded-2xl border border-[#25D366]/20 bg-gradient-to-br from-[#25D366]/10 to-transparent p-4">
+                <div className="rounded-xl border border-[#25D366]/20 bg-gradient-to-br from-[#25D366]/10 to-transparent p-3 sm:rounded-2xl sm:p-4">
                   <div className="flex gap-4">
-                    <div className={`relative shrink-0 rounded-xl bg-white p-2 shadow-lg ring-1 ring-black/5 ${reduced ? "" : "kdf-qr-pulse"}`}>
-                      <img src={qrSrc} alt="Scan QR" className="h-16 w-16 rounded-lg" loading="lazy" onError={() => setQrError(true)} />
+                    <div className={`relative shrink-0 rounded-lg bg-white p-1.5 shadow-lg ring-1 ring-black/5 sm:rounded-xl sm:p-2 ${reduced ? "" : "kdf-qr-pulse"}`}>
+                      <img src={qrSrc} alt="Scan QR" className="h-12 w-12 rounded-md sm:h-16 sm:w-16 sm:rounded-lg" loading="lazy" onError={() => setQrError(true)} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-white">Instant WhatsApp</p>
@@ -970,7 +970,7 @@ export function Footer() {
               )}
 
               {showAppDock && (
-                <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-gradient-to-br from-[#0a1424]/95 via-[#060d18]/90 to-[#030910]/95 p-4 shadow-[0_28px_100px_-40px_rgba(245,131,0,0.25)] backdrop-blur-2xl ring-1 ring-white/[0.06]">
+                <div className="relative overflow-hidden rounded-xl border border-white/[0.09] bg-gradient-to-br from-[#0a1424]/95 via-[#060d18]/90 to-[#030910]/95 p-3 shadow-[0_18px_56px_-38px_rgba(245,131,0,0.25)] backdrop-blur-xl ring-1 ring-white/[0.06] sm:rounded-2xl sm:p-4 sm:shadow-[0_28px_100px_-40px_rgba(245,131,0,0.25)] sm:backdrop-blur-2xl">
                   <div className="pointer-events-none absolute -right-8 -top-12 h-40 w-40 rounded-full bg-[#5FA800]/15 blur-3xl motion-reduce:opacity-40" aria-hidden />
                   <div className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-orange-500/10 blur-3xl motion-reduce:opacity-40" aria-hidden />
                   <div className="relative mb-4 flex items-center justify-between gap-2">
@@ -1234,6 +1234,25 @@ export function Footer() {
         }
         .kdf-mood-track:hover {
           animation-play-state: paused;
+        }
+        @media (max-width: 639px) {
+          .kdf-nl-mesh {
+            opacity: 0.32;
+            background:
+              radial-gradient(ellipse 90% 60% at 15% 20%, rgba(95,168,0,0.12), transparent 50%),
+              linear-gradient(125deg, rgba(15,23,42,0.72), rgba(2,6,23,0.42));
+          }
+          .kdf-nl-orb-a,
+          .kdf-nl-orb-b,
+          .kdf-nl-shimmer,
+          .kdf-badge-pill,
+          .kdf-mood-track {
+            animation: none !important;
+          }
+          .kdf-mood-track {
+            transform: none !important;
+            will-change: auto;
+          }
         }
         @keyframes kdf-ai-tag-glow {
           0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0); }
