@@ -5,6 +5,7 @@ import {
   ChevronLeft, ChevronRight, ArrowRight, Star, Truck, ShieldCheck,
   RefreshCw, Headphones, Flame, Sparkles, TrendingUp, Tag,
   Volume2, VolumeX, Play, Pause, Smartphone, Zap, Shield,
+  CreditCard, ShoppingBag,
 } from "lucide-react";
 import { useListBanners, useListCategories, useListProducts } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 import { asArrayFromApi } from "@/lib/asArrayFromApi";
+import { useCart } from "@/context/CartContext";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Banner = import("@workspace/api-client-react").Banner;
@@ -33,10 +35,11 @@ const PROMO_ANNOUNCEMENTS = [
 ];
 
 const TRUST_BADGES = [
-  { icon: Truck,         title: "Free Delivery",      desc: "On orders Rs. 1,500+" },
-  { icon: ShieldCheck,   title: "100% Authentic",     desc: "Directly from source" },
-  { icon: RefreshCw,     title: "Easy Returns",        desc: "7-day hassle-free" },
-  { icon: Headphones,    title: "24/7 Support",        desc: "WhatsApp & phone" },
+  { icon: Truck,       title: "Fast Delivery",     desc: "Same-day in select cities", color: "#0ea5e9" },
+  { icon: ShieldCheck, title: "100% Authentic",    desc: "Original premium quality",  color: "#16a34a" },
+  { icon: RefreshCw,   title: "Easy Returns",      desc: "Simple support process",    color: "#f97316" },
+  { icon: CreditCard,  title: "Secure Payments",   desc: "Safe checkout options",     color: "#6366f1" },
+  { icon: Star,        title: "Premium Quality",   desc: "Fresh, hygienic packing",   color: "#d97706" },
 ];
 
 
@@ -91,6 +94,42 @@ function CountdownTimer({ endAt }: { endAt: string }) {
           </span>
           {i < 2 && <span className="text-white/60 font-bold text-sm sm:text-lg">:</span>}
         </span>
+      ))}
+    </div>
+  );
+}
+
+function DealCountdownTimer({ endAt }: { endAt: string }) {
+  const calc = () => {
+    const diff = Math.max(0, Math.floor((new Date(endAt).getTime() - Date.now()) / 1000));
+    return {
+      d: Math.floor(diff / 86400),
+      h: Math.floor((diff % 86400) / 3600),
+      m: Math.floor((diff % 3600) / 60),
+      s: diff % 60,
+      done: diff === 0,
+    };
+  };
+  const [t, setT] = useState(calc);
+  useEffect(() => {
+    if (t.done) return;
+    const id = setInterval(() => setT(calc()), 1000);
+    return () => clearInterval(id);
+  }, [endAt, t.done]);
+  if (t.done) return null;
+  const cells = [
+    ["Days", t.d],
+    ["Hours", t.h],
+    ["Min", t.m],
+    ["Sec", t.s],
+  ] as const;
+  return (
+    <div className="flex items-center gap-1.5 sm:gap-2" aria-label="Countdown timer">
+      {cells.map(([label, value]) => (
+        <div key={label} className="min-w-[44px] rounded-xl border border-white/15 bg-white/15 px-2 py-1.5 text-center shadow-inner backdrop-blur-md sm:min-w-[58px] sm:px-3">
+          <div className="font-mono text-base font-black leading-none text-white sm:text-xl">{String(value).padStart(2, "0")}</div>
+          <div className="mt-0.5 text-[8px] font-bold uppercase tracking-wider text-white/65 sm:text-[9px]">{label}</div>
+        </div>
       ))}
     </div>
   );
@@ -887,25 +926,23 @@ function MobileReelsSection({ reels }: { reels: MobileReel[] }) {
 /* ─── Trust Badges ───────────────────────────────────────────── */
 function TrustStrip() {
   return (
-    <div className="bg-white/90 backdrop-blur-md border-b border-[#0D2B00]/[0.06]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-8">
-        <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 overflow-x-auto sm:overflow-visible gap-0 sm:gap-0 pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-hide sm:snap-none">
-          {TRUST_BADGES.map(({ icon: Icon, title, desc }, i) => (
+    <div className="bg-gradient-to-b from-white to-[#f7fbf2]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4">
+        <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-hide lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0">
+          {TRUST_BADGES.map(({ icon: Icon, title, desc, color }) => (
             <div
               key={title}
-              className={`flex min-w-[46%] sm:min-w-0 shrink-0 snap-start items-center gap-3 py-3.5 px-3 sm:px-6 sm:border-r sm:border-gray-100 sm:last:border-r-0 ${
-                i % 2 === 0 ? "sm:border-r" : ""
-              } ${i < 2 ? "lg:border-b-0" : ""}`}
+              className="flex min-w-[210px] shrink-0 snap-start items-center gap-3 rounded-2xl border border-black/[0.04] bg-white/92 px-3.5 py-3.5 shadow-[0_12px_34px_rgba(13,43,0,0.07)] ring-1 ring-white transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(13,43,0,0.10)] lg:min-w-0"
             >
               <div
-                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: `${GREEN}15` }}
+                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner"
+                style={{ backgroundColor: `${color}14` }}
               >
-                <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: GREEN }} />
+                <Icon className="w-5 h-5" style={{ color }} strokeWidth={2.2} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">{title}</p>
-                <p className="text-[11px] sm:text-xs text-gray-500 leading-tight">{desc}</p>
+                <p className="text-sm font-black text-gray-950 leading-tight">{title}</p>
+                <p className="text-xs text-gray-500 leading-snug">{desc}</p>
               </div>
             </div>
           ))}
@@ -1025,6 +1062,166 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
         </button>
       </div>
     </>
+  );
+}
+
+function DealProductCard({ product }: { product: Product }) {
+  const { addItem } = useCart();
+  const [, setLocation] = useLocation();
+  const price = Number.parseFloat(String(product.price ?? "0"));
+  const originalPrice = product.originalPrice ? Number.parseFloat(String(product.originalPrice)) : 0;
+  const discount = originalPrice > price ? Math.round((1 - price / originalPrice) * 100) : 0;
+  const img = product.images?.[0] ? getProductImageSrc(product.images[0], { maxWidth: 420 }) : null;
+  const stock = typeof product.stock === "number" ? product.stock : 0;
+  const href = `/products/${(product as any).slug || product.id}`;
+  const add = (quick = false) => {
+    addItem(product, 1);
+    if (quick) setLocation("/checkout");
+  };
+
+  return (
+    <div className="group relative flex min-w-[170px] max-w-[190px] flex-1 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.10)] ring-1 ring-black/[0.03] transition-all hover:-translate-y-1 hover:shadow-[0_22px_52px_rgba(95,168,0,0.18)] sm:min-w-0 sm:max-w-none">
+      <Link href={href} className="flex w-full flex-col">
+        <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-[#eef8e8] to-[#f9fbf5]">
+          {img && (
+            <img src={img} alt={product.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+          )}
+          {discount > 0 && (
+            <span className="absolute left-2 top-2 rounded-full bg-red-500 px-2 py-1 text-[10px] font-black text-white shadow-lg">
+              -{discount}%
+            </span>
+          )}
+          {stock > 0 && stock <= 10 && (
+            <span className="absolute right-2 top-2 rounded-full bg-amber-500 px-2 py-1 text-[10px] font-black text-white shadow-lg">
+              {stock} left
+            </span>
+          )}
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5 p-3">
+          <h3 className="line-clamp-2 min-h-[2.25rem] text-sm font-black leading-tight text-gray-950">{product.name}</h3>
+          <div className="mt-auto">
+            <div className="flex items-end gap-1.5">
+              <span className="text-base font-black text-gray-950">Rs. {price.toLocaleString()}</span>
+              {originalPrice > price && <span className="text-[11px] font-semibold text-gray-400 line-through">Rs. {originalPrice.toLocaleString()}</span>}
+            </div>
+            <p className="mt-0.5 text-[11px] font-semibold text-gray-500">{stock > 0 ? `${stock} in stock` : "Limited stock"}</p>
+          </div>
+        </div>
+      </Link>
+      <div className="absolute inset-x-2 bottom-2 grid grid-cols-2 gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(false); }} className="rounded-xl bg-white/95 px-2 py-2 text-[11px] font-black text-[#4d8a00] shadow-lg ring-1 ring-[#5FA800]/20">
+          Add
+        </button>
+        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(true); }} className="rounded-xl bg-[#5FA800] px-2 py-2 text-[11px] font-black text-white shadow-lg">
+          Quick Buy
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CountdownDealSection({
+  banner,
+  products,
+  categories,
+  loading,
+}: {
+  banner?: Banner | null;
+  products: Product[];
+  categories: Category[];
+  loading: boolean;
+}) {
+  const [, setLocation] = useLocation();
+  if (!banner) return null;
+  const b = banner as any;
+  const count = Math.max(1, Math.min(12, Number(b.offerDisplayCount ?? 8)));
+  const mode = String(b.offerMode ?? "discount_products");
+  const sortMode = String(b.offerSort ?? "featured");
+  const showCategories = mode === "categories";
+  const productIds: number[] = Array.isArray(b.offerProductIds) ? b.offerProductIds.map(Number) : [];
+  const categoryIds: number[] = Array.isArray(b.offerCategoryIds) ? b.offerCategoryIds.map(Number) : [];
+  const sortedProducts = [...products].sort((a, z) => {
+    if (sortMode === "discount") {
+      const aDiscount = Number(a.originalPrice ?? 0) - Number(a.price ?? 0);
+      const zDiscount = Number(z.originalPrice ?? 0) - Number(z.price ?? 0);
+      return zDiscount - aDiscount;
+    }
+    if (sortMode === "best_sellers") return Number(z.reviewCount ?? 0) - Number(a.reviewCount ?? 0);
+    if (sortMode === "newest") return new Date((z as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime();
+    return Number(z.featured === true) - Number(a.featured === true);
+  });
+  const shownProducts = productIds.length
+    ? productIds.map((id) => products.find((p) => p.id === id)).filter(Boolean).slice(0, count) as Product[]
+    : sortedProducts.slice(0, count);
+  const shownCategories = categoryIds.length
+    ? categoryIds.map((id) => categories.find((c) => c.id === id)).filter(Boolean).slice(0, count) as Category[]
+    : categories.slice(0, count);
+  const desktopImg = b.imageUrl ? getProductImageSrc(b.imageUrl, { maxWidth: 1600 }) : "";
+  const mobileImg = b.mobileImageUrl ? getProductImageSrc(b.mobileImageUrl, { maxWidth: 900 }) : desktopImg;
+  const targetHref =
+    b.targetType === "product" && b.targetId ? `/products/${b.targetId}` :
+    b.targetType === "category" && b.targetId ? `/products?categoryId=${b.targetId}` :
+    b.linkUrl || "/products";
+  const bg = b.bgColor && String(b.bgColor).startsWith("#")
+    ? `linear-gradient(135deg, ${b.bgColor}, #101827)`
+    : "linear-gradient(135deg,#0f2f12 0%,#133d18 45%,#21160a 100%)";
+  const btnBg = b.buttonBgColor || "#ffffff";
+  const btnText = b.buttonTextColor || DARK;
+  const textColor = b.textColor || "#ffffff";
+
+  return (
+    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <div className="overflow-hidden rounded-[1.6rem] border border-white/70 bg-white shadow-[0_24px_70px_rgba(13,43,0,0.12)] ring-1 ring-black/[0.03]">
+        <div
+          className="relative min-h-[156px] overflow-hidden px-4 py-4 sm:min-h-[172px] sm:px-7 sm:py-5"
+          style={{ background: bg, color: textColor }}
+        >
+          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-35 sm:block" />}
+          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-35 sm:hidden" />}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-black/20" />
+          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur">
+                <Flame className="h-3.5 w-3.5 text-orange-300" /> {b.label || "Limited Time Offer"}
+              </div>
+              <h2 className="text-xl font-black leading-tight sm:text-3xl">{banner.title}</h2>
+              {banner.subtitle && <p className="mt-1 max-w-2xl text-sm font-medium opacity-80 sm:text-base">{banner.subtitle}</p>}
+              {b.offerText && <p className="mt-1 text-xs font-bold text-amber-200 sm:text-sm">{b.offerText}</p>}
+            </div>
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              {b.showTimer !== false && b.countdownEndAt && <DealCountdownTimer endAt={String(b.countdownEndAt)} />}
+              <button
+                type="button"
+                onClick={() => setLocation(targetHref)}
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-full px-5 py-2.5 text-sm font-black shadow-[0_18px_34px_rgba(0,0,0,0.22)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                style={{ backgroundColor: btnBg, color: btnText }}
+              >
+                <ShoppingBag className="h-4 w-4" /> {banner.cta || "Shop Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-b from-white to-[#f8fbf4] p-3 sm:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Recommended deals"}</p>
+              <h3 className="text-base font-black text-gray-950 sm:text-lg">{showCategories ? "Explore the offer" : "Top picks under this offer"}</h3>
+            </div>
+            <Link href="/products" className="text-xs font-black text-[#5FA800]">View all</Link>
+          </div>
+          {showCategories ? (
+            <CategoryGrid categories={shownCategories} loading={false} />
+          ) : loading ? (
+            <ProductCarousel products={[]} loading />
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:overflow-visible">
+              {shownProducts.map((p) => <DealProductCard key={p.id} product={p} />)}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1151,10 +1348,17 @@ export default function HomePage() {
       platform: "website",
       placement: "hero",
     },
-    { query: { staleTime: 120_000 } },
+    { query: { queryKey: ["banners", "hero"], staleTime: 120_000 } },
+  );
+  const { data: countdownData } = useListBanners(
+    {
+      platform: "website",
+      placement: "countdown_deal" as any,
+    } as any,
+    { query: { queryKey: ["banners", "countdown_deal"], staleTime: 120_000 } },
   );
   const { data: categoriesData, isLoading: catsLoading } = useListCategories({
-    query: { staleTime: 120_000 },
+    query: { queryKey: ["categories", "homepage"], staleTime: 120_000 },
   });
   const { data: featuredData,   isLoading: featuredLoading }  = useListProducts(
     { featured: true, limit: 10 },
@@ -1165,11 +1369,13 @@ export default function HomePage() {
     { query: { queryKey: ["products", "newest"], staleTime: 120_000, refetchOnWindowFocus: false } },
   );
   const { data: dealsData, isLoading: dealsLoading } = useListProducts(
-    { limit: 10, hasDiscount: true } as any,
+    { limit: 10, hasDiscount: true, sortBy: "discount" } as any,
     { query: { queryKey: ["products", "deals"], staleTime: 120_000, refetchOnWindowFocus: false } },
   );
 
   const banners = useMemo(() => asArrayFromApi<Banner>(bannersData), [bannersData]);
+  const countdownBanners = useMemo(() => asArrayFromApi<Banner>(countdownData), [countdownData]);
+  const countdownBanner = countdownBanners[0] ?? null;
   const categories = useMemo(() => asArrayFromApi<Category>(categoriesData), [categoriesData]);
   const featuredProducts = useMemo(
     () => normalizeProductsListResponse(featuredData).items as Product[],
@@ -1183,6 +1389,30 @@ export default function HomePage() {
     () => normalizeProductsListResponse(dealsData).items as Product[],
     [dealsData],
   );
+  const countdownProductIds = useMemo(
+    () => {
+      const ids = (countdownBanner as any)?.offerProductIds;
+      return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0) : [];
+    },
+    [countdownBanner],
+  );
+  const { data: countdownProductsData, isLoading: countdownProductsLoading } = useQuery<any>({
+    queryKey: ["countdown-products", countdownProductIds.join(",")],
+    queryFn: () => fetch(`/api/products?ids=${countdownProductIds.join(",")}&limit=${Math.max(1, countdownProductIds.length)}`).then(r => r.ok ? r.json() : { items: [] }),
+    enabled: countdownProductIds.length > 0,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
+  });
+  const selectedCountdownProducts = useMemo(
+    () => normalizeProductsListResponse(countdownProductsData).items as Product[],
+    [countdownProductsData],
+  );
+  const countdownSectionProducts = useMemo(() => {
+    const mode = String((countdownBanner as any)?.offerMode ?? "discount_products");
+    if (countdownProductIds.length > 0) return selectedCountdownProducts;
+    if (mode === "best_sellers") return [...featuredProducts, ...dealProducts, ...allProducts].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+    return mode === "featured_products" ? featuredProducts : dealProducts.length ? dealProducts : featuredProducts;
+  }, [allProducts, countdownBanner, countdownProductIds.length, dealProducts, featuredProducts, selectedCountdownProducts]);
 
   const heroSmartCatalog = useMemo(() => {
     const byId = new Map<number, Product>();
@@ -1255,6 +1485,13 @@ export default function HomePage() {
         ) : (
           <HeroBanner banners={banners} loading={heroLoading} smartCatalog={heroSmartCatalog} />
         )}
+
+        <CountdownDealSection
+          banner={countdownBanner}
+          products={countdownSectionProducts}
+          categories={categories}
+          loading={countdownProductsLoading || dealsLoading || featuredLoading}
+        />
 
         {/* Trust strip */}
         <TrustStrip />

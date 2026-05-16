@@ -72,10 +72,17 @@ router.get("/products", async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
     const offset = (page - 1) * limit;
-    const { categoryId, search, featured, sortBy } = req.query;
+    const { categoryId, search, featured, sortBy, hasDiscount, ids } = req.query;
 
     const conditions: any[] = [eq(productsTable.active, true)];
     if (categoryId) conditions.push(eq(productsTable.categoryId, parseInt(categoryId as string)));
+    if (ids) {
+      const idList = String(ids)
+        .split(",")
+        .map((v) => Number(v.trim()))
+        .filter((v) => Number.isFinite(v) && v > 0);
+      if (idList.length > 0) conditions.push(inArray(productsTable.id, idList));
+    }
     /* Featured on the storefront must match either `products.featured` (admin Products)
        OR `shopify_products.is_featured` (admin Featured Products / chat flags), which
        historically were not kept in sync. */
@@ -97,12 +104,17 @@ router.get("/products", async (req, res) => {
         ),
       );
     }
+    if (hasDiscount === "true") {
+      conditions.push(sql`${productsTable.originalPrice} IS NOT NULL AND ${productsTable.originalPrice} > ${productsTable.price}`);
+    }
     if (search) conditions.push(ilike(productsTable.name, `%${search}%`));
 
     let orderBy: any = desc(productsTable.createdAt);
     if (sortBy === "price_asc") orderBy = asc(productsTable.price);
     else if (sortBy === "price_desc") orderBy = desc(productsTable.price);
     else if (sortBy === "rating") orderBy = desc(productsTable.rating);
+    else if (sortBy === "discount") orderBy = desc(sql`(${productsTable.originalPrice} - ${productsTable.price})`);
+    else if (sortBy === "best_sellers") orderBy = desc(productsTable.reviewCount);
 
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
 

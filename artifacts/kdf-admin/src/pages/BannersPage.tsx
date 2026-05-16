@@ -407,6 +407,53 @@ function ProductSelector({
   );
 }
 
+function ProductMultiSelector({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const { data } = useListProducts({ limit: 100 });
+  const products = data?.items ?? [];
+  const filtered = products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+  const selected = products.filter((p) => value.includes(p.id));
+  const toggle = (id: number) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+
+  return (
+    <div className="space-y-2">
+      <Label>Featured Products Under Timer</Label>
+      <div className="rounded-xl border bg-background">
+        <div className="p-2 border-b flex items-center gap-2">
+          <Search className="w-4 h-4 text-muted-foreground" />
+          <input className="flex-1 text-sm outline-none bg-transparent" placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 p-2 border-b bg-muted/30">
+            {selected.map((p) => (
+              <Badge key={p.id} variant="secondary" className="gap-1">
+                {p.name}
+                <button type="button" onClick={() => toggle(p.id)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
+              </Badge>
+            ))}
+          </div>
+        )}
+        <div className="max-h-48 overflow-y-auto">
+          {filtered.slice(0, 50).map((p) => (
+            <button key={p.id} type="button" onClick={() => toggle(p.id)}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-muted/50 flex items-center justify-between ${value.includes(p.id) ? "bg-primary/5 text-primary font-medium" : ""}`}>
+              <span className="line-clamp-1">{p.name}</span>
+              <span className="text-xs text-muted-foreground">#{p.id}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">Leave empty to auto-show discount, featured, or best-selling products based on display mode.</p>
+    </div>
+  );
+}
+
 /* ── Category Dropdown ──────────────────────────────── */
 function CategorySelector({
   value,
@@ -444,6 +491,32 @@ function CategorySelector({
           Slug: <code className="bg-muted px-1 rounded">{selected.slug}</code>
         </p>
       )}
+    </div>
+  );
+}
+
+function CategoryMultiSelector({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const { data: categories } = useListCategories();
+  const cats = Array.isArray(categories) ? categories : [];
+  const toggle = (id: number) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="space-y-2">
+      <Label>Categories / Collections Under Timer</Label>
+      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-xl border p-2">
+        {cats.map((c) => (
+          <button key={c.id} type="button" onClick={() => toggle(c.id)}
+            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${value.includes(c.id) ? "border-primary bg-primary/5 text-primary font-medium" : "hover:bg-muted/50"}`}>
+            {c.name}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">Used when display mode is Categories. Leave empty to show top categories.</p>
     </div>
   );
 }
@@ -510,11 +583,37 @@ const HEADER_BANNER_EMPTY = {
   platform: "both" as PlatformType,
 };
 
+const COUNTDOWN_EMPTY_FORM = {
+  title: "Limited Time Offer",
+  subtitle: "Premium nuts and dry fruits at special prices",
+  label: "Flash Deal",
+  imageUrl: "",
+  mobileImageUrl: "",
+  cta: "Shop Now",
+  linkUrl: "/products",
+  bgColor: "#0D2B00",
+  textColor: "white",
+  buttonBgColor: "#ffffff",
+  buttonTextColor: "#0D2B00",
+  countdownEndAt: "",
+  startDate: "",
+  endDate: "",
+  offerProductIds: [] as number[],
+  offerCategoryIds: [] as number[],
+  offerMode: "discount_products",
+  offerDisplayCount: 8,
+  offerSort: "featured",
+  showTimer: true,
+  sortOrder: 0,
+  active: true,
+  platform: "both" as PlatformType,
+};
+
 const ICON_SUGGESTIONS = ["🚚", "🎁", "📦", "⚡", "🔥", "💎", "🌟", "🎉", "🎯", "🛍️", "💰", "🏷️"];
 
 export default function BannersPage() {
   /* ── Shared state ── */
-  const [activeTab, setActiveTab] = useState<"hero" | "promo" | "header">("hero");
+  const [activeTab, setActiveTab] = useState<"hero" | "countdown" | "promo" | "header">("hero");
   const { data: allBanners, isLoading } = useListBanners();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -528,6 +627,7 @@ export default function BannersPage() {
   const bannerRows: any[] = normalizeListCache(allBanners);
 
   const headerBanners = bannerRows.filter((b: any) => b.placement === "header");
+  const countdownBanners = bannerRows.filter((b: any) => b.placement === "countdown_deal");
   /* Image/video rows always show under Hero (never as gradient promo cards). */
   const promoBanners = bannerRows.filter((b: any) => {
     if (b.placement === "header") return false;
@@ -536,6 +636,7 @@ export default function BannersPage() {
   });
   const heroBanners = bannerRows.filter((b: any) => {
     if (b.placement === "header") return false;
+    if (b.placement === "countdown_deal") return false;
     if (hasHeroStyleMedia(b)) return true;
     if (b.placement === "hero") return true;
     return b.placement !== "promo" && !isPromoCard(b);
@@ -673,6 +774,80 @@ export default function BannersPage() {
   const [headerOpen, setHeaderOpen] = useState(false);
   const [headerEditId, setHeaderEditId] = useState<number | null>(null);
   const [headerForm, setHeaderForm] = useState({ ...HEADER_BANNER_EMPTY });
+  const [countdownOpen, setCountdownOpen] = useState(false);
+  const [countdownEditId, setCountdownEditId] = useState<number | null>(null);
+  const [countdownForm, setCountdownForm] = useState({ ...COUNTDOWN_EMPTY_FORM });
+
+  function openCountdownAdd() {
+    setCountdownForm({ ...COUNTDOWN_EMPTY_FORM });
+    setCountdownEditId(null);
+    setCountdownOpen(true);
+  }
+  function openCountdownEdit(banner: any) {
+    setCountdownForm({
+      ...COUNTDOWN_EMPTY_FORM,
+      title: banner.title ?? COUNTDOWN_EMPTY_FORM.title,
+      subtitle: banner.subtitle ?? "",
+      label: banner.label ?? "Flash Deal",
+      imageUrl: banner.imageUrl ?? "",
+      mobileImageUrl: banner.mobileImageUrl ?? "",
+      cta: banner.cta ?? "Shop Now",
+      linkUrl: banner.linkUrl ?? "/products",
+      bgColor: banner.bgColor ?? "#0D2B00",
+      textColor: banner.textColor ?? "white",
+      buttonBgColor: banner.buttonBgColor ?? "#ffffff",
+      buttonTextColor: banner.buttonTextColor ?? "#0D2B00",
+      countdownEndAt: banner.countdownEndAt ? new Date(banner.countdownEndAt).toISOString().slice(0, 16) : "",
+      startDate: banner.startDate ? new Date(banner.startDate).toISOString().slice(0, 16) : "",
+      endDate: banner.endDate ? new Date(banner.endDate).toISOString().slice(0, 16) : "",
+      offerProductIds: Array.isArray(banner.offerProductIds) ? banner.offerProductIds.map(Number) : [],
+      offerCategoryIds: Array.isArray(banner.offerCategoryIds) ? banner.offerCategoryIds.map(Number) : [],
+      offerMode: banner.offerMode ?? "discount_products",
+      offerDisplayCount: banner.offerDisplayCount ?? 8,
+      offerSort: banner.offerSort ?? "featured",
+      showTimer: banner.showTimer ?? true,
+      sortOrder: banner.sortOrder ?? 0,
+      active: banner.active ?? true,
+      platform: (banner.platform ?? "both") as PlatformType,
+    });
+    setCountdownEditId(banner.id);
+    setCountdownOpen(true);
+  }
+  function handleCountdownSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!countdownForm.title.trim()) {
+      toast({ variant: "destructive", title: "Title is required" });
+      return;
+    }
+    const payload = {
+      ...countdownForm,
+      placement: "countdown_deal" as const,
+      title: countdownForm.title.trim(),
+      subtitle: countdownForm.subtitle || undefined,
+      label: countdownForm.label || undefined,
+      imageUrl: countdownForm.imageUrl || undefined,
+      mobileImageUrl: countdownForm.mobileImageUrl || undefined,
+      linkUrl: countdownForm.linkUrl || "/products",
+      countdownEndAt: countdownForm.countdownEndAt ? new Date(countdownForm.countdownEndAt).toISOString() : undefined,
+      startDate: countdownForm.startDate ? new Date(countdownForm.startDate).toISOString() : undefined,
+      endDate: countdownForm.endDate ? new Date(countdownForm.endDate).toISOString() : undefined,
+      offerDisplayCount: Math.max(1, Math.min(12, Number(countdownForm.offerDisplayCount) || 8)),
+    };
+    const onSuccess = (saved: any) => {
+      queryClient.setQueryData(listKey, (old: unknown) => {
+        const list = normalizeListCache(old);
+        const exists = list.some((row: any) => row.id === saved.id);
+        return (exists ? list.map((row: any) => (row.id === saved.id ? saved : row)) : [...list, saved])
+          .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      });
+      void queryClient.invalidateQueries({ queryKey: listKey, refetchType: "active" });
+      setCountdownOpen(false);
+      toast({ title: countdownEditId ? "Countdown banner updated" : "Countdown banner created", description: "Homepage deal section is saved." });
+    };
+    const onError = (err: unknown) => toast({ variant: "destructive", title: "Failed to save countdown banner", description: err instanceof Error ? err.message : "Request failed" });
+    if (countdownEditId) updateMutation.mutate({ id: countdownEditId, data: payload as any }, { onSuccess, onError });
+    else createMutation.mutate({ data: payload as any }, { onSuccess, onError });
+  }
 
   function openPromoAdd() { setPromoForm({ ...PROMO_EMPTY_FORM }); setPromoEditId(null); setPromoOpen(true); }
   function openPromoEdit(banner: any) {
@@ -837,7 +1012,7 @@ export default function BannersPage() {
     }
   }
 
-  function handleDelete(id: number, type: "hero" | "promo" | "header") {
+  function handleDelete(id: number, type: "hero" | "countdown" | "promo" | "header") {
     if (!confirm(`Delete this ${type === "promo" ? "promo card" : type === "header" ? "header banner" : "banner"}?`)) return;
     deleteMutation.mutate({ id }, {
       onSuccess: () => {
@@ -957,6 +1132,76 @@ export default function BannersPage() {
                   {isBusy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   {heroEditId ? "Update Banner" : "Create Banner"}
                 </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+          )}
+          {activeTab === "countdown" && (
+          <Dialog open={countdownOpen} onOpenChange={setCountdownOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCountdownAdd} className="bg-emerald-700 hover:bg-emerald-800 text-white"><Plus className="w-4 h-4 mr-2" /> Add Countdown Section</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{countdownEditId ? "Edit Countdown Banner" : "Add Countdown Banner"}</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-1">Slim Shopify-style homepage offer banner with timer, CTA, products, and categories.</p>
+              </DialogHeader>
+              <form onSubmit={handleCountdownSubmit} className="space-y-5 py-2">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <BannerImageUploader value={countdownForm.imageUrl} onChange={(url) => setCountdownForm({ ...countdownForm, imageUrl: url })} label="Desktop Banner Image" recommendedW={1400} recommendedH={360} aspectRatio="16/4" optional />
+                  <BannerImageUploader value={countdownForm.mobileImageUrl} onChange={(url) => setCountdownForm({ ...countdownForm, mobileImageUrl: url })} label="Mobile Banner Image" recommendedW={760} recommendedH={360} aspectRatio="2/1" optional />
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><Label>Banner Title *</Label><Input required value={countdownForm.title} onChange={(e) => setCountdownForm({ ...countdownForm, title: e.target.value })} placeholder="Limited Time Offer" /></div>
+                  <div className="space-y-1.5"><Label>Offer Label</Label><Input value={countdownForm.label} onChange={(e) => setCountdownForm({ ...countdownForm, label: e.target.value })} placeholder="Flash Deal" /></div>
+                  <div className="space-y-1.5 md:col-span-2"><Label>Subtitle / Offer Text</Label><Input value={countdownForm.subtitle} onChange={(e) => setCountdownForm({ ...countdownForm, subtitle: e.target.value })} placeholder="Save more on premium nuts and dry fruits today" /></div>
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5"><Label>Button Text</Label><Input value={countdownForm.cta} onChange={(e) => setCountdownForm({ ...countdownForm, cta: e.target.value })} /></div>
+                  <div className="space-y-1.5 md:col-span-2"><Label>Button Link</Label><Input value={countdownForm.linkUrl} onChange={(e) => setCountdownForm({ ...countdownForm, linkUrl: e.target.value })} placeholder="/products" /></div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1.5"><Label>Background</Label><Input type="color" value={countdownForm.bgColor} onChange={(e) => setCountdownForm({ ...countdownForm, bgColor: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>Text Color</Label><Input value={countdownForm.textColor} onChange={(e) => setCountdownForm({ ...countdownForm, textColor: e.target.value })} placeholder="white" /></div>
+                  <div className="space-y-1.5"><Label>Button BG</Label><Input type="color" value={countdownForm.buttonBgColor} onChange={(e) => setCountdownForm({ ...countdownForm, buttonBgColor: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>Button Text</Label><Input type="color" value={countdownForm.buttonTextColor} onChange={(e) => setCountdownForm({ ...countdownForm, buttonTextColor: e.target.value })} /></div>
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5"><Label>Countdown End</Label><Input type="datetime-local" value={countdownForm.countdownEndAt} onChange={(e) => setCountdownForm({ ...countdownForm, countdownEndAt: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>Show From</Label><Input type="datetime-local" value={countdownForm.startDate} onChange={(e) => setCountdownForm({ ...countdownForm, startDate: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>Hide After</Label><Input type="datetime-local" value={countdownForm.endDate} onChange={(e) => setCountdownForm({ ...countdownForm, endDate: e.target.value })} /></div>
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Content Mode</Label>
+                    <select value={countdownForm.offerMode} onChange={(e) => setCountdownForm({ ...countdownForm, offerMode: e.target.value })} className="w-full h-10 px-3 border rounded-lg bg-background text-sm">
+                      <option value="discount_products">Discount Products</option>
+                      <option value="featured_products">Featured Products</option>
+                      <option value="best_sellers">Best Sellers</option>
+                      <option value="deals">Deals</option>
+                      <option value="categories">Categories / Collections</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5"><Label>Display Count</Label><Input type="number" min={1} max={12} value={countdownForm.offerDisplayCount} onChange={(e) => setCountdownForm({ ...countdownForm, offerDisplayCount: parseInt(e.target.value) || 8 })} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Sorting</Label>
+                    <select value={countdownForm.offerSort} onChange={(e) => setCountdownForm({ ...countdownForm, offerSort: e.target.value })} className="w-full h-10 px-3 border rounded-lg bg-background text-sm">
+                      <option value="featured">Featured First</option>
+                      <option value="discount">Biggest Discount</option>
+                      <option value="newest">Newest</option>
+                      <option value="best_sellers">Best Sellers</option>
+                    </select>
+                  </div>
+                </div>
+                <ProductMultiSelector value={countdownForm.offerProductIds} onChange={(ids) => setCountdownForm({ ...countdownForm, offerProductIds: ids })} />
+                <CategoryMultiSelector value={countdownForm.offerCategoryIds} onChange={(ids) => setCountdownForm({ ...countdownForm, offerCategoryIds: ids })} />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1.5"><Label>Sort Order</Label><Input type="number" value={countdownForm.sortOrder} onChange={(e) => setCountdownForm({ ...countdownForm, sortOrder: parseInt(e.target.value) || 0 })} /></div>
+                  <div className="flex items-center gap-3 pt-6"><Switch checked={countdownForm.showTimer} onCheckedChange={(c) => setCountdownForm({ ...countdownForm, showTimer: c })} /><div><Label>Show Timer</Label></div></div>
+                  <div className="flex items-center gap-3 pt-6"><Switch checked={countdownForm.active} onCheckedChange={(c) => setCountdownForm({ ...countdownForm, active: c })} /><div><Label>Show Section</Label></div></div>
+                  <div className="space-y-1.5"><Label>Platform</Label><select value={countdownForm.platform} onChange={(e) => setCountdownForm({ ...countdownForm, platform: e.target.value as PlatformType })} className="w-full h-10 px-3 border rounded-lg bg-background text-sm"><option value="both">Both</option><option value="website">Website</option><option value="mobile">Mobile</option></select></div>
+                </div>
+                <Button type="submit" className="w-full h-11" disabled={isBusy}>{isBusy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}{countdownEditId ? "Update Countdown Section" : "Create Countdown Section"}</Button>
               </form>
             </DialogContent>
           </Dialog>
@@ -1173,6 +1418,13 @@ export default function BannersPage() {
           <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">{heroBanners.length}</Badge>
         </button>
         <button
+          onClick={() => setActiveTab("countdown")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "countdown" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          ⏱ Countdown Deal
+          <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 bg-emerald-50 text-emerald-700 border-emerald-200">{countdownBanners.length}</Badge>
+        </button>
+        <button
           onClick={() => setActiveTab("promo")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "promo" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
         >
@@ -1250,6 +1502,82 @@ export default function BannersPage() {
                     </TableCell>
                   </TableRow>
                 )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {activeTab === "countdown" && (
+        <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-emerald-50 text-sm text-emerald-900">
+            Premium homepage countdown section. Admin can control text, images, colors, timer, visibility, products, categories, count, and sorting.
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30">
+                <TableHead className="w-12">Order</TableHead>
+                <TableHead className="w-40">Preview</TableHead>
+                <TableHead>Content</TableHead>
+                <TableHead>Products / Categories</TableHead>
+                <TableHead>Timer</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right w-24">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                [...Array(2)].map((_, i) => (
+                  <TableRow key={i}>{[...Array(7)].map((_, j) => (<TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>))}</TableRow>
+                ))
+              ) : countdownBanners.length ? (
+                countdownBanners.map((banner: any) => (
+                  <TableRow key={banner.id}>
+                    <TableCell className="font-mono text-sm text-muted-foreground">{banner.sortOrder}</TableCell>
+                    <TableCell>
+                      {banner.imageUrl ? (
+                        <div className="w-36 h-12 bg-muted rounded-lg overflow-hidden border"><img src={storagePublicUrl(banner.imageUrl)} alt={banner.title} className="w-full h-full object-cover" /></div>
+                      ) : (
+                        <div className="w-36 h-12 rounded-lg border flex items-center justify-center text-xs font-bold text-white" style={{ background: banner.bgColor || "#0D2B00" }}>{banner.label || "Deal"}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-semibold text-sm">{banner.title}</div>
+                      {banner.subtitle && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{banner.subtitle}</div>}
+                      <div className="text-xs text-muted-foreground mt-0.5">CTA: <span className="font-medium text-foreground">{banner.cta || "Shop Now"}</span></div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <div><strong>{banner.offerDisplayCount ?? 8}</strong> items · {banner.offerMode ?? "discount_products"}</div>
+                      <div>{Array.isArray(banner.offerProductIds) ? banner.offerProductIds.length : 0} products selected · {Array.isArray(banner.offerCategoryIds) ? banner.offerCategoryIds.length : 0} categories</div>
+                    </TableCell>
+                    <TableCell>
+                      {banner.showTimer === false ? (
+                        <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200">Hidden</Badge>
+                      ) : banner.countdownEndAt ? (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{new Date(banner.countdownEndAt).toLocaleString()}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">No end date</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={banner.active ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200"}>
+                        {banner.active ? "Visible" : "Hidden"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openCountdownEdit(banner)}><Edit className="w-4 h-4 text-muted-foreground" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(banner.id, "countdown")}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-28 text-center text-muted-foreground text-sm">
+                    <div className="flex flex-col items-center gap-2"><ImageOff className="w-8 h-8 opacity-20" />No countdown section yet. Click "Add Countdown Section" to create one.</div>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

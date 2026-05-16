@@ -25,6 +25,13 @@ const BANNER_WRITABLE_KEYS = new Set([
   "startDate",
   "endDate",
   "offerProductIds",
+  "offerCategoryIds",
+  "offerMode",
+  "offerDisplayCount",
+  "offerSort",
+  "showTimer",
+  "buttonBgColor",
+  "buttonTextColor",
   "videoUrl",
   "mobileVideoUrl",
   "videoAutoplay",
@@ -52,8 +59,16 @@ function pickWritableBannerFields(body: Record<string, unknown>): Record<string,
 router.get("/banners", async (req, res) => {
   try {
     const { platform, placement } = req.query;
+    const now = new Date();
     const activeFilter = eq(bannersTable.active, true);
-    const conditions: unknown[] = [activeFilter];
+    const conditions: unknown[] = [];
+    if (platform || placement) {
+      conditions.push(
+        activeFilter,
+        or(isNull(bannersTable.startDate), sql`${bannersTable.startDate} <= ${now}`),
+        or(isNull(bannersTable.endDate), sql`${bannersTable.endDate} >= ${now}`),
+      );
+    }
     if (platform) {
       conditions.push(
         or(
@@ -74,18 +89,17 @@ router.get("/banners", async (req, res) => {
           or length(trim(coalesce(${bannersTable.mobileVideoUrl}, ''))) > 0
         )`;
         conditions.push(
-          or(eq(bannersTable.placement, "hero"), and(ne(bannersTable.placement, "header"), hasBannerMedia)),
+          or(eq(bannersTable.placement, "hero"), and(ne(bannersTable.placement, "header"), ne(bannersTable.placement, "countdown_deal"), hasBannerMedia)),
         );
       } else {
         conditions.push(eq(bannersTable.placement, placement));
       }
     }
-    const whereClause = conditions.length === 1 ? conditions[0] : and(...(conditions as any));
-    const banners = await db
-      .select()
-      .from(bannersTable)
-      .where(whereClause)
-      .orderBy(asc(bannersTable.sortOrder));
+    const baseQuery = db.select().from(bannersTable);
+    const banners = await (conditions.length > 0
+      ? baseQuery.where(conditions.length === 1 ? conditions[0] as any : and(...(conditions as any)))
+      : baseQuery
+    ).orderBy(asc(bannersTable.sortOrder));
     res.set("Cache-Control", "public, max-age=20, s-maxage=45, stale-while-revalidate=180");
     res.json(banners);
   } catch (err) {
