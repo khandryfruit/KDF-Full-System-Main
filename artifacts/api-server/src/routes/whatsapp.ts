@@ -45,8 +45,11 @@ import {
   productRootsInMessage,
   shouldUseProductDatabaseFirst,
   tryWaProductCatalogReply,
+  tryWaFullCatalogMenuReply,
   isPreOrderConfirmSelection,
   isRomanUrduWa,
+  isFullCatalogBrowseMessage,
+  isCatalogNextPageMessage,
 } from "../lib/waProductBrain.js";
 import { productRootTermsFromQuery } from "../lib/shopifyProductSearch.js";
 
@@ -833,7 +836,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               currentState = "idle";
             }
           }
-          if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
+          if (["wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
             const commerceText = inboundText.trim();
             if (isDeliveryOnlyMessage(commerceText) || isTrackingOnlyMessage(commerceText)) {
@@ -855,6 +858,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 });
                 continue;
               }
+            }
+            if (currentState === "wa_catalog_pick_category") {
+              const catalogHandled = await tryHandleCatalogBrowseReply({
+                phone,
+                textBody: commerceText,
+                waSettings,
+                log,
+              });
+              if (catalogHandled) continue;
             }
             try {
               await handleCommerceOrderFlow(phone, commerceText, currentState, waSettings, log);
@@ -888,7 +900,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           await showHumanPresenceBeforeReply({
             inboundMessageId: msgId,
             text: textBody,
-            mode: /product|price|rate|almond|badam|pista|kaju|akhrot|kg|bulk|buy|order/i.test(textBody) ? "product" : "simple",
+            mode: /product|price|rate|almond|badam|pista|kaju|akhrot|kg|bulk|buy|order|catalog|sari|tamam/i.test(textBody) ? "product" : "simple",
             log,
           });
 
@@ -1543,6 +1555,91 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   return card;
 }
 
+async function tryHandleCatalogBrowseReply(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  log?: any;
+}): Promise<boolean> {
+  const conv = await getConversationState(opts.phone);
+  const state = conv?.state ?? "idle";
+  let stateData: Record<string, any> = {};
+  try {
+    stateData = JSON.parse((conv as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+
+  if (state === "wa_catalog_pick_category") {
+    const trimmed = opts.textBody.trim();
+
+    if (isCatalogNextPageMessage(trimmed) && stateData.categoryId && stateData.products) {
+      const page = Number(stateData.catalogPage ?? 0) + 1;
+      const { buildCategoryBrowseFromMenuPick } = await import("../lib/waSalesAgent.js");
+      const browse = await buildCategoryBrowseFromMenuPick({
+        categoryId: stateData.categoryId,
+        textBody: opts.textBody,
+        page,
+      });
+      if (!browse) {
+        await sendWaText(opts.phone, "Is category mein aur products nahi hain.", opts.waSettings);
+        return true;
+      }
+      await sendWaText(opts.phone, browse.reply, opts.waSettings, "catalog_category_page");
+      await setConversationState(opts.phone, "wa_order_await_product_choice", {
+        products: browse.waProducts,
+        productQuery: stateData.categoryId,
+        categoryId: stateData.categoryId,
+        catalogPage: page,
+        categoryProducts: browse.products,
+      });
+      return true;
+    }
+
+    const summaries = stateData.categorySummaries ?? (await import("../lib/waSalesAgent.js")).getCategorySummaries();
+    const num = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10);
+    const { resolveCategoryFromMenuNumber, buildCategoryBrowseFromMenuPick } = await import("../lib/waSalesAgent.js");
+    const picked = resolveCategoryFromMenuNumber(num, await summaries);
+    if (!picked) {
+      await sendWaText(opts.phone, "Please category ka number reply karein (1, 2, 3…) ya product naam bhej dein: badam, pista, kaju.", opts.waSettings);
+      return true;
+    }
+
+    const browse = await buildCategoryBrowseFromMenuPick({
+      categoryId: picked.id,
+      textBody: opts.textBody,
+      page: 0,
+    });
+    if (!browse) {
+      await sendWaText(opts.phone, "Is category mein abhi product nahi mila.", opts.waSettings);
+      return true;
+    }
+
+    await sendWaText(opts.phone, browse.reply, opts.waSettings, "catalog_category_products");
+    await setConversationState(opts.phone, "wa_order_await_product_choice", {
+      products: browse.waProducts,
+      productQuery: picked.id,
+      categoryId: picked.id,
+      catalogPage: 0,
+      categoryProducts: browse.products,
+    });
+    return true;
+  }
+
+  if (isFullCatalogBrowseMessage(opts.textBody)) {
+    const hit = await tryWaFullCatalogMenuReply(opts.textBody);
+    if (!hit) return false;
+    const { getCategorySummaries } = await import("../lib/waSalesAgent.js");
+    const summaries = await getCategorySummaries();
+    await sendWaText(opts.phone, hit.reply, opts.waSettings, "full_catalog_menu");
+    await setConversationState(opts.phone, "wa_catalog_pick_category", {
+      categorySummaries: summaries,
+      totalProducts: summaries.reduce((s, x) => s + x.count, 0),
+    });
+    return true;
+  }
+
+  return false;
+}
+
 async function tryHandleVariantSelectionReply(opts: {
   phone: string;
   textBody: string;
@@ -1634,6 +1731,9 @@ async function tryResolveWaCustomerMessage(opts: {
   if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
     return true;
   }
+  if (await tryHandleCatalogBrowseReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
+    return true;
+  }
   if (await tryHandleVariantSelectionReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
     return true;
   }
@@ -1684,7 +1784,11 @@ async function trySendProductCatalogReply(opts: {
 }): Promise<boolean> {
   const { phone, textBody, waSettings, detectedIntent, log } = opts;
   if (isPureGreetingMessage(textBody) || detectedIntent.intent === "greeting") return false;
-  if (!isProductInquiryMessage(textBody) && !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody)) {
+  if (
+    !isProductInquiryMessage(textBody) &&
+    !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody) &&
+    !isFullCatalogBrowseMessage(textBody)
+  ) {
     return false;
   }
   try {
@@ -1728,11 +1832,19 @@ async function trySendProductCatalogReply(opts: {
       matchedRoots: hit.matchedRoots,
     };
 
-    if (useCategoryFlow) {
+    if (hit.mode === "catalog_menu") {
+      const { getCategorySummaries } = await import("../lib/waSalesAgent.js");
+      const summaries = await getCategorySummaries();
+      await setConversationState(phone, "wa_catalog_pick_category", {
+        ...mergeState,
+        categorySummaries: summaries,
+      });
+    } else if (useCategoryFlow) {
       await setConversationState(phone, "wa_order_await_product_choice", {
         ...mergeState,
         products: waProducts,
         browseMode: hit.mode,
+        categoryId: hit.categoryId,
       });
     } else {
       const waProduct = waProducts[0];
@@ -2514,11 +2626,44 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     return;
   }
   if (state === "wa_order_await_product_choice") {
-    const products = Array.isArray(stateData.products) ? stateData.products : [];
-    const selectedIndex = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10) - 1;
-    const selected = products[selectedIndex] ?? products.find((p: any) => normalizeProductText(p.name).includes(normalizeProductText(trimmed)));
+    const allProducts = Array.isArray(stateData.categoryProducts)
+      ? stateData.categoryProducts
+      : (Array.isArray(stateData.products) ? stateData.products : []);
+
+    if (isCatalogNextPageMessage(trimmed) && stateData.categoryId) {
+      const page = Number(stateData.catalogPage ?? 0) + 1;
+      const { buildCategoryBrowseFromMenuPick } = await import("../lib/waSalesAgent.js");
+      const browse = await buildCategoryBrowseFromMenuPick({
+        categoryId: stateData.categoryId,
+        textBody: trimmed,
+        page,
+      });
+      if (browse) {
+        await setConversationState(phone, "wa_order_await_product_choice", {
+          ...stateData,
+          products: browse.waProducts,
+          categoryProducts: browse.products,
+          catalogPage: page,
+        });
+        await sendWaText(phone, browse.reply, waSettings, "catalog_category_page");
+        return;
+      }
+    }
+
+    const waList = Array.isArray(stateData.products) ? stateData.products : [];
+    const globalIndex = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10) - 1;
+    let selected: any = null;
+    if (globalIndex >= 0 && globalIndex < waList.length) {
+      selected = waList[globalIndex];
+    } else if (globalIndex >= 0 && globalIndex < allProducts.length) {
+      const catalogItem = allProducts[globalIndex];
+      selected = waList.find((p: any) => p.shopifyProductId === catalogItem.shopifyProductId) ?? catalogItem;
+    } else {
+      selected = waList.find((p: any) => normalizeProductText(p.name).includes(normalizeProductText(trimmed)))
+        ?? allProducts.find((p: any) => normalizeProductText(String(p.name ?? p.title ?? "")).includes(normalizeProductText(trimmed)));
+    }
     if (!selected) {
-      await sendWaText(phone, `Please in options mein se number ya naam select karein:\n\n${products.map((p: any, i: number) => `${i + 1}️⃣ ${p.name}`).join("\n")}`, waSettings);
+      await sendWaText(phone, `Please in options mein se number ya naam select karein.\n\nAgar list lambi ho to *next* reply karein, ya product number bhej dein.`, waSettings);
       return;
     }
     const { formatVariantSelectionReply } = await import("../lib/waSalesAgent.js");

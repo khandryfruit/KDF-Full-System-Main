@@ -237,6 +237,9 @@ async function loadAllActiveCatalogRows(): Promise<any[]> {
 
 export function invalidateCatalogCache(): void {
   catalogCache = null;
+  import("./waSalesAgent.js")
+    .then((m) => m.invalidateFullCatalogIndex?.())
+    .catch(() => {});
 }
 
 function formatVariants(variants: unknown, query: string): {
@@ -343,6 +346,46 @@ export async function searchShopifyCatalog(query: string, limit = 6): Promise<Sh
   if (!q) return [];
   const scored = await scoreEntireCatalog(q);
   return scored.slice(0, limit);
+}
+
+/** Map DB row → catalog product for browse lists (no relevance score gate) */
+function mapRowToCatalogProductBrowse(row: any): ShopifyCatalogProduct {
+  const variants = formatVariants(row.variants, "");
+  const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(row.price);
+  const handle = row.handle || row.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "product";
+  const collections = Array.isArray(row.collections) ? row.collections : [];
+  return {
+    id: Number(row.id),
+    shopifyProductId: row.shopifyProductId,
+    name: row.title,
+    price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(parseCatalogUnitPrice(row.price)),
+    rawPrice: basePrice,
+    compareAt: row.compareAtPrice ? formatRupees(parseCatalogUnitPrice(row.compareAtPrice)) : null,
+    description: row.description
+      ? String(row.description).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180)
+      : null,
+    imageUrl: row.imageUrl ?? null,
+    productUrl: `${STORE_URL}/products/${handle}`,
+    variants: variants.label,
+    variantLines: variants.lines,
+    variantOptions: variants.options,
+    inStock: (row.inventoryQuantity ?? 0) > 0 || variants.options.some((v) => (v.inventoryQuantity ?? 0) > 0),
+    tags: row.tags,
+    productType: row.productType,
+    category: collections[0]?.title ?? null,
+    score: 100,
+    source: "shopify",
+  };
+}
+
+/** All active Shopify products (313+) — cached with catalog */
+export async function loadAllCatalogProducts(): Promise<ShopifyCatalogProduct[]> {
+  const rows = await loadAllActiveCatalogRows();
+  return rows.map((row) => mapRowToCatalogProductBrowse(row));
+}
+
+export async function getActiveCatalogProductCount(): Promise<number> {
+  return (await loadAllActiveCatalogRows()).length;
 }
 
 export type CatalogSearchDebug = {

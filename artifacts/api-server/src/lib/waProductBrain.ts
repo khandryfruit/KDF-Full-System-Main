@@ -6,7 +6,16 @@ import {
   type ShopifyCatalogProduct,
 } from "./shopifyProductKnowledge.js";
 import { productRootTermsFromQuery, WA_PRODUCT_ALIASES } from "./shopifyProductSearch.js";
-import { buildCatalogBrowseReply, type WaCatalogBrowseResult } from "./waSalesAgent.js";
+import {
+  buildCatalogBrowseReply,
+  buildFullCatalogMenuReply,
+  buildCategoryBrowseFromMenuPick,
+  isCatalogNextPageMessage,
+  isFullCatalogBrowseMessage,
+  getCategorySummaries,
+  resolveCategoryFromMenuNumber,
+  type WaCatalogBrowseResult,
+} from "./waSalesAgent.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -15,9 +24,11 @@ export type WaProductBrainHit = {
   query: string;
   matchedRoots: string[];
   score: number;
-  mode: "category" | "single" | "legacy";
+  mode: "category" | "single" | "legacy" | "catalog_menu" | "catalog_page";
   categoryId?: string | null;
   waProducts?: WaCatalogBrowseResult["waProducts"];
+  catalogPage?: number;
+  hasMore?: boolean;
 };
 
 export function isRomanUrduWa(text: string): boolean {
@@ -98,6 +109,31 @@ export function shouldUseProductDatabaseFirst(intent: string, text: string): boo
 
 const MIN_PRODUCT_SCORE = 35;
 
+export { isFullCatalogBrowseMessage, isCatalogNextPageMessage };
+
+/** Show all 313+ products via category master menu */
+export async function tryWaFullCatalogMenuReply(textBody: string): Promise<WaProductBrainHit | null> {
+  const menu = await buildFullCatalogMenuReply(textBody);
+  if (!menu) return null;
+
+  const summaries = await getCategorySummaries();
+  const placeholder = summaries[0]
+    ? { name: "Khan Dry Fruits Catalog", shopifyProductId: "catalog", rawPrice: 0, score: 100 } as ShopifyCatalogProduct
+    : { name: "Catalog", shopifyProductId: "catalog", rawPrice: 0, score: 100 } as ShopifyCatalogProduct;
+
+  return {
+    reply: menu.reply,
+    product: placeholder,
+    products: [],
+    query: "catalog",
+    matchedRoots: [],
+    score: 100,
+    mode: "catalog_menu",
+    categoryId: null,
+    waProducts: [],
+  };
+}
+
 export async function tryWaProductCatalogReply(opts: {
   textBody: string;
   productQuery?: string;
@@ -106,6 +142,10 @@ export async function tryWaProductCatalogReply(opts: {
     buildWaProductSearchQuery(opts.textBody, opts.productQuery),
   );
   if (!query || query.length < 2) return null;
+
+  if (isFullCatalogBrowseMessage(query) || isFullCatalogBrowseMessage(opts.textBody)) {
+    return tryWaFullCatalogMenuReply(opts.textBody);
+  }
 
   const browse = await buildCatalogBrowseReply({ query, textBody: opts.textBody });
   if (!browse) return null;

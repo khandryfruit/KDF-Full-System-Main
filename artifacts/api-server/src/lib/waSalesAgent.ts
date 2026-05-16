@@ -3,6 +3,7 @@
  * All data from synced Shopify catalog only.
  */
 import {
+  loadAllCatalogProducts,
   searchShopifyCatalog,
   toWhatsAppCatalogProducts,
   type ShopifyCatalogProduct,
@@ -35,6 +36,10 @@ export const WA_SALES_CATEGORIES: WaSalesCategory[] = [
   { id: "honey", emoji: "🍯", labelEn: "Honey", labelUr: "شہد", families: ["honey", "shahad", "شہد"] },
   { id: "oils", emoji: "🫒", labelEn: "Oils & Butters", labelUr: "آئل", families: ["oil", "butter", "paste"] },
   { id: "mixed", emoji: "🎁", labelEn: "Mixed & Gift Packs", labelUr: "مکس / گفٹ", families: ["mix", "mixed", "combo", "hamper", "gift", "pack"] },
+  { id: "spices", emoji: "🌶️", labelEn: "Spices", labelUr: "مصالحہ", families: ["spice", "spices", "masala", "cumin", "zeera", "haldi", "turmeric"] },
+  { id: "tea", emoji: "🍵", labelEn: "Tea & Herbs", labelUr: "چائے", families: ["tea", "chai", "herb", "herbal", "green tea"] },
+  { id: "chocolate", emoji: "🍫", labelEn: "Chocolate & Sweets", labelUr: "چاکلیٹ", families: ["chocolate", "cocoa", "sweet", "candy"] },
+  { id: "coconut", emoji: "🥥", labelEn: "Coconut", labelUr: "ناریل", families: ["coconut", "narial", "nariel"] },
 ];
 
 function formatRupees(value: unknown): string {
@@ -81,8 +86,100 @@ export function classifyProductCategory(
   return null;
 }
 
-/** Search catalog for a category / product family (up to 20 matches) */
-export async function searchCategoryProducts(query: string, limit = 20): Promise<{
+const CATEGORY_PAGE_SIZE = 25;
+
+let catalogIndexCache: {
+  at: number;
+  grouped: Map<string, ShopifyCatalogProduct[]>;
+  uncategorized: ShopifyCatalogProduct[];
+  total: number;
+} | null = null;
+
+const INDEX_TTL_MS = 60_000;
+
+/** Build in-memory index of ALL active products by sales category */
+export async function buildFullCatalogIndex(): Promise<{
+  grouped: Map<string, ShopifyCatalogProduct[]>;
+  uncategorized: ShopifyCatalogProduct[];
+  total: number;
+}> {
+  const now = Date.now();
+  if (catalogIndexCache && now - catalogIndexCache.at < INDEX_TTL_MS) {
+    return catalogIndexCache;
+  }
+
+  const all = await loadAllCatalogProducts();
+  const grouped = new Map<string, ShopifyCatalogProduct[]>();
+  const uncategorized: ShopifyCatalogProduct[] = [];
+
+  for (const cat of WA_SALES_CATEGORIES) grouped.set(cat.id, []);
+
+  for (const product of all) {
+    const cat = classifyProductCategory(product.name, product.tags, product.description);
+    if (cat) {
+      const list = grouped.get(cat.id) ?? [];
+      list.push(product);
+      grouped.set(cat.id, list);
+    } else {
+      uncategorized.push(product);
+    }
+  }
+
+  for (const [id, list] of grouped) {
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    grouped.set(id, list);
+  }
+  uncategorized.sort((a, b) => a.name.localeCompare(b.name));
+
+  catalogIndexCache = { at: now, grouped, uncategorized, total: all.length };
+  return catalogIndexCache;
+}
+
+export function invalidateFullCatalogIndex(): void {
+  catalogIndexCache = null;
+}
+
+/** Every product in a category from full DB (not search-limited) */
+export async function listProductsByCategoryId(categoryId: string): Promise<{
+  category: WaSalesCategory | null;
+  products: ShopifyCatalogProduct[];
+}> {
+  const index = await buildFullCatalogIndex();
+  if (categoryId === "other" || categoryId === "uncategorized") {
+    return { category: null, products: index.uncategorized };
+  }
+  const category = WA_SALES_CATEGORIES.find((c) => c.id === categoryId) ?? null;
+  const products = index.grouped.get(categoryId) ?? [];
+  return { category, products };
+}
+
+export async function getCategorySummaries(): Promise<Array<{
+  category: WaSalesCategory;
+  count: number;
+}>> {
+  const index = await buildFullCatalogIndex();
+  const out: Array<{ category: WaSalesCategory; count: number }> = [];
+  for (const cat of WA_SALES_CATEGORIES) {
+    const count = index.grouped.get(cat.id)?.length ?? 0;
+    if (count > 0) out.push({ category: cat, count });
+  }
+  if (index.uncategorized.length > 0) {
+    out.push({
+      category: {
+        id: "other",
+        emoji: "📦",
+        labelEn: "More Products",
+        labelUr: "دیگر Products",
+        families: [],
+      },
+      count: index.uncategorized.length,
+    });
+  }
+  return out;
+}
+
+/** Search catalog for a category — uses full index when family match */
+export async function searchCategoryProducts(query: string, limit = 80): Promise<{
   category: WaSalesCategory | null;
   products: ShopifyCatalogProduct[];
   query: string;
@@ -91,8 +188,62 @@ export async function searchCategoryProducts(query: string, limit = 20): Promise
   const q = String(query ?? "").trim();
   const roots = productRootTermsFromQuery(q);
   const category = resolveSalesCategoryFromQuery(q);
-  const products = await searchShopifyCatalog(q, limit);
+
+  if (category) {
+    const { products: allInCat } = await listProductsByCategoryId(category.id);
+    if (allInCat.length > 0) {
+      return { category, products: allInCat.slice(0, limit), query: q, roots };
+    }
+  }
+
+  const products = await searchShopifyCatalog(q, Math.min(limit, 50));
   return { category, products, query: q, roots };
+}
+
+export function isFullCatalogBrowseMessage(text: string): boolean {
+  const t = String(text ?? "")
+    .toLowerCase()
+    .replace(/[^\w\s\u0600-\u06FF]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return false;
+  const exact = new Set([
+    "products", "product", "catalog", "catalogue", "menu", "shop", "list",
+    "all products", "full catalog", "full list", "price list", "rate list",
+    "sari products", "saari products", "tamam products", "sab products",
+    "sare products", "all items", "show products", "show all",
+    "products list", "product list", "kya kya hai", "kya kya milta hai",
+    "تمام products", "ساری products", "تمام پروڈکٹس", "ساری پروڈکٹس",
+    "catalog dikhao", "products dikhao", "list dikhao",
+  ]);
+  if (exact.has(t)) return true;
+  return /\b(sari|saari|tamam|sab|sare|all)\s+(product|products|item|items|cheez|cheezen)\b/i.test(t)
+    || /\b(product|products)\s+(list|catalog|menu|dikhao|batao|bata do)\b/i.test(t)
+    || /\b(shop|catalog)\s+(menu|list)\b/i.test(t);
+}
+
+export function isCatalogNextPageMessage(text: string): boolean {
+  const t = String(text ?? "").trim().toLowerCase();
+  return /^(next|more|agay|aage|aur|continue|next page|agla|مزید|اگلے|اگلا)$/i.test(t);
+}
+
+/** Master menu: all categories covering 313+ products */
+export async function formatMasterCatalogMenuReply(roman: boolean): Promise<string> {
+  const index = await buildFullCatalogIndex();
+  const summaries = await getCategorySummaries();
+  const lines = summaries.map((s, i) =>
+    `${i + 1}️⃣ ${s.category.emoji} ${roman ? s.category.labelEn : s.category.labelUr} (${s.count})`,
+  );
+
+  if (roman) {
+    return `Ji 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog se live hain ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\nCategory number reply karein (jaise *1* for Almonds)\nYa direct product naam: badam, pista, kaju 😊`;
+  }
+  return `جی 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog سے live ہیں ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\nCategory number reply کریں (جیسے *1* بادام)\nیا direct product نام: badam، pista، kaju 😊`;
+}
+
+export function resolveCategoryFromMenuNumber(num: number, summaries: Array<{ category: WaSalesCategory }>): WaSalesCategory | null {
+  if (!Number.isFinite(num) || num < 1) return null;
+  return summaries[num - 1]?.category ?? null;
 }
 
 export type WaCatalogBrowseResult = {
@@ -106,33 +257,50 @@ export type WaCatalogBrowseResult = {
   score: number;
 };
 
-/** Category product list (step 1 of sales flow) */
+/** Category product list (step 1 of sales flow) — paginated for full category */
 export function formatCategoryProductListReply(opts: {
   category: WaSalesCategory | null;
   products: ShopifyCatalogProduct[];
   roman: boolean;
+  page?: number;
+  pageSize?: number;
+  totalInCategory?: number;
 }): string {
   const { category, products, roman } = opts;
+  const page = Math.max(0, opts.page ?? 0);
+  const pageSize = opts.pageSize ?? CATEGORY_PAGE_SIZE;
+  const total = opts.totalInCategory ?? products.length;
+
   if (!products.length) {
     return roman
       ? "Ji 😊 is category mein abhi koi exact match nahi mila. Please product naam bhej dein (jaise: Australian badam, Irani pista)."
       : "جی 😊 اس category میں ابھی کوئی exact match نہیں ملا۔ براہ کرم product نام بھیج دیں۔";
   }
 
+  const slice = products.slice(page * pageSize, (page + 1) * pageSize);
   const label = category
     ? (roman ? `${category.emoji} *${category.labelEn}*` : `${category.emoji} *${category.labelUr}*`)
     : (roman ? "🛒 *Available Products*" : "🛒 *دستیاب Products*");
 
-  const lines = products.slice(0, 12).map((p, i) => {
+  const startNum = page * pageSize + 1;
+  const lines = slice.map((p, i) => {
     const priceHint = p.rawPrice ? ` — from ${formatRupees(p.rawPrice)}` : "";
-    const stock = p.inStock ? "" : roman ? " (out of stock)" : " (out of stock)";
-    return `${i + 1}️⃣ ${p.name}${priceHint}${stock}`;
+    const stock = p.inStock ? "" : " (out of stock)";
+    return `${startNum + i}️⃣ ${p.name}${priceHint}${stock}`;
   });
 
+  const hasMore = (page + 1) * pageSize < total;
+  const pageInfo = total > pageSize
+    ? (roman ? `\n\n_Page ${page + 1} — showing ${startNum}–${startNum + slice.length - 1} of ${total}_` : `\n\n_Page ${page + 1} — ${total} میں سے ${startNum}–${startNum + slice.length - 1}_`)
+    : "";
+  const moreHint = hasMore
+    ? (roman ? "\n\nReply *next* for more products in this category ➡️" : "\n\nمزید products کے لیے *next* reply کریں ➡️")
+    : "";
+
   if (roman) {
-    return `Ji 😊 yeh ${category?.labelEn ?? "products"} available hain:\n\n${label}\n\n${lines.join("\n\n")}\n\n━━━━━━━━━━━\n\nPlease number select karein (1, 2, 3…)\nMain variants aur price bata dunga 😊`;
+    return `Ji 😊 yeh ${category?.labelEn ?? "products"} available hain (${total} total):\n\n${label}\n\n${lines.join("\n\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n\nProduct number select karein (1, 2, 3…)`;
   }
-  return `جی 😊 yeh ${category?.labelUr ?? "products"} available hain:\n\n${label}\n\n${lines.join("\n\n")}\n\n━━━━━━━━━━━\n\nبراہ کرم نمبر منتخب کریں (1، 2، 3…)\nمیں variants اور price بتاؤں گا 😊`;
+  return `جی 😊 yeh ${category?.labelUr ?? "products"} available hain (${total} total):\n\n${label}\n\n${lines.join("\n\n")}${pageInfo}${moreHint}\n\n━━━━━━━━━━━\n\nProduct number select کریں (1، 2، 3…)`;
 }
 
 /** Variant menu after product selection (step 2) */
@@ -180,7 +348,7 @@ export async function buildCatalogBrowseReply(opts: {
   const { query, textBody } = opts;
   if (!query || query.length < 2) return null;
 
-  const { category, products, roots } = await searchCategoryProducts(query, 20);
+  const { category, products, roots } = await searchCategoryProducts(query, 100);
   if (!products.length) return null;
 
   const top = products[0]!;
@@ -192,13 +360,66 @@ export async function buildCatalogBrowseReply(opts: {
 
   return {
     mode: products.length === 1 ? "single" : "category",
-    reply: formatCategoryProductListReply({ category, products, roman }),
+    reply: formatCategoryProductListReply({
+      category,
+      products,
+      roman,
+      page: 0,
+      totalInCategory: products.length,
+    }),
     category,
     products,
     waProducts,
     query,
     roots,
     score: top.score ?? 0,
+  };
+}
+
+export async function buildFullCatalogMenuReply(textBody: string): Promise<{
+  reply: string;
+  totalProducts: number;
+} | null> {
+  if (!isFullCatalogBrowseMessage(textBody)) return null;
+  const roman = isRomanUrduSales(textBody);
+  const index = await buildFullCatalogIndex();
+  const reply = await formatMasterCatalogMenuReply(roman);
+  return { reply, totalProducts: index.total };
+}
+
+export async function buildCategoryBrowseFromMenuPick(opts: {
+  categoryId: string;
+  textBody: string;
+  page?: number;
+}): Promise<{
+  reply: string;
+  category: WaSalesCategory | null;
+  products: ShopifyCatalogProduct[];
+  waProducts: ReturnType<typeof toWhatsAppCatalogProducts>;
+  page: number;
+  hasMore: boolean;
+} | null> {
+  const { products, category } = await listProductsByCategoryId(opts.categoryId);
+  if (!products.length) return null;
+
+  const page = opts.page ?? 0;
+  const roman = isRomanUrduSales(opts.textBody);
+  const waProducts = toWhatsAppCatalogProducts(products);
+  const hasMore = (page + 1) * CATEGORY_PAGE_SIZE < products.length;
+
+  return {
+    reply: formatCategoryProductListReply({
+      category,
+      products,
+      roman,
+      page,
+      totalInCategory: products.length,
+    }),
+    category,
+    products,
+    waProducts,
+    page,
+    hasMore,
   };
 }
 
