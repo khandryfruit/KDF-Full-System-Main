@@ -122,16 +122,16 @@ const CONFIRM_KEYWORDS = [
 ];
 
 export function isConfirmationReply(text: string): boolean {
-  const normalized = text.toLowerCase().trim().replace(/[^\w\s]/g, " ").trim();
+  const normalized = text.toLowerCase().trim().replace(/[_-]+/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
   return CONFIRM_KEYWORDS.some(k => {
-    const kn = k.toLowerCase().trim();
+    const kn = k.toLowerCase().trim().replace(/[_-]+/g, " ");
     return normalized === kn || normalized.startsWith(kn + " ") || normalized.endsWith(" " + kn);
   });
 }
 
 export function isCancellationReply(text: string): boolean {
-  const kws = ["cancel", "no", "nahi", "nope", "dont", "don't", "stop", "reject", "nahi chahiye"];
-  const normalized = text.toLowerCase().trim().replace(/[^\w\s]/g, " ").trim();
+  const kws = ["cancel", "cancel order", "cancel_order", "no", "nahi", "nope", "dont", "don't", "stop", "reject", "nahi chahiye"];
+  const normalized = text.toLowerCase().trim().replace(/[_-]+/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
   return kws.some(k => normalized === k || normalized.startsWith(k + " "));
 }
 
@@ -750,6 +750,7 @@ export async function processWhatsAppConfirmation(params: {
 }): Promise<{ handled: boolean; action?: string; orderId?: string }> {
   const { phone, text, interactionId } = params;
   const normalizedPhone = normalizePhone(phone);
+  const normalizedInteraction = String(interactionId ?? "").toLowerCase().replace(/[_-]+/g, " ").trim();
 
   /* Check interactive button replies */
   if (interactionId) {
@@ -775,13 +776,13 @@ export async function processWhatsAppConfirmation(params: {
   const conf = ((confRes.rows ?? [])[0]) as Record<string, any> | undefined;
   if (!conf) return { handled: false };
 
-  /* Check confirmation keywords */
-  if (isConfirmationReply(text)) {
+  /* Check confirmation keywords from visible text or static Meta button payload */
+  if (isConfirmationReply(text) || isConfirmationReply(normalizedInteraction)) {
     return await handleConfirmation(normalizedPhone, conf.shopify_order_id, "text_reply");
   }
 
   /* Check cancellation */
-  if (isCancellationReply(text)) {
+  if (isCancellationReply(text) || isCancellationReply(normalizedInteraction)) {
     await handleCancellation(normalizedPhone, conf.shopify_order_id);
     return { handled: true, action: "cancelled", orderId: conf.shopify_order_id };
   }
@@ -791,14 +792,33 @@ export async function processWhatsAppConfirmation(params: {
 
 async function handleConfirmation(phone: string, shopifyOrderId: string, method: string): Promise<{ handled: boolean; action: string; orderId: string }> {
   try {
-    /* Mark as confirmed in confirmations table */
-    await db.execute(sql`
+    /* Mark as confirmed once; duplicate Meta callbacks must not re-run side effects. */
+    const updateRes = await db.execute(sql`
       UPDATE shopify_order_confirmations
       SET status = 'confirmed', confirmation_reply = ${method},
           confirmation_received_at = NOW(), updated_at = NOW()
       WHERE shopify_order_id = ${shopifyOrderId}
         AND (customer_phone = ${phone} OR ${method} = 'button_click')
+        AND status = 'pending'
+      RETURNING id
     `).catch(() => {});
+    const updatedRows = Array.isArray((updateRes as any)?.rows) ? (updateRes as any).rows : [];
+    if (updatedRows.length === 0) {
+      const current = await db.execute(sql`
+        SELECT status FROM shopify_order_confirmations
+        WHERE shopify_order_id = ${shopifyOrderId}
+        LIMIT 1
+      `).catch(() => ({ rows: [] }));
+      const status = String(((current.rows ?? [])[0] as any)?.status ?? "");
+      if (["confirmed", "booked"].includes(status)) {
+        logger.info({ shopifyOrderId, phone, status }, "OnDrive: duplicate confirmation click ignored");
+        return { handled: true, action: "already_confirmed", orderId: shopifyOrderId };
+      }
+      if (status === "cancelled") {
+        return { handled: true, action: "already_cancelled", orderId: shopifyOrderId };
+      }
+      logger.warn({ shopifyOrderId, phone, status }, "OnDrive: confirmation click received but no pending confirmation row matched");
+    }
 
     /* Also update local shopify_orders status → confirmed */
     await db.execute(sql`
@@ -854,12 +874,28 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
 }
 
 async function handleCancellation(phone: string, shopifyOrderId: string): Promise<void> {
-  await db.execute(sql`
+  const updateRes = await db.execute(sql`
     UPDATE shopify_order_confirmations
     SET status = 'cancelled', confirmation_reply = 'cancelled',
         confirmation_received_at = NOW(), updated_at = NOW()
-    WHERE shopify_order_id = ${shopifyOrderId} AND customer_phone = ${phone}
+    WHERE shopify_order_id = ${shopifyOrderId}
+      AND customer_phone = ${phone}
+      AND status IN ('pending', 'sending', 'failed')
+    RETURNING id
   `).catch(() => {});
+  const updatedRows = Array.isArray((updateRes as any)?.rows) ? (updateRes as any).rows : [];
+  if (updatedRows.length === 0) {
+    const current = await db.execute(sql`
+      SELECT status FROM shopify_order_confirmations
+      WHERE shopify_order_id = ${shopifyOrderId}
+      LIMIT 1
+    `).catch(() => ({ rows: [] }));
+    const status = String(((current.rows ?? [])[0] as any)?.status ?? "");
+    if (["cancelled", "confirmed", "booked"].includes(status)) {
+      logger.info({ shopifyOrderId, phone, status }, "OnDrive: duplicate/late cancellation click ignored");
+      return;
+    }
+  }
 
   /* Also update local shopify_orders status → cancelled */
   await db.execute(sql`

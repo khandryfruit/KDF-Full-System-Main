@@ -1080,6 +1080,8 @@ export default function WhatsAppPage() {
   const [metaSyncError, setMetaSyncError] = useState<string | null>(null);
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
   const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
+  const [processingLogs, setProcessingLogs] = useState<any[]>([]);
+  const [isLoadingProcessingLogs, setIsLoadingProcessingLogs] = useState(false);
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<{ success: boolean; message?: string; error?: string; webhookUrl?: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1188,6 +1190,14 @@ export default function WhatsAppPage() {
       setWebhookLogs(Array.isArray(r) ? r : []);
     } catch { setWebhookLogs([]); }
     finally { setIsLoadingWebhookLogs(false); }
+  };
+  const handleLoadProcessingLogs = async () => {
+    setIsLoadingProcessingLogs(true);
+    try {
+      const r = await apiFetch("/api/admin/whatsapp/processing-logs?limit=120");
+      setProcessingLogs(Array.isArray(r) ? r : []);
+    } catch { setProcessingLogs([]); }
+    finally { setIsLoadingProcessingLogs(false); }
   };
   const handleTestWebhook = async () => {
     setIsTestingWebhook(true); setWebhookTestResult(null);
@@ -3448,6 +3458,49 @@ export default function WhatsAppPage() {
                       <li key={f.id}>{f.error} — {new Date(f.createdAt).toLocaleString()}</li>
                     ))}
                   </ul>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Bug className="w-4 h-4 text-[#25D366]" /> Button + AI Processing Logs
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Shows whether webhook arrived, inbox saved, confirm/cancel processed, AI triggered, and reply sent.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleLoadProcessingLogs} disabled={isLoadingProcessingLogs} className="gap-1.5">
+                {isLoadingProcessingLogs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Load Processing Logs
+              </Button>
+            </div>
+            <div className="px-5 py-4">
+              {processingLogs.length === 0 ? (
+                <div className="text-center py-5 text-muted-foreground text-xs bg-muted/20 rounded-xl border border-border">
+                  Click "Load Processing Logs", then test Confirm/Cancel or send "I need almonds". Exact backend processing steps will appear here.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {processingLogs.map((row: any) => {
+                    const failed = row.status === "failed";
+                    return (
+                      <div key={row.id} className={`rounded-lg border px-3 py-2 text-xs ${failed ? "border-red-200 bg-red-50" : "border-border bg-muted/20"}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={failed ? "border-red-300 text-red-700" : "border-[#25D366]/30 text-[#25D366]"}>
+                              {row.template_name?.replace("processing:", "")}
+                            </Badge>
+                            <span className="font-mono text-muted-foreground">{row.phone}</span>
+                          </div>
+                          <span className="text-muted-foreground">{row.created_at ? new Date(row.created_at).toLocaleString("en-PK") : ""}</span>
+                        </div>
+                        <p className={`mt-1 font-medium ${failed ? "text-red-800" : "text-foreground"}`}>{row.message}</p>
+                        {row.failure_reason && <p className="mt-1 text-red-700">Reason: {row.failure_reason}</p>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -34,6 +34,26 @@ async function getOpenAIClient() {
   return client;
 }
 
+async function logWaProcessingStep(opts: {
+  phone?: string | null;
+  messageId?: string | null;
+  step: string;
+  status?: "received" | "sent" | "failed";
+  detail?: string | null;
+  payload?: unknown;
+  failureReason?: string | null;
+}) {
+  await db.insert(whatsappLogsTable).values({
+    phone: opts.phone ?? "system",
+    messageId: opts.messageId ?? null,
+    templateName: `processing:${opts.step}`,
+    message: opts.detail ?? opts.step,
+    status: opts.status ?? "received",
+    response: opts.payload ? JSON.stringify(opts.payload).slice(0, 4000) : null,
+    failureReason: opts.failureReason ?? null,
+  } as any).catch(() => {});
+}
+
 /* ─── Public: Chat Button Config ────────────────────── */
 router.get("/whatsapp/chat-config", async (req, res) => {
   try {
@@ -135,6 +155,22 @@ router.get("/webhooks/whatsapp", async (req, res) => {
 /* ─── Webhook Events (Meta POST) ────────────────────── */
 router.get("/admin/whatsapp/webhook-logs", adminMiddleware as any, (req, res) => {
   res.json(recentWebhookPayloads.slice(0, 30));
+});
+
+router.get("/admin/whatsapp/processing-logs", adminMiddleware as any, async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(20, parseInt(String(req.query.limit ?? "100"), 10) || 100));
+    const rows = await db.execute(sql`
+      SELECT id, phone, message_id, template_name, message, status, failure_reason, response, created_at
+      FROM whatsapp_logs
+      WHERE template_name LIKE 'processing:%'
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `);
+    res.json(rows.rows ?? []);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load processing logs" });
+  }
 });
 
 /* ─── Webhook: incoming message handler ──────────────── */
@@ -363,6 +399,13 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             status: "received",
             response: JSON.stringify(msg),
           }).catch((err: unknown) => log?.warn({ err, phone, msgId }, "WA inbound whatsapp_logs insert failed"));
+          await logWaProcessingStep({
+            phone,
+            messageId: msgId,
+            step: "webhook_received",
+            detail: `Webhook received: ${msgType}${interactionId ? ` (${interactionId})` : ""}`,
+            payload: { msgType, rawText, interactionId, interactionTitle, metadata: value.metadata },
+          });
 
           if (phone === "unknown") continue;
 
@@ -390,6 +433,22 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           if (!waConvId) {
             log?.error({ phone, msgId }, "WA inbound not in inbox — check DB / wa_conversations table");
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "inbox_persist",
+              status: "failed",
+              detail: "Inbound webhook reached backend but could not be saved to admin inbox.",
+              failureReason: "wa_conversation_persist_failed",
+            });
+          } else {
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "inbox_persist",
+              detail: "Inbound message saved to admin inbox.",
+              payload: { conversationId: waConvId },
+            });
           }
 
           /* ── Intent detection + save in conversation ── */
@@ -414,24 +473,6 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             await db.execute(sql`UPDATE wa_conversations SET intent = ${detectedIntent} WHERE id = ${waConvId}`).catch(() => {});
           }
 
-          /* ── Check if conversation is in human or off mode ── */
-          if (waConv) {
-            const currentBotMode = (waConv as any)?.botMode ?? "auto";
-            if (currentBotMode === "human" || currentBotMode === "off") {
-              log?.info({ phone, botMode: currentBotMode }, "Bot skipped — human/off mode");
-              continue;
-            }
-          }
-
-          /* Load config (chatbot + WA settings) */
-          const [chatbot]  = await db.select().from(chatbotSettingsTable).limit(1);
-          const [waSettings] = await db.select().from(whatsappSettingsTable).limit(1);
-          if (!waSettings?.isActive) continue;
-
-          /* Get current conversation state */
-          const convState = await getConversationState(phone);
-          const currentState = convState?.state ?? "idle";
-
           if ((msgType === "interactive" || msgType === "button") && (interactionTitle || interactionId || rawText)) {
             await showHumanPresenceBeforeReply({
               inboundMessageId: msgId,
@@ -441,24 +482,84 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             });
           }
 
-          /* ═══════════════════════════════════════════════
-             BRANCH 0: OnDrive Confirmation Detection
-             (check BEFORE menu / AI — highest priority)
-             ═══════════════════════════════════════════════ */
+          /* ── Order Confirm/Cancel is highest priority and must run even if bot mode is human/off. */
           try {
-            const { processWhatsAppConfirmation } = await import("../lib/ondriveEngine.js");
+            const { processWhatsAppConfirmation, isConfirmationReply, isCancellationReply } = await import("../lib/ondriveEngine.js");
             const confResult = await processWhatsAppConfirmation({
               phone,
               text: rawText,
               interactionId,
             });
             if (confResult.handled) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "template_button_processed",
+                status: "sent",
+                detail: `Order button/text processed: ${confResult.action ?? "handled"}`,
+                payload: { orderId: confResult.orderId, action: confResult.action, rawText, interactionId },
+              });
               log?.info({ phone, action: confResult.action, orderId: confResult.orderId }, "OnDrive: confirmation handled");
               continue;
             }
+            if (isConfirmationReply(rawText) || isCancellationReply(rawText) || isConfirmationReply(interactionId ?? "") || isCancellationReply(interactionId ?? "")) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "template_button_processed",
+                status: "failed",
+                detail: "Customer clicked/replied confirm/cancel but no pending Shopify confirmation was found for this phone.",
+                payload: { rawText, interactionId },
+                failureReason: "no_pending_order_confirmation_for_phone",
+              });
+            }
           } catch (confErr) {
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "template_button_processed",
+              status: "failed",
+              detail: "Confirmation button webhook reached backend but processing failed.",
+              payload: { error: confErr instanceof Error ? confErr.message : String(confErr), rawText, interactionId },
+              failureReason: confErr instanceof Error ? confErr.message : String(confErr),
+            });
             log?.warn(confErr, "OnDrive confirmation check failed (non-fatal)");
           }
+
+          /* ── Check if conversation is in human or off mode ── */
+          if (waConv) {
+            const currentBotMode = (waConv as any)?.botMode ?? "auto";
+            if (currentBotMode === "human" || currentBotMode === "off") {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "ai_skipped",
+                detail: `AI skipped because conversation bot mode is ${currentBotMode}.`,
+                payload: { botMode: currentBotMode },
+              });
+              log?.info({ phone, botMode: currentBotMode }, "Bot skipped — human/off mode");
+              continue;
+            }
+          }
+
+          /* Load config (chatbot + WA settings) */
+          const [chatbot]  = await db.select().from(chatbotSettingsTable).limit(1);
+          const [waSettings] = await db.select().from(whatsappSettingsTable).limit(1);
+          if (!waSettings?.isActive) {
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "ai_skipped",
+              status: "failed",
+              detail: "WhatsApp settings are inactive, so no customer reply could be sent.",
+              failureReason: "whatsapp_settings_inactive",
+            });
+            continue;
+          }
+
+          /* Get current conversation state */
+          const convState = await getConversationState(phone);
+          const currentState = convState?.state ?? "idle";
 
           /* ═══════════════════════════════════════════════
              BRANCH 1: Interactive reply (button / list tap)
@@ -570,6 +671,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* AI chatbot fallback */
           if (chatbot?.isEnabled) {
             await handleAiReply({ phone, textBody, chatbot, waSettings, log });
+          } else {
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "ai_skipped",
+              detail: "AI chatbot is disabled or missing in admin settings.",
+              payload: { hasChatbotSettings: Boolean(chatbot), chatbotEnabled: chatbot?.isEnabled ?? false },
+            });
           }
         }
       }
@@ -1163,6 +1272,12 @@ async function handleAiReply(opts: {
 }): Promise<void> {
   const { phone, textBody, chatbot, waSettings, log } = opts;
   try {
+    await logWaProcessingStep({
+      phone,
+      step: "ai_triggered",
+      detail: "AI reply pipeline started.",
+      payload: { textBody: textBody.slice(0, 500), model: chatbot?.aiModel ?? "gpt-4o-mini", chatbotEnabled: chatbot?.isEnabled },
+    });
     /* Rate limit check */
     const cooldownSec = chatbot.replyDelaySec ?? 30;
     const [lastAiReplyRow] = await db.select({ createdAt: whatsappLogsTable.createdAt })
@@ -1173,6 +1288,12 @@ async function handleAiReply(opts: {
     if (lastAiReplyRow) {
       const secsSinceLast = (Date.now() - new Date(lastAiReplyRow.createdAt).getTime()) / 1000;
       if (secsSinceLast < cooldownSec) {
+        await logWaProcessingStep({
+          phone,
+          step: "ai_skipped",
+          detail: `AI skipped by cooldown (${Math.round(secsSinceLast)}s/${cooldownSec}s).`,
+          payload: { secsSinceLast, cooldownSec },
+        });
         log?.info({ phone, secsSinceLast, cooldownSec }, "AI reply rate-limited");
         return;
       }
@@ -1186,6 +1307,14 @@ async function handleAiReply(opts: {
     );
     const todaySent = Number((dailyCount as any)?.rows?.[0]?.cnt ?? 0);
     if (todaySent >= maxDaily) {
+      await logWaProcessingStep({
+        phone,
+        step: "ai_skipped",
+        status: "failed",
+        detail: `AI daily cap reached (${todaySent}/${maxDaily}).`,
+        payload: { todaySent, maxDaily },
+        failureReason: "ai_daily_cap_reached",
+      });
       log?.warn({ todaySent, maxDaily }, "AI reply daily cap reached");
       return;
     }
@@ -1426,11 +1555,36 @@ async function handleAiReply(opts: {
       toolRound++;
     }
 
-    if (!reply) return;
+    if (!reply) {
+      await logWaProcessingStep({
+        phone,
+        step: "ai_skipped",
+        status: "failed",
+        detail: "AI produced no reply text.",
+        failureReason: "ai_empty_reply",
+      });
+      return;
+    }
 
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
-    await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+    const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+    await logWaProcessingStep({
+      phone,
+      step: "ai_reply_sent",
+      status: ok ? "sent" : "failed",
+      detail: ok ? "AI reply sent to customer." : "AI generated a reply but WhatsApp send failed.",
+      payload: { reply: reply.slice(0, 1000) },
+      failureReason: ok ? null : "ai_whatsapp_send_failed",
+    });
   } catch (aiErr) {
+    await logWaProcessingStep({
+      phone,
+      step: "ai_reply_sent",
+      status: "failed",
+      detail: "AI reply pipeline failed.",
+      payload: { error: aiErr instanceof Error ? aiErr.message : String(aiErr) },
+      failureReason: aiErr instanceof Error ? aiErr.message : String(aiErr),
+    });
     log?.warn(aiErr, "AI auto-reply error");
     try {
       if (chatbot?.fallbackMessage) {
