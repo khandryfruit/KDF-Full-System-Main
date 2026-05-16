@@ -297,6 +297,11 @@ async function upsertProduct(store: any, p: any) {
       updatedAt: new Date(),
     },
   });
+
+  try {
+    const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
+    await rebuildShopifyProductAliases({ shopifyProductId: String(p.id) });
+  } catch { /* non-fatal */ }
 }
 
 /* ──────────────────────────────────────────────────────
@@ -432,6 +437,10 @@ async function runIncrementalSync(store: any) {
       await db.update(shopifyStoresTable)
         .set({ lastProductSync: new Date(), updatedAt: new Date() })
         .where(eq(shopifyStoresTable.id, store.id));
+      try {
+        const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
+        await rebuildShopifyProductAliases();
+      } catch { /* non-fatal */ }
     }
   }
 

@@ -19,6 +19,20 @@ import { getMetaAppSecrets, getMetaAppSecret } from "../lib/waSecrets";
 import { buildWhatsappHealthReport } from "../lib/whatsappHealth.js";
 import { classifyWaFailure } from "../lib/waFailureClassifier.js";
 import { createAdminAlert } from "../lib/adminAlerts.js";
+import {
+  expandWaProductSearchTerms,
+  searchShopifyProductIdsByAlias,
+  fetchShopifyProductsByIds,
+  productRootTermsFromQuery,
+} from "../lib/shopifyProductSearch.js";
+import {
+  loadConversationMemory,
+  persistConversationTurn,
+  shouldBlockRepeatedReply,
+  buildMemorySummaryBlock,
+  isActiveCommerceFlow,
+} from "../lib/whatsappConversationMemory.js";
+import { isDeliveryOnlyMessage, isTrackingOnlyMessage, tryDeterministicWaReply, sendDeterministicWaReply } from "../lib/waIntentEngine.js";
 
 const router = Router();
 
@@ -65,6 +79,7 @@ type WaIntent =
   | "bulk_order"
   | "order_start"
   | "tracking"
+  | "delivery"
   | "cancellation"
   | "complaint"
   | "human_agent"
@@ -92,7 +107,9 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "chaye", "chahye", "chaiye", "chahe", "need", "show", "available", "recommend", "suggest", "best"];
   const billWords = ["bill", "bil", "invoice", "receipt", "bna", "bana", "banao", "bnao", "bejo", "bhejo", "bhej do", "checkout", "total bna", "total bana"];
   if (has(["cancel order", "order cancel", "cancel kr", "cancel kar", "nahi chahiye"])) return { intent: "cancellation", confidence: 0.94, reason: "cancel keyword" };
-  if (has(["track", "tracking", "where is my order", "order status", "mera order", "status", "delivery kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
+  if (isDeliveryOnlyMessage(text)) return { intent: "delivery", confidence: 0.92, reason: "delivery/shipping keyword without product" };
+  if (has(["track", "tracking", "where is my order", "order status", "mera order", "parcel kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
+  if (has(["delivery kahan", "delivery status", "parcel status"])) return { intent: "tracking", confidence: 0.88, reason: "delivery status = tracking" };
   if (has(["complaint", "shikayat", "problem", "issue", "refund", "return", "bad quality", "damage"])) return { intent: "complaint", confidence: 0.9, reason: "complaint keyword" };
   if (has(["human", "agent", "representative", "real person", "admin se", "support se", "call me", "phone kar", "baat karni hai", "bat krni h", "bat krna h", "baat krna", "baat karna"])) return { intent: "conversation", confidence: 0.9, reason: "conversation/human support phrase" };
   if (has(["bulk", "wholesale", "20kg", "10kg", "5kg", "carton", "large quantity"])) return { intent: "bulk_order", confidence: 0.9, reason: "bulk order keyword", productQuery: productWords.find((w) => t.includes(w)) };
@@ -784,8 +801,29 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           }
           if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
+            const commerceText = inboundText.trim();
+            if (isDeliveryOnlyMessage(commerceText) || isTrackingOnlyMessage(commerceText)) {
+              const midFlowIntent = detectWaIntent(commerceText);
+              const midReply = await tryDeterministicWaReply({
+                phone,
+                textBody: commerceText,
+                currentState,
+                detectedIntent: midFlowIntent.intent,
+                productQuery: midFlowIntent.productQuery,
+              });
+              if (midReply) {
+                await sendDeterministicWaReply({
+                  phone,
+                  textBody: commerceText,
+                  reply: midReply,
+                  intent: midFlowIntent.intent,
+                  send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+                });
+                continue;
+              }
+            }
             try {
-              await handleCommerceOrderFlow(phone, inboundText.trim(), currentState, waSettings, log);
+              await handleCommerceOrderFlow(phone, commerceText, currentState, waSettings, log);
             } catch (commerceErr) {
               await logWaProcessingStep({
                 phone,
@@ -837,6 +875,23 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: `Detected intent: ${detected.intent} (${detected.reason})`,
               payload: { textBody, ...detected, route: "ai_chat" },
             });
+            const aiChatDeterministic = await tryDeterministicWaReply({
+              phone,
+              textBody,
+              currentState,
+              detectedIntent: detected.intent,
+              productQuery: detected.productQuery,
+            });
+            if (aiChatDeterministic) {
+              await sendDeterministicWaReply({
+                phone,
+                textBody,
+                reply: aiChatDeterministic,
+                intent: detected.intent,
+                send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+              });
+              continue;
+            }
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
           }
@@ -867,6 +922,25 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* Greeting menu is only a fallback when AI is disabled. If AI is enabled, OpenAI must use admin prompt. */
           if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
             await sendQuickOrderMenu(phone, waSettings);
+            continue;
+          }
+
+          /* Deterministic replies: delivery, tracking, contextual price — never generic greeting */
+          const deterministicReply = await tryDeterministicWaReply({
+            phone,
+            textBody,
+            currentState,
+            detectedIntent: detected.intent,
+            productQuery: detected.productQuery,
+          });
+          if (deterministicReply) {
+            await sendDeterministicWaReply({
+              phone,
+              textBody,
+              reply: deterministicReply,
+              intent: detected.intent === "delivery" || isDeliveryOnlyMessage(textBody) ? "delivery" : detected.intent,
+              send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+            });
             continue;
           }
 
@@ -1338,7 +1412,7 @@ function isBundleProductName(name: string): boolean {
 
 function productRootTerms(query: string): string[] {
   const q = normalizeCatalogProductQuery(query);
-  const roots = new Set<string>();
+  const roots = new Set<string>(productRootTermsFromQuery(query));
   for (const token of q.split(/\s+/)) {
     if (PRODUCT_ROOT_WORDS.has(token)) {
       roots.add(token);
@@ -1350,7 +1424,7 @@ function productRootTerms(query: string): string[] {
 
 function expandProductSearchTerms(query: string): string[] {
   const q = normalizeCatalogProductQuery(query) || normalizeProductText(query);
-  const terms = new Set<string>([q]);
+  const terms = new Set<string>([q, ...expandWaProductSearchTerms(query)]);
   for (const token of q.split(/\s+/)) {
     for (const alias of PRODUCT_ALIASES[token] ?? []) terms.add(alias);
   }
@@ -1437,25 +1511,36 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   const matchDiagnostics: Array<{ title: string; score: number; reason: string; excludedReason?: string; source: string; roots?: string[] }> = [];
 
   try {
-    const shopProds = await db.select({
-      title: shopifyProductsTable.title,
-      price: shopifyProductsTable.price,
-      compareAtPrice: shopifyProductsTable.compareAtPrice,
-      description: shopifyProductsTable.description,
-      imageUrl: shopifyProductsTable.imageUrl,
-      variants: shopifyProductsTable.variants,
-      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-      shopifyProductId: shopifyProductsTable.shopifyProductId,
-      handle: shopifyProductsTable.handle,
-      collections: shopifyProductsTable.collections,
-      tags: shopifyProductsTable.tags,
-    }).from(shopifyProductsTable)
-      .where(and(
-        eq(shopifyProductsTable.status, "active"),
-        searchTerms.length ? or(...searchTerms.flatMap((term) => [ilike(shopifyProductsTable.title, `%${term}%`), ilike(shopifyProductsTable.tags, `%${term}%`)])) : sql`false`,
-      ))
-      .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-      .limit(limit * 3);
+    const aliasProductIds = await searchShopifyProductIdsByAlias(query, limit * 3);
+    let shopProds: any[] = [];
+    if (aliasProductIds.length) {
+      shopProds = await fetchShopifyProductsByIds(aliasProductIds);
+    }
+    if (shopProds.length < limit) {
+      const fallback = await db.select({
+        title: shopifyProductsTable.title,
+        price: shopifyProductsTable.price,
+        compareAtPrice: shopifyProductsTable.compareAtPrice,
+        description: shopifyProductsTable.description,
+        imageUrl: shopifyProductsTable.imageUrl,
+        variants: shopifyProductsTable.variants,
+        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+        shopifyProductId: shopifyProductsTable.shopifyProductId,
+        handle: shopifyProductsTable.handle,
+        collections: shopifyProductsTable.collections,
+        tags: shopifyProductsTable.tags,
+      }).from(shopifyProductsTable)
+        .where(and(
+          eq(shopifyProductsTable.status, "active"),
+          searchTerms.length ? or(...searchTerms.flatMap((term) => [ilike(shopifyProductsTable.title, `%${term}%`), ilike(shopifyProductsTable.tags, `%${term}%`)])) : sql`false`,
+        ))
+        .orderBy(desc(shopifyProductsTable.inventoryQuantity))
+        .limit(limit * 3);
+      const seen = new Set(shopProds.map((p) => p.shopifyProductId));
+      for (const row of fallback) {
+        if (!seen.has(row.shopifyProductId)) shopProds.push(row);
+      }
+    }
 
     const scoredShopify = shopProds
       .map((sp: any) => ({ sp, match: productMatchAnalysis(query, sp.title, sp.tags) }));
@@ -1549,10 +1634,19 @@ async function buildEmergencyAiFallback(opts: {
       ? "Assalam o Alaikum 😊 Alhamdulillah, main theek hoon. Aap batayein, kis product ya order mein madad chahiye?"
       : "وعلیکم السلام 😊 الحمدللہ، میں ٹھیک ہوں۔ آپ بتائیں کس product یا order میں مدد چاہیے؟";
   }
+  if (intent.intent === "delivery") {
+    const delivery = await tryDeterministicWaReply({
+      phone: phone ?? "",
+      textBody,
+      currentState: "idle",
+      detectedIntent: "delivery",
+    });
+    if (delivery) return delivery;
+  }
   if (intent.intent === "conversation" || intent.intent === "support" || intent.intent === "general") {
     return roman
-      ? "Ji 😊 main madad ke liye yahin hoon. Aap product, price, order status ya delivery ke bare mein pooch sakte hain."
-      : "جی 😊 میں مدد کے لیے موجود ہوں۔ آپ product, price, order status یا delivery کے بارے میں پوچھ سکتے ہیں۔";
+      ? "Ji 😊 batayein — product, price, delivery, ya order status?"
+      : "جی 😊 بتائیں — product، price، delivery، یا order status؟";
   }
   return roman
     ? "Ji 😊 aapka message receive ho gaya. Aap thori detail share kar dein, main madad karta hoon."
@@ -1669,6 +1763,11 @@ async function handleQuickOrderNumber(opts: {
       await setConversationState(opts.phone, "idle", {});
       return true;
     }
+    await persistConversationTurn(opts.phone, {
+      intent: "order_start",
+      topic: "category_selected",
+      mergeStateData: { selectedCategory: category.label, selectedCategoryKey: category.key },
+    });
     return startCommerceOrderFromText({
       phone: opts.phone,
       textBody: `${category.key} order`,
@@ -2017,6 +2116,9 @@ async function startCommerceOrderFromText(opts: {
       product: found.product,
       variant: found.variant,
       productName: found.product.name,
+      selectedProductName: found.product.name,
+      selectedVariantTitle: found.variantTitle,
+      selectedCategory: parsed.productQuery,
       variantTitle: found.variantTitle,
       unitPrice: found.unitPrice,
     });
@@ -2256,6 +2358,9 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       product: selected,
       variant,
       productName: selected.name,
+      selectedProductName: selected.name,
+      selectedVariantTitle: variant.title,
+      selectedCategory: stateData.productQuery ?? "",
       variantTitle: variant.title,
       unitPrice: parseCatalogUnitPrice(variant.price),
     });
@@ -2281,6 +2386,9 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       product,
       variant: selected,
       productName: product.name,
+      selectedProductName: product.name,
+      selectedVariantTitle: selected.title,
+      selectedCategory: stateData.productQuery ?? "",
       variantTitle: selected.title,
       unitPrice: parseCatalogUnitPrice(selected.price),
     });
@@ -2702,11 +2810,13 @@ async function handleAiReply(opts: {
     }
 
     const convState = await getConversationState(phone).catch(() => null);
+    const sessionMemory = await loadConversationMemory(phone);
+    const memoryBlock = buildMemorySummaryBlock(sessionMemory);
     const memorySummary = [
       `Phone: ${phone}`,
       customerName ? `Known customer name: ${customerName}` : "",
       convState?.state ? `Active state: ${convState.state}` : "",
-      (convState as any)?.stateData ? `State data: ${String((convState as any).stateData).slice(0, 1200)}` : "",
+      memoryBlock,
     ].filter(Boolean).join("\n");
 
     /* Conversation history from wa_messages */
@@ -2791,7 +2901,7 @@ async function handleAiReply(opts: {
       },
     ];
 
-    const whatsappInstructions = `WhatsApp sales behavior:
+    let whatsappInstructions = `WhatsApp sales behavior:
 - For any product/price/variant question, use the official catalog context if provided and answer only from that data.
 - Product, variant, price, stock, discount, SKU, image, and availability data must come from synced Shopify catalog only. Never use local/manual products or guessed prices.
 - For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
@@ -2806,7 +2916,13 @@ async function handleAiReply(opts: {
 - Use senior-citizen mode by default on WhatsApp: short, clear, one question at a time, no long paragraphs.
 - Customers may reply with only numbers from the quick menu. Treat number replies as valid intent, not confusion.
 - Voice notes may arrive as transcribed text. Treat the transcription exactly like the customer typed it.
-- Keep replies short, human, and conversion-focused.`;
+- Keep replies short, human, and conversion-focused.
+- NEVER repeat the same greeting or "main madad ke liye yahin hoon" style line twice in one chat.
+- If customer asks "Delivery" or delivery charges, answer delivery charges directly — never send a generic welcome.
+- If [CONVERSATION MEMORY] shows an active order flow or selected product, continue that flow — do not restart with greeting.`;
+    if (isActiveCommerceFlow(convState?.state) || sessionMemory.selectedProductName) {
+      whatsappInstructions += `\n- CRITICAL: Customer is mid-order or has selected a product. Do NOT send generic greetings. Answer the exact question (delivery, price, variant) using memory context.`;
+    }
     let catalogContextBlock = "";
     if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
       const catalogQuery = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
@@ -2931,8 +3047,24 @@ async function handleAiReply(opts: {
       throw new Error("ai_empty_reply");
     }
 
+    if (shouldBlockRepeatedReply(reply, sessionMemory)) {
+      const roman = /[a-z]/i.test(textBody);
+      reply = roman
+        ? "Ji 😊 samajh gaya. Delivery, price, ya order — kis cheez ki detail chahiye?"
+        : "جی 😊 سمجھ گیا۔ Delivery، price، یا order — کس چیز کی detail چاہیے؟";
+    }
+
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
     const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+    await persistConversationTurn(phone, {
+      intent: intent.intent,
+      topic: intent.intent,
+      assistantReply: reply,
+      mergeStateData: {
+        lastUserMessage: textBody.slice(0, 500),
+        deliveryDiscussed: intent.intent === "delivery" || sessionMemory.deliveryDiscussed,
+      },
+    });
     await logWaProcessingStep({
       phone,
       step: "ai_reply_sent",

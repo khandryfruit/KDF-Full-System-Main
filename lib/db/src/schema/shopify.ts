@@ -146,6 +146,16 @@ export const shopifyCampaignsTable = pgTable("shopify_campaigns", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const shopifyProductAliasesTable = pgTable("shopify_product_aliases", {
+  id: serial("id").primaryKey(),
+  shopifyProductId: text("shopify_product_id").notNull(),
+  alias: text("alias").notNull(),
+  aliasType: text("alias_type").notNull().default("synonym"),
+  locale: text("locale").notNull().default("any"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const shopifyWebhookLogsTable = pgTable("shopify_webhook_logs", {
   id: serial("id").primaryKey(),
   storeId: integer("store_id"),

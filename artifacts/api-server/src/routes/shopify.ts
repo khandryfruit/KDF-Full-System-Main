@@ -491,6 +491,22 @@ router.post("/admin/shopify/sync/products", adminMiddleware, async (req, res) =>
   }
 });
 
+/** Rebuild local Shopify product alias index for WhatsApp/AI fuzzy search */
+router.post("/admin/shopify/products/rebuild-search-index", adminMiddleware, async (req, res) => {
+  try {
+    const { rebuildShopifyProductAliases } = await import("../lib/shopifyProductSearch.js");
+    const result = await rebuildShopifyProductAliases();
+    res.json({
+      success: true,
+      message: `Product search index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
+      ...result,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 /** Pull abandoned checkouts from Shopify (GraphQL primary, REST fallback; Marketing Hub backfill). */
 router.post("/admin/shopify/sync/abandoned-checkouts", adminMiddleware, async (req, res) => {
   try {
