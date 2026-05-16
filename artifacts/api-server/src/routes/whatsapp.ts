@@ -4,7 +4,7 @@ import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspa
 import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
-import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting } from "../lib/whatsapp";
+import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting, markWhatsAppMessageRead, sendWhatsAppTypingIndicator } from "../lib/whatsapp";
 import { handleMenuItemTap } from "../lib/waMenuHandlers.js";
 import { DEFAULT_GREETING, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "../lib/waMenuDefaults.js";
 import { broadcastSSE } from "../lib/sse";
@@ -431,6 +431,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           const convState = await getConversationState(phone);
           const currentState = convState?.state ?? "idle";
 
+          if ((msgType === "interactive" || msgType === "button") && (interactionTitle || interactionId || rawText)) {
+            await showHumanPresenceBeforeReply({
+              inboundMessageId: msgId,
+              text: interactionTitle ?? interactionId ?? rawText,
+              mode: "simple",
+              log,
+            });
+          }
+
           /* ═══════════════════════════════════════════════
              BRANCH 0: OnDrive Confirmation Detection
              (check BEFORE menu / AI — highest priority)
@@ -503,6 +512,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
              ═══════════════════════════════════════════════ */
           if (currentState === "track_order_wait" && msgType === "text" && msg.text?.body) {
             const inputText = msg.text.body.trim();
+            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inputText, mode: "complex", log });
             await handleTrackOrder(phone, inputText, waSettings);
             await setConversationState(phone, "idle");
             continue;
@@ -512,6 +522,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
              BRANCH 2b: Order placement flow states
              ═══════════════════════════════════════════════ */
           if (["order_await_qty", "order_await_name", "order_await_address", "order_await_city", "order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
+            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
             await handleOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
             continue;
           }
@@ -521,6 +532,12 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
              ═══════════════════════════════════════════════ */
           if (msgType !== "text" || !msg.text?.body) continue;
           const textBody = msg.text.body.trim();
+          await showHumanPresenceBeforeReply({
+            inboundMessageId: msgId,
+            text: textBody,
+            mode: /product|price|rate|almond|badam|pista|kaju|akhrot|kg|bulk|buy|order/i.test(textBody) ? "product" : "simple",
+            log,
+          });
 
           /* Reset to idle if user says "menu" at any time */
           const isMenuKeyword = /^\s*(menu|main menu|back|home)\s*$/i.test(textBody);
@@ -558,6 +575,33 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
     }
   } catch (err) {
     log?.error(err, "Webhook event processing error");
+  }
+}
+
+function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" = "simple"): number {
+  const lower = text.toLowerCase();
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const looksProduct = mode === "product" || /price|rate|product|almond|badam|pista|kaju|akhrot|bulk|kg|order|buy|catalog|available/.test(lower);
+  const looksComplex = mode === "complex" || words > 18 || /bulk|20kg|complaint|refund|return|urgent|problem|tracking|status|address|change/.test(lower);
+  const [min, max] = looksComplex ? [3000, 6000] : looksProduct ? [2000, 4000] : [1000, 2000];
+  const jitter = Math.floor(Math.random() * (max - min + 1));
+  return min + jitter;
+}
+
+async function showHumanPresenceBeforeReply(opts: {
+  inboundMessageId?: string | null;
+  text: string;
+  mode?: "simple" | "product" | "complex";
+  log?: any;
+}): Promise<void> {
+  try {
+    if (opts.inboundMessageId) {
+      await markWhatsAppMessageRead(opts.inboundMessageId).catch(() => false);
+      await sendWhatsAppTypingIndicator(opts.inboundMessageId).catch(() => false);
+    }
+    await new Promise((resolve) => setTimeout(resolve, humanReplyDelayMs(opts.text, opts.mode)));
+  } catch (err) {
+    opts.log?.debug?.({ err }, "Human-like WA presence failed");
   }
 }
 

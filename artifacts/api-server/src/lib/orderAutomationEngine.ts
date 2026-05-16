@@ -100,7 +100,7 @@ export async function runShopifyOrderAutomation(
         shopifyOrderDbId: input.shopifyOrderDbId,
         phone,
         customerName: input.customerName ?? "Customer",
-        messageId: null,
+        messageId: confirmRes.messageId ?? null,
       });
       await logOrderAutomation({
         shopifyOrderDbId: input.shopifyOrderDbId,
@@ -112,6 +112,15 @@ export async function runShopifyOrderAutomation(
         errorMessage: confirmRes.error,
         scheduleRetry: !confirmRes.success,
       });
+      if (confirmRes.success) {
+        await db.execute(sql`
+          UPDATE shopify_orders
+          SET wa_notification_sent = TRUE,
+              wa_last_message = ${"Order confirmation sent"},
+              updated_at = NOW()
+          WHERE id = ${input.shopifyOrderDbId}
+        `).catch(() => {});
+      }
     } else {
       await logOrderAutomation({
         shopifyOrderDbId: input.shopifyOrderDbId,
@@ -202,7 +211,7 @@ export async function runShopifyOrderAutomation(
       shopifyOrderDbId: input.shopifyOrderDbId,
       phone,
       customerName: input.customerName ?? "Customer",
-      messageId: null,
+      messageId: premium.messageId ?? null,
     });
   }
 
@@ -232,6 +241,16 @@ export async function runShopifyOrderAutomation(
     errorMessage: errMsg,
     scheduleRetry: !success,
   });
+
+  if (success) {
+    await db.execute(sql`
+      UPDATE shopify_orders
+      SET wa_notification_sent = TRUE,
+          wa_last_message = ${"Order confirmation sent"},
+          updated_at = NOW()
+      WHERE id = ${input.shopifyOrderDbId}
+    `).catch(() => {});
+  }
 
   return {
     routed: "wa_confirmation",
@@ -285,6 +304,8 @@ export async function retryAutomationLog(logId: number): Promise<{ ok: boolean; 
       financialStatus: order.financial_status as string,
       codAmount: Number(order.total_price ?? 0),
       isPaid: order.financial_status === "paid",
+      shopifyOrderId: String(order.shopify_order_id),
+      shopifyOrderDbId: Number(order.id),
     });
     return { ok: res.success, message: res.error ?? "Sent" };
   }

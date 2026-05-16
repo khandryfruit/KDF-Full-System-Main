@@ -123,7 +123,7 @@ async function sendPremiumText(
     ctx?: OrderWaContext;
     templateParams?: string[];
   },
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const norm = normalizePhone(phone);
   const settings = await getSettings();
   if (!settings?.isActive) {
@@ -158,7 +158,7 @@ async function sendPremiumText(
             ]
           : [],
     });
-    if (tplRes.success) return { success: true };
+    if (tplRes.success) return { success: true, messageId: tplRes.messageId };
   }
 
   if (opts?.cta) {
@@ -178,7 +178,7 @@ async function sendPremiumText(
 }
 
 /** New order — order_confirmation */
-export async function sendPremiumOrderConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
+export async function sendPremiumOrderConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const name = firstName(ctx.customerName);
   const items = buildItemsList(ctx.lineItems);
   const total = formatMoney(Number(ctx.totalPrice ?? ctx.codAmount ?? 0));
@@ -201,7 +201,7 @@ export async function sendPremiumOrderConfirmed(ctx: OrderWaContext): Promise<{ 
   return sendPremiumText(ctx.customerPhone, msg, "order_confirmation", { ctx });
 }
 
-export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
+export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const name = firstName(ctx.customerName);
   const total = formatMoney(Number(ctx.totalPrice ?? 0));
 
@@ -219,7 +219,7 @@ export async function sendPremiumPaymentConfirmed(ctx: OrderWaContext): Promise<
   return sendPremiumText(ctx.customerPhone, msg, "paid_order_message", { ctx });
 }
 
-export async function sendPremiumOrderCancelled(ctx: OrderWaContext): Promise<{ success: boolean; error?: string }> {
+export async function sendPremiumOrderCancelled(ctx: OrderWaContext): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const name = firstName(ctx.customerName);
 
   const msg =
@@ -349,7 +349,7 @@ const STATUS_BUILDERS: Record<string, (ctx: OrderWaContext) => string> = {
 export async function sendPremiumDeliveryStatus(
   status: string,
   ctx: OrderWaContext,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const builder = STATUS_BUILDERS[status] ?? STATUS_BUILDERS.picked;
   const templateMap: Record<string, string> = {
     picked: "order_processing",

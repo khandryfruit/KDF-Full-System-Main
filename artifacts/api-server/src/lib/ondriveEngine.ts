@@ -190,14 +190,14 @@ export async function selectBestCourier(params: { city: string; weight: number; 
     if (rule.condition === "is_paid" && codAmount > 0) matches = false;
     if (rule.condition === "is_cod" && codAmount === 0) matches = false;
     if (matches && rule.courierSlug) {
-      const c = couriers.find(x => x.slug === rule.courierSlug);
+      const c = couriers.find((x: any) => x.slug === rule.courierSlug);
       if (c) return c;
     }
   }
 
   /* Use configured default courier */
   if (autoSettings.default_courier_slug) {
-    const c = couriers.find(x => x.slug === autoSettings.default_courier_slug);
+    const c = couriers.find((x: any) => x.slug === autoSettings.default_courier_slug);
     if (c) return c;
   }
 
@@ -566,6 +566,8 @@ export async function autoBookShipmentForOrder(params: {
     await db.update(shopifyOrdersTable).set({
       trackingNumber: trackingId,
       status: "fulfilled",
+      fulfillmentStatus: "fulfilled",
+      tags: order.tags ? `${order.tags},packed,dispatched` : "packed,dispatched",
       updatedAt: new Date(),
     }).where(eq(shopifyOrdersTable.id, shopifyOrderDbId));
 
@@ -684,7 +686,9 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
     /* Also update local shopify_orders status → confirmed */
     await db.execute(sql`
       UPDATE shopify_orders
-      SET status = 'confirmed', updated_at = NOW()
+      SET status = 'confirmed',
+          tags = TRIM(BOTH ',' FROM CONCAT_WS(',', NULLIF(tags, ''), 'wa_confirmed')),
+          updated_at = NOW()
       WHERE shopify_order_id = ${shopifyOrderId}
     `).catch(() => {});
 
@@ -738,7 +742,9 @@ async function handleCancellation(phone: string, shopifyOrderId: string): Promis
   /* Also update local shopify_orders status → cancelled */
   await db.execute(sql`
     UPDATE shopify_orders
-    SET status = 'cancelled', updated_at = NOW()
+    SET status = 'cancelled',
+        tags = TRIM(BOTH ',' FROM CONCAT_WS(',', NULLIF(tags, ''), 'wa_cancelled')),
+        updated_at = NOW()
     WHERE shopify_order_id = ${shopifyOrderId}
   `).catch(() => {});
 

@@ -11,7 +11,7 @@ import { logger } from "./logger.js";
 
 /** Primary trigger_event → alternate keys stored in DB or legacy code */
 export const TEMPLATE_TRIGGER_ALIASES: Record<string, string[]> = {
-  order_confirmation: ["order_confirmation", "order_confirmed"],
+  order_confirmation: ["order_confirmation", "order_confirmed", "order_confirmed_wa", "order_confirm", "order_confromd_"],
   paid_order_message: ["paid_order_message", "payment_confirmed"],
   order_shipped: ["order_shipped"],
   order_processing: ["order_processing", "status_picked"],
@@ -75,6 +75,8 @@ export async function sendLifecycleWhatsApp(opts: {
       phone,
       templateName: tpl.name,
       languageCode: tpl.language,
+      triggerEvent: opts.triggerEvent,
+      shopifyOrderId: opts.shopifyOrderId,
       components:
         tpl.paramCount > 0
           ? [
@@ -99,6 +101,8 @@ export async function sendLifecycleWhatsApp(opts: {
     message: opts.fallbackText,
     templateName: opts.triggerEvent,
     userId: opts.userId,
+    triggerEvent: opts.triggerEvent,
+    shopifyOrderId: opts.shopifyOrderId,
   });
   return { success: ok, usedTemplate: false, error: ok ? undefined : "Fallback text send failed" };
 }

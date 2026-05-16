@@ -1,6 +1,7 @@
-import { db, whatsappLogsTable } from "@workspace/db";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import { sendWhatsAppMessage } from "./whatsapp";
+import { sendLifecycleWhatsApp } from "./waTemplateEvents.js";
 import { logger } from "./logger";
 
 const RETRY_INTERVAL_MS = 60_000;
@@ -57,6 +58,68 @@ async function processFailedMessageRetries() {
             retry_count = COALESCE(retry_count, 0) + 1,
             last_retry_at = NOW(),
             response = ${JSON.stringify({ autoRetryCount: retryCount + 1, lastRetryAt: new Date().toISOString(), autoRecovery: true })}
+        WHERE id = ${row.id}
+      `).catch(() => {});
+    }
+
+    const templateRows = await db.execute(sql`
+      SELECT id, phone, message, template_name AS "templateName", trigger_event AS "triggerEvent",
+             shopify_order_id AS "shopifyOrderId", response, retry_count AS "retryCount"
+      FROM whatsapp_logs
+      WHERE status = 'failed'
+        AND message LIKE '[template]%'
+        AND phone IS NOT NULL
+        AND created_at > NOW() - INTERVAL '48 hours'
+        AND COALESCE(retry_count, 0) < ${MAX_RETRIES}
+        AND (last_retry_at IS NULL OR last_retry_at < NOW() - INTERVAL '5 minutes')
+      ORDER BY created_at ASC
+      LIMIT ${Math.max(5, Math.floor(BATCH / 2))}
+    `);
+
+    for (const row of templateRows.rows as Array<{
+      id: number;
+      phone: string;
+      message: string | null;
+      templateName: string | null;
+      triggerEvent: string | null;
+      shopifyOrderId: string | null;
+      retryCount: number | null;
+    }>) {
+      const trigger = row.triggerEvent ?? row.templateName;
+      if (!row.phone || !trigger || trigger === "incoming") continue;
+
+      let params = ["Customer", row.shopifyOrderId ?? "Order", "Rs. 0", "Cash on delivery"];
+      if (row.shopifyOrderId) {
+        const orderRows = await db.execute(sql`
+          SELECT order_number, customer_name, total_price, financial_status
+          FROM shopify_orders
+          WHERE shopify_order_id = ${row.shopifyOrderId}
+          LIMIT 1
+        `).catch(() => ({ rows: [] }));
+        const order = (orderRows.rows[0] as any) ?? null;
+        if (order) {
+          params = [
+            String(order.customer_name ?? "Customer").split(/\s+/)[0] || "Customer",
+            String(order.order_number ?? row.shopifyOrderId),
+            `Rs. ${Number(order.total_price ?? 0).toLocaleString("en-PK")}`,
+            String(order.financial_status ?? "").includes("paid") ? "Paid online" : "Cash on delivery",
+          ];
+        }
+      }
+
+      const result = await sendLifecycleWhatsApp({
+        triggerEvent: trigger,
+        phone: row.phone,
+        bodyParams: params,
+        fallbackText: row.message ?? `[template] ${trigger}`,
+        shopifyOrderId: row.shopifyOrderId ?? undefined,
+      }).catch((err) => ({ success: false, error: String(err) }));
+
+      await db.execute(sql`
+        UPDATE whatsapp_logs
+        SET retry_count = COALESCE(retry_count, 0) + 1,
+            last_retry_at = NOW(),
+            response = ${JSON.stringify({ templateAutoRetry: true, success: result.success, error: result.error, lastRetryAt: new Date().toISOString() })}
         WHERE id = ${row.id}
       `).catch(() => {});
     }

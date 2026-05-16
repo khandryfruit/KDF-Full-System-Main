@@ -178,6 +178,47 @@ export async function sendWhatsAppMessage(opts: WASendOptions): Promise<boolean>
   }
 }
 
+export async function markWhatsAppMessageRead(messageId?: string | null): Promise<boolean> {
+  if (!messageId) return false;
+  try {
+    const settings = await getSettings();
+    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function sendWhatsAppTypingIndicator(messageId?: string | null): Promise<boolean> {
+  if (!messageId) return false;
+  try {
+    const settings = await getSettings();
+    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /* ─── Send Meta template message ──────────────────────── */
 export async function sendWhatsAppTemplate(opts: {
   phone: string;
