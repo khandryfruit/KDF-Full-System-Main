@@ -21,6 +21,7 @@ import { adminMiddleware } from "../lib/auth";
 import { trackWithCourierApiForShopify } from "./couriers";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import { logger } from "../lib/logger";
+import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 
 const router = Router();
 
@@ -81,11 +82,6 @@ async function getSameDayInfo(): Promise<string> {
 }
 
 function buildSystemPrompt(chatbot: any, sameDayInfo = ""): string {
-  const customPrompt = chatbot.systemPrompt?.trim();
-  const base = customPrompt && customPrompt.length > 20
-    ? customPrompt
-    : `You are a friendly customer support agent for KDF Nuts, a premium nuts and dry fruits brand in Pakistan. Your name is KDF Support.`;
-
   const toolRules = `
 
 TOOL USAGE RULES — MANDATORY, ALWAYS FOLLOW:
@@ -114,7 +110,10 @@ CRITICAL PRODUCT SEARCH RULES:
 When a customer wants to order, use the search_products tool to find the exact product and price. Then collect this information one step at a time in a natural, conversational way: which product and variant they want, their full name, phone number, delivery address, and city. Ask for payment method — either Cash on Delivery or Bank Transfer. Show a clear order summary before confirming. Only use the place_order tool after the customer confirms. After placing the order, share the order number and thank them warmly.`
     : "";
 
-  return `${base}${toolRules}${orderInstructions}${sameDayInfo}\n\nToday's date: ${new Date().toLocaleDateString("en-PK", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
+  return buildAiBrainSystemPrompt(chatbot, {
+    channel: "website_chat",
+    extraInstructions: `${toolRules}${orderInstructions}${sameDayInfo}`,
+  }).systemPrompt;
 }
 
 function buildTools(orderingEnabled: boolean) {

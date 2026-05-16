@@ -12,6 +12,7 @@ import type OpenAI from "openai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
 import { runShopifyOrderAutomation } from "../lib/orderAutomationEngine.js";
 import { createAdminAlert } from "../lib/adminAlerts.js";
+import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { verifyMetaWebhookSignatureAny, isValidMetaWebhookVerifyToken } from "../lib/metaWebhookVerify";
@@ -994,7 +995,7 @@ async function handleTrackOrder(phone: string, input: string, waSettings: any): 
 
       await sendInteractiveButtons({
         phone,
-        text: `🛒 *Shopify Order Status*\n\n🧾 *Order:* ${shopifyOrder.orderNumber}\n💰 *Total:* Rs. ${shopifyOrder.totalPrice}\n📊 *Fulfillment:* ${fulfillLabel}${trackLine}${trackLinkLine}\n${dateLine}`,
+        text: `🛒 *Order Status*\n\n🧾 *Order:* ${shopifyOrder.orderNumber}\n💰 *Total:* Rs. ${shopifyOrder.totalPrice}\n📊 *Fulfillment:* ${fulfillLabel}${trackLine}${trackLinkLine}\n${dateLine}`,
         buttons: [
           { id: "track_again", title: "🔄 Track Another" },
           { id: "main_menu",   title: "🏠 Main Menu" },
@@ -1321,7 +1322,7 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   card += `💰 *Price:* ${p.price}`;
   if (p.compareAt) card += ` ~~${p.compareAt}~~ 🔥`;
   card += "\n";
-  if (p.variants) card += `📦 *Official Shopify options:*\n${p.variants}\n`;
+  if (p.variants) card += `📦 *Available options:*\n${p.variants}\n`;
   if (p.description) card += `📝 ${p.description}\n`;
   card += `${p.inStock ? "✅ In Stock" : "❌ Out of Stock"}\n`;
   card += `🔗 ${p.productUrl}`;
@@ -1372,7 +1373,7 @@ async function calculateWhatsAppOrderTotal(opts: {
   const products = await searchProductsForWa(opts.productQuery, 1);
   const product = products[0];
   if (!product) {
-    return { ok: false, reason: "No matching Shopify product found. Cannot calculate total without official price." };
+    return { ok: false, reason: "No matching product found. Cannot calculate total without official price." };
   }
   const qty = Math.max(1, Math.min(99, Number(opts.quantity ?? 1) || 1));
   let unitPrice = Number(product.rawPrice ?? 0);
@@ -1559,7 +1560,7 @@ async function startCommerceOrderFromText(opts: {
       payload: parsed,
       failureReason: "shopify_product_not_found",
     });
-    await sendWaText(opts.phone, "Sorry, is product ka official Shopify data nahi mila. Please product ka exact naam bhej dein.", opts.waSettings);
+    await sendWaText(opts.phone, "Sorry, is product ka official data nahi mila. Please product ka exact naam bhej dein.", opts.waSettings);
     return true;
   }
   if (!parsed.variantTitle && (product.variantOptions?.length ?? 0) > 1) {
@@ -1584,7 +1585,7 @@ async function startCommerceOrderFromText(opts: {
       payload: parsed,
       failureReason: "shopify_variant_not_found",
     });
-    await sendWaText(opts.phone, "Sorry, is product/variant ka official Shopify price nahi mila. Please product ka exact naam ya weight bhej dein.", opts.waSettings);
+    await sendWaText(opts.phone, "Sorry, is product/variant ka official price nahi mila. Please product ka exact naam ya weight bhej dein.", opts.waSettings);
     return true;
   }
   if (!parsed.quantityExplicit) {
@@ -1884,7 +1885,7 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       log?.warn(err, "WhatsApp Shopify order creation failed");
       await logWaProcessingStep({ phone, step: "shopify_order_created", status: "failed", detail: "Shopify order creation failed.", payload: { error: reason, stateData }, failureReason: reason });
       await createAdminAlert({ title: "WhatsApp Shopify order failed", message: reason, type: "wa_order_failure", dedupeMinutes: 10 });
-      await sendWaText(phone, `Sorry, order create nahi ho saka.\nReason: ${reason.slice(0, 180)}\n\nTeam ko alert kar diya gaya hai.`, waSettings);
+      await sendWaText(phone, "Sorry, order create nahi ho saka. Team ko alert kar diya gaya hai, hamara support agent isay check karega.", waSettings);
     }
   }
 }
@@ -2176,26 +2177,15 @@ async function handleAiReply(opts: {
       },
     ];
 
-    const salesSystem = `You are a premium human WhatsApp sales representative for Khan Dry Fruits.
-High priority behavior:
-- The saved Admin business instructions below are customer-specific business rules. Follow them on every conversation and do not ignore or replace them.
-- Never invent product names, weights, variants, prices, discounts, delivery charges, or totals.
-- For any product/price/variant question, use the OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT if provided and answer only from that data.
-- For quantity + variant total questions, use the official catalog prices shown in context. If no official match is found, say you need to confirm instead of guessing.
+    const whatsappInstructions = `WhatsApp sales behavior:
+- For any product/price/variant question, use the official catalog context if provided and answer only from that data.
+- For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
-- If customer asks a broad need like "Mujhe dry fruits chahiye", first ask natural qualifying questions (budget, gift/use, quantity) and suggest categories without fake prices.
-Rules:
-- Reply naturally in the customer's language (Urdu, Roman Urdu, or English).
-- Never use generic auto-responder lines like "Thank you for your message" unless it truly fits.
-- For conversation/support intent, ask what they want to discuss and offer help warmly.
-- Only show/search products when the detected intent is product_search, pricing, recommendation, bulk_order, or order_start.
+- If customer asks a broad need like "Mujhe dry fruits chahiye", first ask natural qualifying questions: budget, gift/use, quantity.
 - Never spam catalog/products for greetings, support, or general conversation.
-- If customer asks price/product availability, show only matching items from official catalog context.
 - If customer wants to order a named product, ask for variant/quantity and keep the conversation moving naturally.
 - If customer wants tracking/order status, use recent order context if available; otherwise ask for order number/phone.
 - Keep replies short, human, and conversion-focused.`;
-    const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
-    const promptSource = adminPrompt ? "Admin DB" : "Missing";
     let catalogContextBlock = "";
     if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
       const products = await searchProductsForWa(intent.productQuery ?? textBody, 4);
@@ -2222,16 +2212,22 @@ Rules:
         });
       }
     }
-    const systemContent = `${salesSystem}\n\nAdmin business instructions (must be applied):\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}${catalogContextBlock}`;
+    const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
+      channel: "whatsapp",
+      detectedIntent: `${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}`,
+      extraInstructions: whatsappInstructions,
+      contextBlocks: [orderContextBlock, catalogContextBlock],
+    });
+    const systemContent = brainPrompt.systemPrompt;
     await logWaProcessingStep({
       phone,
       step: "prompt_loaded",
-      detail: adminPrompt ? "AI Behaviour Instructions loaded from Admin DB and injected as primary WhatsApp prompt context." : "No saved AI Behaviour Instructions found; using safe default business prompt.",
+      detail: brainPrompt.promptLoaded ? "AI Behaviour Instructions loaded from Admin DB and injected through Central AI Brain." : "No saved AI Behaviour Instructions found; Central AI Brain used safe default business prompt.",
       payload: {
-        promptLoaded: Boolean(adminPrompt),
-        promptSource,
-        promptLength: adminPrompt.length,
-        promptPreview: adminPrompt.slice(0, 800),
+        promptLoaded: brainPrompt.promptLoaded,
+        promptSource: brainPrompt.promptSource,
+        promptLength: brainPrompt.promptLength,
+        promptPreview: brainPrompt.promptPreview,
         detectedIntent: intent,
       },
     });
@@ -2272,8 +2268,8 @@ Rules:
       payload: {
         model: chatbot.aiModel ?? "gpt-4o-mini",
         messages: messages.length,
-        promptSource,
-        promptLoaded: Boolean(adminPrompt),
+        promptSource: brainPrompt.promptSource,
+        promptLoaded: brainPrompt.promptLoaded,
         catalogContextLoaded: Boolean(catalogContextBlock),
       },
     });
@@ -2894,26 +2890,23 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
         }).join("\n")}\n[END CATALOG CONTEXT]`;
       }
     }
-    const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
-    const systemPrompt = `You are a premium human WhatsApp sales representative for Khan Dry Fruits.
-Follow the Admin business instructions exactly. Reply naturally in the customer's language. Never invent prices, variants, discounts, or totals.
-If catalog context is provided, answer only from that official data.
-
-Admin business instructions:
-${adminPrompt || "Be friendly, concise, helpful, and accurate."}
-
-Detected intent: ${detected.intent} (${detected.reason}).${catalogContext}`;
+    const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
+      channel: "admin_test",
+      detectedIntent: `${detected.intent} (${detected.reason})`,
+      extraInstructions: "Reply naturally in the customer's language. Never invent prices, variants, discounts, or totals. If catalog context is provided, answer only from that official data.",
+      contextBlocks: [catalogContext],
+    });
     const aiClient = await getOpenAIClient();
     const completion = await aiClient.chat.completions.create({
       model: chatbot.aiModel ?? "gpt-4o-mini",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: brainPrompt.systemPrompt },
         { role: "user", content: testText },
       ],
       max_tokens: 400,
     });
     const reply = completion.choices[0]?.message?.content?.trim() ?? "";
-    return res.json({ success: true, reply, model: chatbot.aiModel });
+    return res.json({ success: true, reply, model: chatbot.aiModel, promptLoaded: brainPrompt.promptLoaded, promptSource: brainPrompt.promptSource });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e.message ?? "AI test failed" });
   }
