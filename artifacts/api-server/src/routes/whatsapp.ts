@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
-import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
+import { ordersTable, orderItemsTable, usersTable, productsTable, shipmentsTable, adminNotificationsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable, shopifyStoresTable } from "@workspace/db";
 import { eq, desc, asc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
@@ -1160,6 +1160,37 @@ function parseMoneyValue(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseCatalogUnitPrice(value: unknown): number {
+  const n = parseMoneyValue(value);
+  if (!Number.isFinite(n)) return 0;
+  // Some synced catalog payloads store PKR as paisa/cents (85000 => Rs. 850).
+  if (n >= 50000 && Number.isInteger(n) && n % 100 === 0) return n / 100;
+  return n;
+}
+
+function generateWhatsappOrderNumber(): string {
+  return "KDF-WA-" + Date.now().toString().slice(-7) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+}
+
+function generateWhatsappTrackingId(): string {
+  return "WA" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+}
+
+function normalizeCheckoutPhone(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function isInvalidCheckoutName(value: unknown): boolean {
+  const normalized = normalizeProductText(value);
+  if (normalized.length < 3) return true;
+  return /^(ok|okay|yes|confirm|confirmed|same|no|nahi|nai|done|cod)$/i.test(normalized);
+}
+
+function isValidCheckoutPhone(value: unknown): boolean {
+  const digits = normalizeCheckoutPhone(value);
+  return digits.length >= 10 && digits.length <= 15;
+}
+
 function normalizeProductText(value: unknown): string {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -1221,7 +1252,7 @@ function formatShopifyVariants(variants: unknown): { label: string; lines: strin
     .slice(0, 8)
     .map((v: any) => {
       const title = String(v.title ?? "Default").replace(/^default title$/i, "Standard");
-      const price = Number.parseFloat(String(v.price ?? "0"));
+      const price = parseCatalogUnitPrice(v.price);
       return { id: String(v.id ?? ""), title, price, sku: v.sku ? String(v.sku) : undefined, inventoryQuantity: Number(v.inventoryQuantity ?? 0) };
     });
   const cheapest = options.length ? Math.min(...options.map((v) => v.price).filter((v) => Number.isFinite(v))) : null;
@@ -1268,12 +1299,12 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit)) {
       const variants = formatShopifyVariants(sp.sp.variants);
-      const basePrice = variants.cheapestPrice ?? Number.parseFloat(String(sp.sp.price ?? "0"));
+      const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(sp.sp.price);
       const handle = sp.sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() ?? "product";
       results.push({
         name: sp.sp.title,
-        price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(sp.sp.price),
-        compareAt: sp.sp.compareAtPrice ? formatRupees(sp.sp.compareAtPrice) : null,
+        price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(parseCatalogUnitPrice(sp.sp.price)),
+        compareAt: sp.sp.compareAtPrice ? formatRupees(parseCatalogUnitPrice(sp.sp.compareAtPrice)) : null,
         description: null,
         imageUrl: sp.sp.imageUrl ?? null,
         productUrl: `${websiteUrl}/products/${handle}`,
@@ -1308,9 +1339,9 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit - results.length)) {
       const variants = Array.isArray(p.p.variants)
-        ? p.p.variants.filter((v: any) => Number(v.stock ?? 0) > 0).slice(0, 8).map((v: any) => `${v.value || v.name} — ${formatRupees(v.price ?? p.p.price)}`)
+        ? p.p.variants.filter((v: any) => Number(v.stock ?? 0) > 0).slice(0, 8).map((v: any) => `${v.value || v.name} — ${formatRupees(parseCatalogUnitPrice(v.price ?? p.p.price))}`)
         : [];
-      const rawPrice = Number.parseFloat(String(p.p.price ?? "0"));
+      const rawPrice = parseCatalogUnitPrice(p.p.price);
       results.push({
         name: p.p.name,
         price: formatRupees(rawPrice),
@@ -1398,7 +1429,7 @@ async function calculateWhatsAppOrderTotal(opts: {
     return { ok: false, reason: "No matching product found. Cannot calculate total without official price." };
   }
   const qty = Math.max(1, Math.min(99, Number(opts.quantity ?? 1) || 1));
-  let unitPrice = Number(product.rawPrice ?? 0);
+  let unitPrice = parseCatalogUnitPrice(product.rawPrice);
   let matchedVariant = product.variantLines?.[0] ?? "";
   if (opts.variantTitle && product.variantLines?.length) {
     const wanted = normalizeProductText(opts.variantTitle);
@@ -1406,7 +1437,7 @@ async function calculateWhatsAppOrderTotal(opts: {
     if (found) {
       matchedVariant = found;
       const priceMatch = found.match(/Rs\.\s*([\d,]+)/i);
-      if (priceMatch) unitPrice = Number(priceMatch[1].replace(/,/g, ""));
+      if (priceMatch) unitPrice = parseCatalogUnitPrice(priceMatch[1]);
     }
   }
   const subtotal = unitPrice * qty;
@@ -1497,7 +1528,7 @@ async function findCommerceProductVariant(productQuery: string, variantHint?: st
   return {
     product,
     variant: selected,
-    unitPrice: selected.price,
+    unitPrice: parseCatalogUnitPrice(selected.price),
     variantTitle: selected.title,
     variantId: selected.id,
   };
@@ -1525,12 +1556,66 @@ function buildCommerceSummary(data: Record<string, any>): string {
     `💵 *Final:* ${formatRupees(data.total ?? data.subtotal)}`;
 }
 
+function normalizeCommerceTotals(stateData: Record<string, any>): Record<string, any> {
+  const cart = Array.isArray(stateData.cart) && stateData.cart.length
+    ? stateData.cart
+    : [{
+      productName: stateData.productName,
+      shopifyProductId: stateData.shopifyProductId,
+      variantId: stateData.variantId,
+      variantTitle: stateData.variantTitle,
+      quantity: stateData.quantity,
+      unitPrice: stateData.unitPrice,
+      imageUrl: stateData.imageUrl,
+      sku: stateData.sku,
+    }];
+
+  const cleanCart = cart.map((item: any) => ({
+    ...item,
+    productName: String(item.productName ?? stateData.productName ?? "Product").trim(),
+    variantTitle: String(item.variantTitle ?? stateData.variantTitle ?? "Standard").trim(),
+    quantity: Math.max(1, Number.parseInt(String(item.quantity ?? 1), 10) || 1),
+    unitPrice: parseCatalogUnitPrice(item.unitPrice),
+  })).filter((item: any) => item.productName && item.unitPrice > 0);
+
+  const subtotal = cleanCart.reduce((sum: number, item: any) => sum + item.unitPrice * item.quantity, 0);
+  const delivery = subtotal >= 10000 ? 0 : parseMoneyValue(stateData.delivery ?? 300) || 300;
+  const deliveryLabel = subtotal >= 10000
+    ? "Rs. 0 (FREE delivery above Rs. 10,000)"
+    : `${formatRupees(delivery)} (Estimated standard delivery)`;
+  const total = Math.max(0, subtotal + delivery);
+
+  return {
+    ...stateData,
+    cart: cleanCart,
+    quantity: cleanCart[0]?.quantity ?? stateData.quantity,
+    unitPrice: cleanCart[0]?.unitPrice ?? stateData.unitPrice,
+    subtotal,
+    delivery,
+    deliveryLabel,
+    total,
+  };
+}
+
+function validateCommerceCheckoutState(stateData: Record<string, any>): string | null {
+  if (!Array.isArray(stateData.cart) || stateData.cart.length === 0) return "cart_missing";
+  if (stateData.cart.some((item: any) => !item.productName || !item.variantTitle || Number(item.unitPrice ?? 0) <= 0)) return "invalid_cart_item";
+  if (stateData.cart.some((item: any) => Number(item.quantity ?? 0) < 1 || Number(item.quantity ?? 0) > 99)) return "invalid_quantity";
+  if (Number(stateData.subtotal ?? 0) <= 0 || Number(stateData.total ?? 0) <= 0) return "invalid_total";
+  if (isInvalidCheckoutName(stateData.customerName)) return "invalid_customer_name";
+  if (!isValidCheckoutPhone(stateData.customerPhone)) return "invalid_customer_phone";
+  if (!String(stateData.address ?? "").trim() || String(stateData.address ?? "").trim().length < 8) return "invalid_address";
+  if (!String(stateData.city ?? "").trim() || String(stateData.city ?? "").trim().length < 2) return "invalid_city";
+  return null;
+}
+
 async function buildCommerceStateDataFromSelection(params: {
   product: Awaited<ReturnType<typeof searchProductsForWa>>[number];
   variant: { id: string; title: string; price: number; sku?: string; inventoryQuantity?: number };
   quantity: number;
 }) {
-  const subtotal = params.variant.price * params.quantity;
+  const unitPrice = parseCatalogUnitPrice(params.variant.price);
+  const subtotal = unitPrice * params.quantity;
   const totalCalc = await calculateWhatsAppOrderTotal({
     productQuery: params.product.name,
     quantity: params.quantity,
@@ -1543,7 +1628,7 @@ async function buildCommerceStateDataFromSelection(params: {
       variantId: params.variant.id,
       variantTitle: params.variant.title,
       quantity: params.quantity,
-      unitPrice: params.variant.price,
+      unitPrice,
       imageUrl: params.product.imageUrl,
       sku: params.variant.sku,
     }],
@@ -1552,7 +1637,7 @@ async function buildCommerceStateDataFromSelection(params: {
     variantId: params.variant.id,
     variantTitle: params.variant.title,
     quantity: params.quantity,
-    unitPrice: params.variant.price,
+    unitPrice,
     subtotal,
     delivery: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).delivery) : 300,
     deliveryLabel: totalCalc && (totalCalc as any).ok ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})` : "Will confirm by city",
@@ -1658,6 +1743,93 @@ async function startCommerceOrderFromText(opts: {
   });
   await sendWaText(opts.phone, `${buildCommerceSummary(stateData)}\n\nOrder confirm karne ke liye apna *naam* bhej dein 😊`, opts.waSettings);
   return true;
+}
+
+async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Record<string, any>) {
+  const stateData = normalizeCommerceTotals(rawStateData);
+  const validationError = validateCommerceCheckoutState(stateData);
+  if (validationError) {
+    throw new Error(`Order validation failed: ${validationError}`);
+  }
+
+  const orderNumber = generateWhatsappOrderNumber();
+  const trackingId = generateWhatsappTrackingId();
+  const shippingAddress = {
+    name: String(stateData.customerName).trim(),
+    phone: normalizeCheckoutPhone(stateData.customerPhone || phone),
+    address: String(stateData.address).trim(),
+    city: String(stateData.city).trim(),
+    country: "Pakistan",
+  };
+  const paymentMethod = /bank/i.test(String(stateData.paymentMethod ?? "")) ? "bank_transfer" : "cod";
+  const now = new Date();
+
+  const result = await (db as any).transaction(async (tx: any) => {
+    const [order] = await tx.insert(ordersTable).values({
+      userId: null,
+      orderNumber,
+      status: "confirmed",
+      paymentStatus: paymentMethod === "cod" ? "unpaid" : "pending",
+      subtotal: Number(stateData.subtotal).toFixed(2),
+      discount: "0.00",
+      deliveryFee: Number(stateData.delivery ?? 0).toFixed(2),
+      loyaltyDiscount: "0.00",
+      walletDiscount: "0.00",
+      total: Number(stateData.total).toFixed(2),
+      deliveryType: "standard",
+      courier: "tcs",
+      paymentMethod,
+      shippingAddress,
+      notes: [stateData.notes ? `Customer note: ${stateData.notes}` : "", "Source: WhatsApp AI Commerce"].filter(Boolean).join("\n"),
+      trackingId,
+      confirmedAt: now,
+    }).returning();
+
+    const insertedItems = await tx.insert(orderItemsTable).values(
+      stateData.cart.map((item: any) => ({
+        orderId: order.id,
+        productId: null,
+        name: item.productName,
+        variant: item.variantTitle,
+        price: Number(item.unitPrice).toFixed(2),
+        qty: Number(item.quantity ?? 1),
+        gradient: null,
+      })),
+    ).returning();
+
+    const [shipment] = await tx.insert(shipmentsTable).values({
+      orderId: order.id,
+      courierId: null,
+      courierSlug: "tcs",
+      trackingId,
+      status: "pending",
+      statusHistory: [{ status: "pending", timestamp: now.toISOString(), note: "WhatsApp order confirmed; courier booking pending" }],
+      customerName: shippingAddress.name,
+      customerPhone: shippingAddress.phone,
+      customerAddress: shippingAddress.address,
+      customerCity: shippingAddress.city,
+      codAmount: Number(stateData.total).toFixed(2),
+      pieces: stateData.cart.reduce((sum: number, item: any) => sum + Number(item.quantity ?? 1), 0),
+      contentDesc: stateData.cart.map((item: any) => item.productName).join(", ").slice(0, 250),
+      isCod: paymentMethod === "cod",
+      bookingSource: "whatsapp_ai_commerce",
+      rawResponse: { note: "Internal tracking generated after ecommerce DB save", orderNumber },
+    } as any).returning();
+
+    return { order, insertedItems, shipment, stateData };
+  });
+
+  const notifPayload = {
+    title: `New WhatsApp Order #${result.order.orderNumber}`,
+    message: `Rs. ${Number(result.order.total).toLocaleString("en-PK")} from ${shippingAddress.name}`,
+    type: "order",
+    isRead: false,
+    orderId: result.order.id,
+  };
+  const [notif] = await db.insert(adminNotificationsTable).values(notifPayload as any).returning().catch(() => [null]);
+  if (notif) broadcastSSE("new_order", notif);
+
+  return result;
 }
 
 async function createShopifyOrderFromWhatsApp(phone: string, stateData: Record<string, any>) {
@@ -1795,9 +1967,9 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       variant,
       productName: selected.name,
       variantTitle: variant.title,
-      unitPrice: variant.price,
+      unitPrice: parseCatalogUnitPrice(variant.price),
     });
-    await sendWaText(phone, `Perfect 😊\n\n*${selected.name}*\nVariant: *${variant.title}*\nPrice: *${formatRupees(variant.price)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
+    await sendWaText(phone, `Perfect 😊\n\n*${selected.name}*\nVariant: *${variant.title}*\nPrice: *${formatRupees(parseCatalogUnitPrice(variant.price))}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
     return;
   }
   if (state === "wa_order_await_variant") {
@@ -1818,10 +1990,10 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       variant: selected,
       productName: product.name,
       variantTitle: selected.title,
-      unitPrice: selected.price,
+      unitPrice: parseCatalogUnitPrice(selected.price),
     });
     await logWaProcessingStep({ phone, step: "commerce_variant_selected", detail: "Customer selected official Shopify variant.", payload: { product: product.name, variant: selected } });
-    await sendWaText(phone, `Perfect 😊\n\n*${product.name}*\nVariant: *${selected.title}*\nPrice: *${formatRupees(selected.price)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
+    await sendWaText(phone, `Perfect 😊\n\n*${product.name}*\nVariant: *${selected.title}*\nPrice: *${formatRupees(parseCatalogUnitPrice(selected.price))}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
     return;
   }
   if (state === "wa_order_await_quantity") {
@@ -1849,7 +2021,7 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         variantId: found.variantId,
         variantTitle: found.variantTitle,
         quantity: parsed.quantity,
-        unitPrice: found.unitPrice,
+        unitPrice: parseCatalogUnitPrice(found.unitPrice),
         imageUrl: found.product.imageUrl,
         sku: found.variant.sku,
       };
@@ -1867,13 +2039,24 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     }
   }
   if (state === "wa_order_await_name") {
+    if (isInvalidCheckoutName(trimmed)) {
+      await logWaProcessingStep({ phone, step: "commerce_validation_failed", status: "failed", detail: "Invalid customer name captured during WhatsApp checkout.", payload: { value: trimmed }, failureReason: "invalid_customer_name" });
+      await sendWaText(phone, "Please apna *proper naam* bhej dein. Sirf Ok/Yes/Confirm naam ke liye accept nahi hoga.", waSettings);
+      return;
+    }
     stateData.customerName = trimmed;
     await setConversationState(phone, "wa_order_await_phone", stateData);
     await sendWaText(phone, `Shukriya *${stateData.customerName}* 😊\n\nApna phone number confirm kar dein. Current WhatsApp number use karna hai to reply karein: *same*`, waSettings);
     return;
   }
   if (state === "wa_order_await_phone") {
-    stateData.customerPhone = /^same$/i.test(trimmed) ? phone : trimmed;
+    const customerPhone = /^same$/i.test(trimmed) ? phone : trimmed;
+    if (!isValidCheckoutPhone(customerPhone)) {
+      await logWaProcessingStep({ phone, step: "commerce_validation_failed", status: "failed", detail: "Invalid customer phone captured during WhatsApp checkout.", payload: { value: trimmed }, failureReason: "invalid_customer_phone" });
+      await sendWaText(phone, "Please valid phone number bhej dein, ya current WhatsApp number use karne ke liye *same* reply karein.", waSettings);
+      return;
+    }
+    stateData.customerPhone = normalizeCheckoutPhone(customerPhone);
     await setConversationState(phone, "wa_order_await_address", stateData);
     await sendWaText(phone, "Delivery ke liye apna complete address bhej dein 🏠", waSettings);
     return;
@@ -1909,10 +2092,11 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   }
   if (state === "wa_order_await_notes") {
     stateData.notes = /^no|none|nahi|nai$/i.test(trimmed) ? "" : trimmed;
-    await setConversationState(phone, "wa_order_await_confirm", stateData);
+    const finalState = normalizeCommerceTotals(stateData);
+    await setConversationState(phone, "wa_order_await_confirm", finalState);
     await sendInteractiveButtons({
       phone,
-      text: `${buildCommerceSummary(stateData)}\n\nNaam: ${stateData.customerName}\nPhone: ${stateData.customerPhone}\nAddress: ${stateData.address}, ${stateData.city}\nPayment: ${stateData.paymentMethod}\n\nOrder confirm karein?`,
+      text: `${buildCommerceSummary(finalState)}\n\nNaam: ${finalState.customerName}\nPhone: ${finalState.customerPhone}\nAddress: ${finalState.address}, ${finalState.city}\nPayment: ${finalState.paymentMethod}\n\nOrder confirm karein?`,
       buttons: [
         { id: "wa_chat_order_confirm", title: "✅ Confirm" },
         { id: "wa_chat_order_cancel", title: "❌ Cancel" },
@@ -1933,38 +2117,85 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       await sendWaText(phone, "Please reply *confirm* ya *cancel*.", waSettings);
       return;
     }
+    await logWaProcessingStep({ phone, step: "commerce_confirm_clicked", status: "received", detail: "Customer confirmed WhatsApp commerce order.", payload: { state, stateData } });
+    const finalState = normalizeCommerceTotals(stateData);
+    const validationError = validateCommerceCheckoutState(finalState);
+    if (validationError) {
+      await logWaProcessingStep({ phone, step: "commerce_order_validation_failed", status: "failed", detail: "WhatsApp commerce order blocked before DB save.", payload: finalState, failureReason: validationError });
+      if (validationError === "invalid_customer_name") {
+        await setConversationState(phone, "wa_order_await_name", finalState);
+        await sendWaText(phone, "Order save failed: customer name valid nahi. Please apna *proper naam* bhej dein.", waSettings);
+        return;
+      }
+      if (validationError === "invalid_customer_phone") {
+        await setConversationState(phone, "wa_order_await_phone", finalState);
+        await sendWaText(phone, "Order save failed: phone number valid nahi. Please valid phone number bhej dein ya *same* reply karein.", waSettings);
+        return;
+      }
+      if (validationError === "invalid_quantity") {
+        await setConversationState(phone, "wa_order_await_quantity", {
+          ...finalState,
+          product: { name: finalState.cart[0]?.productName, shopifyProductId: finalState.cart[0]?.shopifyProductId, imageUrl: finalState.cart[0]?.imageUrl },
+          variant: { id: finalState.cart[0]?.variantId, title: finalState.cart[0]?.variantTitle, price: finalState.cart[0]?.unitPrice },
+        });
+        await sendWaText(phone, "Order save failed: quantity valid nahi. Agar aap ne *250g* likha tha to woh variant/weight hai, quantity nahi. Please quantity bhej dein: *1, 2, 3*.", waSettings);
+        return;
+      }
+      await sendWaText(phone, "Order save failed: order details invalid hain. Please product/quantity dobara confirm kar dein.", waSettings);
+      return;
+    }
     try {
-      await logWaProcessingStep({ phone, step: "shopify_order_create_started", detail: "Creating Shopify order from WhatsApp commerce cart.", payload: stateData });
-      const created = await createShopifyOrderFromWhatsApp(phone, stateData);
+      await logWaProcessingStep({ phone, step: "ecommerce_order_save_started", detail: "Saving WhatsApp order into ecommerce orders tables.", payload: finalState });
+      const ecommerce = await createEcommerceOrderFromWhatsApp(phone, finalState);
       await logWaProcessingStep({
         phone,
-        step: "shopify_order_created",
+        step: "ecommerce_order_saved",
         status: "sent",
-        detail: `Shopify order ${created.order.name} created from WhatsApp.`,
-        payload: { shopifyOrderId: created.order.id, orderNumber: created.order.name, total: created.order.total_price },
+        detail: `Ecommerce order ${ecommerce.order.orderNumber} saved and shipment tracking generated.`,
+        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, trackingId: ecommerce.shipment.trackingId, total: ecommerce.order.total },
       });
       await setConversationState(phone, "idle", {});
-      await runShopifyOrderAutomation({
-        shopifyOrderDbId: Number(created.orderRow.id),
-        shopifyOrderId: String(created.order.id),
-        orderNumber: String(created.order.name),
-        customerPhone: stateData.customerPhone || phone,
-        customerName: stateData.customerName,
-        shippingAddress: created.orderRow.shippingAddress,
-        totalPrice: String(created.order.total_price ?? stateData.total ?? 0),
-        financialStatus: created.order.financial_status ?? "pending",
-        lineItems: created.lineItems,
-        source: "manual",
-      }).catch(async (err) => {
-        await logWaProcessingStep({ phone, step: "template_triggered", status: "failed", detail: "Order automation/template trigger failed after Shopify order creation.", payload: { error: err instanceof Error ? err.message : String(err) }, failureReason: err instanceof Error ? err.message : String(err) });
+
+      let shopifyCreated: Awaited<ReturnType<typeof createShopifyOrderFromWhatsApp>> | null = null;
+      try {
+        await logWaProcessingStep({ phone, step: "shopify_order_create_started", detail: "Syncing saved WhatsApp ecommerce order to Shopify order table/API.", payload: finalState });
+        shopifyCreated = await createShopifyOrderFromWhatsApp(phone, finalState);
+      } catch (shopifyErr) {
+        const shopifyReason = shopifyErr instanceof Error ? shopifyErr.message : String(shopifyErr);
+        await logWaProcessingStep({ phone, step: "shopify_order_created", status: "failed", detail: "Shopify sync failed after ecommerce order save.", payload: { error: shopifyReason, ecommerceOrderId: ecommerce.order.id }, failureReason: shopifyReason });
+        await createAdminAlert({ title: "WhatsApp Shopify sync failed", message: shopifyReason, type: "wa_order_failure", dedupeMinutes: 10 });
+      }
+
+      await logWaProcessingStep({
+        phone,
+        step: "admin_order_sync_completed",
+        status: "sent",
+        detail: "WhatsApp order is visible in Ecommerce Admin Orders.",
+        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, trackingId: ecommerce.shipment.trackingId, shopifySynced: Boolean(shopifyCreated) },
       });
-      await sendWaText(phone, `جزاک اللہ 😊\n\nآپ کا آرڈر کامیابی سے confirm ہو گیا ہے۔\n\nOrder ID:\n${created.order.name}\n\nAdmin panel mein order update ho gaya hai.`, waSettings);
+      if (shopifyCreated) {
+        await runShopifyOrderAutomation({
+          shopifyOrderDbId: Number(shopifyCreated.orderRow.id),
+          shopifyOrderId: String(shopifyCreated.order.id),
+          orderNumber: String(shopifyCreated.order.name),
+          customerPhone: finalState.customerPhone || phone,
+          customerName: finalState.customerName,
+          shippingAddress: shopifyCreated.orderRow.shippingAddress,
+          totalPrice: String(shopifyCreated.order.total_price ?? ecommerce.order.total ?? 0),
+          financialStatus: shopifyCreated.order.financial_status ?? "pending",
+          lineItems: shopifyCreated.lineItems,
+          source: "manual",
+        }).catch(async (err) => {
+          await logWaProcessingStep({ phone, step: "template_triggered", status: "failed", detail: "Order automation/template trigger failed after Shopify sync.", payload: { error: err instanceof Error ? err.message : String(err) }, failureReason: err instanceof Error ? err.message : String(err) });
+        });
+      }
+      await sendWaText(phone, `جزاک اللہ 😊\n\nآپ کا آرڈر کامیابی سے confirm ہو گیا ہے۔\n\nOrder ID:\n${ecommerce.order.orderNumber}\nTracking ID:\n${ecommerce.shipment.trackingId}\n\nAdmin panel mein order update ho gaya hai.`, waSettings);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      log?.warn(err, "WhatsApp Shopify order creation failed");
-      await logWaProcessingStep({ phone, step: "shopify_order_created", status: "failed", detail: "Shopify order creation failed.", payload: { error: reason, stateData }, failureReason: reason });
-      await createAdminAlert({ title: "WhatsApp Shopify order failed", message: reason, type: "wa_order_failure", dedupeMinutes: 10 });
-      await sendWaText(phone, "Sorry, order create nahi ho saka. Team ko alert kar diya gaya hai, hamara support agent isay check karega.", waSettings);
+      log?.warn(err, "WhatsApp ecommerce order save failed");
+      await logWaProcessingStep({ phone, step: "ecommerce_order_save_failed", status: "failed", detail: "Ecommerce DB save failed; no confirmation was sent.", payload: { error: reason, stateData: finalState }, failureReason: reason });
+      await createAdminAlert({ title: "WhatsApp order save failed", message: reason, type: "wa_order_failure", dedupeMinutes: 10 });
+      await sendWaText(phone, "Order save failed. Team ko alert kar diya gaya hai, confirmation abhi nahi hui.", waSettings);
     }
   }
 }
