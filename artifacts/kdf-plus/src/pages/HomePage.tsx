@@ -178,75 +178,39 @@ function customerMarketingText(value: unknown, fallback = ""): string {
   return cleaned || fallback;
 }
 
-const AUTO_PROMO_RECIPES = [
-  {
-    key: "seasonal",
-    label: "Seasonal Picks",
-    title: "Healthy Seasonal Picks",
-    subtitle: "Fresh nuts and dry fruits selected for everyday energy and better snacking.",
+function buildAutoPromotionBanner(products: Product[]): Banner {
+  const month = new Date().getMonth();
+  const seasonal =
+    month === 2 ? { label: "Ramadan Wellness", title: "Healthy Fasting Picks", subtitle: "Dates, almonds, and wholesome dry fruits for balanced energy.", campaign: "ramadan", terms: ["dates", "almond", "walnut"] } :
+    month === 3 ? { label: "Eid Gifting", title: "Premium Gift Packs", subtitle: "Elegant dry fruit selections for family, friends, and corporate gifting.", campaign: "eid_gifts", terms: ["gift", "pistachio", "cashew"] } :
+    [10, 11, 0].includes(month) ? { label: "Winter Wellness", title: "Immunity Boosting Dry Fruits", subtitle: "Premium nuts and dry fruits for cozy, healthy winter snacking.", campaign: "winter", terms: ["almond", "walnut", "fig"] } :
+    [5, 6, 7].includes(month) ? { label: "Summer Energy", title: "Healthy Nuts Collection", subtitle: "Light, premium snacks for everyday energy and freshness.", campaign: "summer", terms: ["almond", "cashew", "seeds"] } :
+    { label: "KDF Premium", title: "Fresh Premium Nuts & Dry Fruits", subtitle: "Clean, hygienic, and carefully selected picks delivered across Pakistan.", campaign: "healthy_lifestyle", terms: ["almond", "pistachio", "cashew"] };
+  const relatedProductIds = products
+    .filter((product) => {
+      const text = `${product.name ?? ""} ${(product.tags ?? []).join(" ")}`.toLowerCase();
+      return seasonal.terms.some((term) => text.includes(term));
+    })
+    .slice(0, 4)
+    .map((product) => product.id)
+    .filter(Boolean);
+  return {
+    id: -12000,
+    title: seasonal.title,
+    subtitle: seasonal.subtitle,
+    label: seasonal.label,
     cta: "Shop Now",
-    keywords: ["almond", "walnut", "dates", "healthy", "energy"],
-    campaign: "healthy_lifestyle",
-  },
-  {
-    key: "gift",
-    label: "Gift Selection",
-    title: "Premium Gift Packs",
-    subtitle: "Elegant dry fruit selections for Eid, family sharing, and corporate gifting.",
-    cta: "Explore Gifts",
-    keywords: ["gift", "pack", "pistachio", "cashew", "dates"],
-    campaign: "gift_season",
-  },
-  {
-    key: "wellness",
-    label: "Wellness Collection",
-    title: "Daily Energy Nuts",
-    subtitle: "Almonds, walnuts, seeds, and dry fruits for a smarter healthy routine.",
-    cta: "Healthy Picks",
-    keywords: ["almond", "walnut", "seeds", "organic", "healthy"],
-    campaign: "healthy_lifestyle",
-  },
-  {
-    key: "bestsellers",
-    label: "Customer Favorites",
-    title: "Best Sellers This Week",
-    subtitle: "Popular premium picks customers keep adding to cart.",
-    cta: "View Collection",
-    keywords: ["best", "popular", "cashew", "pistachio", "almond"],
-    campaign: "weekend_deals",
-  },
-];
-
-function buildAutoPromoBanners(products: Product[]): Banner[] {
-  return AUTO_PROMO_RECIPES.map((recipe, index) => {
-    const matchedProducts = products
-      .filter((product) => {
-        const text = `${product.name ?? ""} ${(product.tags ?? []).join(" ")}`.toLowerCase();
-        return recipe.keywords.some((term) => text.includes(term));
-      })
-      .slice(0, 8);
-    const fallbackProduct = products[index % Math.max(1, products.length)];
-    const relatedIds = (matchedProducts.length ? matchedProducts : fallbackProduct ? [fallbackProduct] : [])
-      .map((product) => product.id)
-      .filter(Boolean);
-    return {
-      id: -12000 - index,
-      title: recipe.title,
-      subtitle: recipe.subtitle,
-      label: recipe.label,
-      cta: recipe.cta,
-      linkUrl: "/products",
-      targetType: "page",
-      sortOrder: index,
-      active: true,
-      aiMode: true,
-      aiCampaign: recipe.campaign,
-      relatedProductIds: relatedIds,
-      healthBenefitText: recipe.subtitle,
-      urgencyText: index === 3 ? "Updated from current customer favorites." : "Fresh picks curated for this season.",
-      bannerStyle: "premium",
-    } as unknown as Banner;
-  });
+    linkUrl: "/products",
+    targetType: "page",
+    sortOrder: 0,
+    active: true,
+    aiMode: true,
+    aiCampaign: seasonal.campaign,
+    relatedProductIds,
+    healthBenefitText: seasonal.subtitle,
+    urgencyText: "Premium seasonal picks selected for KDF customers.",
+    bannerStyle: "premium",
+  } as unknown as Banner;
 }
 
 /* ─── AI Fallback Slides ─── */
@@ -1193,175 +1157,6 @@ function ProductCarousel({ products, loading, skeletonCount = 5 }: {
   );
 }
 
-function SmartBannerProductStrip({
-  banner,
-  products,
-  loading,
-}: {
-  banner?: Banner | null;
-  products: Product[];
-  loading: boolean;
-}) {
-  if (!banner || (!loading && products.length === 0)) return null;
-  const b = banner as any;
-  const title = customerMarketingText(b.healthBenefitText || b.urgencyText, "Recommended for you");
-  return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9">
-      <div className="rounded-2xl border border-emerald-100 bg-white/92 p-3 shadow-[0_12px_34px_rgba(13,43,0,0.07)] sm:p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5FA800]">
-              Recommended picks
-            </p>
-            <h2 className="mt-1 text-base font-black text-gray-950 sm:text-xl">
-              {title}
-            </h2>
-            {b.urgencyText && (
-              <p className="mt-1 text-xs font-semibold text-gray-500 sm:text-sm">
-                {customerMarketingText(b.urgencyText)}
-              </p>
-            )}
-          </div>
-          <Link href="/products" className="hidden rounded-full border border-[#5FA800]/25 px-4 py-2 text-sm font-black text-[#4d8a00] sm:inline-flex">
-            View all
-          </Link>
-        </div>
-        <ProductCarousel products={products} loading={loading} skeletonCount={4} />
-      </div>
-    </section>
-  );
-}
-
-function SmartPromoBannerCard({
-  banner,
-  productCount,
-}: {
-  banner: Banner;
-  productCount: number;
-}) {
-  const [, setLocation] = useLocation();
-  const b = banner as any;
-  const desktopImg = b.imageUrl ? getProductImageSrc(b.imageUrl, { maxWidth: 1000 }) : "";
-  const mobileImg = b.mobileImageUrl ? getProductImageSrc(b.mobileImageUrl, { maxWidth: 700 }) : desktopImg;
-  const source = desktopImg || mobileImg ? "Manual" : b.id < 0 ? "Fallback" : "AI";
-  const targetHref =
-    b.targetType === "product" && b.targetId ? `/products/${b.targetId}` :
-    b.targetType === "category" && b.targetId ? `/products?categoryId=${b.targetId}` :
-    b.linkUrl || "/products";
-  const bg = b.bgColor && String(b.bgColor).startsWith("#")
-    ? `linear-gradient(135deg, ${b.bgColor}, #0f172a)`
-    : dealThemeForBanner(b);
-
-  return (
-    <button
-      type="button"
-      onClick={() => setLocation(targetHref)}
-      data-banner-source={source}
-      data-banner-reason={source === "Manual" ? "uploaded-image" : source === "AI" ? "ai-content-with-gradient" : "local-fallback-gradient"}
-      className="group relative min-h-[150px] overflow-hidden rounded-[1.4rem] p-5 text-left text-white shadow-[0_16px_44px_rgba(13,43,0,0.12)] ring-1 ring-black/[0.04] transition-all hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(13,43,0,0.17)] active:translate-y-0 sm:min-h-[178px] sm:p-6"
-      style={{ background: bg }}
-    >
-      {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:block" />}
-      {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-24 transition-transform duration-700 group-hover:scale-105 sm:hidden" />}
-      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/20 blur-3xl transition-transform duration-700 group-hover:scale-125" />
-      <div className="absolute -bottom-14 left-8 h-36 w-36 rounded-full bg-[#F58300]/25 blur-3xl" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.18),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.30),rgba(0,0,0,0.06))]" />
-      <div className="relative z-10 flex h-full flex-col justify-between gap-5">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/14 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/85 ring-1 ring-white/16 backdrop-blur">
-            <Sparkles className="h-3 w-3 text-amber-200" />
-            {customerMarketingText(b.label, "Seasonal Pick")}
-          </div>
-          <h3 className="max-w-[26rem] text-xl font-black leading-[1.04] tracking-tight sm:text-2xl">
-            {customerMarketingText(banner.title, "Premium Dry Fruit Collection")}
-          </h3>
-          {(b.healthBenefitText || banner.subtitle) && (
-            <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">
-              {customerMarketingText(b.healthBenefitText || banner.subtitle)}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="rounded-full bg-white/14 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white/80 ring-1 ring-white/14">
-            {productCount > 0 ? `${productCount} matched products` : customerMarketingText(b.urgencyText, "Seasonal picks")}
-          </span>
-          <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-black text-[#0D2B00] shadow-lg transition-transform group-hover:translate-x-1">
-            {customerMarketingText(banner.cta, "Shop Now")} <ArrowRight className="h-3.5 w-3.5" />
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function SmartPromoBannerSection({
-  banners,
-  products,
-}: {
-  banners: Banner[];
-  products: Product[];
-}) {
-  const [rotation, setRotation] = useState(0);
-  const autoBanners = useMemo(() => buildAutoPromoBanners(products), [products]);
-  const displayBanners = useMemo(() => {
-    const active = banners.filter((banner) => (banner as any).active !== false);
-    const existingKeys = new Set(active.map((banner) => customerMarketingText((banner as any).title).toLowerCase()));
-    const supplements = autoBanners.filter((banner) => !existingKeys.has(customerMarketingText((banner as any).title).toLowerCase()));
-    return [...active, ...supplements].slice(0, 4);
-  }, [banners, autoBanners]);
-
-  useEffect(() => {
-    if (displayBanners.length <= 1) return;
-    const id = window.setInterval(() => setRotation((current) => (current + 1) % displayBanners.length), 6500);
-    return () => window.clearInterval(id);
-  }, [displayBanners.length]);
-
-  useEffect(() => {
-    const isAdminViewing = typeof window !== "undefined" && window.localStorage?.getItem("kdf_admin_token");
-    if (!displayBanners.length || !isAdminViewing || typeof console === "undefined") return;
-    const diagnostics = displayBanners.map((banner) => {
-      const b = banner as any;
-      const hasImage = Boolean(b.imageUrl || b.mobileImageUrl);
-      const relatedIds = Array.isArray(b.relatedProductIds) ? b.relatedProductIds.map(Number).filter(Boolean) : [];
-      const matched = relatedIds.length || products.filter((product) => productMatchScore(product, b) > 0).length;
-      return {
-        title: customerMarketingText(b.title, "Untitled banner"),
-        source: hasImage ? "Manual" : b.id < 0 ? "Fallback" : "AI",
-        reason: hasImage ? "Uploaded banner image available" : b.id < 0 ? "Generated because fewer than 4 AI banners were active" : "No image, using smart gradient banner",
-        matchedProducts: matched,
-      };
-    });
-    console.info("[KDF Smart Promo Banners]", diagnostics);
-  }, [displayBanners, products]);
-
-  if (!displayBanners.length) return null;
-  const rotatedBanners = displayBanners.map((_, index) => displayBanners[(index + rotation) % displayBanners.length]);
-  return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-      <div className="mb-4 flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#5FA800]">Seasonal promotions</p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 sm:text-2xl">Premium seasonal picks</h2>
-        </div>
-        <Link href="/products" className="hidden rounded-full border border-[#5FA800]/25 px-4 py-2 text-sm font-black text-[#4d8a00] transition-colors hover:bg-[#5FA800]/10 sm:inline-flex">
-          View products
-        </Link>
-      </div>
-      <div className="flex snap-x gap-4 overflow-x-auto pb-1 [scrollbar-width:none] md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
-        {rotatedBanners.map((banner) => {
-          const ids = Array.isArray((banner as any).relatedProductIds) ? (banner as any).relatedProductIds.map(Number) : [];
-          const count = ids.length || products.filter((p) => productMatchScore(p, banner as any) > 0).length;
-          return (
-            <div key={banner.id} className="min-w-[82vw] snap-start sm:min-w-[360px] md:min-w-0">
-              <SmartPromoBannerCard banner={banner} productCount={count} />
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function DealProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
   const [, setLocation] = useLocation();
@@ -1431,7 +1226,7 @@ function CountdownDealSection({
   const [, setLocation] = useLocation();
   if (!banner) return null;
   const b = banner as any;
-  const count = Math.max(1, Math.min(12, Number(b.offerDisplayCount ?? 8)));
+  const count = Math.max(1, Math.min(4, Number(b.offerDisplayCount ?? 4)));
   const mode = String(b.offerMode ?? "discount_products");
   const sortMode = String(b.offerSort ?? "featured");
   const showCategories = mode === "categories";
@@ -1471,24 +1266,26 @@ function CountdownDealSection({
   const btnText = b.buttonTextColor || DARK;
   const textColor = b.textColor || "#ffffff";
   const supportingText = customerMarketingText(b.healthBenefitText || b.urgencyText || b.subtitle);
+  const shouldShowMatchedItems = showCategories ? shownCategories.length > 0 : loading || shownProducts.length > 0;
 
   return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9 sm:pb-10">
-      <div className="overflow-hidden rounded-[1.35rem] border border-white/80 bg-white shadow-[0_16px_46px_rgba(13,43,0,0.10)] ring-1 ring-black/[0.03] sm:rounded-[1.65rem]">
+    <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-8 sm:pb-9">
+      <div className="overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-[0_14px_38px_rgba(13,43,0,0.08)] ring-1 ring-black/[0.03] sm:rounded-[1.5rem]">
         <div
-          className="relative overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-7"
+          className="relative overflow-hidden px-4 py-5 sm:px-7 sm:py-6 lg:px-8"
           style={{ background: bg, color: textColor }}
         >
-          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-25 sm:block" />}
-          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-24 sm:hidden" />}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_15%,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(255,255,255,0.14),transparent_24%)]" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/38 via-black/14 to-black/28" />
-          <div className="relative z-10 grid gap-4 lg:grid-cols-[1.1fr_auto_auto] lg:items-center">
+          {desktopImg && <img src={desktopImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 hidden h-full w-full object-cover opacity-30 sm:block" />}
+          {mobileImg && <img src={mobileImg} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-28 sm:hidden" />}
+          <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/18 blur-3xl" />
+          <div className="absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[#F58300]/18 blur-3xl" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/42 via-black/16 to-black/26" />
+          <div className="relative z-10 grid gap-4 lg:grid-cols-[1.15fr_auto_auto] lg:items-center">
             <div className="min-w-0 lg:max-w-xl">
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/90 backdrop-blur">
-                <Flame className="h-3 w-3 text-orange-300" /> {customerMarketingText(b.label, "Limited Time Picks")}
+                <Sparkles className="h-3 w-3 text-orange-300" /> {customerMarketingText(b.label, "KDF Premium")}
               </div>
-              <h2 className="text-lg font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.7rem]">{customerMarketingText(banner.title, "Daily Energy Nuts")}</h2>
+              <h2 className="text-xl font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.9rem]">{customerMarketingText(banner.title, "Fresh Premium Nuts & Dry Fruits")}</h2>
               {supportingText && <p className="mt-1 max-w-xl text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">{supportingText}</p>}
             </div>
             <div className="flex items-center lg:justify-center">
@@ -1507,24 +1304,26 @@ function CountdownDealSection({
           </div>
         </div>
 
-        <div className="bg-gradient-to-b from-white to-[#f8fbf4] px-3 py-3 sm:px-5 sm:py-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Recommended products"}</p>
-              <h3 className="text-sm font-black text-gray-950 sm:text-base">{showCategories ? "Explore this collection" : "Matched to this offer"}</h3>
+        {shouldShowMatchedItems && (
+          <div className="bg-gradient-to-b from-white to-[#f8fbf4] px-3 py-3 sm:px-5 sm:py-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#5FA800]">{showCategories ? "Shop collections" : "Matched picks"}</p>
+                <h3 className="text-sm font-black text-gray-950 sm:text-base">{showCategories ? "Explore this collection" : "Products matched to this promotion"}</h3>
+              </div>
+              <Link href="/products" className="shrink-0 rounded-full border border-[#5FA800]/20 px-3 py-1.5 text-xs font-black text-[#5FA800] transition-colors hover:bg-[#5FA800]/10">View all</Link>
             </div>
-            <Link href="/products" className="shrink-0 rounded-full border border-[#5FA800]/20 px-3 py-1.5 text-xs font-black text-[#5FA800] transition-colors hover:bg-[#5FA800]/10">View all</Link>
+            {showCategories ? (
+              <CategoryGrid categories={shownCategories} loading={false} />
+            ) : loading ? (
+              <ProductCarousel products={[]} loading skeletonCount={4} />
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]" style={{ WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory" }}>
+                {shownProducts.map((p) => <DealProductCard key={p.id} product={p} />)}
+              </div>
+            )}
           </div>
-          {showCategories ? (
-            <CategoryGrid categories={shownCategories} loading={false} />
-          ) : loading ? (
-            <ProductCarousel products={[]} loading />
-          ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]" style={{ WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory" }}>
-              {shownProducts.map((p) => <DealProductCard key={p.id} product={p} />)}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </section>
   );
@@ -1730,16 +1529,12 @@ export default function HomePage() {
   const smartBanners = useMemo(() => {
     return banners.filter((b: any) => b.aiMode);
   }, [banners]);
-  const autoSmartBanners = useMemo(() => buildAutoPromoBanners(heroSmartCatalog), [heroSmartCatalog]);
-  const smartPromoBanners = useMemo(() => {
-    const existingTitles = new Set(smartBanners.map((banner: any) => customerMarketingText(banner.title).toLowerCase()));
-    const supplements = autoSmartBanners.filter((banner: any) => !existingTitles.has(customerMarketingText(banner.title).toLowerCase()));
-    return [...smartBanners, ...supplements].slice(0, 4);
-  }, [autoSmartBanners, smartBanners]);
-  const smartBanner = smartPromoBanners.find((b: any) => Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? smartPromoBanners[0] ?? null;
+  const autoPromotionBanner = useMemo(() => buildAutoPromotionBanner(heroSmartCatalog), [heroSmartCatalog]);
+  const smartBanner = smartBanners.find((b: any) => Array.isArray(b.relatedProductIds) && b.relatedProductIds.length > 0) ?? smartBanners[0] ?? null;
+  const promotionBanner = countdownBanner ?? smartBanner ?? autoPromotionBanner;
   const smartBannerProductIds = useMemo(() => {
     const ids = (smartBanner as any)?.relatedProductIds;
-    return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0).slice(0, 12) : [];
+    return Array.isArray(ids) ? ids.map(Number).filter((id) => Number.isFinite(id) && id > 0).slice(0, 4) : [];
   }, [smartBanner]);
   const { data: smartBannerProductsData, isLoading: smartBannerProductsLoading } = useQuery<any>({
     queryKey: ["smart-banner-products", smartBannerProductIds.join(",")],
@@ -1752,6 +1547,14 @@ export default function HomePage() {
     () => normalizeProductsListResponse(smartBannerProductsData).items as Product[],
     [smartBannerProductsData],
   );
+  const promotionProducts = useMemo(() => {
+    if (countdownBanner) return countdownSectionProducts.slice(0, 4);
+    if (smartBannerProductIds.length > 0 && smartBannerProducts.length > 0) return smartBannerProducts.slice(0, 4);
+    const matched = heroSmartCatalog
+      .filter((product) => productMatchScore(product, promotionBanner as any) > 0)
+      .slice(0, 4);
+    return (matched.length ? matched : heroSmartCatalog.slice(0, 4));
+  }, [countdownBanner, countdownSectionProducts, heroSmartCatalog, promotionBanner, smartBannerProductIds.length, smartBannerProducts]);
 
   const noBanners = banners.length === 0;
   const hasAnyCatalog =
@@ -1848,16 +1651,10 @@ export default function HomePage() {
         )}
 
         <CountdownDealSection
-          banner={countdownBanner}
-          products={countdownSectionProducts}
+          banner={promotionBanner}
+          products={promotionProducts}
           categories={categories}
-          loading={countdownProductsLoading || dealsLoading || featuredLoading}
-        />
-
-        <SmartBannerProductStrip
-          banner={smartBanner}
-          products={smartBannerProducts}
-          loading={smartBannerProductsLoading}
+          loading={countdownBanner ? (countdownProductsLoading || dealsLoading || featuredLoading) : smartBannerProductsLoading}
         />
 
         {/* Deals / Hot Deals */}
@@ -1881,18 +1678,6 @@ export default function HomePage() {
           <MobileReelsSection reels={mobileReels} />
         )}
 
-        {/* Mid promo banner */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-          <PromoBanner
-            badge="Free Delivery"
-            title="Order Rs. 1,500+ Get Free Shipping"
-            subtitle="Delivered in 60–72 hours across Pakistan · Same-day in Karachi"
-            cta="Shop Now"
-            href="/products"
-            gradient={`linear-gradient(135deg, ${DARK} 0%, #1a5200 100%)`}
-          />
-        </section>
-
         {/* New Arrivals */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
           <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
@@ -1906,8 +1691,6 @@ export default function HomePage() {
             <ProductGrid products={allProducts.slice(0, 10)} loading={allLoading} />
           </div>
         </section>
-
-        <SmartPromoBannerSection banners={smartPromoBanners} products={heroSmartCatalog} />
 
         {/* All products */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
