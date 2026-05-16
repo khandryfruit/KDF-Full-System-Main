@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
-import { eq, desc, sql, ilike, or, and, inArray } from "drizzle-orm";
+import { eq, desc, asc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
 import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting, markWhatsAppMessageRead, sendWhatsAppTypingIndicator } from "../lib/whatsapp";
 import { handleMenuItemTap } from "../lib/waMenuHandlers.js";
@@ -105,6 +105,11 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
 
 function shouldSendCatalogForIntent(intent: WaIntent): boolean {
   return ["product_search", "pricing", "recommendation", "bulk_order"].includes(intent);
+}
+
+function isGenericCategoryQuery(query: string | undefined): boolean {
+  const q = normalizeIntentText(query ?? "");
+  return ["dry fruit", "dry fruits", "nuts", "mewa"].includes(q);
 }
 
 function naturalIntentReply(intent: WaIntent, text: string): string | null {
@@ -1039,6 +1044,7 @@ async function handleProductCatalog(opts: {
   const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
   try {
     if (detectedIntent && !shouldSendCatalogForIntent(detectedIntent.intent)) return false;
+    if (isGenericCategoryQuery(detectedIntent?.productQuery) && detectedIntent?.intent !== "pricing") return false;
 
     /* ── Search products: Shopify first, then custom DB ── */
     const maxProducts = Math.min((chatbot as any)?.catalogMaxProducts ?? 3, 5);
@@ -1051,42 +1057,7 @@ async function handleProductCatalog(opts: {
       .slice(0, 40);
     if (searchTerm.length < 2 && !detectedIntent?.productQuery) return false;
 
-    let products: Array<{ name: string; price: string; description: string | null; imageUrl: string | null; productUrl: string }> = [];
-
-    /* Try custom DB first */
-    try {
-      const websiteUrl = (chatbot as any)?.websiteUrl ?? "https://kdfnuts.com";
-      const dbProducts = await db.select({
-        id: productsTable.id,
-        name: productsTable.name,
-        price: productsTable.price,
-        description: productsTable.description,
-        images: productsTable.images,
-        slug: productsTable.slug,
-        stock: productsTable.stock,
-        featured: productsTable.featured,
-      }).from(productsTable)
-        .where(
-          or(
-            searchTerm.length > 2 ? ilike(productsTable.name, `%${searchTerm}%`) : undefined,
-            searchTerm.length > 2 ? ilike(productsTable.description, `%${searchTerm}%`) : undefined,
-          ) as any
-        )
-        .limit(maxProducts * 2);
-
-      const source = dbProducts.filter((p: any) => p.stock > 0);
-      const finalSource = source;
-
-      products = finalSource.slice(0, maxProducts).map((p: any) => ({
-        name: p.name,
-        price: `Rs. ${parseFloat(String(p.price)).toLocaleString("en-PK")}`,
-        description: p.description?.slice(0, 80) ?? null,
-        imageUrl: (p.images as string[])?.[0] ?? null,
-        productUrl: `${websiteUrl}/products/${p.slug}`,
-      }));
-    } catch (dbErr) {
-      log?.warn(dbErr, "Product catalog DB lookup failed");
-    }
+    const products = await searchProductsForWa(searchTerm, maxProducts);
 
     if (products.length === 0) return false;
     await logWaProcessingStep({
@@ -1097,7 +1068,7 @@ async function handleProductCatalog(opts: {
     });
 
     /* ── Send each product as a separate message with buttons ── */
-    const intro = `🛍️ *Matching products* 🥜\n\nAapki request ke mutabiq yeh items mile hain:`;
+    const intro = `جی 😊 official catalog ke matching options yeh hain:`;
     await sendWhatsAppMessage({ phone, message: intro, templateName: "catalog_intro" });
     await new Promise(r => setTimeout(r, 800));
 
@@ -1106,6 +1077,7 @@ async function handleProductCatalog(opts: {
       const msgText =
         `*${p.name}*\n` +
         `💰 *Price:* ${p.price}\n` +
+        (p.variants ? `📦 *Official options:*\n${p.variants}\n` : "") +
         (p.description ? `📝 ${p.description}\n` : "") +
         `\n🔗 ${p.productUrl}`;
 
@@ -1444,12 +1416,27 @@ async function handleOrderFlow(
 
     if (state === "order_await_city") {
       stateData.city = text.trim();
+      const calculated = await calculateWhatsAppOrderTotal({
+        productQuery: String(stateData.productName ?? ""),
+        quantity: Number(stateData.qty ?? 1),
+        variantTitle: String(stateData.variant ?? ""),
+        city: stateData.city,
+      }).catch(() => null);
+      if (calculated && (calculated as any).ok) {
+        stateData.subtotalLabel = (calculated as any).subtotal;
+        stateData.deliveryLabel = (calculated as any).delivery;
+        stateData.finalTotalLabel = (calculated as any).total;
+        stateData.deliveryMethod = (calculated as any).deliveryLabel;
+        stateData.totalNumeric = Number(String((calculated as any).total).replace(/[^\d.]/g, "")) || stateData.subtotal;
+      }
       await setConversationState(phone, "order_await_confirm", stateData);
       const summary =
         `📋 *Order Summary*\n\n` +
         `🛍️ *Product:* ${stateData.productName ?? "Item"}\n` +
         `📦 *Qty:* ${stateData.qty ?? 1}\n` +
-        `💰 *Total:* Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}\n` +
+        `💰 *Subtotal:* ${stateData.subtotalLabel ?? `Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}`}\n` +
+        `🚚 *Delivery:* ${stateData.deliveryLabel ?? "To be confirmed"}${stateData.deliveryMethod ? ` (${stateData.deliveryMethod})` : ""}\n` +
+        `✅ *Final Total:* ${stateData.finalTotalLabel ?? `Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}`}\n` +
         `👤 *Name:* ${stateData.customerName}\n` +
         `🏠 *Address:* ${stateData.address}, ${stateData.city}\n` +
         `💳 *Payment:* Cash on Delivery (COD)\n\n` +
@@ -1469,7 +1456,7 @@ async function handleOrderFlow(
         await db.insert(ordersTable).values({
           orderNumber,
           status: "pending",
-          total: String(stateData.subtotal ?? 0),
+          total: String(stateData.totalNumeric ?? stateData.subtotal ?? 0),
           shippingAddress: {
             name: stateData.customerName,
             address: stateData.address,
@@ -1484,7 +1471,7 @@ async function handleOrderFlow(
         await setConversationState(phone, "idle", {});
         await sendInteractiveButtons({
           phone,
-          text: `🎉 *Order Placed Successfully!*\n\n📋 *Order ID:* ${orderNumber}\n💰 *Total:* Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}\n\nHamara team aapko confirm karega. Shukriya! 🙏`,
+          text: `🎉 *Order Placed Successfully!*\n\n📋 *Order ID:* ${orderNumber}\n💰 *Total:* ${stateData.finalTotalLabel ?? `Rs. ${(stateData.subtotal ?? 0).toLocaleString("en-PK")}`}\n\nHamara team aapko confirm karega. Shukriya! 🙏`,
           buttons: [
             { id: `track_order`, title: "📦 Track Order" },
             { id: "main_menu", title: "🏠 Main Menu" },
@@ -1623,6 +1610,24 @@ async function handleAiReply(opts: {
       {
         type: "function",
         function: {
+          name: "calculate_order_total",
+          description: "Calculate exact order total using official Shopify/live catalog variant price, configured shipping rules, and an approved coupon code if the customer provides one.",
+          parameters: {
+            type: "object",
+            properties: {
+              productQuery: { type: "string", description: "Product name from customer, e.g. Almond, Badam, Pistachio" },
+              quantity: { type: "number", description: "Quantity requested by customer", default: 1 },
+              variantTitle: { type: "string", description: "Variant/weight requested, e.g. 250g, 500g, 1KG, 2KG" },
+              city: { type: "string", description: "Delivery city if customer mentioned it" },
+              couponCode: { type: "string", description: "Coupon/promo code only if customer mentioned one" },
+            },
+            required: ["productQuery"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
           name: "track_order",
           description: "Look up order status/tracking by order number or phone number. Use when customer asks 'where is my order', 'track', 'status', etc.",
           parameters: {
@@ -1661,6 +1666,13 @@ async function handleAiReply(opts: {
     ];
 
     const salesSystem = `You are a premium human WhatsApp sales representative for Khan Dry Fruits.
+High priority behavior:
+- The saved Admin business instructions below are customer-specific business rules. Follow them on every conversation and do not ignore or replace them.
+- Never invent product names, weights, variants, prices, discounts, delivery charges, or totals.
+- For any product/price/variant question, call search_products and answer only from returned official catalog data.
+- For quantity + variant total questions, call calculate_order_total. If no official match is found, say you need to confirm instead of guessing.
+- If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
+- If customer asks a broad need like "Mujhe dry fruits chahiye", first ask natural qualifying questions (budget, gift/use, quantity) and suggest categories without fake prices.
 Rules:
 - Reply naturally in the customer's language (Urdu, Roman Urdu, or English).
 - Never use generic auto-responder lines like "Thank you for your message" unless it truly fits.
@@ -1672,7 +1684,7 @@ Rules:
 - If customer wants tracking/order status, use track_order.
 - Keep replies short, human, and conversion-focused.`;
     const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
-    const systemContent = `${salesSystem}\n\nAdmin business instructions:\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
+    const systemContent = `${salesSystem}\n\nAdmin business instructions (must be applied):\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
     await logWaProcessingStep({
       phone,
       step: "prompt_loaded",
@@ -1717,13 +1729,14 @@ Rules:
     let reply = "";
     let toolRound = 0;
     let currentMessages = [...messages];
+    const allowToolUse = (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) || ["order_start", "tracking", "complaint"].includes(intent.intent);
 
     while (toolRound < 2) {
       const completion = await aiClient.chat.completions.create({
         model: chatbot.aiModel ?? "gpt-4o-mini",
         messages: currentMessages,
         tools,
-        tool_choice: shouldSendCatalogForIntent(intent.intent) || ["order_start", "tracking", "complaint"].includes(intent.intent) ? "auto" : "none",
+        tool_choice: allowToolUse ? "auto" : "none",
         max_completion_tokens: 600,
       });
 
@@ -1746,7 +1759,7 @@ Rules:
         let toolResult = "";
 
         if (tcFn.name === "search_products") {
-          if (!shouldSendCatalogForIntent(intent.intent) && intent.intent !== "order_start") {
+          if ((!shouldSendCatalogForIntent(intent.intent) && intent.intent !== "order_start") || isGenericCategoryQuery(intent.productQuery)) {
             toolResult = "Product search blocked because customer did not ask for products.";
             toolResults.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
             continue;
@@ -1758,7 +1771,7 @@ Rules:
             /* Send product cards immediately via WA */
             const intro = customerName
               ? `🛍️ *${customerName}*, yahan hain matching products:`
-              : `🛍️ *KDF NUTS Products* — ap k liye:`;
+              : `جی 😊 official Shopify catalog ke matching options yeh hain:`;
             await sendWaText(phone, intro, waSettings);
             await new Promise(r => setTimeout(r, 600));
             for (let i = 0; i < products.length; i++) {
@@ -1781,6 +1794,23 @@ Rules:
             await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Products shown: ${products.map(p => p.name).join(", ")}]`, status: "sent" }).catch(() => {});
             return; /* Products already sent */
           }
+        } else if (tcFn.name === "calculate_order_total") {
+          const total = await calculateWhatsAppOrderTotal({
+            productQuery: String(args.productQuery ?? ""),
+            quantity: Number(args.quantity ?? 1),
+            variantTitle: args.variantTitle ? String(args.variantTitle) : undefined,
+            city: args.city ? String(args.city) : undefined,
+            couponCode: args.couponCode ? String(args.couponCode) : undefined,
+          });
+          toolResult = JSON.stringify(total);
+          await logWaProcessingStep({
+            phone,
+            step: "order_total_calculated",
+            status: (total as any).ok ? "sent" : "failed",
+            detail: (total as any).ok ? "Order total calculated from official catalog/shipping rules." : "Order total calculation failed because product price was not found.",
+            payload: { args, total },
+            failureReason: (total as any).ok ? null : String((total as any).reason ?? "order_total_calculation_failed"),
+          });
         } else if (tcFn.name === "track_order") {
           const normalizedLookup = normalizePhone(phone);
           const altPhone = normalizedLookup.startsWith("92") ? "0" + normalizedLookup.slice(2) : phone;
@@ -1804,16 +1834,33 @@ Rules:
           }
         } else if (tcFn.name === "start_order") {
           const pName = args.productName ?? "Product";
-          const pPrice = args.price ?? 0;
-          const variant = args.variantTitle ? ` (${args.variantTitle})` : "";
+          const officialProducts = await searchProductsForWa(String(pName), 1);
+          const officialProduct = officialProducts[0];
+          if (!officialProduct) {
+            toolResult = "Cannot start order because no official matching product/price was found.";
+            toolResults.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
+            continue;
+          }
+          let officialPrice = Number(officialProduct.rawPrice ?? 0);
+          let selectedVariantTitle = args.variantTitle ? String(args.variantTitle) : "";
+          if (selectedVariantTitle && officialProduct.variantLines?.length) {
+            const wanted = normalizeProductText(selectedVariantTitle);
+            const found = officialProduct.variantLines.find((line) => normalizeProductText(line).includes(wanted));
+            if (found) {
+              selectedVariantTitle = found.split("—")[0]?.trim() || selectedVariantTitle;
+              const priceMatch = found.match(/Rs\.\s*([\d,]+)/i);
+              if (priceMatch) officialPrice = Number(priceMatch[1].replace(/,/g, ""));
+            }
+          }
+          const variant = selectedVariantTitle ? ` (${selectedVariantTitle})` : "";
           await setConversationState(phone, "order_await_qty", {
-            productName: pName + variant,
-            price: pPrice,
-            variant: args.variantTitle ?? "",
+            productName: officialProduct.name + variant,
+            price: officialPrice,
+            variant: selectedVariantTitle,
           });
-          const msg = `🛒 *Order: ${pName}${variant}*\n💰 Price: Rs. ${pPrice.toLocaleString("en-PK")} per unit\n\n📦 Kitni quantity chahiye? (Enter number e.g. 1, 2, 3)`;
+          const msg = `🛒 *Order: ${officialProduct.name}${variant}*\n💰 Official price: ${formatRupees(officialPrice)} per unit\n\n📦 Kitni quantity chahiye? (Enter number e.g. 1, 2, 3)`;
           await sendWaText(phone, msg, waSettings);
-          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Order flow started: ${pName}]`, status: "sent" }).catch(() => {});
+          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Order flow started: ${officialProduct.name}]`, status: "sent" }).catch(() => {});
           return;
         } else if (tcFn.name === "escalate_to_human") {
           await sendInteractiveButtons({
