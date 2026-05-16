@@ -33,6 +33,15 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   makhana: ["foxnut", "fox nuts"],
   peanut: ["peanuts", "mungphali", "مونگ پھلی"],
   peanuts: ["peanut", "mungphali"],
+  goji: ["goji berry", "goji berries", "گوجی"],
+  cranberry: ["cranberries", "کرین بیری"],
+  blueberry: ["blueberries", "بلیو بیری"],
+  berry: ["berries", "بیری"],
+  berries: ["berry", "بیریز"],
+  sunflower: ["sunflower seeds", "soorajmukhi", "سورج مخی"],
+  pumpkin: ["pumpkin seeds", "کدو"],
+  chia: ["chia seeds"],
+  sesame: ["til", "تل"],
 };
 
 const PRODUCT_ROOT_WORDS = new Set([

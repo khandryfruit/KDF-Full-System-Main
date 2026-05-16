@@ -2,11 +2,11 @@
  * Central product brain for WhatsApp + website — product DB answers BEFORE OpenAI.
  */
 import {
-  searchShopifyCatalog,
   formatShopifyCatalogWhatsAppReply,
   type ShopifyCatalogProduct,
 } from "./shopifyProductKnowledge.js";
 import { productRootTermsFromQuery, WA_PRODUCT_ALIASES } from "./shopifyProductSearch.js";
+import { buildCatalogBrowseReply, type WaCatalogBrowseResult } from "./waSalesAgent.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -15,6 +15,9 @@ export type WaProductBrainHit = {
   query: string;
   matchedRoots: string[];
   score: number;
+  mode: "category" | "single" | "legacy";
+  categoryId?: string | null;
+  waProducts?: WaCatalogBrowseResult["waProducts"];
 };
 
 export function isRomanUrduWa(text: string): boolean {
@@ -64,6 +67,10 @@ export function isOrderAffirmationMessage(text: string): boolean {
   return /^(haan|han|yes|ji|jee|jee haan|ok|okay|theek|thik|order|order start|start order|kr do|kar do|krna hai|karna hai|confirm|place order)$/i.test(t);
 }
 
+export function isPreOrderConfirmSelection(text: string): boolean {
+  return /^[12]$/.test(String(text ?? "").trim());
+}
+
 /** Product inquiry: has catalog root or known product word */
 export function isLikelyProductInquiry(text: string, intent?: string): boolean {
   return isProductInquiryMessage(text) || (intent != null && ["product_search", "pricing", "recommendation", "bulk_order"].includes(intent));
@@ -77,7 +84,7 @@ export function isProductInquiryMessage(text: string): boolean {
   for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
     if (lower.includes(key)) return true;
   }
-  return /\b(almond|badam|pista|kaju|akhrot|walnut|cashew|khajoor|anjeer|kishmish|dry fruit|nuts)\b/i.test(t);
+  return /\b(almond|badam|pista|kaju|akhrot|walnut|cashew|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry)\b/i.test(t);
 }
 
 export function shouldUseProductDatabaseFirst(intent: string, text: string): boolean {
@@ -100,28 +107,28 @@ export async function tryWaProductCatalogReply(opts: {
   );
   if (!query || query.length < 2) return null;
 
-  const roots = productRootsInMessage(query);
-  let products = await searchShopifyCatalog(query, 6);
+  const browse = await buildCatalogBrowseReply({ query, textBody: opts.textBody });
+  if (!browse) return null;
 
-  if (!products.length && roots.length > 0) {
-    products = await searchShopifyCatalog(roots[0]!, 6);
-  }
-
-  const minScore = roots.length > 0 ? MIN_PRODUCT_SCORE : 20;
-  const top = products[0];
-  if (!top || (top.score ?? 0) < minScore) return null;
-
-  const roman = isRomanUrduWa(opts.textBody);
-  const reply = formatShopifyCatalogWhatsAppReply(products.slice(0, 3), roman);
+  const top = browse.products[0]!;
+  if ((top.score ?? 0) < MIN_PRODUCT_SCORE && browse.roots.length > 0) return null;
 
   return {
-    reply,
+    reply: browse.reply,
     product: top,
-    products: products.slice(0, 3),
-    query,
-    matchedRoots: roots,
-    score: top.score,
+    products: browse.products,
+    query: browse.query,
+    matchedRoots: browse.roots,
+    score: browse.score,
+    mode: browse.mode,
+    categoryId: browse.category?.id ?? null,
+    waProducts: browse.waProducts,
   };
+}
+
+/** Legacy single-product variant card (website / fallback) */
+export function formatLegacyVariantReply(products: ShopifyCatalogProduct[], roman: boolean): string {
+  return formatShopifyCatalogWhatsAppReply(products.slice(0, 3), roman);
 }
 
 export function buildWaProductSearchQuery(textBody: string, productQuery?: string): string {
