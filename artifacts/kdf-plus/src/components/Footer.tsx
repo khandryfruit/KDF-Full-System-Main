@@ -132,6 +132,19 @@ const PRODUCT_SHORTCUTS: { label: string; href: string }[] = [
   { label: "Dry Fruits", href: "/categories" },
 ];
 
+const MOOD_COLLECTIONS = [
+  { emoji: "🥜", title: "Nuts", desc: "Premium healthy snacks", href: "/products?search=nuts" },
+  { emoji: "🍇", title: "Dry Fruits", desc: "Fresh daily essentials", href: "/categories" },
+  { emoji: "🌿", title: "Organic", desc: "Clean lifestyle picks", href: "/products?search=organic" },
+  { emoji: "✨", title: "Seeds", desc: "Smart nutrition boosts", href: "/products?search=seeds" },
+  { emoji: "🎁", title: "Gift Packs", desc: "Elegant ready gifting", href: "/products?search=gift" },
+  { emoji: "💪", title: "Healthy Snacks", desc: "Everyday energy bites", href: "/products?search=healthy" },
+  { emoji: "🏆", title: "Premium Collection", desc: "Best quality selections", href: "/products?featured=true" },
+  { emoji: "🌰", title: "Walnuts", desc: "Omega-rich snacking", href: "/products?search=walnuts" },
+  { emoji: "🥭", title: "Dried Fruits", desc: "Naturally sweet picks", href: "/products?search=dried" },
+  { emoji: "🎉", title: "Seasonal Offers", desc: "Limited-time favorites", href: "/products?sortBy=popular" },
+];
+
 function TikTokIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -299,6 +312,49 @@ function ScrollToTop() {
   );
 }
 
+function MoodCollectionSlider() {
+  const items = [...MOOD_COLLECTIONS, ...MOOD_COLLECTIONS];
+  return (
+    <div className="mb-8 overflow-hidden rounded-[1.4rem] border border-white/[0.08] bg-white/[0.035] px-3 py-4 shadow-[0_22px_80px_-46px_rgba(95,168,0,0.55)] backdrop-blur-xl ring-1 ring-white/[0.04] sm:px-4">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-orange-100">
+            <Sparkles className="h-3 w-3 text-orange-300" aria-hidden /> Most popular collections
+          </p>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">Shop by Mood</h3>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Explore premium categories curated for every lifestyle</p>
+        </div>
+        <Link href="/categories" className="hidden items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#9fe870] transition-colors hover:text-white sm:inline-flex">
+          Explore collections <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <div className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#08111b] to-transparent" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#08111b] to-transparent" aria-hidden />
+        <div className="kdf-mood-track flex w-max gap-3 overflow-visible py-1">
+          {items.map((item, index) => (
+            <Link
+              key={`${item.title}-${index}`}
+              href={item.href}
+              className="group flex min-w-[180px] max-w-[220px] items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.055] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:scale-[1.03] hover:border-[#5FA800]/35 hover:bg-white/[0.085] hover:shadow-[0_18px_45px_-26px_rgba(95,168,0,0.75)] motion-reduce:transition-none"
+              aria-label={`Shop ${item.title}`}
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.08] text-xl ring-1 ring-white/[0.08] transition-transform group-hover:scale-105">
+                {item.emoji}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-black text-white">{item.title}</span>
+                <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-500">{item.desc}</span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800]" />
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NewsletterBand({
   premium,
   email,
@@ -407,6 +463,7 @@ function NewsletterBand({
       )}
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+        <MoodCollectionSlider />
         <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
           <div className="lg:col-span-6">
             <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">
@@ -1167,6 +1224,17 @@ export function Footer() {
           50% { opacity: 0.92; transform: scale(1.02); }
         }
         .kdf-pulse-soft { animation: kdf-pulse-soft-k 2.4s ease-in-out infinite; }
+        @keyframes kdf-mood-marquee {
+          from { transform: translateX(0); }
+          to { transform: translateX(calc(-50% - 0.375rem)); }
+        }
+        .kdf-mood-track {
+          animation: kdf-mood-marquee 34s linear infinite;
+          will-change: transform;
+        }
+        .kdf-mood-track:hover {
+          animation-play-state: paused;
+        }
         @keyframes kdf-ai-tag-glow {
           0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0); }
           50% { box-shadow: 0 0 14px 0 rgba(167,139,250,0.25); }
@@ -1175,7 +1243,7 @@ export function Footer() {
         @media (prefers-reduced-motion: reduce) {
           .kdf-float-emoji, .kdf-fade-up, .kdf-pulse-glow, .kdf-qr-pulse, .kdf-tagline,
           .kdf-nl-mesh, .kdf-nl-orb-a, .kdf-nl-orb-b, .kdf-nl-shimmer, .kdf-badge-pill,
-          .kdf-icon-drift, .kdf-icon-drift2, .kdf-app-badge-shine, .kdf-pulse-soft, .kdf-ai-tag { animation: none !important; }
+          .kdf-icon-drift, .kdf-icon-drift2, .kdf-app-badge-shine, .kdf-pulse-soft, .kdf-mood-track, .kdf-ai-tag { animation: none !important; }
         }
       `}</style>
     </>
