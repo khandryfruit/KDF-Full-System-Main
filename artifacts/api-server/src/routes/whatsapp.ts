@@ -99,6 +99,7 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   if (has(billWords) && has(productWords)) return { intent: "order_start", confidence: 0.92, reason: "product + bill/checkout keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(billWords)) return { intent: "order_start", confidence: 0.82, reason: "bill/checkout keyword without product" };
   if (has(productWords) && has(["order", "buy", "purchase", "mangwana", "bhej", "checkout"])) return { intent: "order_start", confidence: 0.9, reason: "product + order keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && has(["chahiye", "need", "lena", "lena hai", "mangwana", "bhej do"])) return { intent: "order_start", confidence: 0.88, reason: "product need/order phrase", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai", "bill bna", "bill bana", "bill bna k", "bill bana k"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
   if (has(productWords) && has(["recommend", "suggest", "best", "healthy", "gift", "kids", "energy"])) return { intent: "recommendation", confidence: 0.86, reason: "product recommendation keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(productWords) && has(["price", "rate", "qeemat", "kitna", "how much", "rs", "rupees"])) return { intent: "pricing", confidence: 0.9, reason: "product + price keyword", productQuery: productWords.find((w) => t.includes(w)) };
@@ -717,7 +718,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ═══════════════════════════════════════════════
              BRANCH 2b: Order placement flow states
              ═══════════════════════════════════════════════ */
-          if (["wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
+          if (["wa_order_await_product", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
             await handleCommerceOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
             continue;
@@ -1448,7 +1449,7 @@ function parseCommerceOrderRequest(text: string, fallbackQuery?: string) {
     .replace(/\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams|x|pcs|piece|pack)?\b/g, " ")
     .replace(/\s+/g, " ")
     .trim()) || normalized;
-  return { productQuery, quantity, variantTitle };
+  return { productQuery, quantity, variantTitle, quantityExplicit: Boolean(qtyMatch) };
 }
 
 async function findCommerceProductVariant(productQuery: string, variantHint?: string) {
@@ -1492,6 +1493,42 @@ function buildCommerceSummary(data: Record<string, any>): string {
     `💵 *Final:* ${formatRupees(data.total ?? data.subtotal)}`;
 }
 
+async function buildCommerceStateDataFromSelection(params: {
+  product: Awaited<ReturnType<typeof searchProductsForWa>>[number];
+  variant: { id: string; title: string; price: number; sku?: string; inventoryQuantity?: number };
+  quantity: number;
+}) {
+  const subtotal = params.variant.price * params.quantity;
+  const totalCalc = await calculateWhatsAppOrderTotal({
+    productQuery: params.product.name,
+    quantity: params.quantity,
+    variantTitle: params.variant.title,
+  }).catch(() => null);
+  return {
+    cart: [{
+      productName: params.product.name,
+      shopifyProductId: params.product.shopifyProductId,
+      variantId: params.variant.id,
+      variantTitle: params.variant.title,
+      quantity: params.quantity,
+      unitPrice: params.variant.price,
+      imageUrl: params.product.imageUrl,
+      sku: params.variant.sku,
+    }],
+    productName: params.product.name,
+    shopifyProductId: params.product.shopifyProductId,
+    variantId: params.variant.id,
+    variantTitle: params.variant.title,
+    quantity: params.quantity,
+    unitPrice: params.variant.price,
+    subtotal,
+    delivery: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).delivery).replace(/[^\d.]/g, "")) : 0,
+    deliveryLabel: totalCalc && (totalCalc as any).ok ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})` : "Will confirm by city",
+    total: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).total).replace(/[^\d.]/g, "")) : subtotal,
+    source: "whatsapp_ai_commerce",
+  };
+}
+
 async function startCommerceOrderFromText(opts: {
   phone: string;
   textBody: string;
@@ -1507,7 +1544,34 @@ async function startCommerceOrderFromText(opts: {
       detail: "Customer asked for bill/order but product or variant was missing.",
       payload: { textBody: opts.textBody, detectedIntent: opts.detectedIntent },
     });
-    await sendWaText(opts.phone, "Ji 😊 bill bana deta hoon. Bas product, weight aur quantity confirm kar dein.\n\nExample: *1KG Badam 1 pack* ya *500g Kaju 2 pack*", opts.waSettings);
+    await setConversationState(opts.phone, "wa_order_await_product", { source: "whatsapp_ai_commerce" });
+    await sendWaText(opts.phone, "Ji 😊 bill bana deta hoon. Sab se pehle product ka naam bhej dein.\n\nExample: *Badam*, *Kaju*, *Pista*", opts.waSettings);
+    return true;
+  }
+  const products = await searchProductsForWa(parsed.productQuery, 1);
+  const product = products[0];
+  if (!product || product.source !== "shopify") {
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "commerce_order_start_failed",
+      status: "failed",
+      detail: "Could not start WhatsApp commerce order because no official Shopify product matched.",
+      payload: parsed,
+      failureReason: "shopify_product_not_found",
+    });
+    await sendWaText(opts.phone, "Sorry, is product ka official Shopify data nahi mila. Please product ka exact naam bhej dein.", opts.waSettings);
+    return true;
+  }
+  if (!parsed.variantTitle && (product.variantOptions?.length ?? 0) > 1) {
+    await setConversationState(opts.phone, "wa_order_await_variant", { productQuery: parsed.productQuery, product });
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "commerce_order_variant_requested",
+      status: "received",
+      detail: "Product found; asking customer to select official Shopify variant.",
+      payload: { product: product.name, variants: product.variantLines },
+    });
+    await sendWaText(opts.phone, `جی 😊 *${product.name}* ke available variants:\n\n${product.variantLines?.map((v) => `• ${v}`).join("\n") || product.variants}\n\nKaunsa variant chahiye?`, opts.waSettings);
     return true;
   }
   const found = await findCommerceProductVariant(parsed.productQuery, parsed.variantTitle);
@@ -1523,35 +1587,18 @@ async function startCommerceOrderFromText(opts: {
     await sendWaText(opts.phone, "Sorry, is product/variant ka official Shopify price nahi mila. Please product ka exact naam ya weight bhej dein.", opts.waSettings);
     return true;
   }
-  const subtotal = found.unitPrice * parsed.quantity;
-  const totalCalc = await calculateWhatsAppOrderTotal({
-    productQuery: found.product.name,
-    quantity: parsed.quantity,
-    variantTitle: found.variantTitle,
-  }).catch(() => null);
-  const stateData = {
-    cart: [{
+  if (!parsed.quantityExplicit) {
+    await setConversationState(opts.phone, "wa_order_await_quantity", {
+      product: found.product,
+      variant: found.variant,
       productName: found.product.name,
-      shopifyProductId: found.product.shopifyProductId,
-      variantId: found.variantId,
       variantTitle: found.variantTitle,
-      quantity: parsed.quantity,
       unitPrice: found.unitPrice,
-      imageUrl: found.product.imageUrl,
-      sku: found.variant.sku,
-    }],
-    productName: found.product.name,
-    shopifyProductId: found.product.shopifyProductId,
-    variantId: found.variantId,
-    variantTitle: found.variantTitle,
-    quantity: parsed.quantity,
-    unitPrice: found.unitPrice,
-    subtotal,
-    delivery: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).delivery).replace(/[^\d.]/g, "")) : 0,
-    deliveryLabel: totalCalc && (totalCalc as any).ok ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})` : "Will confirm by city",
-    total: totalCalc && (totalCalc as any).ok ? Number(String((totalCalc as any).total).replace(/[^\d.]/g, "")) : subtotal,
-    source: "whatsapp_ai_commerce",
-  };
+    });
+    await sendWaText(opts.phone, `Perfect 😊\n\n*${found.product.name}*\nVariant: *${found.variantTitle}*\nPrice: *${formatRupees(found.unitPrice)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, opts.waSettings);
+    return true;
+  }
+  const stateData = await buildCommerceStateDataFromSelection({ product: found.product, variant: found.variant, quantity: parsed.quantity });
   await setConversationState(opts.phone, "wa_order_await_name", stateData);
   await logWaProcessingStep({
     phone: opts.phone,
@@ -1667,6 +1714,52 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   const convState = await getConversationState(phone);
   const stateData: Record<string, any> = JSON.parse((convState as any)?.stateData ?? "{}");
   const trimmed = text.trim();
+  if (state === "wa_order_await_product") {
+    await startCommerceOrderFromText({
+      phone,
+      textBody: trimmed,
+      waSettings,
+      detectedIntent: { intent: "order_start", confidence: 0.88, reason: "product provided during commerce flow", productQuery: trimmed },
+    });
+    return;
+  }
+  if (state === "wa_order_await_variant") {
+    const product = stateData.product;
+    const options = Array.isArray(product?.variantOptions) ? product.variantOptions : [];
+    const wanted = normalizeProductText(trimmed);
+    const selected = options.find((v: any) => normalizeProductText(v.title).includes(wanted))
+      ?? options.find((v: any) => wanted.includes(normalizeProductText(v.title)))
+      ?? null;
+    if (!product || !selected) {
+      await sendWaText(phone, `Please available variants mein se select karein:\n\n${(product?.variantLines ?? []).map((v: string) => `• ${v}`).join("\n")}`, waSettings);
+      return;
+    }
+    await setConversationState(phone, "wa_order_await_quantity", {
+      product,
+      variant: selected,
+      productName: product.name,
+      variantTitle: selected.title,
+      unitPrice: selected.price,
+    });
+    await logWaProcessingStep({ phone, step: "commerce_variant_selected", detail: "Customer selected official Shopify variant.", payload: { product: product.name, variant: selected } });
+    await sendWaText(phone, `Perfect 😊\n\n*${product.name}*\nVariant: *${selected.title}*\nPrice: *${formatRupees(selected.price)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, waSettings);
+    return;
+  }
+  if (state === "wa_order_await_quantity") {
+    const qty = Math.max(1, Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10) || 1);
+    const product = stateData.product;
+    const variant = stateData.variant;
+    if (!product || !variant) {
+      await setConversationState(phone, "wa_order_await_product", { source: "whatsapp_ai_commerce" });
+      await sendWaText(phone, "Product detail missing ho gayi. Please product ka naam dobara bhej dein.", waSettings);
+      return;
+    }
+    const nextState = await buildCommerceStateDataFromSelection({ product, variant, quantity: qty });
+    await setConversationState(phone, "wa_order_await_name", nextState);
+    await logWaProcessingStep({ phone, step: "commerce_quantity_selected", detail: "Customer selected quantity and order summary was generated.", payload: nextState });
+    await sendWaText(phone, `${buildCommerceSummary(nextState)}\n\nOrder confirm karne ke liye apna *naam* bhej dein 😊`, waSettings);
+    return;
+  }
   if (/\b(add|aur|more|extra|include|shamil)\b/i.test(trimmed) && /\b(almond|badam|pista|pistachio|kaju|cashew|akhrot|walnut|kg|g)\b/i.test(trimmed)) {
     const parsed = parseCommerceOrderRequest(trimmed);
     const found = await findCommerceProductVariant(parsed.productQuery || stateData.productName, parsed.variantTitle);
