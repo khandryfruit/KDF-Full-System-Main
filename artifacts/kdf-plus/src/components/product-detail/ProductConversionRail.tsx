@@ -5,13 +5,7 @@ import {
   Flame,
   Truck,
   Banknote,
-  Leaf,
-  RotateCcw,
   BadgeCheck,
-  Shield,
-  Lock,
-  Heart,
-  Sparkles,
   Package,
   Zap,
 } from "lucide-react";
@@ -76,11 +70,10 @@ function SocialPulseStrip({ productId, stock }: { productId: number; stock: numb
 }
 
 const DELIVERY_CARDS = [
-  { icon: Truck, title: "Same-day dispatch", sub: "Order before cut-off", accent: "from-sky-500/10 to-blue-500/5" },
   { icon: Banknote, title: "Cash on delivery", sub: "Pay when you receive", accent: "from-amber-500/10 to-orange-500/5" },
-  { icon: Leaf, title: "Fresh guarantee", sub: "Quality-checked lots", accent: "from-emerald-500/12 to-green-500/5" },
-  { icon: RotateCcw, title: "Easy returns", sub: "7-day support window", accent: "from-violet-500/10 to-purple-500/5" },
-  { icon: BadgeCheck, title: "Premium checked", sub: "Handpicked batches", accent: "from-teal-500/10 to-cyan-500/5" },
+  { icon: Truck, title: "Same-day delivery", sub: "Available in key cities", accent: "from-sky-500/10 to-blue-500/5" },
+  { icon: BadgeCheck, title: "Authentic product", sub: "Quality-checked lots", accent: "from-emerald-500/12 to-green-500/5" },
+  { icon: Package, title: "Fast shipping", sub: "Packed and dispatched fast", accent: "from-teal-500/10 to-cyan-500/5" },
 ] as const;
 
 function DeliveryPromiseRow() {
@@ -96,49 +89,6 @@ function DeliveryPromiseRow() {
             <Icon className="mb-1.5 h-4 w-4 text-[#5FA800]" />
             <p className="text-[11px] font-bold leading-tight text-foreground">{title}</p>
             <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{sub}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const BENEFIT_PILLS = ["Organic", "Fresh stock", "High protein", "Imported quality", "Bestseller"] as const;
-
-function BenefitPillsRow() {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {BENEFIT_PILLS.map((label, i) => (
-        <span
-          key={label}
-          className="inline-flex items-center rounded-full border border-gray-200/90 bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-gray-700 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm transition-transform duration-300 hover:scale-[1.03] motion-reduce:hover:scale-100"
-          style={{ animationDelay: `${i * 80}ms` }}
-        >
-          <Sparkles className="mr-1 h-2.5 w-2.5 text-[#5FA800]" />
-          {label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-const TRUST_ICONS = [
-  { icon: Lock, label: "Secure checkout" },
-  { icon: BadgeCheck, label: "100% authentic" },
-  { icon: Package, label: "Handpicked quality" },
-  { icon: Heart, label: "Loved by customers" },
-] as const;
-
-function TrustMarquee() {
-  return (
-    <div className="rounded-2xl border border-gray-100/90 bg-gradient-to-r from-slate-50/90 via-white/80 to-slate-50/90 p-3 shadow-inner ring-1 ring-black/[0.03] backdrop-blur-sm">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-between sm:gap-3">
-        {TRUST_ICONS.map(({ icon: Icon, label }) => (
-          <div key={label} className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground sm:flex-1 sm:justify-center">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 text-[#5FA800] shadow-sm ring-1 ring-black/[0.04]">
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <span className="leading-tight text-foreground/85">{label}</span>
           </div>
         ))}
       </div>
@@ -163,7 +113,7 @@ function PairsWellMini({
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/80">Pairs well with</p>
           <p className="text-xs font-semibold text-foreground/90">Customers also loved</p>
         </div>
-        <Shield className="h-4 w-4 shrink-0 text-[#5FA800]/50" aria-hidden />
+        <BadgeCheck className="h-4 w-4 shrink-0 text-[#5FA800]/50" aria-hidden />
       </div>
       <div className="flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((p) => {
@@ -298,11 +248,11 @@ export function ProductConversionRail({
 }) {
   return (
     <div className="space-y-4 border-t border-border/50 pt-4">
-      <SocialPulseStrip productId={productId} stock={stock} />
+      <div className="hidden sm:block">
+        <SocialPulseStrip productId={productId} stock={stock} />
+      </div>
       <DeliveryPromiseRow />
       <PairsWellMini items={pairs} getImageSrc={getImageSrc} onSelect={onPairClick} />
-      <BenefitPillsRow />
-      <TrustMarquee />
     </div>
   );
 }

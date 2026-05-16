@@ -6,6 +6,7 @@ import {
   Heart, Share2, Zap, RotateCcw, ChevronLeft, ChevronRight,
   Send, Loader2, ChevronDown, MapPin, Clock, RefreshCw,
   Bell, X, Gavel, Timer, TrendingUp, Camera, ImagePlus,
+  Banknote, BadgeCheck,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useListProducts, useListCategories } from "@workspace/api-client-react";
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   ProductConversionRail,
@@ -319,6 +321,217 @@ function RelatedProducts({ currentId }: { currentId: number }) {
   );
 }
 
+type PurchaseIntent = "cart" | "buy";
+
+type VariantGroup = {
+  type: string;
+  items: any[];
+};
+
+function MobilePurchaseSheet({
+  open,
+  onOpenChange,
+  intent,
+  product,
+  image,
+  variantGroups,
+  selectedVariant,
+  activeVariant,
+  onVariantChange,
+  price,
+  qty,
+  onQtyChange,
+  stockStatus,
+  availableStock,
+  onAddToCart,
+  onBuyNow,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  intent: PurchaseIntent;
+  product: any;
+  image: string;
+  variantGroups: VariantGroup[];
+  selectedVariant?: string;
+  activeVariant?: any;
+  onVariantChange: (id: string) => void;
+  price: number;
+  qty: number;
+  onQtyChange: (qty: number) => void;
+  stockStatus: { label: string; cls: string };
+  availableStock: number;
+  onAddToCart: () => void;
+  onBuyNow: () => void;
+}) {
+  const selectedLabel = activeVariant?.value ?? (product as any).weight ?? "Standard";
+  const canBuy = availableStock > 0;
+  const total = price * qty;
+
+  const confirmAdd = () => {
+    onAddToCart();
+    onOpenChange(false);
+  };
+
+  const confirmBuy = () => {
+    onBuyNow();
+    onOpenChange(false);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="left-1/2 z-[700] w-full max-w-[34rem] -translate-x-1/2 rounded-t-[1.75rem] border-gray-100 bg-white p-0 shadow-2xl"
+      >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-gray-200" />
+        <div className="max-h-[82dvh] overflow-y-auto px-4 pb-32 pt-4">
+          <SheetHeader className="pr-8 text-left">
+            <SheetTitle className="text-base font-black text-gray-950">Choose your weight</SheetTitle>
+            <SheetDescription>Confirm variant, quantity, and total before checkout.</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 flex gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 p-3">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white">
+              <img
+                src={image}
+                alt={product.name}
+                className="h-full w-full object-contain"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 text-sm font-bold leading-snug text-gray-950">{product.name}</p>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">{selectedLabel}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-lg font-black text-[#5FA800]">Rs. {price.toLocaleString()}</span>
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${stockStatus.cls}`}>
+                  {stockStatus.label}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {variantGroups.length > 0 && (
+            <div className="mt-5 space-y-4">
+              {variantGroups.map(({ type, items }) => (
+                <div key={type}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-500">
+                      {type.toLowerCase().includes("weight") ? "Select Weight" : `Select ${type}`}
+                    </p>
+                    {activeVariant?.price && items.some((v) => v.id === activeVariant.id) && (
+                      <span className="text-xs font-black text-[#5FA800]">Rs. {Number(activeVariant.price).toLocaleString()}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {items.map((v) => {
+                      const isSelected = selectedVariant === v.id;
+                      const outOfStock = v.stock === 0;
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => !outOfStock && onVariantChange(v.id)}
+                          disabled={outOfStock}
+                          className={`relative rounded-2xl border-2 px-3 py-3 text-sm font-black transition-all active:scale-[0.98] ${
+                            isSelected
+                              ? "border-[#5FA800] bg-[#5FA800] text-white shadow-lg shadow-[#5FA800]/20"
+                              : outOfStock
+                              ? "cursor-not-allowed border-gray-100 bg-gray-50 text-gray-300"
+                              : "border-gray-200 bg-white text-gray-800 hover:border-[#5FA800]/60"
+                          }`}
+                        >
+                          {type === "Color" && v.hex && (
+                            <span className="mr-1.5 inline-block h-3.5 w-3.5 rounded-full border border-white/70 align-middle" style={{ backgroundColor: v.hex }} />
+                          )}
+                          {v.value}
+                          {outOfStock && <span className="ml-1 text-[9px] font-semibold opacity-70">Out</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-gray-950">Quantity</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Total updates instantly</p>
+              </div>
+              <div className="flex items-center rounded-2xl border border-gray-200 bg-gray-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => onQtyChange(Math.max(1, qty - 1))}
+                  disabled={qty <= 1}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-700 shadow-sm disabled:opacity-40"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="w-10 text-center text-sm font-black">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => onQtyChange(Math.min(availableStock, qty + 1))}
+                  disabled={!canBuy || qty >= availableStock}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-700 shadow-sm disabled:opacity-40"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-2xl bg-[#5FA800]/8 p-3">
+                <Truck className="mb-1 h-4 w-4 text-[#5FA800]" />
+                <p className="font-bold text-gray-900">Estimated delivery</p>
+                <p className="text-muted-foreground">Same-day dispatch</p>
+              </div>
+              <div className="rounded-2xl bg-orange-50 p-3">
+                <Banknote className="mb-1 h-4 w-4 text-orange-600" />
+                <p className="font-bold text-gray-900">Payment</p>
+                <p className="text-muted-foreground">COD available</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 border-t border-gray-100 bg-white/95 px-4 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+          style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold text-muted-foreground">{selectedLabel} · Qty {qty}</p>
+              <p className="text-lg font-black text-[#5FA800]">Rs. {total.toLocaleString()}</p>
+            </div>
+            <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold text-gray-600">
+              {intent === "buy" ? "Fast checkout" : "Add to cart"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={confirmAdd}
+              disabled={!canBuy}
+              className="h-11 rounded-2xl border-2 border-gray-200 bg-white text-sm font-black text-gray-800 transition active:scale-[0.98] disabled:opacity-40"
+            >
+              Add to Cart
+            </button>
+            <button
+              type="button"
+              onClick={confirmBuy}
+              disabled={!canBuy}
+              className="h-11 rounded-2xl bg-gradient-to-r from-[#5FA800] to-[#3d7000] text-sm font-black text-white shadow-lg shadow-[#5FA800]/25 transition active:scale-[0.98] disabled:opacity-40"
+            >
+              Buy Now
+            </button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 /* ── Main Page ── */
 export default function ProductDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -342,6 +555,8 @@ export default function ProductDetailPage() {
   const [notifyDone, setNotifyDone] = useState(false);
   const [showBidForm, setShowBidForm] = useState(false);
   const [bidForm, setBidForm] = useState({ bidderName: "", bidderPhone: "", amount: "" });
+  const [purchaseSheetOpen, setPurchaseSheetOpen] = useState(false);
+  const [purchaseIntent, setPurchaseIntent] = useState<PurchaseIntent>("cart");
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["kdf-plus-product", param],
@@ -380,7 +595,7 @@ export default function ProductDetailPage() {
   }, [relatedPool, productId]);
 
   const { data: categoriesRaw } = useListCategories({
-    query: { staleTime: 120_000, refetchOnWindowFocus: false },
+    query: { queryKey: ["categories", "pdp-gallery"], staleTime: 120_000, refetchOnWindowFocus: false },
   });
   const galleryCategories: GalleryCategory[] = useMemo(
     () => asArrayFromApi<GalleryCategory>(categoriesRaw).slice(0, 12),
@@ -485,20 +700,46 @@ export default function ProductDetailPage() {
     );
   }
 
-  const images = product.images && product.images.length > 0 ? product.images : [""];
-  const activeVariant = product.variants?.find(v => v.id === selectedVariant);
+  const productVariants = (((product as any).variants ?? []) as any[]);
+  const images: string[] = (product.images && product.images.length > 0 ? product.images : [""]) as string[];
+  const activeVariant = productVariants.find((v: any) => v.id === selectedVariant);
   const price = activeVariant?.price ? parseFloat(activeVariant.price) : parseFloat(product.price);
   const originalPrice = product.originalPrice ? parseFloat(product.originalPrice) : null;
   const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : null;
+  const availableStock = activeVariant?.stock != null ? Number(activeVariant.stock) : Number(product.stock);
+  const safeQty = Math.max(1, Math.min(qty, Math.max(availableStock, 1)));
+  const selectedVariantLabel = activeVariant?.value ?? ((product as any).weight ? `${(product as any).weight} ${(product as any).unit || ""}`.trim() : "Standard");
+  const variantGroups: VariantGroup[] = productVariants.length > 0 ? (() => {
+    const order: string[] = [];
+    const map = new Map<string, any[]>();
+    for (const v of productVariants) {
+      if (!map.has(v.name)) {
+        map.set(v.name, []);
+        order.push(v.name);
+      }
+      map.get(v.name)!.push(v);
+    }
+    return order.map(type => ({ type, items: map.get(type)! }));
+  })() : [];
 
-  const stockStatus = product.stock === 0
+  const stockStatus = availableStock === 0
     ? { label: "Out of Stock", cls: "text-red-600 bg-red-50 border-red-200" }
-    : product.stock < 10
-    ? { label: `Low Stock — only ${product.stock} left`, cls: "text-orange-600 bg-orange-50 border-orange-200" }
+    : availableStock < 10
+    ? { label: `Low Stock — only ${availableStock} left`, cls: "text-orange-600 bg-orange-50 border-orange-200" }
     : { label: "In Stock", cls: "text-green-700 bg-green-50 border-green-200" };
 
-  const handleAddToCart = () => { addItem(product, qty, selectedVariant, activeVariant?.value); toast({ title: "Added to cart!", description: `${qty}× ${product.name}` }); };
-  const handleBuyNow = () => { addItem(product, qty, selectedVariant, activeVariant?.value); setLocation("/cart"); };
+  const openPurchaseSheet = (intent: PurchaseIntent) => {
+    setPurchaseIntent(intent);
+    setPurchaseSheetOpen(true);
+  };
+  const handleVariantChange = (variantId: string) => {
+    const next = productVariants.find((v: any) => v.id === variantId);
+    const nextStock = next?.stock != null ? Number(next.stock) : Number(product.stock);
+    setSelectedVariant(variantId);
+    setQty((current) => Math.max(1, Math.min(current, Math.max(nextStock, 1))));
+  };
+  const handleAddToCart = () => { addItem(product, safeQty, selectedVariant, activeVariant?.value); toast({ title: "Added to cart!", description: `${safeQty}× ${product.name}` }); };
+  const handleBuyNow = () => { addItem(product, safeQty, selectedVariant, activeVariant?.value); setLocation("/cart"); };
   const handleShare = async () => {
     const url = window.location.href;
     if (navigator.share) await navigator.share({ title: product.name, url });
@@ -515,7 +756,7 @@ export default function ProductDetailPage() {
   const structuredData = {
     "@context": "https://schema.org", "@type": "Product",
     "name": product.name, "description": product.description,
-    "image": images.map(getProductImageSrc),
+    "image": images.map((img) => getProductImageSrc(img)),
     "sku": product.slug,
     "brand": { "@type": "Brand", "name": "KDF NUTS" },
     "offers": { "@type": "Offer", "priceCurrency": "PKR", "price": price.toString(), "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", "seller": { "@type": "Organization", "name": "KDF NUTS" } },
@@ -549,9 +790,9 @@ export default function ProductDetailPage() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-4 py-8 pb-36 sm:px-6 sm:py-10 sm:pb-28 lg:px-8 lg:pb-12">
+      <main className="mx-auto w-full max-w-[min(100%,80rem)] px-3 py-3 pb-36 sm:px-6 sm:py-10 sm:pb-28 lg:px-8 lg:pb-12">
         {/* Breadcrumb */}
-        <nav className="mb-8 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:mb-9">
+        <nav className="mb-8 hidden flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:mb-9 lg:flex">
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
           <span>/</span>
           <button onClick={() => setLocation("/products")} className="hover:text-primary transition-colors" data-testid="breadcrumb-products">Products</button>
@@ -609,25 +850,27 @@ export default function ProductDetailPage() {
               </div>
             )}
             </div>
-            <ProductGalleryEngagementZone
-              productId={productId}
-              productName={product.name}
-              discountPercent={discount}
-              stock={product.stock}
-              marqueeProducts={galleryEngagementProducts}
-              apiCategories={galleryCategories}
-              getImageSrc={getProductImageSrc}
-              onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
-              onQuickAdd={handleQuickAddGallery}
-              onPathNavigate={(path) => setLocation(path)}
-            />
+            <div className="hidden lg:block">
+              <ProductGalleryEngagementZone
+                productId={productId}
+                productName={product.name}
+                discountPercent={discount}
+                stock={product.stock}
+                marqueeProducts={galleryEngagementProducts}
+                apiCategories={galleryCategories}
+                getImageSrc={getProductImageSrc}
+                onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
+                onQuickAdd={handleQuickAddGallery}
+                onPathNavigate={(path) => setLocation(path)}
+              />
+            </div>
           </div>
 
           {/* Right: Info — sticky glass buy column (no vh max-height: avoids zoom / OS scaling layout jumps) */}
           <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:z-10 lg:self-start lg:gap-5 lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-slate-900/[0.06] lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl xl:p-7">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                {product.tags?.map((tag) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
+                {((product as any).tags as string[] | undefined)?.map((tag: string) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button onClick={() => setIsWishlisted(w => !w)} className={`p-2 rounded-full transition-all ${isWishlisted ? "text-red-500 bg-red-50" : "text-muted-foreground hover:bg-muted"}`} title="Add to wishlist">
@@ -666,7 +909,7 @@ export default function ProductDetailPage() {
             </div>
 
             <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border w-fit ${stockStatus.cls}`}>
-              <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: product.stock === 0 ? "#ef4444" : product.stock < 10 ? "#f97316" : "#16a34a" }} />
+              <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: availableStock === 0 ? "#ef4444" : availableStock < 10 ? "#f97316" : "#16a34a" }} />
               {stockStatus.label}
             </div>
 
@@ -675,46 +918,55 @@ export default function ProductDetailPage() {
             <Separator />
 
             {/* Variants */}
-            {product.variants && product.variants.length > 0 && (() => {
-              const order: string[] = []; const map = new Map<string, typeof product.variants>();
-              for (const v of product.variants) { if (!map.has(v.name)) { map.set(v.name, []); order.push(v.name); } map.get(v.name)!.push(v); }
-              const groups = order.map(t => ({ type: t, items: map.get(t)! }));
-              return (
-                <div className="space-y-4">
-                  {groups.map(({ type, items }) => (
-                    <div key={type}>
-                      <div className="flex items-center justify-between mb-2.5">
-                        <p className="text-sm font-semibold text-foreground">{type}</p>
-                        {activeVariant && items.some(v => v.id === activeVariant.id) && activeVariant.price && (<span className="text-sm font-bold text-[#5FA800]">Rs. {parseFloat(activeVariant.price).toLocaleString()}</span>)}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {items.map((v) => {
-                          const isSelected = selectedVariant === v.id; const outOfStock = v.stock === 0;
-                          return (
-                            <button key={v.id} onClick={() => !outOfStock && setSelectedVariant(v.id)} disabled={outOfStock}
-                              className={`relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all hover:scale-[1.02] active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:scale-100 ${isSelected ? "text-white border-transparent shadow-md" : outOfStock ? "text-gray-300 border-gray-200 cursor-not-allowed" : "text-gray-700 border-gray-200 hover:border-[#5FA800]/60 hover:text-[#5FA800]"}`}
-                              style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : {}} data-testid={`button-variant-${v.id}`}>
-                              {type === "Color" && v.hex && <span className="inline-block w-3.5 h-3.5 rounded-full mr-1.5 border border-gray-300 align-middle" style={{ backgroundColor: v.hex }} />}
-                              {v.value}{outOfStock && <span className="ml-1.5 text-[10px] font-normal opacity-60">Out</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
+            {variantGroups.length > 0 && (
+              <div className="space-y-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+                {variantGroups.map(({ type, items }) => (
+                  <div key={type}>
+                    <div className="flex items-center justify-between mb-2.5">
+                      <p className="text-sm font-semibold text-foreground">{type.toLowerCase().includes("weight") ? "Select Weight" : type}</p>
+                      {activeVariant && items.some(v => v.id === activeVariant.id) && activeVariant.price && (<span className="text-sm font-bold text-[#5FA800]">Rs. {parseFloat(activeVariant.price).toLocaleString()}</span>)}
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
+                    <div className="flex flex-wrap gap-2">
+                      {items.map((v) => {
+                        const isSelected = selectedVariant === v.id; const outOfStock = v.stock === 0;
+                        return (
+                          <button key={v.id} onClick={() => !outOfStock && handleVariantChange(v.id)} disabled={outOfStock}
+                            className={`relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all hover:scale-[1.02] active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:scale-100 ${isSelected ? "text-white border-transparent shadow-md" : outOfStock ? "text-gray-300 border-gray-200 cursor-not-allowed" : "text-gray-700 border-gray-200 hover:border-[#5FA800]/60 hover:text-[#5FA800]"}`}
+                            style={isSelected ? { backgroundColor: "#5FA800", borderColor: "#5FA800" } : {}} data-testid={`button-variant-${v.id}`}>
+                            {type === "Color" && v.hex && <span className="inline-block w-3.5 h-3.5 rounded-full mr-1.5 border border-gray-300 align-middle" style={{ backgroundColor: v.hex }} />}
+                            {v.value}{outOfStock && <span className="ml-1.5 text-[10px] font-normal opacity-60">Out</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Quantity */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
               <span className="text-sm font-semibold">Quantity</span>
               <div className="flex items-center gap-2 border border-border rounded-xl px-2 py-1">
-                <button onClick={() => setQty((q) => Math.max(1, q - 1))} disabled={qty <= 1} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center disabled:opacity-40 hover:bg-muted/80" data-testid="button-qty-decrement"><Minus className="w-3.5 h-3.5" /></button>
-                <span className="w-8 text-center font-bold text-sm" data-testid="text-qty">{qty}</span>
-                <button onClick={() => setQty((q) => Math.min(product.stock, q + 1))} disabled={qty >= product.stock} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center disabled:opacity-40 hover:bg-muted/80" data-testid="button-qty-increment"><Plus className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setQty((q) => Math.max(1, q - 1))} disabled={safeQty <= 1} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center disabled:opacity-40 hover:bg-muted/80" data-testid="button-qty-decrement"><Minus className="w-3.5 h-3.5" /></button>
+                <span className="w-8 text-center font-bold text-sm" data-testid="text-qty">{safeQty}</span>
+                <button onClick={() => setQty((q) => Math.min(availableStock, q + 1))} disabled={availableStock === 0 || safeQty >= availableStock} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center disabled:opacity-40 hover:bg-muted/80" data-testid="button-qty-increment"><Plus className="w-3.5 h-3.5" /></button>
               </div>
-              <span className="text-sm font-bold text-[#5FA800]">Rs. {(price * qty).toLocaleString()}</span>
+              <span className="text-sm font-bold text-[#5FA800]">Rs. {(price * safeQty).toLocaleString()}</span>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 lg:hidden">
+              {[
+                { icon: Banknote, label: "COD" },
+                { icon: Truck, label: "Same-day" },
+                { icon: BadgeCheck, label: "Authentic" },
+                { icon: Package, label: "Fast ship" },
+              ].map(({ icon: Icon, label }) => (
+                <div key={label} className="rounded-2xl border border-gray-100 bg-white p-2 text-center shadow-sm">
+                  <Icon className="mx-auto mb-1 h-4 w-4 text-[#5FA800]" />
+                  <p className="text-[10px] font-bold leading-tight text-gray-700">{label}</p>
+                </div>
+              ))}
             </div>
 
             {/* Active Auction Panel */}
@@ -766,10 +1018,10 @@ export default function ProductDetailPage() {
 
             {/* CTA — desktop (intersection anchor for sticky repurchase bar) */}
             <div ref={desktopCtaRef} className="hidden gap-3 lg:flex">
-              <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={handleAddToCart} disabled={product.stock === 0} data-testid="button-add-to-cart">
+              <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={() => openPurchaseSheet("cart")} disabled={availableStock === 0} data-testid="button-add-to-cart">
                 <ShoppingCart className="mr-2 h-4 w-4" /> Add to Cart
               </Button>
-              <Button size="lg" className="flex-1 rounded-xl font-semibold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-300 hover:scale-[1.02] active:scale-[0.98]" onClick={handleBuyNow} disabled={product.stock === 0} style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }} data-testid="button-buy-now">
+              <Button size="lg" className="flex-1 rounded-xl font-semibold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-300 hover:scale-[1.02] active:scale-[0.98]" onClick={() => openPurchaseSheet("buy")} disabled={availableStock === 0} style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }} data-testid="button-buy-now">
                 <Zap className="mr-2 h-4 w-4" /> Buy Now
               </Button>
             </div>
@@ -811,6 +1063,21 @@ export default function ProductDetailPage() {
               onPairClick={(p) => setLocation(`/products/${p.slug || p.id}`)}
             />
           </div>
+        </div>
+
+        <div className="mt-5 lg:hidden">
+          <ProductGalleryEngagementZone
+            productId={productId}
+            productName={product.name}
+            discountPercent={discount}
+            stock={product.stock}
+            marqueeProducts={galleryEngagementProducts}
+            apiCategories={galleryCategories}
+            getImageSrc={getProductImageSrc}
+            onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
+            onQuickAdd={handleQuickAddGallery}
+            onPathNavigate={(path) => setLocation(path)}
+          />
         </div>
 
         {/* ── Accordion: Description / Reviews / Shipping ── */}
@@ -886,23 +1153,26 @@ export default function ProductDetailPage() {
       </main>
 
       <StickyPurchaseConfidenceLg
-        visible={!!product && product.stock > 0 && !bidData?.isLive && !desktopCtaInView}
+        visible={!!product && availableStock > 0 && !bidData?.isLive && !desktopCtaInView}
         price={price}
-        qty={qty}
+        qty={safeQty}
         name={product.name}
-        onAdd={handleAddToCart}
-        onBuy={handleBuyNow}
-        disabled={product.stock === 0}
+        onAdd={() => openPurchaseSheet("cart")}
+        onBuy={() => openPurchaseSheet("buy")}
+        disabled={availableStock === 0}
       />
 
       {/* Sticky mobile CTA — compact premium */}
       <div className="kdf-suppress-for-fullscreen-sheet fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
         style={{ bottom: "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))" }}
       >
-        {/* Price + name strip */}
-        <div className="flex items-center justify-between mb-1.5 px-0.5">
-          <p className="text-[11px] text-gray-400 truncate max-w-[55%]">{product.name}</p>
-          <p className="text-sm font-extrabold" style={{ color: "#5FA800" }}>Rs. {price.toLocaleString()}</p>
+        {/* Price + selected variant strip */}
+        <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-gray-600 truncate max-w-[62vw]">{product.name}</p>
+            <p className="text-[10px] font-medium text-gray-400 truncate">{selectedVariantLabel} · Qty {safeQty}</p>
+          </div>
+          <p className="shrink-0 text-sm font-extrabold" style={{ color: "#5FA800" }}>Rs. {(price * safeQty).toLocaleString()}</p>
         </div>
         {/* Buttons */}
         {product.stock === 0 && !bidData?.isLive ? (
@@ -916,16 +1186,16 @@ export default function ProductDetailPage() {
         ) : (
           <div className="flex gap-2">
             <button
-              onClick={handleAddToCart}
-              disabled={product.stock === 0}
+              onClick={() => openPurchaseSheet("cart")}
+              disabled={availableStock === 0}
               data-testid="button-add-to-cart-mobile"
               className="flex-1 h-9 rounded-xl text-xs font-semibold border-2 border-gray-200 text-gray-700 flex items-center justify-center gap-1.5 bg-white transition-all active:scale-[0.98] hover:border-gray-400 disabled:opacity-40"
             >
               <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
             </button>
             <button
-              onClick={handleBuyNow}
-              disabled={product.stock === 0}
+              onClick={() => openPurchaseSheet("buy")}
+              disabled={availableStock === 0}
               data-testid="button-buy-now-mobile"
               className="flex-[1.4] h-9 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-40"
               style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
@@ -935,6 +1205,25 @@ export default function ProductDetailPage() {
           </div>
         )}
       </div>
+
+      <MobilePurchaseSheet
+        open={purchaseSheetOpen}
+        onOpenChange={setPurchaseSheetOpen}
+        intent={purchaseIntent}
+        product={product}
+        image={getProductImageSrc(images[selectedImage])}
+        variantGroups={variantGroups}
+        selectedVariant={selectedVariant}
+        activeVariant={activeVariant}
+        onVariantChange={handleVariantChange}
+        price={price}
+        qty={safeQty}
+        onQtyChange={setQty}
+        stockStatus={stockStatus}
+        availableStock={availableStock}
+        onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
+      />
 
       {/* Notify Me mobile modal */}
       {notifyOpen && product.stock === 0 && !bidData?.isLive && (
