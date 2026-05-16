@@ -1271,6 +1271,40 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   return card;
 }
 
+async function buildEmergencyAiFallback(opts: {
+  textBody: string;
+  intent: ReturnType<typeof detectWaIntent>;
+}): Promise<string> {
+  const { textBody, intent } = opts;
+  const roman = /[a-z]/i.test(textBody) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(textBody);
+  if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
+    const query = intent.productQuery ?? textBody;
+    const products = await searchProductsForWa(query, 3).catch(() => []);
+    if (products.length > 0) {
+      const lines = products.map((p) => {
+        const variants = p.variantLines?.length ? `\n${p.variantLines.map((v) => `- ${v}`).join("\n")}` : ` ${p.price}`;
+        return `*${p.name}*${variants}`;
+      });
+      return roman
+        ? `Ji 😊 official catalog ke mutabiq matching options:\n\n${lines.join("\n\n")}\n\nAap chahein to main order bhi start kar deta hoon 👍`
+        : `جی 😊 official catalog کے مطابق matching options:\n\n${lines.join("\n\n")}\n\nآپ چاہیں تو میں order بھی start کر دیتا ہوں 👍`;
+    }
+  }
+  if (intent.intent === "greeting") {
+    return roman
+      ? "Assalam o Alaikum 😊 Alhamdulillah, main theek hoon. Aap batayein, kis product ya order mein madad chahiye?"
+      : "وعلیکم السلام 😊 الحمدللہ، میں ٹھیک ہوں۔ آپ بتائیں کس product یا order میں مدد چاہیے؟";
+  }
+  if (intent.intent === "conversation" || intent.intent === "support" || intent.intent === "general") {
+    return roman
+      ? "Ji 😊 main madad ke liye yahin hoon. Aap product, price, order status ya delivery ke bare mein pooch sakte hain."
+      : "جی 😊 میں مدد کے لیے موجود ہوں۔ آپ product, price, order status یا delivery کے بارے میں پوچھ سکتے ہیں۔";
+  }
+  return roman
+    ? "Ji 😊 aapka message receive ho gaya. Aap thori detail share kar dein, main madad karta hoon."
+    : "جی 😊 آپ کا message receive ہو گیا۔ تھوڑی detail share کر دیں، میں مدد کرتا ہوں۔";
+}
+
 async function calculateWhatsAppOrderTotal(opts: {
   productQuery: string;
   quantity?: number;
@@ -1634,8 +1668,8 @@ async function handleAiReply(opts: {
 High priority behavior:
 - The saved Admin business instructions below are customer-specific business rules. Follow them on every conversation and do not ignore or replace them.
 - Never invent product names, weights, variants, prices, discounts, delivery charges, or totals.
-- For any product/price/variant question, call search_products and answer only from returned official catalog data.
-- For quantity + variant total questions, call calculate_order_total. If no official match is found, say you need to confirm instead of guessing.
+- For any product/price/variant question, use the OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT if provided and answer only from that data.
+- For quantity + variant total questions, use the official catalog prices shown in context. If no official match is found, say you need to confirm instead of guessing.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
 - If customer asks a broad need like "Mujhe dry fruits chahiye", first ask natural qualifying questions (budget, gift/use, quantity) and suggest categories without fake prices.
 Rules:
@@ -1644,13 +1678,39 @@ Rules:
 - For conversation/support intent, ask what they want to discuss and offer help warmly.
 - Only show/search products when the detected intent is product_search, pricing, recommendation, bulk_order, or order_start.
 - Never spam catalog/products for greetings, support, or general conversation.
-- If customer asks price/product availability, use search_products and show only matching items.
-- If customer wants to order a named product, use start_order.
-- If customer wants tracking/order status, use track_order.
+- If customer asks price/product availability, show only matching items from official catalog context.
+- If customer wants to order a named product, ask for variant/quantity and keep the conversation moving naturally.
+- If customer wants tracking/order status, use recent order context if available; otherwise ask for order number/phone.
 - Keep replies short, human, and conversion-focused.`;
     const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
     const promptSource = adminPrompt ? "Admin DB" : "Missing";
-    const systemContent = `${salesSystem}\n\nAdmin business instructions (must be applied):\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
+    let catalogContextBlock = "";
+    if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
+      const products = await searchProductsForWa(intent.productQuery ?? textBody, 4);
+      if (products.length > 0) {
+        catalogContextBlock = `\n\n[OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT]\nUse ONLY these products, variants, and prices. Never invent prices.\n${products.map((p, idx) => {
+          const variants = p.variantLines?.length ? p.variantLines.map((v) => `    - ${v}`).join("\n") : `    - ${p.price}`;
+          return `${idx + 1}. ${p.name}\n${variants}\n    Stock: ${p.inStock ? "In stock" : "Out of stock"}\n    URL: ${p.productUrl}`;
+        }).join("\n")}\n[END CATALOG CONTEXT]`;
+        await logWaProcessingStep({
+          phone,
+          step: "catalog_result",
+          status: "received",
+          detail: `Catalog context preloaded with ${products.length} product(s) before OpenAI call.`,
+          payload: { query: intent.productQuery ?? textBody, products: products.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
+        });
+      } else {
+        await logWaProcessingStep({
+          phone,
+          step: "catalog_result",
+          status: "failed",
+          detail: "No matching catalog products found before OpenAI call.",
+          payload: { query: intent.productQuery ?? textBody },
+          failureReason: "catalog_no_match",
+        });
+      }
+    }
+    const systemContent = `${salesSystem}\n\nAdmin business instructions (must be applied):\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}${catalogContextBlock}`;
     await logWaProcessingStep({
       phone,
       step: "prompt_loaded",
@@ -1692,188 +1752,37 @@ Rules:
 
     const aiClient = await getOpenAIClient();
 
-    /* ── Tool-use loop (max 2 rounds) ── */
     let reply = "";
-    let toolRound = 0;
-    let currentMessages = [...messages];
-    const allowToolUse = (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) || ["order_start", "tracking", "complaint"].includes(intent.intent);
-
-    while (toolRound < 2) {
-      await logWaProcessingStep({
-        phone,
-        step: "openai_request_sent",
-        detail: `OpenAI request sent with model ${chatbot.aiModel ?? "gpt-4o-mini"}.`,
-        payload: {
-          model: chatbot.aiModel ?? "gpt-4o-mini",
-          toolRound,
-          toolChoice: allowToolUse ? "auto" : "none",
-          messages: currentMessages.length,
-          promptSource,
-          promptLoaded: Boolean(adminPrompt),
-        },
-      });
-      const completion = await aiClient.chat.completions.create({
+    await logWaProcessingStep({
+      phone,
+      step: "openai_request_sent",
+      detail: `OpenAI request sent with model ${chatbot.aiModel ?? "gpt-4o-mini"} using stable no-tools WhatsApp mode.`,
+      payload: {
         model: chatbot.aiModel ?? "gpt-4o-mini",
-        messages: currentMessages,
-        tools,
-        tool_choice: allowToolUse ? "auto" : "none",
-        max_completion_tokens: 600,
-      });
-
-      const choice = completion.choices[0];
-      if (!choice) break;
-      await logWaProcessingStep({
-        phone,
-        step: "openai_response_returned",
-        status: "received",
-        detail: choice.message.tool_calls?.length
-          ? `OpenAI returned ${choice.message.tool_calls.length} tool call(s).`
-          : "OpenAI returned a text response.",
-        payload: {
-          model: completion.model,
-          finishReason: choice.finish_reason,
-          toolCalls: choice.message.tool_calls?.map((tc: any) => ({ name: tc.function?.name, arguments: tc.function?.arguments })) ?? [],
-          responsePreview: choice.message.content?.slice(0, 1000) ?? null,
-        },
-      });
-
-      /* No tool call → plain text reply */
-      if (!choice.message.tool_calls?.length) {
-        reply = choice.message.content?.trim() ?? "";
-        break;
-      }
-
-      /* Process tool calls */
-      currentMessages.push(choice.message);
-      const toolResults: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-
-      for (const tc of choice.message.tool_calls) {
-        const tcFn = (tc as any).function as { name: string; arguments: string };
-        const args = JSON.parse(tcFn.arguments ?? "{}");
-        let toolResult = "";
-
-        if (tcFn.name === "search_products") {
-          if ((!shouldSendCatalogForIntent(intent.intent) && intent.intent !== "order_start") || isGenericCategoryQuery(intent.productQuery)) {
-            toolResult = "Product search blocked because customer did not ask for products.";
-            toolResults.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
-            continue;
-          }
-          const products = await searchProductsForWa(args.query ?? "", Math.min(args.limit ?? 3, 5));
-          if (products.length === 0) {
-            toolResult = "No products found for this query.";
-          } else {
-            toolResult = JSON.stringify({
-              found: true,
-              instruction: "Use only these official catalog products, variants, and prices. Do not invent prices.",
-              products: products.map((p) => ({
-                name: p.name,
-                price: p.price,
-                compareAt: p.compareAt,
-                variants: p.variantLines?.length ? p.variantLines : p.variants ? p.variants.split("\n") : [],
-                inStock: p.inStock,
-                source: p.source,
-                productUrl: p.productUrl,
-              })),
-            });
-            await logWaProcessingStep({
-              phone,
-              step: "catalog_result",
-              status: "received",
-              detail: `Catalog lookup returned ${products.length} product(s) to OpenAI for final reply.`,
-              payload: { query: args.query, products: products.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
-            });
-          }
-        } else if (tcFn.name === "calculate_order_total") {
-          const total = await calculateWhatsAppOrderTotal({
-            productQuery: String(args.productQuery ?? ""),
-            quantity: Number(args.quantity ?? 1),
-            variantTitle: args.variantTitle ? String(args.variantTitle) : undefined,
-            city: args.city ? String(args.city) : undefined,
-            couponCode: args.couponCode ? String(args.couponCode) : undefined,
-          });
-          toolResult = JSON.stringify(total);
-          await logWaProcessingStep({
-            phone,
-            step: "order_total_calculated",
-            status: (total as any).ok ? "sent" : "failed",
-            detail: (total as any).ok ? "Order total calculated from official catalog/shipping rules." : "Order total calculation failed because product price was not found.",
-            payload: { args, total },
-            failureReason: (total as any).ok ? null : String((total as any).reason ?? "order_total_calculation_failed"),
-          });
-        } else if (tcFn.name === "track_order") {
-          const normalizedLookup = normalizePhone(phone);
-          const altPhone = normalizedLookup.startsWith("92") ? "0" + normalizedLookup.slice(2) : phone;
-          const cleanInput = (args.input ?? "").replace(/^kdf[-\s]?/i, "").toUpperCase().trim();
-          const [order] = await db.select({
-            orderNumber: ordersTable.orderNumber, status: ordersTable.status,
-            total: ordersTable.total, trackingId: ordersTable.trackingId,
-            createdAt: ordersTable.createdAt,
-          }).from(ordersTable)
-            .where(sql`(UPPER(order_number) LIKE ${"%" + cleanInput + "%"} OR UPPER(order_number) LIKE ${"KDF-" + cleanInput + "%"} OR shipping_address->>'phone' = ${normalizedLookup} OR shipping_address->>'phone' = ${altPhone} OR shipping_address->>'phone' = ${phone})`)
-            .orderBy(desc(ordersTable.createdAt))
-            .limit(1);
-          if (order) {
-            const STATUS_LABEL: Record<string, string> = {
-              pending: "⏳ Pending", processing: "🔧 Processing", shipped: "🚚 Shipped",
-              out_for_delivery: "🛵 Out for Delivery", delivered: "✅ Delivered", cancelled: "❌ Cancelled",
-            };
-            toolResult = `Order #${order.orderNumber}: ${STATUS_LABEL[order.status ?? ""] ?? order.status}, Total: Rs.${order.total}${order.trackingId ? `, Tracking: ${order.trackingId}` : ""}, Placed: ${new Date(order.createdAt).toLocaleDateString("en-PK")}`;
-          } else {
-            toolResult = "No order found for this number/ID.";
-          }
-        } else if (tcFn.name === "start_order") {
-          const pName = args.productName ?? "Product";
-          const officialProducts = await searchProductsForWa(String(pName), 1);
-          const officialProduct = officialProducts[0];
-          if (!officialProduct) {
-            toolResult = "Cannot start order because no official matching product/price was found.";
-            toolResults.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
-            continue;
-          }
-          let officialPrice = Number(officialProduct.rawPrice ?? 0);
-          let selectedVariantTitle = args.variantTitle ? String(args.variantTitle) : "";
-          if (selectedVariantTitle && officialProduct.variantLines?.length) {
-            const wanted = normalizeProductText(selectedVariantTitle);
-            const found = officialProduct.variantLines.find((line) => normalizeProductText(line).includes(wanted));
-            if (found) {
-              selectedVariantTitle = found.split("—")[0]?.trim() || selectedVariantTitle;
-              const priceMatch = found.match(/Rs\.\s*([\d,]+)/i);
-              if (priceMatch) officialPrice = Number(priceMatch[1].replace(/,/g, ""));
-            }
-          }
-          const variant = selectedVariantTitle ? ` (${selectedVariantTitle})` : "";
-          await setConversationState(phone, "order_await_qty", {
-            productName: officialProduct.name + variant,
-            price: officialPrice,
-            variant: selectedVariantTitle,
-          });
-          const msg = `🛒 *Order: ${officialProduct.name}${variant}*\n💰 Official price: ${formatRupees(officialPrice)} per unit\n\n📦 Kitni quantity chahiye? (Enter number e.g. 1, 2, 3)`;
-          await sendWaText(phone, msg, waSettings);
-          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: `[Order flow started: ${officialProduct.name}]`, status: "sent" }).catch(() => {});
-          return;
-        } else if (tcFn.name === "escalate_to_human") {
-          await sendInteractiveButtons({
-            phone,
-            text: `👤 *Hamara Support Agent*\n\nAapko human agent se connect kar raha hoon. Please wait karo — agent jald reply karega.\n\nYa WhatsApp pe directly message kar sakte hain:\n📞 +92-XXX-XXXXXXX`,
-            buttons: [{ id: "main_menu", title: "🏠 Main Menu" }],
-            settings: waSettings,
-            templateName: "ai_escalate",
-          });
-          await db.execute(sql`UPDATE wa_conversations SET bot_mode = 'human' WHERE contact_phone = ${phone}`).catch(() => {});
-          await db.insert(whatsappLogsTable).values({ phone, templateName: "ai_reply", message: "[Escalated to human]", status: "sent" }).catch(() => {});
-          return;
-        }
-
-        toolResults.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: toolResult,
-        });
-      }
-
-      currentMessages.push(...toolResults);
-      toolRound++;
-    }
+        messages: messages.length,
+        promptSource,
+        promptLoaded: Boolean(adminPrompt),
+        catalogContextLoaded: Boolean(catalogContextBlock),
+      },
+    });
+    const completion = await aiClient.chat.completions.create({
+      model: chatbot.aiModel ?? "gpt-4o-mini",
+      messages,
+      max_tokens: 600,
+    });
+    const choice = completion.choices[0];
+    reply = choice?.message?.content?.trim() ?? "";
+    await logWaProcessingStep({
+      phone,
+      step: "openai_response_returned",
+      status: "received",
+      detail: "OpenAI returned a text response in stable no-tools WhatsApp mode.",
+      payload: {
+        model: completion.model,
+        finishReason: choice?.finish_reason ?? null,
+        responsePreview: reply.slice(0, 1000),
+      },
+    });
 
     if (!reply) {
       await logWaProcessingStep({
@@ -1907,26 +1816,21 @@ Rules:
     });
     log?.warn(aiErr, "AI auto-reply error");
     try {
-      if (chatbot?.fallbackMessage) {
-        const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
-        const fallbackText = String(chatbot.fallbackMessage);
-        const fallback = fallbackText.toLowerCase().includes("thank you for your message")
-          ? "AI response mein technical issue aa gaya hai. Hamari team ko alert kar diya gaya hai, please apna sawal yahin send kar dein."
-          : fallbackText;
-        await logWaProcessingStep({
-          phone,
-          step: "fallback_triggered",
-          status: "failed",
-          detail: "Fallback was used only because OpenAI generation failed.",
-          payload: {
-            detectedIntent: intent,
-            fallbackPreview: fallback.slice(0, 500),
-            openAiError: aiErr instanceof Error ? aiErr.message : String(aiErr),
-          },
-          failureReason: aiErr instanceof Error ? aiErr.message : "ai_generation_failed",
-        });
-        await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
-      }
+      const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
+      const fallback = await buildEmergencyAiFallback({ textBody, intent });
+      await logWaProcessingStep({
+        phone,
+        step: "fallback_triggered",
+        status: "failed",
+        detail: "Emergency fallback was used only because OpenAI generation failed.",
+        payload: {
+          detectedIntent: intent,
+          fallbackPreview: fallback.slice(0, 500),
+          openAiError: aiErr instanceof Error ? aiErr.message : String(aiErr),
+        },
+        failureReason: aiErr instanceof Error ? aiErr.message : "ai_generation_failed",
+      });
+      await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
     } catch { /* ignore fallback errors */ }
   }
 }
@@ -2466,14 +2370,35 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
     if (!message?.trim()) return res.status(400).json({ error: "message required" });
     const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1);
     if (!chatbot) return res.status(404).json({ error: "Chatbot settings not found" });
+    const testText = message.trim();
+    const detected = detectWaIntent(testText);
+    let catalogContext = "";
+    if (shouldSendCatalogForIntent(detected.intent) && !isGenericCategoryQuery(detected.productQuery)) {
+      const products = await searchProductsForWa(detected.productQuery ?? testText, 4);
+      if (products.length > 0) {
+        catalogContext = `\n\n[OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT]\nUse ONLY these products, variants, and prices. Never invent prices.\n${products.map((p, idx) => {
+          const variants = p.variantLines?.length ? p.variantLines.map((v) => `    - ${v}`).join("\n") : `    - ${p.price}`;
+          return `${idx + 1}. ${p.name}\n${variants}`;
+        }).join("\n")}\n[END CATALOG CONTEXT]`;
+      }
+    }
+    const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
+    const systemPrompt = `You are a premium human WhatsApp sales representative for Khan Dry Fruits.
+Follow the Admin business instructions exactly. Reply naturally in the customer's language. Never invent prices, variants, discounts, or totals.
+If catalog context is provided, answer only from that official data.
+
+Admin business instructions:
+${adminPrompt || "Be friendly, concise, helpful, and accurate."}
+
+Detected intent: ${detected.intent} (${detected.reason}).${catalogContext}`;
     const aiClient = await getOpenAIClient();
     const completion = await aiClient.chat.completions.create({
       model: chatbot.aiModel ?? "gpt-4o-mini",
       messages: [
-        { role: "system", content: chatbot.systemPrompt },
-        { role: "user", content: message.trim() },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: testText },
       ],
-      max_completion_tokens: 400,
+      max_tokens: 400,
     });
     const reply = completion.choices[0]?.message?.content?.trim() ?? "";
     return res.json({ success: true, reply, model: chatbot.aiModel });
