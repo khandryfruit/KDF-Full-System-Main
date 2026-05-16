@@ -4,7 +4,7 @@ import { ordersTable, orderItemsTable, usersTable, shipmentsTable, adminNotifica
 import { shopifyProductsTable, shopifyOrdersTable, shopifyStoresTable } from "@workspace/db";
 import { eq, desc, asc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
-import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting, markWhatsAppMessageRead, sendWhatsAppTypingIndicator } from "../lib/whatsapp";
+import { sendWhatsAppMessage, sendWhatsAppTemplate, sendInteractiveMenu, sendInteractiveButtons, sendCtaUrlMessage, normalizePhone, getConversationState, setConversationState, isGreeting, markWhatsAppMessageRead, sendWhatsAppTypingIndicator, getSettings } from "../lib/whatsapp";
 import { handleMenuItemTap } from "../lib/waMenuHandlers.js";
 import { DEFAULT_GREETING, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "../lib/waMenuDefaults.js";
 import { broadcastSSE } from "../lib/sse";
@@ -36,6 +36,9 @@ import { isDeliveryOnlyMessage, isTrackingOnlyMessage, tryDeterministicWaReply, 
 import {
   buildHumanWelcomeReply,
   isLikelyProductInquiry,
+  isOrderAffirmationMessage,
+  isPureGreetingMessage,
+  isVariantMenuSelection,
   shouldUseProductDatabaseFirst,
   tryWaProductCatalogReply,
 } from "../lib/waProductBrain.js";
@@ -79,6 +82,7 @@ async function logWaProcessingStep(opts: {
 
 type WaIntent =
   | "greeting"
+  | "variant_selection"
   | "conversation"
   | "product_search"
   | "pricing"
@@ -139,7 +143,9 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
     }
     return { intent: "product_search", confidence: 0.78, reason: `catalog alias root: ${catalogRoots[0]}`, productQuery: text.trim() };
   }
-  if (exact(["hi", "hello", "hey", "salam", "salaam", "assalam", "assalam o alaikum", "aoa", "helo", "hii"])) return { intent: "greeting", confidence: 0.88, reason: "greeting only" };
+  if (isPureGreetingMessage(text)) return { intent: "greeting", confidence: 0.92, reason: "pure greeting" };
+  if (/^[1-9]$/.test(t)) return { intent: "variant_selection", confidence: 0.9, reason: "numbered menu choice" };
+  if (isOrderAffirmationMessage(text)) return { intent: "order_start", confidence: 0.85, reason: "order affirmation after catalog" };
   if (has(["help", "madad", "support", "poochna", "sawal", "question"])) return { intent: "support", confidence: 0.72, reason: "support keyword" };
   return { intent: "general", confidence: 0.45, reason: "no strong deterministic intent" };
 }
@@ -893,6 +899,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: `Detected intent: ${detected.intent} (${detected.reason})`,
               payload: { textBody, ...detected, route: "ai_chat" },
             });
+            if (await trySendHumanGreetingReply({ phone, textBody, waSettings })) continue;
+            if (await tryHandleVariantSelectionReply({ phone, textBody, waSettings, log })) continue;
+            if (await tryHandleOrderAffirmationReply({ phone, textBody, waSettings, log })) continue;
             const aiChatDeterministic = await tryDeterministicWaReply({
               phone,
               textBody,
@@ -926,17 +935,26 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { textBody, ...detected },
           });
 
-          if (detected.intent === "greeting" && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
+          if (
+            (detected.intent === "greeting" || isPureGreetingMessage(textBody)) &&
+            (isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords) || isPureGreetingMessage(textBody))
+          ) {
             if (chatbot?.isEnabled) {
-              await sendWaText(phone, buildHumanWelcomeReply(textBody), waSettings, "human_greeting");
-              await setConversationState(phone, "ai_chat", { greetedAt: new Date().toISOString() });
-              await persistConversationTurn(phone, { intent: "greeting", topic: "greeting" });
+              await trySendHumanGreetingReply({ phone, textBody, waSettings });
               continue;
             }
             if ((chatbot as any)?.menuEnabled) {
               await sendQuickOrderMenu(phone, waSettings);
               continue;
             }
+          }
+
+          if (await tryHandleVariantSelectionReply({ phone, textBody, waSettings, log })) {
+            continue;
+          }
+
+          if (await tryHandleOrderAffirmationReply({ phone, textBody, waSettings, log })) {
+            continue;
           }
 
           if (await handleQuickOrderNumber({ phone, textBody, currentState, waSettings, detectedIntent: detected })) {
@@ -1573,6 +1591,81 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   return card;
 }
 
+async function tryHandleVariantSelectionReply(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  log?: any;
+}): Promise<boolean> {
+  if (!isVariantMenuSelection(opts.textBody)) return false;
+  const conv = await getConversationState(opts.phone);
+  const state = conv?.state ?? "idle";
+  let stateData: Record<string, any> = {};
+  try {
+    stateData = JSON.parse((conv as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+
+  if (state === "wa_order_await_variant" || state === "wa_order_await_product_choice") {
+    await handleCommerceOrderFlow(opts.phone, opts.textBody.trim(), state, opts.waSettings, opts.log);
+    return true;
+  }
+
+  const product = stateData.product ?? stateData.lastOfferedProduct;
+  if (product?.variantOptions?.length) {
+    await setConversationState(opts.phone, "wa_order_await_variant", {
+      product,
+      productQuery: stateData.productQuery ?? "",
+      source: stateData.source ?? "product_knowledge",
+    });
+    await handleCommerceOrderFlow(opts.phone, opts.textBody.trim(), "wa_order_await_variant", opts.waSettings, opts.log);
+    return true;
+  }
+  return false;
+}
+
+async function tryHandleOrderAffirmationReply(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  log?: any;
+}): Promise<boolean> {
+  if (!isOrderAffirmationMessage(opts.textBody)) return false;
+  const conv = await getConversationState(opts.phone);
+  let stateData: Record<string, any> = {};
+  try {
+    stateData = JSON.parse((conv as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+  const product = stateData.product ?? stateData.lastOfferedProduct;
+  if (!product?.name) return false;
+
+  const mem = await loadConversationMemory(opts.phone);
+  const productName = product.name ?? mem.selectedProductName;
+  const variantTitle = mem.selectedVariantTitle || product.variantOptions?.[0]?.title;
+  return startCommerceOrderFromText({
+    phone: opts.phone,
+    textBody: variantTitle ? `${productName} ${variantTitle}` : productName,
+    waSettings: opts.waSettings,
+    detectedIntent: {
+      intent: "order_start",
+      confidence: 0.9,
+      reason: "order affirmation after product catalog",
+      productQuery: stateData.productQuery ?? productName,
+    },
+  });
+}
+
+async function trySendHumanGreetingReply(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+}): Promise<boolean> {
+  if (!isPureGreetingMessage(opts.textBody) && !isGreeting(opts.textBody)) return false;
+  await sendWaText(opts.phone, buildHumanWelcomeReply(opts.textBody), opts.waSettings, "human_greeting");
+  await setConversationState(opts.phone, "ai_chat", { greetedAt: new Date().toISOString() });
+  await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting" });
+  return true;
+}
+
 async function trySendProductCatalogReply(opts: {
   phone: string;
   textBody: string;
@@ -1581,6 +1674,7 @@ async function trySendProductCatalogReply(opts: {
   log?: any;
 }): Promise<boolean> {
   const { phone, textBody, waSettings, detectedIntent, log } = opts;
+  if (isPureGreetingMessage(textBody) || detectedIntent.intent === "greeting") return false;
   if (
     !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody) &&
     !isLikelyProductInquiry(textBody, detectedIntent.intent)
@@ -1607,6 +1701,10 @@ async function trySendProductCatalogReply(opts: {
       },
     });
 
+    const { toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
+    const waProduct = toWhatsAppCatalogProducts([hit.product])[0];
+    const variantCount = waProduct?.variantOptions?.length ?? 0;
+
     await sendDeterministicWaReply({
       phone,
       textBody,
@@ -1614,14 +1712,29 @@ async function trySendProductCatalogReply(opts: {
       intent: "product_search",
       send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
     });
+
+    const mergeState: Record<string, unknown> = {
+      selectedProductName: hit.product.name,
+      shopifyProductId: hit.product.shopifyProductId,
+      lastUserMessage: textBody.slice(0, 500),
+      lastOfferedProduct: waProduct,
+      productQuery: hit.query,
+      source: "product_knowledge",
+    };
+
+    if (variantCount > 1) {
+      await setConversationState(phone, "wa_order_await_variant", {
+        ...mergeState,
+        product: waProduct,
+      });
+    } else {
+      await setConversationState(phone, "ai_chat", mergeState);
+    }
+
     await persistConversationTurn(phone, {
       intent: "product_search",
       topic: "product",
-      mergeStateData: {
-        selectedProductName: hit.product.name,
-        shopifyProductId: hit.product.shopifyProductId,
-        lastUserMessage: textBody.slice(0, 500),
-      },
+      mergeStateData: mergeState,
     });
     return true;
   } catch (err) {
@@ -1675,6 +1788,14 @@ async function buildEmergencyAiFallback(opts: {
       detectedIntent: "delivery",
     });
     if (delivery) return delivery;
+  }
+  if (phone && (intent.intent === "variant_selection" || /^[1-9]$/.test(textBody.trim()))) {
+    const handled = await tryHandleVariantSelectionReply({
+      phone,
+      textBody,
+      waSettings: (await getSettings()) ?? {},
+    }).catch(() => false);
+    if (handled) return "__VARIANT_HANDLED__";
   }
   if (intent.intent === "conversation" || intent.intent === "support" || intent.intent === "general") {
     return roman
@@ -3085,7 +3206,7 @@ async function handleAiReply(opts: {
       throw new Error("ai_empty_reply");
     }
 
-    if (shouldBlockRepeatedReply(reply, sessionMemory)) {
+    if (shouldBlockRepeatedReply(reply, sessionMemory) && !isVariantMenuSelection(textBody)) {
       const roman = /[a-z]/i.test(textBody);
       reply = roman
         ? "Ji 😊 samajh gaya. Delivery, price, ya order — kis cheez ki detail chahiye?"
@@ -3124,19 +3245,21 @@ async function handleAiReply(opts: {
     try {
       const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
       const fallback = await buildEmergencyAiFallback({ textBody, intent, phone });
-      await logWaProcessingStep({
-        phone,
-        step: "fallback_triggered",
-        status: "failed",
-        detail: "Emergency fallback was used only because OpenAI generation failed.",
-        payload: {
-          detectedIntent: intent,
-          fallbackPreview: fallback.slice(0, 500),
-          openAiError: aiErr instanceof Error ? aiErr.message : String(aiErr),
-        },
-        failureReason: aiErr instanceof Error ? aiErr.message : "ai_generation_failed",
-      });
-      await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
+      if (fallback && fallback !== "__VARIANT_HANDLED__") {
+        await logWaProcessingStep({
+          phone,
+          step: "fallback_triggered",
+          status: "failed",
+          detail: "Emergency fallback was used only because OpenAI generation failed.",
+          payload: {
+            detectedIntent: intent,
+            fallbackPreview: fallback.slice(0, 500),
+            openAiError: aiErr instanceof Error ? aiErr.message : String(aiErr),
+          },
+          failureReason: aiErr instanceof Error ? aiErr.message : "ai_generation_failed",
+        });
+        await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
+      }
     } catch { /* ignore fallback errors */ }
   }
 }

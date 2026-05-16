@@ -190,7 +190,7 @@ export async function sendDeterministicWaReply(opts: {
 }): Promise<boolean> {
   const mem = await loadConversationMemory(opts.phone);
   let reply = opts.reply;
-  if (shouldBlockRepeatedReply(reply, mem)) {
+  if (shouldBlockRepeatedReply(reply, mem) && !/^[1-9]$/.test(opts.textBody.trim())) {
     const roman = isRomanUrdu(opts.textBody);
     reply = roman
       ? "Ji 😊 delivery / price / order ke bare mein aur kya confirm karna hai?"
