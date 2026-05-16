@@ -93,7 +93,7 @@ warmUpDb()
       }
       startAbandonedRecoveryScheduler();
       startCampaignQueueProcessor();
-      startShopifyAutoSync(15); /* incremental sync every 15 minutes */
+      startShopifyAutoSync(3); /* incremental Shopify product/order sync every few minutes */
       autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
       startWaSendRetryProcessor(); /* retry failed WA text sends */

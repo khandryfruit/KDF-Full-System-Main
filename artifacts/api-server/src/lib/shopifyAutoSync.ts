@@ -204,11 +204,56 @@ async function upsertCustomer(store: any, c: any) {
   });
 }
 
+async function getProductCollections(store: any, productId: string): Promise<Array<{ id: string; title: string; handle?: string; type?: string }>> {
+  const collections: Array<{ id: string; title: string; handle?: string; type?: string }> = [];
+  try {
+    const collectsRes = await shopifyFetch(store, `/collects.json?product_id=${encodeURIComponent(productId)}&limit=250`);
+    if (collectsRes.ok) {
+      const { collects = [] } = await collectsRes.json() as any;
+      const ids = collects.map((c: any) => c.collection_id).filter(Boolean).slice(0, 50);
+      if (ids.length > 0) {
+        const collectionRes = await shopifyFetch(store, `/custom_collections.json?ids=${ids.join(",")}&limit=250`);
+        if (collectionRes.ok) {
+          const { custom_collections = [] } = await collectionRes.json() as any;
+          collections.push(...custom_collections.map((c: any) => ({ id: String(c.id), title: c.title, handle: c.handle, type: "custom" })));
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.debug({ err: err?.message, productId }, "Shopify product custom collection lookup skipped");
+  }
+  try {
+    const smartRes = await shopifyFetch(store, `/smart_collections.json?product_id=${encodeURIComponent(productId)}&limit=250`);
+    if (smartRes.ok) {
+      const { smart_collections = [] } = await smartRes.json() as any;
+      collections.push(...smart_collections.map((c: any) => ({ id: String(c.id), title: c.title, handle: c.handle, type: "smart" })));
+    }
+  } catch (err: any) {
+    logger.debug({ err: err?.message, productId }, "Shopify product smart collection lookup skipped");
+  }
+  const seen = new Set<string>();
+  return collections.filter((c) => {
+    const key = c.id || c.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function upsertProduct(store: any, p: any) {
   const firstVariant = p.variants?.[0] ?? {};
+  const collections = await getProductCollections(store, String(p.id));
   const variants = (p.variants ?? []).map((v: any) => ({
     id: String(v.id), title: v.title, price: v.price, sku: v.sku,
+    compareAtPrice: v.compare_at_price ?? null,
+    inventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : undefined,
     inventoryQuantity: v.inventory_quantity,
+    weight: v.weight != null ? Number(v.weight) : undefined,
+    weightUnit: v.weight_unit,
+    option1: v.option1 ?? null,
+    option2: v.option2 ?? null,
+    option3: v.option3 ?? null,
+    barcode: v.barcode ?? null,
   }));
   await db.insert(shopifyProductsTable).values({
     storeId: store.id,
@@ -219,6 +264,8 @@ async function upsertProduct(store: any, p: any) {
     productType: p.product_type ?? null,
     status: p.status ?? "active",
     tags: p.tags ?? null,
+    handle: p.handle ?? null,
+    collections,
     imageUrl: p.images?.[0]?.src ?? null,
     price: firstVariant.price ?? null,
     compareAtPrice: firstVariant.compare_at_price ?? null,
@@ -226,16 +273,26 @@ async function upsertProduct(store: any, p: any) {
     sku: firstVariant.sku ?? null,
     variants,
     shopifyCreatedAt: p.created_at ? new Date(p.created_at) : null,
+    shopifyUpdatedAt: p.updated_at ? new Date(p.updated_at) : null,
     syncedAt: new Date(),
   }).onConflictDoUpdate({
     target: shopifyProductsTable.shopifyProductId,
     set: {
       title: p.title,
+      description: p.body_html ?? null,
+      vendor: p.vendor ?? null,
+      productType: p.product_type ?? null,
       status: p.status ?? "active",
+      tags: p.tags ?? null,
+      handle: p.handle ?? null,
+      collections,
       price: firstVariant.price ?? null,
+      compareAtPrice: firstVariant.compare_at_price ?? null,
+      sku: firstVariant.sku ?? null,
       variants,
       imageUrl: p.images?.[0]?.src ?? null,
       inventoryQuantity: firstVariant.inventory_quantity ?? 0,
+      shopifyUpdatedAt: p.updated_at ? new Date(p.updated_at) : null,
       syncedAt: new Date(),
       updatedAt: new Date(),
     },
@@ -701,20 +758,40 @@ export async function processShopifyWebhookPayload(
         await upsertProduct(store, payload);
         break;
 
+      case "products/delete":
+        if (payload.id != null) {
+          await db.update(shopifyProductsTable)
+            .set({ status: "deleted", inventoryQuantity: 0, syncedAt: new Date(), updatedAt: new Date() })
+            .where(eq(shopifyProductsTable.shopifyProductId, String(payload.id)));
+        }
+        break;
+
       case "customers/create":
       case "customers/update":
         await upsertCustomer(store, payload);
         break;
 
       case "inventory_levels/update":
-        /* best-effort: update inventory_quantity where sku matches */
+        /* best-effort: update inventory where variant inventory_item_id matches */
         if (payload.inventory_item_id != null && payload.available != null) {
+          const inventoryItemId = String(payload.inventory_item_id);
+          const available = Number(payload.available);
           await db.execute(
             sql`UPDATE shopify_products
-                SET inventory_quantity = ${Number(payload.available)},
+                SET inventory_quantity = ${available},
+                    variants = (
+                      SELECT jsonb_agg(
+                        CASE
+                          WHEN elem->>'inventoryItemId' = ${inventoryItemId}
+                          THEN jsonb_set(elem, '{inventoryQuantity}', to_jsonb(${available}::int), true)
+                          ELSE elem
+                        END
+                      )
+                      FROM jsonb_array_elements(coalesce(variants, '[]'::jsonb)) elem
+                    ),
                     updated_at = NOW(),
                     synced_at  = NOW()
-                WHERE variants @> ${JSON.stringify([{ inventoryItemId: String(payload.inventory_item_id) }])}::jsonb`,
+                WHERE variants @> ${JSON.stringify([{ inventoryItemId }])}::jsonb`,
           ).catch(() => {});
         }
         break;
@@ -757,6 +834,8 @@ const REQUIRED_TOPICS = [
   "fulfillments/update",
   "products/create",
   "products/update",
+  "products/delete",
+  "inventory_levels/update",
   "customers/create",
   "customers/update",
   "draft_orders/create",

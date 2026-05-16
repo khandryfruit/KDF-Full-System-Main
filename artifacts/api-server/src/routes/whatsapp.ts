@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, aiSettingsTable, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
-import { ordersTable, orderItemsTable, usersTable, productsTable, shipmentsTable, adminNotificationsTable } from "@workspace/db";
+import { ordersTable, orderItemsTable, usersTable, shipmentsTable, adminNotificationsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable, shopifyStoresTable } from "@workspace/db";
 import { eq, desc, asc, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { adminMiddleware } from "../lib/auth";
@@ -730,15 +730,14 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                     const parts = interactionId.split("_");
                     const productNameEncoded = parts.slice(2, parts.length - 1).join("_");
                     const productName = decodeURIComponent(productNameEncoded.replace(/_/g, " "));
-                    /* Try to find price from DB */
-                    const [prod] = await db.select({ price: productsTable.price })
-                      .from(productsTable).where(ilike(productsTable.name, `%${productName.slice(0, 20)}%`)).limit(1);
-                    const price = prod ? parseFloat(String(prod.price)) : 0;
-                    await setConversationState(phone, "order_await_qty", { productName, price });
-                    await sendWaText(phone, `🛒 *Order: ${productName}*\n💰 Price: Rs. ${price > 0 ? price.toLocaleString("en-PK") : "TBD"}\n\n📦 Kitni quantity chahiye? (e.g. 1, 2, 3)`, waSettings);
+                    await startCommerceOrderFromText({
+                      phone,
+                      textBody: `${productName} order`,
+                      waSettings,
+                      detectedIntent: { intent: "order_start", confidence: 0.95, reason: "product card button", productQuery: productName } as any,
+                    });
                   } catch {
-                    await handleSendMenu(phone, waSettings, chatbot);
-                    await setConversationState(phone, "menu_shown");
+                    await sendQuickOrderMenu(phone, waSettings);
                   }
                 } else {
                   /* Truly unknown — show menu */
@@ -1395,7 +1394,7 @@ function productMatchScore(query: string, name: string, tags?: unknown): number 
   return productMatchAnalysis(query, name, tags).score;
 }
 
-function formatShopifyVariants(variants: unknown): { label: string; lines: string[]; cheapestPrice: number | null; options: Array<{ id: string; title: string; price: number; sku?: string; inventoryQuantity?: number }> } {
+function formatShopifyVariants(variants: unknown): { label: string; lines: string[]; cheapestPrice: number | null; options: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }> } {
   const arr = Array.isArray(variants) ? variants : [];
   const options = arr
     .filter((v: any) => Number(v?.inventoryQuantity ?? 1) > 0)
@@ -1403,12 +1402,23 @@ function formatShopifyVariants(variants: unknown): { label: string; lines: strin
     .map((v: any) => {
       const title = String(v.title ?? "Default").replace(/^default title$/i, "Standard");
       const price = parseCatalogUnitPrice(v.price);
-      return { id: String(v.id ?? ""), title, price, sku: v.sku ? String(v.sku) : undefined, inventoryQuantity: Number(v.inventoryQuantity ?? 0) };
+      const compareAtPrice = v.compareAtPrice ? parseCatalogUnitPrice(v.compareAtPrice) : null;
+      return {
+        id: String(v.id ?? ""),
+        title,
+        price,
+        compareAtPrice,
+        sku: v.sku ? String(v.sku) : undefined,
+        inventoryQuantity: Number(v.inventoryQuantity ?? 0),
+        inventoryItemId: v.inventoryItemId ? String(v.inventoryItemId) : undefined,
+        weight: v.weight != null ? Number(v.weight) : undefined,
+        weightUnit: v.weightUnit ? String(v.weightUnit) : undefined,
+      };
     });
   const cheapest = options.length ? Math.min(...options.map((v) => v.price).filter((v) => Number.isFinite(v))) : null;
   return {
-    label: options.map((v) => `${v.title} — ${formatRupees(v.price)}`).join("\n"),
-    lines: options.map((v) => `${v.title} — ${formatRupees(v.price)}`),
+    label: options.map((v) => `${v.title} — ${formatRupees(v.price)}${v.compareAtPrice && v.compareAtPrice > v.price ? ` (was ${formatRupees(v.compareAtPrice)})` : ""}`).join("\n"),
+    lines: options.map((v) => `${v.title} — ${formatRupees(v.price)}${v.compareAtPrice && v.compareAtPrice > v.price ? ` (was ${formatRupees(v.compareAtPrice)})` : ""}`),
     cheapestPrice: cheapest != null && Number.isFinite(cheapest) ? cheapest : null,
     options,
   };
@@ -1419,7 +1429,7 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   description: string | null; imageUrl: string | null;
   productUrl: string; variants: string; inStock: boolean;
   source?: "shopify" | "local"; rawPrice?: number; variantLines?: string[];
-  shopifyProductId?: string; variantOptions?: Array<{ id: string; title: string; price: number; sku?: string; inventoryQuantity?: number }>;
+  shopifyProductId?: string; variantOptions?: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }>;
 }>> {
   const websiteUrl = "https://khanbabadryfruits.com";
   const results: Array<any> = [];
@@ -1431,10 +1441,13 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       title: shopifyProductsTable.title,
       price: shopifyProductsTable.price,
       compareAtPrice: shopifyProductsTable.compareAtPrice,
+      description: shopifyProductsTable.description,
       imageUrl: shopifyProductsTable.imageUrl,
       variants: shopifyProductsTable.variants,
       inventoryQuantity: shopifyProductsTable.inventoryQuantity,
       shopifyProductId: shopifyProductsTable.shopifyProductId,
+      handle: shopifyProductsTable.handle,
+      collections: shopifyProductsTable.collections,
       tags: shopifyProductsTable.tags,
     }).from(shopifyProductsTable)
       .where(and(
@@ -1453,12 +1466,12 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       .slice(0, limit)) {
       const variants = formatShopifyVariants(sp.sp.variants);
       const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(sp.sp.price);
-      const handle = sp.sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() ?? "product";
+      const handle = sp.sp.handle || sp.sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "product";
       results.push({
         name: sp.sp.title,
         price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(parseCatalogUnitPrice(sp.sp.price)),
         compareAt: sp.sp.compareAtPrice ? formatRupees(parseCatalogUnitPrice(sp.sp.compareAtPrice)) : null,
-        description: null,
+        description: sp.sp.description ? String(sp.sp.description).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180) : null,
         imageUrl: sp.sp.imageUrl ?? null,
         productUrl: `${websiteUrl}/products/${handle}`,
         variants: variants.label,
@@ -1471,47 +1484,6 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
       });
     }
   } catch { /* Shopify table may be empty */ }
-
-  if (results.length < limit) {
-    const dbProds = await db.select({
-      id: productsTable.id, name: productsTable.name, price: productsTable.price,
-      description: productsTable.description, images: productsTable.images,
-      slug: productsTable.slug, stock: productsTable.stock, featured: productsTable.featured,
-      variants: productsTable.variants, tags: productsTable.tags,
-    }).from(productsTable)
-      .where(searchTerms.length
-        ? or(...searchTerms.flatMap((term) => [ilike(productsTable.name, `%${term}%`), ilike(productsTable.description, `%${term}%`), sql`${productsTable.tags}::text ILIKE ${"%" + term + "%"}`]))
-        : sql`false`
-      )
-      .orderBy(desc(productsTable.featured))
-      .limit(limit * 2);
-
-    const scoredLocal = dbProds
-      .map((p: any) => ({ p, match: productMatchAnalysis(query, p.name, p.tags) }));
-    matchDiagnostics.push(...scoredLocal.map((x: any) => ({ title: x.p.name, score: x.match.score, reason: x.match.reason, excludedReason: x.match.excludedReason, source: "local", roots: x.match.roots })));
-    for (const p of scoredLocal
-      .filter((x: any) => x.match.score > 0)
-      .sort((a: any, b: any) => b.match.score - a.match.score)
-      .slice(0, limit - results.length)) {
-      const variants = Array.isArray(p.p.variants)
-        ? p.p.variants.filter((v: any) => Number(v.stock ?? 0) > 0).slice(0, 8).map((v: any) => `${v.value || v.name} — ${formatRupees(parseCatalogUnitPrice(v.price ?? p.p.price))}`)
-        : [];
-      const rawPrice = parseCatalogUnitPrice(p.p.price);
-      results.push({
-        name: p.p.name,
-        price: formatRupees(rawPrice),
-        compareAt: null,
-        description: p.p.description?.slice(0, 100) ?? null,
-        imageUrl: (p.p.images as string[])?.[0] ?? null,
-        productUrl: `${websiteUrl}/products/${p.p.slug}`,
-        variants: variants.join("\n"),
-        variantLines: variants,
-        rawPrice,
-        inStock: p.p.stock > 0,
-        source: "local",
-      });
-    }
-  }
 
   await logWaProcessingStep({
     step: "shopify_product_lookup",
@@ -2007,7 +1979,7 @@ async function startCommerceOrderFromText(opts: {
     });
     await sendWaText(
       opts.phone,
-      `جی 😊 Badam mein yeh options available hain:\n\n${products.map((p, i) => `${i + 1}. ${p.name}`).join("\n")}\n\nKaunsa chahiye? Number ya naam reply kar dein.`,
+      `جی 😊 Shopify catalog mein yeh matching products available hain:\n\n${products.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nKaunsa chahiye? Number reply kar dein.`,
       opts.waSettings,
     );
     return true;
@@ -2021,7 +1993,10 @@ async function startCommerceOrderFromText(opts: {
       detail: "Product found; asking customer to select official Shopify variant.",
       payload: { product: product.name, variants: product.variantLines },
     });
-    await sendWaText(opts.phone, `جی 😊 *${product.name}* ke available variants:\n\n${product.variantLines?.map((v) => `• ${v}`).join("\n") || product.variants}\n\nKaunsa variant chahiye?`, opts.waSettings);
+    const variantMenu = product.variantOptions?.map((v: any, i: number) =>
+      `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}${v.compareAtPrice && v.compareAtPrice > v.price ? ` (was ${formatRupees(v.compareAtPrice)})` : ""}`,
+    ).join("\n") || product.variants;
+    await sendWaText(opts.phone, `جی 😊 *${product.name}* ke available Shopify variants:\n\n${variantMenu}\n\nNumber reply kar dein, example: 3`, opts.waSettings);
     return true;
   }
   const found = await findCommerceProductVariant(parsed.productQuery, parsed.variantTitle);
@@ -2291,13 +2266,15 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     const product = stateData.product;
     const options = Array.isArray(product?.variantOptions) ? product.variantOptions : [];
     const wanted = normalizeProductText(trimmed);
-    const selected = options.find((v: any) => {
+    const selectedIndex = Number.parseInt(trimmed.replace(/[^0-9]/g, ""), 10) - 1;
+    const selectedByNumber = Number.isFinite(selectedIndex) && selectedIndex >= 0 ? options[selectedIndex] : null;
+    const selected = selectedByNumber ?? options.find((v: any) => {
       const title = normalizeVariantText(v.title);
       return title === normalizeVariantText(trimmed) || title.includes(normalizeVariantText(trimmed)) || normalizeVariantText(trimmed).includes(title);
     })
       ?? null;
     if (!product || !selected) {
-      await sendWaText(phone, `Please available variants mein se select karein:\n\n${(product?.variantLines ?? []).map((v: string) => `• ${v}`).join("\n")}`, waSettings);
+      await sendWaText(phone, `Please available Shopify variants mein se number select karein:\n\n${options.map((v: any, i: number) => `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}`).join("\n")}`, waSettings);
       return;
     }
     await setConversationState(phone, "wa_order_await_quantity", {
@@ -2816,6 +2793,7 @@ async function handleAiReply(opts: {
 
     const whatsappInstructions = `WhatsApp sales behavior:
 - For any product/price/variant question, use the official catalog context if provided and answer only from that data.
+- Product, variant, price, stock, discount, SKU, image, and availability data must come from synced Shopify catalog only. Never use local/manual products or guessed prices.
 - For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
 - Product matching is strict: if customer asks one product (for example "1kg walnut"), answer only that product family and variants. Never include gift boxes, combos, mixed packs, or unrelated products unless customer explicitly asks for gift/combo/mix.

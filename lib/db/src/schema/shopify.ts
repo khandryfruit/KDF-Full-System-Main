@@ -94,6 +94,8 @@ export const shopifyProductsTable = pgTable("shopify_products", {
   productType: text("product_type"),
   status: text("status").default("active"),
   tags: text("tags"),
+  handle: text("handle"),
+  collections: jsonb("collections").$type<Array<{ id: string; title: string; handle?: string; type?: string }>>().default([]),
   imageUrl: text("image_url"),
   price: numeric("price", { precision: 10, scale: 2 }),
   compareAtPrice: numeric("compare_at_price", { precision: 10, scale: 2 }),
@@ -101,12 +103,15 @@ export const shopifyProductsTable = pgTable("shopify_products", {
   sku: text("sku"),
   variants: jsonb("variants").$type<Array<{
     id: string; title: string; price: string; sku?: string; inventoryQuantity?: number;
+    compareAtPrice?: string | null; inventoryItemId?: string; weight?: number; weightUnit?: string;
+    option1?: string | null; option2?: string | null; option3?: string | null; barcode?: string | null;
   }>>(),
   isFeatured: boolean("is_featured").notNull().default(false),
   badge: text("badge"),
   isRecommended: boolean("is_recommended").notNull().default(false),
   recommendPriority: integer("recommend_priority").default(0),
   shopifyCreatedAt: timestamp("shopify_created_at"),
+  shopifyUpdatedAt: timestamp("shopify_updated_at"),
   syncedAt: timestamp("synced_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
