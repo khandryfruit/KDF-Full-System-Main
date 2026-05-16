@@ -732,6 +732,19 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: `Detected intent: ${detected.intent} (${detected.reason})`,
               payload: { textBody, ...detected, route: "ai_chat" },
             });
+            const deterministicReply = naturalIntentReply(detected.intent, textBody);
+            if (deterministicReply) {
+              await sendWhatsAppMessage({ phone, message: deterministicReply, templateName: "intent_reply" });
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "ai_reply_sent",
+                status: "sent",
+                detail: `Sent deterministic human-like reply for ${detected.intent} in ai_chat state.`,
+                payload: { detected, reply: deterministicReply },
+              });
+              continue;
+            }
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
           }
@@ -1520,6 +1533,17 @@ Rules:
 - Keep replies short, human, and conversion-focused.`;
     const adminPrompt = String(chatbot.systemPrompt ?? "").trim();
     const systemContent = `${salesSystem}\n\nAdmin business instructions:\n${adminPrompt || "Be friendly, concise, helpful, and accurate."}\n\nDetected intent: ${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}.${orderContextBlock}`;
+    await logWaProcessingStep({
+      phone,
+      step: "prompt_loaded",
+      detail: adminPrompt ? "AI Behaviour Instructions loaded and injected into WhatsApp prompt." : "No saved AI Behaviour Instructions found; using safe default business prompt.",
+      payload: {
+        promptLoaded: Boolean(adminPrompt),
+        promptLength: adminPrompt.length,
+        promptPreview: adminPrompt.slice(0, 800),
+        detectedIntent: intent,
+      },
+    });
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemContent },
@@ -1713,9 +1737,18 @@ Rules:
         await sendWa({ phone, message: intentFallback, templateName: "ai_fallback" });
       } else if (chatbot?.fallbackMessage) {
         const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
-        const fallback = String(chatbot.fallbackMessage).includes("Thank you for your message")
+        const fallbackText = String(chatbot.fallbackMessage);
+        const fallback = fallbackText.toLowerCase().includes("thank you for your message")
           ? "Ji 😊 main yahin hoon. Aap apna sawal ya zaroorat bata dein, main madad karta hoon."
-          : chatbot.fallbackMessage;
+          : fallbackText;
+        await logWaProcessingStep({
+          phone,
+          step: "fallback_triggered",
+          status: "failed",
+          detail: "Fallback was used because AI generation failed.",
+          payload: { detectedIntent: intent, fallbackPreview: fallback.slice(0, 500) },
+          failureReason: "ai_generation_failed",
+        });
         await sendWa({ phone, message: fallback, templateName: "ai_fallback" });
       }
     } catch { /* ignore fallback errors */ }
