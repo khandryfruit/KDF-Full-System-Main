@@ -4115,12 +4115,18 @@ router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (r
       .where(sql`${shopifyProductsTable.status} != 'active'`)
       .catch(() => [{ count: 0 }]);
 
+    const indexMismatch = stats.activeProducts > 0 && stats.indexedProducts < stats.activeProducts;
+
     return res.json({
       engine: "shopifyProductKnowledge",
       stats: {
         ...stats,
         inactiveProducts: Number(inactiveCount?.count ?? 0),
         totalProducts: stats.activeProducts + Number(inactiveCount?.count ?? 0),
+        indexMismatch,
+        indexWarning: indexMismatch
+          ? `Only ${stats.indexedProducts} of ${stats.activeProducts} products are indexed. Click Rebuild Index.`
+          : null,
       },
       store: store ?? null,
       sync: {
@@ -4154,7 +4160,10 @@ router.get("/admin/whatsapp/product-knowledge/products", adminMiddleware as any,
     const { searchShopifyCatalog } = await import("../lib/shopifyProductKnowledge.js");
 
     if (q) {
-      const hits = await searchShopifyCatalog(q, limit);
+      const { countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
+      const searchLimit = Math.min(50, Math.max(limit, 30));
+      const hits = await searchShopifyCatalog(q, searchLimit);
+      const totalMatches = await countShopifyCatalogMatches(q);
       return res.json({
         products: hits.map((p) => ({
           shopifyProductId: p.shopifyProductId,
@@ -4176,10 +4185,11 @@ router.get("/admin/whatsapp/product-knowledge/products", adminMiddleware as any,
           variantCount: p.variantOptions.length,
           syncedAt: null,
         })),
-        total: hits.length,
+        total: totalMatches,
         page: 1,
-        limit,
-        searchEngine: "shopifyProductKnowledge",
+        limit: searchLimit,
+        showing: hits.length,
+        searchEngine: "shopifyProductKnowledge_full_catalog",
       });
     }
 
@@ -4253,7 +4263,9 @@ router.get("/admin/whatsapp/product-knowledge/products", adminMiddleware as any,
 
 router.post("/admin/whatsapp/product-knowledge/rebuild", adminMiddleware as any, async (req, res) => {
   try {
-    const { rebuildShopifyProductAliases, getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
+    const { rebuildShopifyProductAliases } = await import("../lib/shopifyProductSearch.js");
+    const { getShopifyCatalogStats, invalidateCatalogCache } = await import("../lib/shopifyProductKnowledge.js");
+    invalidateCatalogCache();
     const result = await rebuildShopifyProductAliases();
     const stats = await getShopifyCatalogStats();
     return res.json({
@@ -4271,12 +4283,16 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
   try {
     const query = String(req.body?.query ?? "").trim();
     if (!query) return res.status(400).json({ error: "query is required" });
-    const limit = Math.min(6, Math.max(1, Number(req.body?.limit ?? 4)));
-    const { searchShopifyCatalog, formatShopifyCatalogForOpenAI } = await import("../lib/shopifyProductKnowledge.js");
+    const limit = Math.min(25, Math.max(1, Number(req.body?.limit ?? 8)));
+    const { searchShopifyCatalog, formatShopifyCatalogForOpenAI, formatShopifyCatalogWhatsAppReply, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
     const products = await searchShopifyCatalog(query, limit);
+    const totalMatches = await countShopifyCatalogMatches(query);
+    const roman = /[a-z]/i.test(query) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(query);
     return res.json({
       query,
       count: products.length,
+      totalMatches,
+      whatsappReplyPreview: formatShopifyCatalogWhatsAppReply(products.slice(0, 1), roman),
       products: products.map((p) => ({
         name: p.name,
         shopifyProductId: p.shopifyProductId,

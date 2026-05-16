@@ -4,17 +4,17 @@
  */
 
 import { db, shopifyProductsTable } from "@workspace/db";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { expandQuery } from "../routes/search.js";
+import { eq, desc, sql } from "drizzle-orm";
 import {
   expandWaProductSearchTerms,
-  searchShopifyProductIdsByAlias,
-  fetchShopifyProductsByIds,
   productRootTermsFromQuery,
   WA_PRODUCT_ALIASES,
 } from "./shopifyProductSearch.js";
 
 const STORE_URL = "https://khanbabadryfruits.com";
+
+const CATALOG_CACHE_TTL_MS = 60_000;
+let catalogCache: { at: number; rows: any[] } | null = null;
 
 export type ShopifyCatalogVariant = {
   id: string;
@@ -40,6 +40,8 @@ export type ShopifyCatalogProduct = {
   variantOptions: ShopifyCatalogVariant[];
   inStock: boolean;
   tags?: string | null;
+  productType?: string | null;
+  category?: string | null;
   score: number;
   source: "shopify";
 };
@@ -71,10 +73,17 @@ function normalizeText(value: unknown): string {
     .trim();
 }
 
+function normalizeVariantText(value: string): string {
+  return normalizeText(value)
+    .replace(/\bgrams?\b/g, "g")
+    .replace(/\bgm\b/g, "g")
+    .replace(/\bkgs?\b/g, "kg")
+    .replace(/\s+/g, "");
+}
+
 function normalizeCatalogQuery(query: string): string {
   return normalizeText(query)
-    .replace(/\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/g, " ")
-    .replace(/\b(price|rate|qeemat|kitna|how much|available|chahiye|order|buy)\b/g, " ")
+    .replace(/\b(price|rate|qeemat|kitna|how much|available|chahiye|order|buy|please)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -82,10 +91,27 @@ function normalizeCatalogQuery(query: string): string {
 function expandAllSearchTerms(query: string): string[] {
   const terms = new Set<string>();
   for (const t of expandWaProductSearchTerms(query)) terms.add(t);
-  for (const t of expandQuery(query)) terms.add(normalizeText(t));
   const q = normalizeCatalogQuery(query) || normalizeText(query);
   if (q) terms.add(q);
+  for (const token of q.split(/\s+/)) {
+    if (token.length > 1) terms.add(token);
+    if (WA_PRODUCT_ALIASES[token]) {
+      for (const syn of WA_PRODUCT_ALIASES[token]) terms.add(normalizeText(syn));
+    }
+  }
   return [...terms].filter((t) => t.length > 1);
+}
+
+function productRootsFromQuery(query: string): string[] {
+  const roots = new Set<string>(productRootTermsFromQuery(query));
+  const q = normalizeText(query);
+  for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
+    if (q.includes(key) || q.split(/\s+/).includes(key)) {
+      roots.add(key);
+      for (const syn of WA_PRODUCT_ALIASES[key]) roots.add(normalizeText(syn));
+    }
+  }
+  return [...roots];
 }
 
 function queryWantsBundle(query: string): boolean {
@@ -96,12 +122,20 @@ function isBundleName(name: string): boolean {
   return /\b(gift|box|combo|mix|mixed|assorted|portion|hamper|basket)\b/.test(normalizeText(name));
 }
 
+function extractWeightHint(query: string): string | null {
+  const m = normalizeText(query).match(/\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilogram|kilograms|g|gm|gram|grams)\b/);
+  if (!m) return null;
+  const num = m[1];
+  const unit = m[2].startsWith("k") ? "kg" : "g";
+  return `${num}${unit}`;
+}
+
 function scoreProduct(query: string, title: string, tags?: unknown): number {
   const terms = expandAllSearchTerms(query);
-  const q = terms[0] ?? normalizeText(query);
+  const q = normalizeCatalogQuery(query) || normalizeText(query);
   const n = normalizeText(title);
   const tagText = normalizeText(Array.isArray(tags) ? tags.join(" ") : tags);
-  const roots = productRootTermsFromQuery(query);
+  const roots = productRootsFromQuery(query);
 
   if (roots.length > 0 && isBundleName(title) && !queryWantsBundle(query)) return 0;
   if (roots.length > 0 && /\b(oil|butter|powder|paste)\b/.test(n) && !/\b(oil|butter|powder|paste)\b/.test(normalizeText(query))) {
@@ -109,62 +143,101 @@ function scoreProduct(query: string, title: string, tags?: unknown): number {
   }
 
   let score = 0;
-  if (n === q) score += 100;
-  if (q && n.includes(q)) score += 70;
+  if (n === q) score += 120;
+  if (q && n.includes(q)) score += 80;
   for (const root of roots) {
-    if (n.split(/\s+/).includes(root)) score += 45;
-    else if (n.includes(root)) score += 25;
-    if (tagText.includes(root)) score += 12;
+    if (n.split(/\s+/).some((w) => w === root || w.includes(root))) score += 50;
+    else if (n.includes(root)) score += 30;
+    if (tagText.includes(root)) score += 15;
   }
-  for (const term of terms.flatMap((t) => t.split(/\s+/)).filter((t) => t.length > 1)) {
+  for (const term of terms) {
+    if (term.length < 2) continue;
     const pos = n.indexOf(term);
-    if (pos === 0) score += 30;
-    else if (pos > 0 && pos <= 28) score += 20;
-    else if (pos > 28) score += 8;
-    if (tagText.includes(term)) score += 5;
+    if (pos === 0) score += 35;
+    else if (pos > 0 && pos <= 30) score += 22;
+    else if (pos > 30) score += 6;
+    if (tagText.includes(term)) score += 8;
   }
   if (roots.length > 0 && !roots.some((r) => n.includes(r) || tagText.includes(r))) return 0;
   return score;
 }
 
-function formatVariants(variants: unknown): {
+async function loadAllActiveCatalogRows(): Promise<any[]> {
+  const now = Date.now();
+  if (catalogCache && now - catalogCache.at < CATALOG_CACHE_TTL_MS) {
+    return catalogCache.rows;
+  }
+  const rows = await db
+    .select({
+      id: shopifyProductsTable.id,
+      title: shopifyProductsTable.title,
+      price: shopifyProductsTable.price,
+      compareAtPrice: shopifyProductsTable.compareAtPrice,
+      description: shopifyProductsTable.description,
+      imageUrl: shopifyProductsTable.imageUrl,
+      variants: shopifyProductsTable.variants,
+      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+      shopifyProductId: shopifyProductsTable.shopifyProductId,
+      handle: shopifyProductsTable.handle,
+      tags: shopifyProductsTable.tags,
+      productType: shopifyProductsTable.productType,
+      collections: shopifyProductsTable.collections,
+    })
+    .from(shopifyProductsTable)
+    .where(eq(shopifyProductsTable.status, "active"))
+    .orderBy(desc(shopifyProductsTable.syncedAt))
+    .catch(() => []);
+
+  catalogCache = { at: now, rows };
+  return rows;
+}
+
+export function invalidateCatalogCache(): void {
+  catalogCache = null;
+}
+
+function formatVariants(variants: unknown, query: string): {
   label: string;
   lines: string[];
   cheapestPrice: number | null;
   options: ShopifyCatalogVariant[];
 } {
+  const weightHint = extractWeightHint(query);
   const arr = Array.isArray(variants) ? variants : [];
-  const options = arr
-    .filter((v: any) => Number(v?.inventoryQuantity ?? 1) > 0)
-    .slice(0, 12)
-    .map((v: any) => {
-      const title = String(v.title ?? "Default").replace(/^default title$/i, "Standard");
-      const price = parseCatalogUnitPrice(v.price);
-      return {
-        id: String(v.id ?? ""),
-        title,
-        price,
-        compareAtPrice: v.compareAtPrice ? parseCatalogUnitPrice(v.compareAtPrice) : null,
-        sku: v.sku ? String(v.sku) : undefined,
-        inventoryQuantity: Number(v.inventoryQuantity ?? 0),
-      };
+  let options = arr.map((v: any) => {
+    const title = String(v.title ?? "Default").replace(/^default title$/i, "Standard");
+    const price = parseCatalogUnitPrice(v.price);
+    return {
+      id: String(v.id ?? ""),
+      title,
+      price,
+      compareAtPrice: v.compareAtPrice ? parseCatalogUnitPrice(v.compareAtPrice) : null,
+      sku: v.sku ? String(v.sku) : undefined,
+      inventoryQuantity: Number(v.inventoryQuantity ?? 0),
+    };
+  });
+
+  if (weightHint) {
+    const filtered = options.filter((v) => {
+      const vt = normalizeVariantText(v.title);
+      return vt.includes(weightHint) || vt.includes(weightHint.replace("kg", "")) || weightHint.includes(vt);
     });
+    if (filtered.length) options = filtered;
+  }
+
+  options = options.slice(0, 12);
   const cheapest = options.length ? Math.min(...options.map((o) => o.price)) : null;
   const lines = options.map((v) => `${v.title} — ${formatRupees(v.price)}`);
-  return {
-    label: lines.join("\n"),
-    lines,
-    cheapestPrice: cheapest,
-    options,
-  };
+  return { label: lines.join("\n"), lines, cheapestPrice: cheapest, options };
 }
 
 function mapRowToCatalogProduct(row: any, query: string): ShopifyCatalogProduct | null {
   const matchScore = scoreProduct(query, row.title, row.tags);
   if (matchScore <= 0) return null;
-  const variants = formatVariants(row.variants);
+  const variants = formatVariants(row.variants, query);
   const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(row.price);
   const handle = row.handle || row.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "product";
+  const collections = Array.isArray(row.collections) ? row.collections : [];
   return {
     id: Number(row.id),
     shopifyProductId: row.shopifyProductId,
@@ -180,11 +253,22 @@ function mapRowToCatalogProduct(row: any, query: string): ShopifyCatalogProduct 
     variants: variants.label,
     variantLines: variants.lines,
     variantOptions: variants.options,
-    inStock: (row.inventoryQuantity ?? 0) > 0 || variants.lines.length > 0,
+    inStock: (row.inventoryQuantity ?? 0) > 0 || variants.options.some((v) => (v.inventoryQuantity ?? 0) > 0),
     tags: row.tags,
+    productType: row.productType,
+    category: collections[0]?.title ?? null,
     score: matchScore,
     source: "shopify",
   };
+}
+
+/** Score entire active catalog — reliable for 300+ products */
+async function scoreEntireCatalog(query: string): Promise<ShopifyCatalogProduct[]> {
+  const rows = await loadAllActiveCatalogRows();
+  return rows
+    .map((row) => mapRowToCatalogProduct(row, query))
+    .filter((p): p is ShopifyCatalogProduct => Boolean(p))
+    .sort((a, b) => b.score - a.score);
 }
 
 /**
@@ -193,61 +277,17 @@ function mapRowToCatalogProduct(row: any, query: string): ShopifyCatalogProduct 
 export async function searchShopifyCatalog(query: string, limit = 6): Promise<ShopifyCatalogProduct[]> {
   const q = String(query ?? "").trim();
   if (!q) return [];
-
-  const terms = expandAllSearchTerms(q);
-  const aliasIds = await searchShopifyProductIdsByAlias(q, limit * 4);
-  let rows: any[] = [];
-
-  if (aliasIds.length) {
-    rows = await fetchShopifyProductsByIds(aliasIds);
-  }
-
-  if (rows.length < limit) {
-    const fallback = await db
-      .select({
-        id: shopifyProductsTable.id,
-        title: shopifyProductsTable.title,
-        price: shopifyProductsTable.price,
-        compareAtPrice: shopifyProductsTable.compareAtPrice,
-        description: shopifyProductsTable.description,
-        imageUrl: shopifyProductsTable.imageUrl,
-        variants: shopifyProductsTable.variants,
-        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-        shopifyProductId: shopifyProductsTable.shopifyProductId,
-        handle: shopifyProductsTable.handle,
-        tags: shopifyProductsTable.tags,
-      })
-      .from(shopifyProductsTable)
-      .where(and(
-        eq(shopifyProductsTable.status, "active"),
-        terms.length
-          ? or(
-              ...terms.flatMap((term) => [
-                ilike(shopifyProductsTable.title, `%${term}%`),
-                ilike(shopifyProductsTable.tags, `%${term}%`),
-              ]),
-            )
-          : sql`false`,
-      ))
-      .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-      .limit(limit * 4)
-      .catch(() => []);
-
-    const seen = new Set(rows.map((r) => r.shopifyProductId));
-    for (const row of fallback) {
-      if (!seen.has(row.shopifyProductId)) rows.push(row);
-    }
-  }
-
-  const scored = rows
-    .map((row) => mapRowToCatalogProduct(row, q))
-    .filter((p): p is ShopifyCatalogProduct => Boolean(p))
-    .sort((a, b) => b.score - a.score);
-
+  const scored = await scoreEntireCatalog(q);
   return scored.slice(0, limit);
 }
 
-/** OpenAI system / tool context — official prices only */
+/** Count all matches (admin index health / pagination) */
+export async function countShopifyCatalogMatches(query: string): Promise<number> {
+  const q = String(query ?? "").trim();
+  if (!q) return 0;
+  return (await scoreEntireCatalog(q)).length;
+}
+
 export function formatShopifyCatalogForOpenAI(products: ShopifyCatalogProduct[]): string {
   if (!products.length) return "";
   return products
@@ -260,7 +300,23 @@ export function formatShopifyCatalogForOpenAI(products: ShopifyCatalogProduct[])
     .join("\n");
 }
 
-/** Website chat product cards */
+/** Roman Urdu / Urdu customer-facing variant list */
+export function formatShopifyCatalogWhatsAppReply(products: ShopifyCatalogProduct[], roman = true): string {
+  if (!products.length) {
+    return roman
+      ? "Sorry, is product ka official data nahi mila. Please exact naam ya weight bhej dein."
+      : "معذرت، اس product کا official data نہیں ملا۔ براہ کرم exact نام یا weight بھیج دیں۔";
+  }
+  const p = products[0];
+  const lines = p.variantOptions.length
+    ? p.variantOptions.map((v, i) => `${i + 1}️⃣ ${v.title} — ${formatRupees(v.price)}${(v.inventoryQuantity ?? 0) > 0 ? "" : " (out of stock)"}`)
+    : [`1️⃣ ${p.price}`];
+  if (roman) {
+    return `Ji 😊\n\n*${p.name}*\nAvailable options:\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}\n\nKya aap order start karna chahte hain?`;
+  }
+  return `جی 😊\n\n*${p.name}*\nAvailable options:\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}\n\nکیا آپ order start کرنا چاہتے ہیں؟`;
+}
+
 export function toWebsiteChatProductCards(
   products: ShopifyCatalogProduct[],
   sellerScores?: Map<string, number>,
@@ -276,11 +332,7 @@ export function toWebsiteChatProductCards(
       compareAt && compareAt > minPrice ? Math.round(((compareAt - minPrice) / compareAt) * 100) : null;
     const sellerRank = topSellers.indexOf(p.name.toLowerCase());
     const badge =
-      sellerRank >= 0 && sellerRank < 3
-        ? "Best Seller"
-        : sellerRank < 7
-          ? "Popular"
-          : null;
+      sellerRank >= 0 && sellerRank < 3 ? "Best Seller" : sellerRank < 7 ? "Popular" : null;
     return {
       id: p.id,
       name: p.name,
@@ -301,7 +353,6 @@ export function toWebsiteChatProductCards(
   });
 }
 
-/** WhatsApp catalog shape (compatible with existing searchProductsForWa) */
 export function toWhatsAppCatalogProducts(products: ShopifyCatalogProduct[]) {
   return products.map((p) => ({
     name: p.name,
@@ -323,23 +374,33 @@ export function toWhatsAppCatalogProducts(products: ShopifyCatalogProduct[]) {
 export async function getShopifyCatalogStats(): Promise<{
   activeProducts: number;
   aliasRows: number;
+  indexedProducts: number;
+  indexHealthy: boolean;
+  indexCoveragePct: number;
 }> {
   const [prod] = await db
     .select({ count: sql<number>`count(*)` })
     .from(shopifyProductsTable)
     .where(eq(shopifyProductsTable.status, "active"))
     .catch(() => [{ count: 0 }]);
+
+  const activeProducts = Number(prod?.count ?? 0);
   let aliasRows = 0;
+  let indexedProducts = 0;
   try {
-    const [a] = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM shopify_product_aliases`);
-    aliasRows = Number((a as any)?.rows?.[0]?.cnt ?? (a as any)?.cnt ?? 0);
+    const aliasCount = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM shopify_product_aliases`);
+    aliasRows = Number((aliasCount as any).rows?.[0]?.cnt ?? 0);
+    const idxCount = await db.execute(sql`SELECT COUNT(DISTINCT shopify_product_id)::int AS cnt FROM shopify_product_aliases`);
+    indexedProducts = Number((idxCount as any).rows?.[0]?.cnt ?? 0);
   } catch {
     aliasRows = 0;
+    indexedProducts = 0;
   }
-  return {
-    activeProducts: Number(prod?.count ?? 0),
-    aliasRows,
-  };
+
+  const indexCoveragePct = activeProducts > 0 ? Math.round((indexedProducts / activeProducts) * 100) : 0;
+  const indexHealthy = activeProducts === 0 || indexedProducts >= Math.floor(activeProducts * 0.95);
+
+  return { activeProducts, aliasRows, indexedProducts, indexHealthy, indexCoveragePct };
 }
 
 export { WA_PRODUCT_ALIASES, rebuildShopifyProductAliases } from "./shopifyProductSearch.js";

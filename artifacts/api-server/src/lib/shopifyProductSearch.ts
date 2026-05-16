@@ -137,15 +137,30 @@ export async function rebuildShopifyProductAliases(opts?: { shopifyProductId?: s
     }
   }
 
-  const BATCH = 200;
+  const BATCH = 150;
+  let inserted = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
-    await db.insert(shopifyProductAliasesTable).values(chunk).onConflictDoNothing().catch((err) => {
-      logger.warn({ err }, "shopify_product_aliases batch insert failed (table may need migration)");
-    });
+    try {
+      await db.insert(shopifyProductAliasesTable).values(chunk);
+      inserted += chunk.length;
+    } catch (err) {
+      logger.warn({ err, batch: i }, "shopify_product_aliases batch insert failed — retrying row-by-row");
+      for (const row of chunk) {
+        try {
+          await db.insert(shopifyProductAliasesTable).values(row).onConflictDoNothing();
+          inserted++;
+        } catch { /* skip duplicate */ }
+      }
+    }
   }
 
-  return { indexed: products.length, aliases: rows.length };
+  try {
+    const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
+    invalidateCatalogCache();
+  } catch { /* ok */ }
+
+  return { indexed: products.length, aliases: inserted };
 }
 
 export async function searchShopifyProductIdsByAlias(query: string, limit = 12): Promise<string[]> {

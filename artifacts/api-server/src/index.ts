@@ -94,6 +94,19 @@ warmUpDb()
       startAbandonedRecoveryScheduler();
       startCampaignQueueProcessor();
       startShopifyAutoSync(3); /* incremental Shopify product/order sync every few minutes */
+      setImmediate(async () => {
+        try {
+          const { getShopifyCatalogStats } = await import("./lib/shopifyProductKnowledge.js");
+          const { rebuildShopifyProductAliases } = await import("./lib/shopifyProductSearch.js");
+          const stats = await getShopifyCatalogStats();
+          if (stats.activeProducts > 0 && (stats.aliasRows === 0 || stats.indexedProducts < Math.floor(stats.activeProducts * 0.9))) {
+            await rebuildShopifyProductAliases();
+            logger.info({ ...stats }, "Shopify Product Knowledge index auto-rebuilt on startup");
+          }
+        } catch (err) {
+          logger.warn({ err }, "Shopify Product Knowledge startup rebuild skipped");
+        }
+      });
       autoRegisterWebhooksOnStartup(); /* auto-register all webhook topics with Shopify */
       startWaAutomationEngine(); /* IF/THEN WA automation rules every 5 min */
       startWaSendRetryProcessor(); /* retry failed WA text sends */

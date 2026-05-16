@@ -301,6 +301,8 @@ async function upsertProduct(store: any, p: any) {
   try {
     const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
     await rebuildShopifyProductAliases({ shopifyProductId: String(p.id) });
+    const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
+    invalidateCatalogCache();
   } catch { /* non-fatal */ }
 }
 
@@ -439,7 +441,9 @@ async function runIncrementalSync(store: any) {
         .where(eq(shopifyStoresTable.id, store.id));
       try {
         const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
+        const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
         await rebuildShopifyProductAliases();
+        invalidateCatalogCache();
       } catch { /* non-fatal */ }
     }
   }
