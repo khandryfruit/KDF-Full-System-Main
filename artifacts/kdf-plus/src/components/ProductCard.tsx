@@ -77,11 +77,11 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
   return (
     <>
       <Link href={`/products/${(product as any).slug || product.id}`} data-testid={`card-product-${product.id}`}>
-        <div className="group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-[transform,box-shadow] duration-300 box-border max-sm:rounded-xl max-sm:shadow-[0_2px_12px_rgba(15,23,42,0.06)] sm:rounded-3xl sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] md:shadow-md hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12 active:max-sm:scale-[0.99]">
+        <div className="kdf-product-card group relative flex h-full w-full min-w-0 cursor-pointer flex-col overflow-hidden bg-white box-border transition-[transform,box-shadow] duration-300 active:max-sm:scale-[0.99] sm:rounded-3xl sm:border sm:border-gray-100 sm:shadow-sm sm:ring-1 sm:ring-black/[0.03] md:rounded-[1.75rem] md:shadow-md hover:md:-translate-y-1 hover:md:border-[#5FA800]/30 hover:md:shadow-2xl hover:md:shadow-[#5FA800]/12">
 
           <button
             onClick={handleWish}
-            className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm sm:right-3 sm:top-3 sm:h-10 sm:w-10 md:hover:scale-110"
+            className="absolute right-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm max-sm:right-2 max-sm:top-2 sm:right-3 sm:top-3 sm:h-10 sm:w-10 md:hover:scale-110"
             data-testid={`button-wish-${product.id}`}
           >
             <Heart
@@ -91,20 +91,20 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
           </button>
 
           {lowStock && !outOfStock && (
-            <div className={`absolute left-2 z-10 sm:left-2.5 ${discount ? "top-8 sm:top-10" : "top-2 sm:top-2.5"}`}>
+            <div className={`absolute left-2.5 z-10 max-sm:left-2 ${discount ? "top-9 sm:top-10" : "top-2.5 max-sm:top-2"}`}>
               <Badge className="rounded-full border-0 bg-amber-500/95 px-1.5 py-0.5 text-[9px] font-bold text-white sm:px-2 sm:text-[10px]">
                 {stock} left
               </Badge>
             </div>
           )}
           {outOfStock && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/75 backdrop-blur-[2px] sm:rounded-3xl">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/75 backdrop-blur-[2px] max-sm:rounded-[20px] sm:rounded-3xl">
               <span className="rounded-full bg-gray-900/85 px-3 py-1.5 text-xs font-bold text-white">Out of stock</span>
             </div>
           )}
 
           {discount != null && discount > 0 && (
-            <div className="absolute left-2 top-2 z-10 sm:left-2.5 sm:top-2.5">
+            <div className="kdf-product-card__badge">
               <span
                 className={`kdf-discount-badge${hotDealBadge ? " kdf-discount-badge-hot" : ""}`}
                 aria-label={`${discount} percent off`}
@@ -114,7 +114,7 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
             </div>
           )}
 
-          <div className="relative aspect-square w-full overflow-hidden bg-white">
+          <div className="kdf-product-card__media relative aspect-square w-full bg-white">
             {(!imageUrl || imgError) && (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-50">
                 <span className="text-4xl font-black max-sm:text-3xl" style={{ color: "#5FA800", opacity: 0.2 }}>
@@ -136,7 +136,7 @@ function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
             )}
           </div>
 
-          <div className="flex flex-col gap-0.5 p-2 sm:gap-1 sm:p-3.5 md:p-5">
+          <div className="kdf-product-card__body flex flex-col gap-0.5 sm:gap-1 sm:p-3.5 md:p-5">
             {(product.weight ?? product.unit) && (
               <p className="text-[10px] font-medium text-gray-400 sm:text-[11px]">{product.weight ?? product.unit}</p>
             )}
