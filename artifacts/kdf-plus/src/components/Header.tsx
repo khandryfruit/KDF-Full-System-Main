@@ -349,13 +349,14 @@ function MobileDrawer({ open, onClose, onNavigate, user, logout, city, cities, s
             </div>
           </div>
         ) : (
-          <div className="px-5 py-3 border-b border-gray-100 flex gap-2">
+          <div className="flex gap-2 border-b border-gray-100 px-5 py-3">
             <button onClick={() => { onNavigate("/login"); onClose(); }}
-              className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition-all"
-              style={{ background: GREEN }}>Login</button>
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#5FA800]/25 bg-white py-2 text-sm font-black text-[#3d7000] shadow-sm transition-all active:scale-[0.98]">
+              <User className="h-3.5 w-3.5" /> Login
+            </button>
             <button onClick={() => { onNavigate("/register"); onClose(); }}
-              className="flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition-all"
-              style={{ borderColor: GREEN, color: GREEN }}>Register</button>
+              className="flex-1 rounded-xl py-2 text-sm font-black text-white shadow-md transition-all active:scale-[0.98]"
+              style={{ background: `linear-gradient(135deg, ${GREEN}, #3d7000)` }}>Register</button>
           </div>
         )}
 
@@ -881,13 +882,13 @@ export function Header() {
               : "0 1px 0 rgba(0,0,0,0.06)",
           }}
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-visible">
+          <div className="mx-auto max-w-7xl overflow-visible px-3.5 sm:px-5 lg:px-7 xl:px-8">
             {/* Top row */}
-            <div className={`flex items-center gap-3 lg:gap-5 transition-all duration-300 ${shrunk ? "h-[56px] lg:h-[60px]" : "h-[64px] lg:h-[76px]"}`}>
+            <div className={`flex items-center gap-2.5 transition-all duration-300 sm:gap-3 lg:gap-4 xl:gap-5 ${shrunk ? "h-[54px] lg:h-[58px]" : "h-[60px] lg:h-[70px]"}`}>
 
               {/* Mobile: Hamburger */}
               <button
-                className="lg:hidden p-2 -ml-1 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+                className="flex-shrink-0 rounded-2xl p-2 -ml-1 transition-all hover:bg-slate-100 active:scale-95 lg:hidden"
                 onClick={() => setDrawerOpen(true)}
                 aria-label="Menu"
               >
@@ -895,7 +896,7 @@ export function Header() {
               </button>
 
               {/* Logo */}
-              <Link href="/" className="flex items-center gap-2 flex-shrink-0" data-testid="link-logo">
+              <Link href="/" className="flex flex-shrink-0 items-center gap-2" data-testid="link-logo">
                 {logoSrc(siteSettings?.logoPath) ? (
                   <>
                     <img
@@ -905,19 +906,19 @@ export function Header() {
                       height={36}
                       decoding="async"
                       fetchPriority="high"
-                      className={`w-auto max-w-[9rem] sm:max-w-[11rem] object-contain flex-shrink-0 transition-all duration-300 ${shrunk ? "h-7" : "h-9"}`}
+                      className={`w-auto max-w-[7.8rem] flex-shrink-0 object-contain transition-all duration-300 sm:max-w-[10rem] lg:max-w-[11rem] ${shrunk ? "h-7" : "h-8 lg:h-9"}`}
                     />
-                    <span className={`font-black text-gray-900 hidden sm:block transition-all duration-300 ${shrunk ? "text-base" : "text-lg"}`}>
+                    <span className={`hidden font-black tracking-tight text-slate-950 transition-all duration-300 sm:block ${shrunk ? "text-base" : "text-lg"}`}>
                       {siteSettings?.siteName ?? "KDF NUTS"}
                     </span>
                   </>
                 ) : (
                   <>
-                    <div className={`rounded-xl flex items-center justify-center flex-shrink-0 font-black text-white shadow-sm transition-all duration-300 ${shrunk ? "w-7 h-7 text-xs" : "w-9 h-9 text-sm"}`}
+                    <div className={`flex flex-shrink-0 items-center justify-center rounded-2xl font-black text-white shadow-sm transition-all duration-300 ${shrunk ? "h-7 w-7 text-xs" : "h-8 w-8 text-xs lg:h-9 lg:w-9 lg:text-sm"}`}
                       style={{ background: `linear-gradient(135deg, ${GREEN} 0%, #3d7000 100%)` }}>
                       KDF
                     </div>
-                    <span className={`font-black text-gray-900 transition-all duration-300 ${shrunk ? "text-base" : "text-lg"}`}>
+                    <span className={`font-black tracking-tight text-slate-950 transition-all duration-300 ${shrunk ? "text-base" : "text-lg"}`}>
                       KDF <span style={{ color: GREEN }}>NUTS</span>
                     </span>
                   </>
@@ -925,7 +926,7 @@ export function Header() {
               </Link>
 
               {/* Search — desktop */}
-              <div ref={searchRef} className="relative mx-auto hidden w-full max-w-md flex-1 sm:flex lg:max-w-lg xl:max-w-xl">
+              <div ref={searchRef} className="relative mx-auto hidden w-full max-w-md flex-1 sm:flex lg:max-w-[34rem] xl:max-w-[38rem]">
                 <form onSubmit={handleSearch} className="w-full">
                   <div className="group relative">
                     <Search
@@ -942,8 +943,8 @@ export function Header() {
                       }}
                       onFocus={() => searchQuery.length > 0 && setShowHints(true)}
                       className={[
-                        "h-11 w-full rounded-full border border-slate-300/80 bg-white pl-10 pr-[5.5rem] text-[14px] font-medium text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none transition-[box-shadow,border-color,background-color] duration-200 md:h-11 md:pl-11 md:pr-[5.75rem] md:text-[15px]",
-                        "group-focus-within:border-[#5FA800]/50 group-focus-within:shadow-[0_0_0_3px_rgba(95,168,0,0.1),0_8px_24px_rgba(15,23,42,0.06)]",
+                        "h-10 w-full rounded-[1.25rem] border border-slate-200/90 bg-white pl-10 pr-[5.15rem] text-[13.5px] font-medium tracking-tight text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none transition-[box-shadow,border-color,background-color,transform] duration-200 md:h-10 md:pl-11 md:pr-[5.5rem] md:text-[14px] lg:h-11",
+                        "group-focus-within:border-[#5FA800]/45 group-focus-within:bg-white group-focus-within:shadow-[0_0_0_3px_rgba(95,168,0,0.09),0_12px_30px_rgba(15,23,42,0.07)]",
                         scrolled ? "bg-white/90 backdrop-blur-sm" : "",
                       ].join(" ")}
                       style={{
@@ -957,10 +958,10 @@ export function Header() {
                           showHints || searchQuery ? GREEN : undefined,
                         boxShadow:
                           showHints || searchQuery
-                            ? "0 0 0 1px rgba(95,168,0,0.12), 0 10px 28px rgba(15,23,42,0.07)"
+                              ? "0 0 0 1px rgba(95,168,0,0.12), 0 10px 28px rgba(15,23,42,0.07)"
                             : scrolled
-                              ? "0 4px 18px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)"
-                              : "0 4px 16px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.88)",
+                              ? "0 6px 18px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)"
+                              : "0 6px 18px rgba(15,23,42,0.045), inset 0 1px 0 rgba(255,255,255,0.88)",
                       }}
                       data-testid="input-search"
                     />
@@ -968,7 +969,7 @@ export function Header() {
                       <button
                         type="button"
                         onClick={() => headerCameraRef.current?.click()}
-                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-opacity duration-200 hover:opacity-90 active:opacity-100 md:h-9 md:w-9 ${headerCamLoad ? "text-green-600" : ""}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 md:h-8 md:w-8 lg:h-9 lg:w-9 ${headerCamLoad ? "text-green-600" : ""}`}
                         style={{ background: `${GREEN}14`, color: headerCamLoad ? "#16a34a" : GREEN }}
                         aria-label="Search by image"
                       >
@@ -977,7 +978,7 @@ export function Header() {
                       <button
                         type="button"
                         onClick={startHeaderVoice}
-                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-opacity duration-200 hover:opacity-90 active:opacity-100 md:h-9 md:w-9 ${headerListening ? "animate-pulse" : ""}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 md:h-8 md:w-8 lg:h-9 lg:w-9 ${headerListening ? "animate-pulse" : ""}`}
                         style={{ background: headerListening ? "#ef4444" : `${GREEN}14`, color: headerListening ? "#fff" : GREEN }}
                         aria-label="Voice search"
                       >
@@ -1057,10 +1058,10 @@ export function Header() {
               </div>
 
               {/* Right actions */}
-              <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:ml-0 md:gap-2">
+              <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:ml-0 sm:gap-1.5 lg:gap-2">
 
                 {/* Mobile: search icon */}
-                <button className="sm:hidden p-2.5 rounded-xl hover:bg-gray-100 transition-colors"
+                <button className="rounded-2xl p-2.5 transition-all hover:bg-slate-100 active:scale-95 sm:hidden"
                   onClick={() => setSearchOverlay(true)} aria-label="Search">
                   <Search className="w-5 h-5 text-gray-700" />
                 </button>
@@ -1069,18 +1070,18 @@ export function Header() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="hidden items-center gap-2 rounded-full border border-slate-200/90 bg-white/90 px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-[#5FA800]/35 hover:shadow-md md:flex md:px-4 md:py-2.5"
+                      className="hidden h-10 items-center gap-2 rounded-[1.1rem] border border-slate-200/90 bg-white/90 px-3 text-[13px] font-bold tracking-tight text-slate-700 shadow-[0_6px_16px_rgba(15,23,42,0.045)] transition-all hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:bg-white hover:shadow-[0_10px_24px_rgba(15,23,42,0.075)] active:translate-y-0 md:flex lg:h-10 lg:px-3.5"
                       data-testid="button-location"
                     >
                       <MapPin className="h-4 w-4 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
                       <span className="max-w-[100px] truncate lg:max-w-[140px]">{city}</span>
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48 max-h-72 overflow-y-auto">
+                  <DropdownMenuContent align="start" className="max-h-72 w-52 overflow-y-auto rounded-2xl border-slate-200/90 p-1 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
                     {cities.map(c => (
                       <DropdownMenuItem key={c} onClick={() => setCity(c)}
-                        className={c === city ? "font-semibold" : ""} style={c === city ? { color: GREEN } : {}}>
+                        className={`rounded-xl text-sm ${c === city ? "font-bold" : ""}`} style={c === city ? { color: GREEN } : {}}>
                         {c === city && <span className="mr-1.5">✓</span>}{c}
                       </DropdownMenuItem>
                     ))}
@@ -1089,25 +1090,25 @@ export function Header() {
 
                 {/* Wishlist — desktop */}
                 <Link href="/account?tab=wishlist" className="hidden sm:block">
-                  <button className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-11 md:w-11" aria-label="Wishlist">
-                    <Heart className="h-[1.15rem] w-[1.15rem] text-slate-500 transition-all group-hover:scale-110 group-hover:text-red-500 md:h-5 md:w-5" strokeWidth={2} />
+                  <button className="group relative flex h-10 w-10 items-center justify-center rounded-[1.1rem] border border-transparent bg-white/60 transition-all hover:-translate-y-0.5 hover:border-red-100 hover:bg-red-50/70 hover:shadow-[0_10px_24px_rgba(239,68,68,0.10)] active:translate-y-0 md:h-10 md:w-10" aria-label="Wishlist">
+                    <Heart className="h-[1.1rem] w-[1.1rem] text-slate-500 transition-all group-hover:scale-110 group-hover:text-red-500 md:h-[1.18rem] md:w-[1.18rem]" strokeWidth={2.1} />
                   </button>
                 </Link>
 
                 {/* Cart */}
                 <button
-                  className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent transition-all hover:border-slate-200 hover:bg-slate-50 md:h-11 md:w-11"
+                  className="group relative flex h-10 w-10 items-center justify-center rounded-[1.1rem] border border-transparent bg-white/70 transition-all hover:-translate-y-0.5 hover:border-[#5FA800]/20 hover:bg-[#5FA800]/[0.07] hover:shadow-[0_10px_24px_rgba(95,168,0,0.12)] active:translate-y-0 md:h-10 md:w-10"
                   onClick={() => setMiniCartOpen(true)}
                   aria-label="Open cart"
                   data-testid="link-cart"
                 >
                   <ShoppingBag
-                    className={`h-[1.15rem] w-[1.15rem] text-slate-800 transition-transform duration-200 md:h-5 md:w-5 ${cartBounce ? "scale-110" : "group-hover:scale-105"}`}
-                    strokeWidth={2}
+                    className={`h-[1.15rem] w-[1.15rem] text-slate-800 transition-transform duration-200 md:h-[1.18rem] md:w-[1.18rem] ${cartBounce ? "scale-110" : "group-hover:scale-105"}`}
+                    strokeWidth={2.15}
                   />
                   {totalItems > 0 && (
                     <span
-                      className={`absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px] font-black text-white shadow-md transition-transform duration-200 md:h-6 md:min-w-[1.5rem] md:text-xs ${cartBounce ? "scale-110" : ""}`}
+                      className={`absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-white px-1 text-[10px] font-black text-white shadow-md transition-transform duration-200 md:h-5 md:min-w-[1.25rem] ${cartBounce ? "scale-110" : ""}`}
                       style={{ background: ORANGE }}
                       data-testid="badge-cart-count"
                     >
@@ -1120,10 +1121,10 @@ export function Header() {
                 {user ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="hidden items-center gap-2 rounded-full border border-slate-200/80 bg-white px-2 py-1.5 shadow-sm transition-all hover:shadow md:flex" data-testid="button-user-menu">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white shadow-inner ring-2 ring-white/30 md:h-10 md:w-10"
+                      <button className="hidden h-10 items-center gap-1.5 rounded-[1.1rem] border border-slate-200/80 bg-white px-1.5 pr-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] active:translate-y-0 md:flex" data-testid="button-user-menu">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold text-white shadow-inner ring-2 ring-white/40"
                           style={{ background: `linear-gradient(145deg, ${GREEN} 0%, #3d7000 100%)` }}>{user.name.charAt(0).toUpperCase()}</div>
-                        <ChevronDown className="h-4 w-4 text-slate-400" />
+                        <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52">
@@ -1142,13 +1143,15 @@ export function Header() {
                 ) : (
                   <>
                     <Link href="/login" className="hidden sm:block" data-testid="link-login">
-                      <button className="rounded-full px-6 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(95,168,0,0.35)] transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(95,168,0,0.45)] active:translate-y-0 md:px-8 md:py-3 md:text-[15px]"
-                        style={{ background: `linear-gradient(135deg, ${GREEN} 0%, #3d7000 55%, #2d5a00 100%)` }}>
-                        Login
+                      <button
+                        className="group inline-flex h-10 items-center justify-center gap-1.5 rounded-[1.1rem] border border-[#5FA800]/25 bg-white px-3.5 text-[13px] font-black tracking-tight text-[#356900] shadow-[0_8px_22px_rgba(95,168,0,0.12)] transition-all hover:-translate-y-0.5 hover:border-[#5FA800]/45 hover:bg-[#5FA800] hover:text-white hover:shadow-[0_14px_30px_rgba(95,168,0,0.22)] active:translate-y-0 lg:px-4"
+                      >
+                        <User className="h-3.5 w-3.5 transition-transform group-hover:scale-110" strokeWidth={2.3} />
+                        <span>Login</span>
                       </button>
                     </Link>
                     <Link href="/login" className="sm:hidden">
-                      <button className="p-2.5 rounded-xl hover:bg-gray-100 transition-colors">
+                      <button className="rounded-2xl p-2.5 transition-all hover:bg-slate-100 active:scale-95">
                         <User className="w-5 h-5 text-gray-700" />
                       </button>
                     </Link>
@@ -1160,7 +1163,7 @@ export function Header() {
             {/* ── Desktop Nav + Trust strip ── */}
             <div
               ref={desktopNavBandRef}
-              className={`hidden sm:flex items-center justify-between gap-2 overflow-visible border-t border-slate-200/80 bg-gradient-to-r from-white via-slate-50/40 to-white transition-all duration-300 ${shrunk ? "py-1.5" : "py-2.5"} -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8`}
+              className={`hidden items-center justify-between gap-2 overflow-visible border-t border-slate-200/70 bg-gradient-to-r from-white via-slate-50/35 to-white transition-all duration-300 sm:flex ${shrunk ? "py-1.5" : "py-2"} -mx-3.5 px-3.5 sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7 xl:-mx-8 xl:px-8`}
             >
               <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1 overflow-visible md:gap-1.5">
                 <Link href="/products">
@@ -1261,17 +1264,17 @@ export function Header() {
             </div>
 
             {/* ── Mobile search row (premium glass strip) ── */}
-            <div className="sm:hidden pb-2.5">
+            <div className="pb-2.5 sm:hidden">
               <div
-                className="flex w-full items-center gap-2 rounded-2xl border border-white/70 px-4 py-3 text-sm text-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl"
+                className="flex w-full items-center gap-2 rounded-2xl border border-white/70 px-3.5 py-2.5 text-sm text-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl"
                 style={{
                   background: "linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 50%, rgba(241,245,249,0.9) 100%)",
                   boxShadow: "0 4px 24px rgba(15,23,42,0.06), 0 0 0 1px rgba(95,168,0,0.08)",
                 }}
               >
-                <button type="button" className="flex flex-1 items-center gap-2.5 text-left min-h-[44px]" onClick={() => setSearchOverlay(true)}>
+                <button type="button" className="flex min-h-[40px] flex-1 items-center gap-2.5 text-left" onClick={() => setSearchOverlay(true)}>
                   <Search className="h-5 w-5 shrink-0 text-[#5FA800]" strokeWidth={2.25} />
-                  <span className="flex-1 truncate font-medium text-gray-500">
+                  <span className="flex-1 truncate text-[13px] font-semibold text-gray-500">
                     {headerListening ? "Listening…" : headerCamLoad ? "Analyzing…" : "Search mixed nuts, dry fruits…"}
                   </span>
                 </button>
