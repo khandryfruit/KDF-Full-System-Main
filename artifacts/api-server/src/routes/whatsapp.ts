@@ -971,7 +971,7 @@ function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" 
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   const looksProduct = mode === "product" || /price|rate|product|almond|badam|pista|kaju|akhrot|bulk|kg|order|buy|catalog|available|need|want/.test(lower);
   const looksComplex = mode === "complex" || words > 18 || /bulk|20kg|complaint|refund|return|urgent|problem|tracking|status|address|change/.test(lower);
-  const [min, max] = looksComplex ? [3000, 6000] : looksProduct ? [2000, 4500] : [2000, 3500];
+  const [min, max] = looksComplex ? [4000, 7000] : looksProduct ? [5000, 8000] : [2000, 3500];
   const jitter = Math.floor(Math.random() * (max - min + 1));
   return min + jitter;
 }
@@ -4544,9 +4544,9 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
     const query = String(req.body?.query ?? "").trim();
     if (!query) return res.status(400).json({ error: "query is required" });
     const limit = Math.min(25, Math.max(1, Number(req.body?.limit ?? 8)));
-    const { searchShopifyCatalog, formatShopifyCatalogForOpenAI, formatShopifyCatalogWhatsAppReply, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
+    const { searchShopifyCatalogWithDebug, formatShopifyCatalogForOpenAI, formatShopifyCatalogWhatsAppReply, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
     const { productRootsInMessage } = await import("../lib/waProductBrain.js");
-    const products = await searchShopifyCatalog(query, limit);
+    const { products, debug } = await searchShopifyCatalogWithDebug(query, limit);
     const totalMatches = await countShopifyCatalogMatches(query);
     const roman = /[a-z]/i.test(query) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(query);
     const roots = productRootsInMessage(query);
@@ -4554,6 +4554,7 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
       query,
       count: products.length,
       totalMatches,
+      debug,
       matchedAliasRoots: roots,
       whatsappReplyPreview: formatShopifyCatalogWhatsAppReply(products.slice(0, 1), roman),
       topMatch: products[0]

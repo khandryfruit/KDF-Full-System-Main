@@ -11,6 +11,8 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   pista: ["pistachio", "pistachios", "pistay", "پستہ", "پستے"],
   pistachio: ["pista", "pistachios", "پستہ"],
   pistachios: ["pista", "pistachio", "پستہ"],
+  پستہ: ["pista", "pistachio", "pistachios", "پستے"],
+  پستے: ["pista", "pistachio", "پستہ"],
   kaju: ["cashew", "cashews", "کاجو"],
   cashew: ["kaju", "cashews", "کاجو"],
   cashews: ["kaju", "cashew", "کاجو"],
@@ -23,6 +25,7 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   kaghazi: ["kaghzi", "paper shell", "soft shell"],
   khajoor: ["dates", "date", "کھجور"],
   dates: ["khajoor", "کھجور"],
+  کھجور: ["khajoor", "dates", "date"],
   anjeer: ["fig", "figs", "انجیر"],
   kishmish: ["raisin", "raisins", "کشمش"],
   munakka: ["raisin", "raisins"],
@@ -34,8 +37,9 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
 
 const PRODUCT_ROOT_WORDS = new Set([
   ...Object.keys(WA_PRODUCT_ALIASES),
-  "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin", "raisins", "munakka", "makhana",
+  "khajoor", "dates", "date", "کھجور", "anjeer", "fig", "figs", "kishmish", "raisin", "raisins", "munakka", "makhana",
   "peanut", "peanuts", "chilgoza", "dry fruit", "dry fruits",
+  "پستہ", "پستے", "بادام", "کاجو", "اخروٹ",
 ]);
 
 function normalizeAliasText(value: string): string {
@@ -169,11 +173,17 @@ export async function searchShopifyProductIdsByAlias(query: string, limit = 12):
 
   const ids = new Set<string>();
   try {
+    const aliasConds = terms.flatMap((term) => [
+      eq(shopifyProductAliasesTable.alias, term),
+      ilike(shopifyProductAliasesTable.alias, `${term} %`),
+      ilike(shopifyProductAliasesTable.alias, `% ${term}`),
+      ilike(shopifyProductAliasesTable.alias, `% ${term} %`),
+    ]);
     const aliasRows = await db
       .select({ shopifyProductId: shopifyProductAliasesTable.shopifyProductId })
       .from(shopifyProductAliasesTable)
-      .where(or(...terms.map((term) => ilike(shopifyProductAliasesTable.alias, `%${term}%`))))
-      .limit(limit * 3);
+      .where(or(...aliasConds))
+      .limit(limit * 4);
     for (const row of aliasRows) ids.add(row.shopifyProductId);
   } catch {
     /* table may not exist yet */
@@ -220,14 +230,35 @@ export async function fetchShopifyProductsByIds(productIds: string[]) {
     .catch(() => []);
 }
 
+function addRootKey(roots: Set<string>, key: string): void {
+  const k = normalizeAliasText(key);
+  if (!k || k.length < 2) return;
+  roots.add(k);
+  for (const alias of WA_PRODUCT_ALIASES[k] ?? []) {
+    const a = normalizeAliasText(alias);
+    if (a.length >= 2) roots.add(a);
+  }
+}
+
 export function productRootTermsFromQuery(query: string): string[] {
   const q = normalizeAliasText(query);
   const roots = new Set<string>();
-  for (const token of q.split(/\s+/)) {
-    if (PRODUCT_ROOT_WORDS.has(token)) {
-      roots.add(token);
-      for (const alias of WA_PRODUCT_ALIASES[token] ?? []) roots.add(normalizeAliasText(alias));
+
+  for (const token of q.split(/\s+/).filter(Boolean)) {
+    if (PRODUCT_ROOT_WORDS.has(token)) addRootKey(roots, token);
+  }
+
+  if (PRODUCT_ROOT_WORDS.has(q)) addRootKey(roots, q);
+
+  for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
+    if (key.length >= 3 && q.includes(key)) addRootKey(roots, key);
+  }
+
+  for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
+    for (const token of q.split(/\s+/)) {
+      if (token.length >= 3 && key.includes(token)) addRootKey(roots, key);
     }
   }
+
   return [...roots];
 }

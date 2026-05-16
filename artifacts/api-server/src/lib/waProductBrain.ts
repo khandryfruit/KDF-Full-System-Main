@@ -89,7 +89,7 @@ export function shouldUseProductDatabaseFirst(intent: string, text: string): boo
   return false;
 }
 
-const MIN_PRODUCT_SCORE = 22;
+const MIN_PRODUCT_SCORE = 35;
 
 export async function tryWaProductCatalogReply(opts: {
   textBody: string;
@@ -103,21 +103,13 @@ export async function tryWaProductCatalogReply(opts: {
   const roots = productRootsInMessage(query);
   let products = await searchShopifyCatalog(query, 6);
 
-  if ((!products.length || (products[0]?.score ?? 0) < MIN_PRODUCT_SCORE) && roots.length > 0) {
-    const alt = await searchShopifyCatalog(roots[0]!, 6);
-    if ((alt[0]?.score ?? 0) > (products[0]?.score ?? 0)) products = alt;
+  if (!products.length && roots.length > 0) {
+    products = await searchShopifyCatalog(roots[0]!, 6);
   }
 
-  if (roots.length > 0) {
-    const filtered = products.filter((p) => {
-      const title = p.name.toLowerCase();
-      return roots.some((r) => title.includes(r) || r.length >= 4 && title.includes(r.slice(0, 4)));
-    });
-    if (filtered.length) products = filtered;
-  }
-
+  const minScore = roots.length > 0 ? MIN_PRODUCT_SCORE : 20;
   const top = products[0];
-  if (!top || (top.score ?? 0) < MIN_PRODUCT_SCORE) return null;
+  if (!top || (top.score ?? 0) < minScore) return null;
 
   const roman = isRomanUrduWa(opts.textBody);
   const reply = formatShopifyCatalogWhatsAppReply(products.slice(0, 3), roman);
@@ -144,17 +136,15 @@ export function buildWaProductSearchQuery(textBody: string, productQuery?: strin
 export function buildHumanWelcomeReply(textBody: string): string {
   const roman = isRomanUrduWa(textBody);
   if (roman) {
-    return `Hello 😊 Welcome to Khan Dry Fruit.
+    return `Assalam o Alaikum 😊
+Welcome to Khan Dry Fruits.
 
-I am here to help you.
-
-You can ask me about our products, prices, orders, or delivery.`;
+I can help you with products, prices, orders, or delivery.`;
   }
-  return `جی 😊 خوش آمدید خان ڈرائی فروٹس میں۔
+  return `اسلام علیکم 😊
+خوش آمدید Khan Dry Fruits میں۔
 
-میں آپ کی مدد کے لیے موجود ہوں۔
-
-آپ پروڈکٹ، قیمت، آرڈر یا ڈلیوری کے بارے میں پوچھ سکتے ہیں۔`;
+میں پروڈکٹس، قیمت، آرڈر، یا ڈیلیوری کے بارے میں مدد کر سکتا ہوں۔`;
 }
 
 /** Never send the old robotic fallback */

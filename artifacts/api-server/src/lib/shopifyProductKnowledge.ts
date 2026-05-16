@@ -8,8 +8,15 @@ import { eq, desc, sql } from "drizzle-orm";
 import {
   expandWaProductSearchTerms,
   productRootTermsFromQuery,
+  searchShopifyProductIdsByAlias,
+  fetchShopifyProductsByIds,
   WA_PRODUCT_ALIASES,
 } from "./shopifyProductSearch.js";
+import {
+  productBelongsToFamilies,
+  resolveQueryFamilies,
+  expandFamilyTerms,
+} from "./catalogProductMatcher.js";
 
 const STORE_URL = "https://khanbabadryfruits.com";
 
@@ -144,39 +151,57 @@ const ROOT_TITLE_BLOCK: Record<string, RegExp> = {
   walnut: /\b(sunflower|sooraj|almond|badam|pista|cashew|kaju)\b/i,
 };
 
-function scoreProduct(query: string, title: string, tags?: unknown): number {
+function scoreProduct(
+  query: string,
+  title: string,
+  tags?: unknown,
+  description?: unknown,
+  families?: string[],
+): number {
+  const familyList = families ?? resolveQueryFamilies(query);
+  const descText = description ? String(description).replace(/<[^>]+>/g, " ") : "";
+
+  if (familyList.length > 0 && !productBelongsToFamilies(title, tags, descText, familyList)) {
+    return 0;
+  }
+
   const terms = expandAllSearchTerms(query);
+  const familyTerms = expandFamilyTerms(familyList);
   const q = normalizeCatalogQuery(query) || normalizeText(query);
   const n = normalizeText(title);
   const tagText = normalizeText(Array.isArray(tags) ? tags.join(" ") : tags);
-  const roots = productRootsFromQuery(query);
+  const descNorm = normalizeText(descText);
 
-  if (roots.length > 0 && isBundleName(title) && !queryWantsBundle(query)) return 0;
-  if (roots.length > 0 && /\b(oil|butter|powder|paste)\b/.test(n) && !/\b(oil|butter|powder|paste)\b/.test(normalizeText(query))) {
+  if (familyList.length > 0 && isBundleName(title) && !queryWantsBundle(query)) return 0;
+  if (familyList.length > 0 && /\b(oil|butter|powder|paste)\b/.test(n) && !/\b(oil|butter|powder|paste)\b/.test(normalizeText(query))) {
     return 0;
-  }
-  for (const root of roots) {
-    const block = ROOT_TITLE_BLOCK[root];
-    if (block && block.test(n)) return 0;
   }
 
   let score = 0;
   if (n === q) score += 120;
-  if (q && n.includes(q)) score += 80;
-  for (const root of roots) {
-    if (n.split(/\s+/).some((w) => w === root || w.includes(root))) score += 50;
-    else if (n.includes(root)) score += 30;
-    if (tagText.includes(root)) score += 15;
+  if (q && q.length >= 3 && n.includes(q)) score += 80;
+
+  for (const root of familyTerms) {
+    if (root.length < 3) continue;
+    if (n.includes(root)) score += 55;
+    if (tagText.includes(root)) score += 20;
+    if (descNorm.includes(root)) score += 10;
   }
+
   for (const term of terms) {
-    if (term.length < 2) continue;
+    if (term.length < 3) continue;
     const pos = n.indexOf(term);
-    if (pos === 0) score += 35;
-    else if (pos > 0 && pos <= 30) score += 22;
-    else if (pos > 30) score += 6;
-    if (tagText.includes(term)) score += 8;
+    if (pos === 0) score += 30;
+    else if (pos > 0 && pos <= 35) score += 18;
+    if (tagText.includes(term)) score += 10;
   }
-  if (roots.length > 0 && !roots.some((r) => n.includes(r) || tagText.includes(r))) return 0;
+
+  if (familyList.length > 0) {
+    const hasFamilyHit = familyTerms.some((t) => t.length >= 3 && (n.includes(t) || tagText.includes(t)));
+    if (!hasFamilyHit) return 0;
+    score += 25;
+  }
+
   return score;
 }
 
@@ -249,8 +274,8 @@ function formatVariants(variants: unknown, query: string): {
   return { label: lines.join("\n"), lines, cheapestPrice: cheapest, options };
 }
 
-function mapRowToCatalogProduct(row: any, query: string): ShopifyCatalogProduct | null {
-  const matchScore = scoreProduct(query, row.title, row.tags);
+function mapRowToCatalogProduct(row: any, query: string, families: string[]): ShopifyCatalogProduct | null {
+  const matchScore = scoreProduct(query, row.title, row.tags, row.description, families);
   if (matchScore <= 0) return null;
   const variants = formatVariants(row.variants, query);
   const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(row.price);
@@ -280,13 +305,34 @@ function mapRowToCatalogProduct(row: any, query: string): ShopifyCatalogProduct 
   };
 }
 
-/** Score entire active catalog — reliable for 300+ products */
+/** Score entire active catalog — alias DB first, strict family gate */
 async function scoreEntireCatalog(query: string): Promise<ShopifyCatalogProduct[]> {
-  const rows = await loadAllActiveCatalogRows();
-  return rows
-    .map((row) => mapRowToCatalogProduct(row, query))
-    .filter((p): p is ShopifyCatalogProduct => Boolean(p))
+  const q = String(query ?? "").trim();
+  if (!q) return [];
+
+  const families = resolveQueryFamilies(q);
+  const minScore = families.length > 0 ? 35 : 20;
+
+  const aliasIds = await searchShopifyProductIdsByAlias(q, 80);
+  const aliasRows = aliasIds.length ? await fetchShopifyProductsByIds(aliasIds) : [];
+
+  const allRows = await loadAllActiveCatalogRows();
+  const rowById = new Map<string, any>();
+  for (const row of allRows) rowById.set(row.shopifyProductId, row);
+  for (const row of aliasRows) rowById.set(row.shopifyProductId, row);
+
+  const candidates = families.length > 0
+    ? [...rowById.values()].filter((row) =>
+        productBelongsToFamilies(row.title, row.tags, row.description, families),
+      )
+    : [...rowById.values()];
+
+  const scored = candidates
+    .map((row) => mapRowToCatalogProduct(row, q, families))
+    .filter((p): p is ShopifyCatalogProduct => p != null && (p.score ?? 0) >= minScore)
     .sort((a, b) => b.score - a.score);
+
+  return scored;
 }
 
 /**
@@ -297,6 +343,40 @@ export async function searchShopifyCatalog(query: string, limit = 6): Promise<Sh
   if (!q) return [];
   const scored = await scoreEntireCatalog(q);
   return scored.slice(0, limit);
+}
+
+export type CatalogSearchDebug = {
+  query: string;
+  families: string[];
+  familyTerms: string[];
+  aliasHits: number;
+  matchCount: number;
+  topMatches: Array<{ name: string; score: number; shopifyProductId: string }>;
+};
+
+export async function searchShopifyCatalogWithDebug(query: string, limit = 6): Promise<{
+  products: ShopifyCatalogProduct[];
+  debug: CatalogSearchDebug;
+}> {
+  const q = String(query ?? "").trim();
+  const families = resolveQueryFamilies(q);
+  const aliasIds = await searchShopifyProductIdsByAlias(q, 80);
+  const products = await searchShopifyCatalog(q, limit);
+  return {
+    products,
+    debug: {
+      query: q,
+      families,
+      familyTerms: expandFamilyTerms(families),
+      aliasHits: aliasIds.length,
+      matchCount: products.length,
+      topMatches: products.map((p) => ({
+        name: p.name,
+        score: p.score,
+        shopifyProductId: p.shopifyProductId,
+      })),
+    },
+  };
 }
 
 /** Count all matches (admin index health / pagination) */
@@ -322,27 +402,52 @@ export function formatShopifyCatalogForOpenAI(products: ShopifyCatalogProduct[])
 export function formatShopifyCatalogWhatsAppReply(products: ShopifyCatalogProduct[], roman = true): string {
   if (!products.length) {
     return roman
-      ? "Ji 😊 is product ka official catalog data abhi nahi mila. Please exact naam ya weight bhej dein (jaise badam 500g)."
-      : "جی 😊 اس product کا official catalog data ابھی نہیں ملا۔ براہ کرم exact نام یا weight بھیج دیں (جیسے badam 500g)۔";
+      ? "Ji 😊 exact match nahi mila. Please product naam bhej dein — jaise: badam, pista, kaju, akhrot (ya weight: 500g, 1kg)."
+      : "جی 😊 exact match نہیں ملا۔ براہ کرم product نام بھیج دیں — جیسے: badam، pista، kaju، akhrot (یا weight: 500g، 1kg)۔";
   }
   const p = products[0];
   const lines = p.variantOptions.length
     ? p.variantOptions.map((v, i) => {
         const label = v.title.replace(/^default title$/i, "Standard");
-        return `${i + 1}️⃣ ${label} — ${formatRupees(v.price)}${(v.inventoryQuantity ?? 0) > 0 ? "" : " (out of stock)"}`;
+        const sku = v.sku ? ` · SKU ${v.sku}` : "";
+        return `${i + 1}️⃣ ${label} — ${formatRupees(v.price)}${(v.inventoryQuantity ?? 0) > 0 ? "" : " (out of stock)"}${sku}`;
       })
     : [`1️⃣ ${p.price}`];
 
-  const familyHint = products.length > 1
-    ? (roman
-      ? `\n\nOther matching options:\n${products.slice(1, 3).map((x) => `• ${x.name}`).join("\n")}`
-      : `\n\nدیگر matching options:\n${products.slice(1, 3).map((x) => `• ${x.name}`).join("\n")}`)
+  const altLines = products.length > 1
+    ? products.slice(1, 3).map((x, i) => `${i + 2}. ${x.name}`).join("\n")
     : "";
 
   if (roman) {
-    return `Ji 😊 hamare paas yeh options available hain:\n\n*${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}${familyHint}\n\nKaunsa size chahiye? Number reply kar dein (1, 2, 3).\nMain order mein madad kar sakta hoon 😊`;
+    return `🥜 *${p.name}*
+
+Available options:
+
+${lines.join("\n")}
+
+Stock: ${p.inStock ? "Available ✅" : "Out of stock ❌"}
+${p.productUrl ? `\n🔗 ${p.productUrl}` : ""}
+
+Delivery:
+• Lahore: Same Day
+• Pakistan: Nationwide Shipping
+
+${altLines ? `Also available:\n${altLines}\n\n` : ""}Reply *1*, *2*, or *3* to select size — phir main order mein madad karunga 😊`;
   }
-  return `جی 😊 ہمارے پاس یہ options دستیاب ہیں:\n\n*${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Limited ❌"}${familyHint}\n\nکون سا سائز چاہیے؟ نمبر reply کر دیں (1، 2، 3)۔\nمیں آرڈر میں مدد کر سکتا ہوں 😊`;
+  return `🥜 *${p.name}*
+
+Available options:
+
+${lines.join("\n")}
+
+Stock: ${p.inStock ? "Available ✅" : "Out of stock ❌"}
+${p.productUrl ? `\n🔗 ${p.productUrl}` : ""}
+
+Delivery:
+• Lahore: Same Day
+• Pakistan: Nationwide Shipping
+
+${altLines ? `دیگر options:\n${altLines}\n\n` : ""}سائز کے لیے *1*، *2*، یا *3* reply کریں — پھر میں order میں مدد کروں گا 😊`;
 }
 
 export function toWebsiteChatProductCards(
