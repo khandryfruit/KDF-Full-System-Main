@@ -675,6 +675,23 @@ export default function BannersPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
 
   function openHeroAdd() { setFormData({ ...EMPTY_FORM }); setHeroEditId(null); setHeroOpen(true); }
+  function openAiHeroAdd() {
+    setFormData({
+      ...EMPTY_FORM,
+      aiMode: true,
+      aiAutoUpdate: true,
+      aiCampaign: "healthy_lifestyle",
+      title: "AI Smart Seasonal Picks",
+      subtitle: "Generate safe seasonal homepage copy and matched products.",
+      label: "AI Smart Pick",
+      cta: "Shop Now",
+      linkUrl: "/products",
+      targetType: "page",
+      platform: "website",
+    });
+    setHeroEditId(null);
+    setHeroOpen(true);
+  }
   function openHeroEdit(banner: any) {
     setFormData({
       title: banner.title ?? "",
@@ -1138,12 +1155,17 @@ export default function BannersPage() {
           {activeTab === "hero" && (
           <Dialog open={heroOpen} onOpenChange={setHeroOpen}>
             <DialogTrigger asChild>
-              <Button onClick={openHeroAdd}><Plus className="w-4 h-4 mr-2" /> Add Hero Banner</Button>
+              <Button onClick={openHeroAdd} variant="outline"><Plus className="w-4 h-4 mr-2" /> Add Hero Banner</Button>
             </DialogTrigger>
+            <Button onClick={openAiHeroAdd} className="bg-emerald-700 hover:bg-emerald-800 text-white">
+              <Sparkles className="w-4 h-4 mr-2" /> Add AI Smart Banner
+            </Button>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{heroEditId ? "Edit Hero Banner" : "Add Hero Banner"}</DialogTitle>
-                <p className="text-xs text-muted-foreground mt-1">Desktop: <strong>1200×400px</strong> · Mobile: <strong>600×300px</strong></p>
+                <DialogTitle>{heroEditId ? "Edit Hero Banner" : formData.aiMode ? "Add AI Smart Banner" : "Add Hero Banner"}</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formData.aiMode ? "AI banners can run without an uploaded image and will generate safe seasonal copy." : <>Desktop: <strong>1200×400px</strong> · Mobile: <strong>600×300px</strong></>}
+                </p>
               </DialogHeader>
               <form onSubmit={handleHeroSubmit} className="space-y-5 py-2">
                 <BannerImageUploader value={formData.imageUrl} onChange={(url) => setFormData({ ...formData, imageUrl: url })} label="🖥️ Desktop Banner Image" recommendedW={1200} recommendedH={400} aspectRatio="3/1" />
@@ -1545,7 +1567,7 @@ export default function BannersPage() {
           onClick={() => setActiveTab("hero")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "hero" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
         >
-          🖼️ Hero Banners
+          🖼️ Hero / AI Banners
           <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">{heroBanners.length}</Badge>
         </button>
         <button
@@ -1629,7 +1651,16 @@ export default function BannersPage() {
                 : (
                   <TableRow>
                     <TableCell colSpan={7} className="h-28 text-center text-muted-foreground text-sm">
-                      <div className="flex flex-col items-center gap-2"><ImageOff className="w-8 h-8 opacity-20" />No hero banners yet. Click "Add Hero Banner" to create one.</div>
+                      <div className="flex flex-col items-center gap-3">
+                        <Sparkles className="w-8 h-8 text-emerald-600/40" />
+                        <div>
+                          <p className="font-semibold text-foreground">No hero or AI banners yet.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Click <strong>Add AI Smart Banner</strong> to create seasonal AI copy and matched products.</p>
+                        </div>
+                        <Button size="sm" onClick={openAiHeroAdd} className="bg-emerald-700 hover:bg-emerald-800 text-white">
+                          <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Add AI Smart Banner
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
