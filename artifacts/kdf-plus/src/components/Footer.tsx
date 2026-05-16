@@ -315,14 +315,14 @@ function ScrollToTop() {
 function MoodCollectionSlider() {
   const items = [...MOOD_COLLECTIONS, ...MOOD_COLLECTIONS];
   return (
-    <div className="mb-5 overflow-hidden rounded-[1rem] border border-white/[0.07] bg-white/[0.028] px-2.5 py-3 shadow-[0_14px_46px_-34px_rgba(95,168,0,0.48)] backdrop-blur-md ring-1 ring-white/[0.035] sm:mb-8 sm:rounded-[1.4rem] sm:px-4 sm:py-4 sm:backdrop-blur-xl">
-      <div className="mb-2.5 flex flex-col gap-1 sm:mb-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-4 overflow-hidden rounded-[0.9rem] border border-white/[0.06] bg-white/[0.024] px-2 py-2.5 shadow-[0_10px_34px_-28px_rgba(95,168,0,0.42)] backdrop-blur-sm ring-1 ring-white/[0.03] sm:mb-8 sm:rounded-[1.4rem] sm:px-4 sm:py-4 sm:backdrop-blur-xl">
+      <div className="mb-2 flex flex-col gap-0.5 sm:mb-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="inline-flex items-center gap-1.5 rounded-full border border-orange-400/20 bg-orange-400/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-orange-100 sm:gap-2 sm:px-3 sm:py-1 sm:text-[10px]">
+          <p className="inline-flex items-center gap-1 rounded-full border border-orange-400/20 bg-orange-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-orange-100 sm:gap-2 sm:px-3 sm:py-1 sm:text-[10px]">
             <Sparkles className="h-3 w-3 text-orange-300" aria-hidden /> Most popular collections
           </p>
-          <h3 className="mt-1.5 text-lg font-black tracking-tight text-white sm:mt-2 sm:text-2xl">Shop by Mood</h3>
-          <p className="mt-0.5 max-w-[18rem] text-[11px] leading-snug text-slate-500 sm:mt-1 sm:max-w-none sm:text-sm">Premium categories curated for every lifestyle</p>
+          <h3 className="mt-1 text-base font-black tracking-tight text-white sm:mt-2 sm:text-2xl">Shop by Mood</h3>
+          <p className="mt-0.5 max-w-[16rem] text-[10px] leading-snug text-slate-500 sm:mt-1 sm:max-w-none sm:text-sm">Premium categories curated for every lifestyle</p>
         </div>
         <Link href="/categories" className="hidden items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#9fe870] transition-colors hover:text-white sm:inline-flex">
           Explore collections <ArrowRight className="h-3.5 w-3.5" />
@@ -331,22 +331,22 @@ function MoodCollectionSlider() {
       <div className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-[#08111b] to-transparent sm:w-10" aria-hidden />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-[#08111b] to-transparent sm:w-10" aria-hidden />
-        <div className="kdf-mood-track flex w-max gap-2 overflow-visible py-0.5 sm:gap-3 sm:py-1">
+        <div className="kdf-mood-track flex w-max gap-1.5 overflow-visible py-0.5 sm:gap-3 sm:py-1">
           {items.map((item, index) => (
             <Link
               key={`${item.title}-${index}`}
               href={item.href}
-              className="group flex min-w-[132px] max-w-[150px] items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.045] px-2.5 py-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] backdrop-blur-sm transition-all duration-200 active:scale-[0.98] hover:border-[#5FA800]/30 hover:bg-white/[0.075] sm:min-w-[180px] sm:max-w-[220px] sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md sm:hover:-translate-y-1 sm:hover:scale-[1.03] sm:hover:shadow-[0_18px_45px_-26px_rgba(95,168,0,0.75)] motion-reduce:transition-none"
+              className="group flex min-w-[106px] max-w-[118px] items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2 py-1.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 active:scale-[0.98] hover:border-[#5FA800]/30 hover:bg-white/[0.07] sm:min-w-[180px] sm:max-w-[220px] sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md sm:hover:-translate-y-1 sm:hover:scale-[1.03] sm:hover:shadow-[0_18px_45px_-26px_rgba(95,168,0,0.75)] motion-reduce:transition-none"
               aria-label={`Shop ${item.title}`}
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-base ring-1 ring-white/[0.07] transition-transform group-hover:scale-105 sm:h-11 sm:w-11 sm:rounded-xl sm:text-xl">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.065] text-sm ring-1 ring-white/[0.06] transition-transform group-hover:scale-105 sm:h-11 sm:w-11 sm:rounded-xl sm:text-xl">
                 {item.emoji}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-black text-white sm:text-sm">{item.title}</span>
-                <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500 sm:text-[11px]">{item.desc}</span>
+                <span className="block truncate text-[11px] font-black text-white sm:text-sm">{item.title}</span>
+                <span className="mt-0.5 hidden truncate text-[10px] font-medium text-slate-500 sm:block sm:text-[11px]">{item.desc}</span>
               </span>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800] sm:h-4 sm:w-4" />
+              <ArrowRight className="h-3 w-3 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-[#5FA800] sm:h-4 sm:w-4" />
             </Link>
           ))}
         </div>
@@ -413,7 +413,7 @@ function NewsletterBand({
     <section
       ref={bandRef}
       onMouseMove={onMove}
-      className="kdf-nl-band relative isolate mt-8 overflow-hidden border-y border-white/[0.06] sm:mt-16"
+      className="kdf-nl-band relative isolate mt-6 overflow-hidden border-y border-white/[0.06] sm:mt-16"
       style={{
         background: `linear-gradient(135deg, ${VOID} 0%, ${DEEP} 45%, #0a1628 100%)`,
         ["--fx" as string]: "0.5",
@@ -462,15 +462,15 @@ function NewsletterBand({
         </div>
       )}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-3 py-7 sm:px-6 sm:py-14 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-14 lg:px-8">
         <MoodCollectionSlider />
-        <div className="grid gap-6 sm:gap-10 lg:grid-cols-12 lg:items-center">
+        <div className="grid gap-4 sm:gap-10 lg:grid-cols-12 lg:items-center">
           <div className="lg:col-span-6">
             <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300 sm:gap-2 sm:px-3 sm:py-1 sm:text-[10px]">
               <Sparkles className="h-3 w-3" style={{ color: ORANGE }} aria-hidden />
               KDF newsletter
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
+            <div className="mt-1.5 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
               <span className="kdf-badge-pill inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-200/90 sm:gap-1.5 sm:px-2.5 sm:text-[10px]">
                 <Leaf className="h-3 w-3" aria-hidden /> Seasonal offers
               </span>
@@ -481,12 +481,12 @@ function NewsletterBand({
                 <BadgeCheck className="h-3 w-3 text-sky-300" aria-hidden /> Premium quality
               </span>
             </div>
-            <h2 className="mt-3 text-balance text-xl font-black tracking-tight text-white sm:mt-4 sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
+            <h2 className="mt-2.5 text-balance text-lg font-black tracking-tight text-white sm:mt-4 sm:text-3xl lg:text-[2rem] lg:leading-[1.15]">
               {headline}
             </h2>
-            <p className="mt-2 max-w-lg text-pretty text-xs leading-relaxed text-slate-400 sm:mt-3 sm:text-base">{sub}</p>
+            <p className="mt-1.5 max-w-lg text-pretty text-[11px] leading-relaxed text-slate-400 sm:mt-3 sm:text-base">{sub}</p>
 
-            <div className="mt-3 min-h-[1.25rem] text-xs font-medium text-slate-200/90 sm:mt-5 sm:min-h-[1.5rem] sm:text-sm">
+            <div className="mt-2.5 min-h-[1.1rem] text-[11px] font-medium text-slate-200/90 sm:mt-5 sm:min-h-[1.5rem] sm:text-sm">
               <span className="inline-flex items-center gap-2 text-[#7fe045]">
                 <Zap className="h-3.5 w-3.5 shrink-0 motion-reduce:animate-none kdf-pulse-glow sm:h-4 sm:w-4" aria-hidden />
                 <span key={lineIdx} className="motion-reduce:animate-none kdf-fade-up">
@@ -496,7 +496,7 @@ function NewsletterBand({
             </div>
 
             {premium.aiTipsEnabled !== false && (
-              <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 backdrop-blur-sm sm:mt-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md">
+              <div className="mt-2.5 hidden rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 backdrop-blur-sm sm:mt-4 sm:block sm:rounded-2xl sm:px-4 sm:py-3 sm:backdrop-blur-md">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Healthy tip</p>
                 <p key={tipIdx} className="mt-1 text-[11px] leading-relaxed text-slate-300 motion-reduce:animate-none kdf-fade-up sm:text-xs">
                   {tips[tipIdx % tips.length]}
