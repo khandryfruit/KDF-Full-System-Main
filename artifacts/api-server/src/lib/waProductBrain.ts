@@ -116,10 +116,32 @@ export async function tryWaFullCatalogMenuReply(textBody: string): Promise<WaPro
   const menu = await buildFullCatalogMenuReply(textBody);
   if (!menu) return null;
 
+  if (menu.directAllList && menu.categoryId === "all") {
+    const { buildCategoryBrowseFromMenuPick } = await import("./waSalesAgent.js");
+    const full = await buildCategoryBrowseFromMenuPick({ categoryId: "all", textBody, page: 0 });
+    if (!full?.products.length) return null;
+    return {
+      reply: full.reply,
+      product: full.products[0]!,
+      products: full.products,
+      query: "all",
+      matchedRoots: [],
+      score: 100,
+      mode: "category",
+      categoryId: "all",
+      waProducts: full.waProducts,
+      catalogPage: 0,
+      hasMore: full.hasMore,
+    };
+  }
+
   const summaries = await getCategorySummaries();
-  const placeholder = summaries[0]
-    ? { name: "Khan Dry Fruits Catalog", shopifyProductId: "catalog", rawPrice: 0, score: 100 } as ShopifyCatalogProduct
-    : { name: "Catalog", shopifyProductId: "catalog", rawPrice: 0, score: 100 } as ShopifyCatalogProduct;
+  const placeholder = {
+    name: "Khan Dry Fruits Catalog",
+    shopifyProductId: "catalog",
+    rawPrice: 0,
+    score: 100,
+  } as ShopifyCatalogProduct;
 
   return {
     reply: menu.reply,

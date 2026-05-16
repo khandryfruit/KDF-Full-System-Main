@@ -49,6 +49,8 @@ export type ShopifyCatalogProduct = {
   tags?: string | null;
   productType?: string | null;
   category?: string | null;
+  /** All Shopify collection titles joined for classification */
+  collectionText?: string | null;
   score: number;
   source: "shopify";
 };
@@ -354,6 +356,10 @@ function mapRowToCatalogProductBrowse(row: any): ShopifyCatalogProduct {
   const basePrice = variants.cheapestPrice ?? parseCatalogUnitPrice(row.price);
   const handle = row.handle || row.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "product";
   const collections = Array.isArray(row.collections) ? row.collections : [];
+  const collectionText = collections
+    .map((c: { title?: string; handle?: string }) => `${c.title ?? ""} ${c.handle ?? ""}`)
+    .join(" ")
+    .trim();
   return {
     id: Number(row.id),
     shopifyProductId: row.shopifyProductId,
@@ -373,6 +379,7 @@ function mapRowToCatalogProductBrowse(row: any): ShopifyCatalogProduct {
     tags: row.tags,
     productType: row.productType,
     category: collections[0]?.title ?? null,
+    collectionText: collectionText || null,
     score: 100,
     source: "shopify",
   };

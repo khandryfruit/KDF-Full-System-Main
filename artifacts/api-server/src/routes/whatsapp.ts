@@ -1839,12 +1839,17 @@ async function trySendProductCatalogReply(opts: {
         ...mergeState,
         categorySummaries: summaries,
       });
-    } else if (useCategoryFlow) {
+    } else if (hit.categoryId === "all" || (useCategoryFlow && hit.products.length > 0)) {
+      const { buildFullCatalogIndex } = await import("../lib/waSalesAgent.js");
+      const index = await buildFullCatalogIndex();
       await setConversationState(phone, "wa_order_await_product_choice", {
         ...mergeState,
         products: waProducts,
+        categoryProducts: hit.categoryId === "all" ? hit.products : hit.products,
         browseMode: hit.mode,
-        categoryId: hit.categoryId,
+        categoryId: hit.categoryId ?? hit.matchedRoots[0] ?? null,
+        catalogPage: hit.catalogPage ?? 0,
+        totalInCategory: hit.categoryId === "all" ? index.total : hit.products.length,
       });
     } else {
       const waProduct = waProducts[0];
@@ -4629,6 +4634,7 @@ router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (r
       },
       aliasSample,
       salesCategories: (await import("../lib/waSalesAgent.js")).listAllCategoryDefinitions(),
+      catalogIndexStats: await (await import("../lib/waSalesAgent.js")).getCatalogIndexStats(),
       features: [
         "Category browse → product → variant → order (premium sales flow)",
         "Multi-language aliases (Urdu / Roman / English)",

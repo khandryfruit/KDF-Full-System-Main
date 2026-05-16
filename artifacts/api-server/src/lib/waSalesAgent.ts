@@ -8,7 +8,7 @@ import {
   toWhatsAppCatalogProducts,
   type ShopifyCatalogProduct,
 } from "./shopifyProductKnowledge.js";
-import { productBelongsToFamilies, primaryFamilyLabel, resolveQueryFamilies } from "./catalogProductMatcher.js";
+import { expandFamilyTerms, primaryFamilyLabel, resolveQueryFamilies } from "./catalogProductMatcher.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 
 export type WaSalesCategory = {
@@ -20,12 +20,23 @@ export type WaSalesCategory = {
   families: string[];
 };
 
+/** Shown first in catalog menu — entire Shopify catalog */
+export const ALL_PRODUCTS_CATEGORY: WaSalesCategory = {
+  id: "all",
+  emoji: "📋",
+  labelEn: "All Products",
+  labelUr: "تمام Products",
+  families: [],
+};
+
+/** Specific categories first; mixed/gift last so items classify correctly */
 export const WA_SALES_CATEGORIES: WaSalesCategory[] = [
-  { id: "almonds", emoji: "🥜", labelEn: "Almonds", labelUr: "بادام", families: ["almond", "almonds", "badam", "بادام"] },
+  { id: "almonds", emoji: "🥜", labelEn: "Almonds", labelUr: "بادام", families: ["almond", "almonds", "badam", "بادام", "kagzi", "kagazi", "mamra", "gurbandi", "american almond", "australian almond"] },
   { id: "pistachio", emoji: "🌰", labelEn: "Pistachio", labelUr: "پستہ", families: ["pista", "pistachio", "pistachios", "پستہ", "پستے"] },
   { id: "cashew", emoji: "🌰", labelEn: "Cashew", labelUr: "کاجو", families: ["kaju", "cashew", "cashews", "کاجو"] },
   { id: "walnut", emoji: "🌰", labelEn: "Walnuts", labelUr: "اخروٹ", families: ["akhrot", "walnut", "walnuts", "اخروٹ"] },
-  { id: "dates", emoji: "🌴", labelEn: "Dates", labelUr: "کھجور", families: ["khajoor", "dates", "date", "کھجور", "chuara"] },
+  { id: "dates", emoji: "🌴", labelEn: "Dates", labelUr: "کھجور", families: ["khajoor", "dates", "date", "کھجور", "chuara", "ajwa", "mazafati", "kalmi", "sukkari", "rabbi", "amber"] },
+  { id: "hazelnut", emoji: "🌰", labelEn: "Hazelnuts", labelUr: "ہیزلنٹ", families: ["hazelnut", "hazelnuts", "filbert", "fındık"] },
   { id: "berries", emoji: "🍇", labelEn: "Berries", labelUr: "بیریز", families: ["berry", "berries", "goji", "cranberry", "blueberry", "strawberry"] },
   { id: "raisins", emoji: "🍇", labelEn: "Raisins", labelUr: "کشمش", families: ["kishmish", "raisin", "raisins", "munakka", "کشمش"] },
   { id: "figs", emoji: "🫐", labelEn: "Figs", labelUr: "انجیر", families: ["anjeer", "fig", "figs", "انجیر"] },
@@ -34,8 +45,10 @@ export const WA_SALES_CATEGORIES: WaSalesCategory[] = [
   { id: "pine", emoji: "🌲", labelEn: "Chilgoza", labelUr: "چلغوزہ", families: ["chilgoza", "pine nut", "pine nuts"] },
   { id: "makhana", emoji: "🪷", labelEn: "Makhana", labelUr: "مکھانہ", families: ["makhana", "foxnut"] },
   { id: "honey", emoji: "🍯", labelEn: "Honey", labelUr: "شہد", families: ["honey", "shahad", "شہد"] },
-  { id: "oils", emoji: "🫒", labelEn: "Oils & Butters", labelUr: "آئل", families: ["oil", "butter", "paste"] },
-  { id: "mixed", emoji: "🎁", labelEn: "Mixed & Gift Packs", labelUr: "مکس / گفٹ", families: ["mix", "mixed", "combo", "hamper", "gift", "pack"] },
+  { id: "oils", emoji: "🫒", labelEn: "Oils & Butters", labelUr: "آئل", families: ["oil", "butter", "paste", "ghee"] },
+  { id: "apricot", emoji: "🍑", labelEn: "Apricot & Dried Fruit", labelUr: "خوبانی", families: ["apricot", "khubani", "prune", "plum"] },
+  { id: "saffron", emoji: "🌸", labelEn: "Saffron", labelUr: "زعفران", families: ["saffron", "zafran", "zaffran"] },
+  { id: "mixed", emoji: "🎁", labelEn: "Mixed & Gift Packs", labelUr: "مکس / گفٹ", families: ["mix", "mixed", "combo", "hamper", "gift box", "gift pack", "assorted"] },
   { id: "spices", emoji: "🌶️", labelEn: "Spices", labelUr: "مصالحہ", families: ["spice", "spices", "masala", "cumin", "zeera", "haldi", "turmeric"] },
   { id: "tea", emoji: "🍵", labelEn: "Tea & Herbs", labelUr: "چائے", families: ["tea", "chai", "herb", "herbal", "green tea"] },
   { id: "chocolate", emoji: "🍫", labelEn: "Chocolate & Sweets", labelUr: "چاکلیٹ", families: ["chocolate", "cocoa", "sweet", "candy"] },
@@ -73,20 +86,39 @@ export function resolveSalesCategoryFromQuery(query: string): WaSalesCategory | 
   };
 }
 
-export function classifyProductCategory(
-  title: string,
-  tags?: unknown,
-  description?: unknown,
-): WaSalesCategory | null {
+function normalizeCatalogBlob(product: ShopifyCatalogProduct): string {
+  return String(
+    `${product.name} ${product.tags ?? ""} ${product.description ?? ""} ${product.productType ?? ""} ${product.category ?? ""} ${product.collectionText ?? ""}`,
+  )
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Loose classification for catalog grouping (no cross-family block) */
+function productMatchesCategoryLoose(blob: string, families: string[]): boolean {
+  if (!families.length) return false;
+  const terms = expandFamilyTerms(families);
+  return terms.some((t) => {
+    if (t.length >= 3) return blob.includes(t);
+    if (t.length === 2 && /[\u0600-\u06FF]/.test(t)) return blob.includes(t);
+    return false;
+  });
+}
+
+export function classifyProductCategory(product: ShopifyCatalogProduct): WaSalesCategory | null {
+  const blob = normalizeCatalogBlob(product);
   for (const cat of WA_SALES_CATEGORIES) {
-    if (productBelongsToFamilies(title, tags, description, cat.families)) {
-      return cat;
-    }
+    if (cat.id === "mixed") continue;
+    if (productMatchesCategoryLoose(blob, cat.families)) return cat;
   }
+  const mixed = WA_SALES_CATEGORIES.find((c) => c.id === "mixed");
+  if (mixed && productMatchesCategoryLoose(blob, mixed.families)) return mixed;
   return null;
 }
 
-const CATEGORY_PAGE_SIZE = 25;
+const CATEGORY_PAGE_SIZE = 30;
 
 let catalogIndexCache: {
   at: number;
@@ -115,7 +147,7 @@ export async function buildFullCatalogIndex(): Promise<{
   for (const cat of WA_SALES_CATEGORIES) grouped.set(cat.id, []);
 
   for (const product of all) {
-    const cat = classifyProductCategory(product.name, product.tags, product.description);
+    const cat = classifyProductCategory(product);
     if (cat) {
       const list = grouped.get(cat.id) ?? [];
       list.push(product);
@@ -144,9 +176,23 @@ export async function listProductsByCategoryId(categoryId: string): Promise<{
   category: WaSalesCategory | null;
   products: ShopifyCatalogProduct[];
 }> {
+  if (categoryId === "all") {
+    const products = await loadAllCatalogProducts();
+    return { category: ALL_PRODUCTS_CATEGORY, products };
+  }
+
   const index = await buildFullCatalogIndex();
   if (categoryId === "other" || categoryId === "uncategorized") {
-    return { category: null, products: index.uncategorized };
+    return {
+      category: {
+        id: "other",
+        emoji: "📦",
+        labelEn: "More Products",
+        labelUr: "دیگر Products",
+        families: [],
+      },
+      products: index.uncategorized,
+    };
   }
   const category = WA_SALES_CATEGORIES.find((c) => c.id === categoryId) ?? null;
   const products = index.grouped.get(categoryId) ?? [];
@@ -158,7 +204,9 @@ export async function getCategorySummaries(): Promise<Array<{
   count: number;
 }>> {
   const index = await buildFullCatalogIndex();
-  const out: Array<{ category: WaSalesCategory; count: number }> = [];
+  const out: Array<{ category: WaSalesCategory; count: number }> = [
+    { category: ALL_PRODUCTS_CATEGORY, count: index.total },
+  ];
   for (const cat of WA_SALES_CATEGORIES) {
     const count = index.grouped.get(cat.id)?.length ?? 0;
     if (count > 0) out.push({ category: cat, count });
@@ -178,6 +226,28 @@ export async function getCategorySummaries(): Promise<Array<{
   return out;
 }
 
+export async function getCatalogIndexStats(): Promise<{
+  total: number;
+  categorized: number;
+  uncategorized: number;
+  categories: Array<{ id: string; label: string; count: number }>;
+}> {
+  const index = await buildFullCatalogIndex();
+  let categorized = 0;
+  const categories: Array<{ id: string; label: string; count: number }> = [];
+  for (const cat of WA_SALES_CATEGORIES) {
+    const count = index.grouped.get(cat.id)?.length ?? 0;
+    categorized += count;
+    if (count > 0) categories.push({ id: cat.id, label: cat.labelEn, count });
+  }
+  return {
+    total: index.total,
+    categorized,
+    uncategorized: index.uncategorized.length,
+    categories,
+  };
+}
+
 /** Search catalog for a category — uses full index when family match */
 export async function searchCategoryProducts(query: string, limit = 80): Promise<{
   category: WaSalesCategory | null;
@@ -192,12 +262,24 @@ export async function searchCategoryProducts(query: string, limit = 80): Promise
   if (category) {
     const { products: allInCat } = await listProductsByCategoryId(category.id);
     if (allInCat.length > 0) {
-      return { category, products: allInCat.slice(0, limit), query: q, roots };
+      return { category, products: allInCat, query: q, roots };
     }
   }
 
-  const products = await searchShopifyCatalog(q, Math.min(limit, 50));
+  const products = await searchShopifyCatalog(q, Math.min(limit, 100));
   return { category, products, query: q, roots };
+}
+
+/** "sari products" → skip category menu, show full numbered list immediately */
+export function isShowAllProductsDirectMessage(text: string): boolean {
+  const t = String(text ?? "")
+    .toLowerCase()
+    .replace(/[^\w\s\u0600-\u06FF]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /\b(sari|saari|tamam|sab|sare|all)\s+(product|products|item|items|cheez|cheezen)\b/i.test(t)
+    || /\b(poori|puri|complete|full)\s+(list|catalog)\b/i.test(t)
+    || t === "sari products" || t === "tamam products" || t === "sab products";
 }
 
 export function isFullCatalogBrowseMessage(text: string): boolean {
@@ -236,9 +318,9 @@ export async function formatMasterCatalogMenuReply(roman: boolean): Promise<stri
   );
 
   if (roman) {
-    return `Ji 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog se live hain ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\nCategory number reply karein (jaise *1* for Almonds)\nYa direct product naam: badam, pista, kaju 😊`;
+    return `Ji 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog se live hain ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\n*1* = All ${index.total} products (full list)\n*2+** = category\nYa direct naam: badam, pista, kaju 😊`;
   }
-  return `جی 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog سے live ہیں ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\nCategory number reply کریں (جیسے *1* بادام)\nیا direct product نام: badam، pista، kaju 😊`;
+  return `جی 😊 Khan Dry Fruits — *${index.total} products* Shopify catalog سے live ہیں ✅\n\n*Categories:*\n\n${lines.join("\n")}\n\n━━━━━━━━━━━\n\n*1* = تمام ${index.total} products (full list)\n*2+** = category\nیا direct نام: badam، pista، kaju 😊`;
 }
 
 export function resolveCategoryFromMenuNumber(num: number, summaries: Array<{ category: WaSalesCategory }>): WaSalesCategory | null {
@@ -379,10 +461,29 @@ export async function buildCatalogBrowseReply(opts: {
 export async function buildFullCatalogMenuReply(textBody: string): Promise<{
   reply: string;
   totalProducts: number;
+  directAllList?: boolean;
+  categoryId?: string;
 } | null> {
   if (!isFullCatalogBrowseMessage(textBody)) return null;
   const roman = isRomanUrduSales(textBody);
   const index = await buildFullCatalogIndex();
+
+  if (isShowAllProductsDirectMessage(textBody)) {
+    const browse = await buildCategoryBrowseFromMenuPick({
+      categoryId: "all",
+      textBody,
+      page: 0,
+    });
+    if (browse) {
+      return {
+        reply: browse.reply,
+        totalProducts: index.total,
+        directAllList: true,
+        categoryId: "all",
+      };
+    }
+  }
+
   const reply = await formatMasterCatalogMenuReply(roman);
   return { reply, totalProducts: index.total };
 }
