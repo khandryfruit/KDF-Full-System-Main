@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable } from "@workspace/db";
+import { db, whatsappSettingsTable, whatsappTemplatesTable, whatsappLogsTable, chatbotSettingsTable, whatsappCampaignsTable, whatsappConversationStatesTable, waConversationsTable, waMessagesTable, waFlowsTable, waAutomationRulesTable, waAutomationLogsTable, waWebhookFailuresTable, socialSettingsTable, couponsTable, shippingRulesTable } from "@workspace/db";
 import { ordersTable, usersTable, productsTable, shipmentsTable } from "@workspace/db";
 import { shopifyProductsTable, shopifyOrdersTable } from "@workspace/db";
 import { eq, desc, sql, ilike, or, and, inArray } from "drizzle-orm";
@@ -1174,79 +1174,147 @@ async function sendWaText(phone: string, message: string, _waSettings: any, temp
 }
 
 /* ─── Helper: search products (DB + Shopify) ────────── */
+function formatRupees(value: unknown): string {
+  const n = Number.parseFloat(String(value ?? "0"));
+  return `Rs. ${Number.isFinite(n) ? Math.round(n).toLocaleString("en-PK") : "0"}`;
+}
+
+function normalizeProductText(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function productMatchScore(query: string, name: string, tags?: unknown): number {
+  const q = normalizeProductText(query);
+  const n = normalizeProductText(name);
+  const tagText = normalizeProductText(Array.isArray(tags) ? tags.join(" ") : tags);
+  if (!q || !n) return 0;
+  const terms = q.split(/\s+/).filter((t) => t.length > 1);
+  let score = 0;
+  if (n === q) score += 100;
+  if (n.includes(q)) score += 70;
+  for (const term of terms) {
+    if (n.split(/\s+/).includes(term)) score += 18;
+    else if (n.includes(term)) score += 8;
+    if (tagText.includes(term)) score += 5;
+  }
+  return score;
+}
+
+function formatShopifyVariants(variants: unknown): { label: string; lines: string[]; cheapestPrice: number | null } {
+  const arr = Array.isArray(variants) ? variants : [];
+  const lines = arr
+    .filter((v: any) => Number(v?.inventoryQuantity ?? 1) > 0)
+    .slice(0, 8)
+    .map((v: any) => {
+      const title = String(v.title ?? "Default").replace(/^default title$/i, "Standard");
+      const price = Number.parseFloat(String(v.price ?? "0"));
+      return { line: `${title} — ${formatRupees(price)}`, price };
+    });
+  const cheapest = lines.length ? Math.min(...lines.map((v) => v.price).filter((v) => Number.isFinite(v))) : null;
+  return {
+    label: lines.map((v) => v.line).join("\n"),
+    lines: lines.map((v) => v.line),
+    cheapestPrice: cheapest != null && Number.isFinite(cheapest) ? cheapest : null,
+  };
+}
+
 async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   name: string; price: string; compareAt: string | null;
   description: string | null; imageUrl: string | null;
   productUrl: string; variants: string; inStock: boolean;
+  source?: "shopify" | "local"; rawPrice?: number; variantLines?: string[];
 }>> {
   const websiteUrl = "https://khanbabadryfruits.com";
   const results: Array<any> = [];
 
-  /* Search custom DB products */
-  const dbProds = await db.select({
-    id: productsTable.id, name: productsTable.name, price: productsTable.price,
-    description: productsTable.description, images: productsTable.images,
-    slug: productsTable.slug, stock: productsTable.stock, featured: productsTable.featured,
-  }).from(productsTable)
-    .where(query.length > 1
-      ? or(ilike(productsTable.name, `%${query}%`), ilike(productsTable.description, `%${query}%`))
-      : sql`active = true AND stock > 0`
-    )
-    .orderBy(desc(productsTable.featured))
-    .limit(limit * 2);
+  try {
+    const shopProds = await db.select({
+      title: shopifyProductsTable.title,
+      price: shopifyProductsTable.price,
+      compareAtPrice: shopifyProductsTable.compareAtPrice,
+      imageUrl: shopifyProductsTable.imageUrl,
+      variants: shopifyProductsTable.variants,
+      inventoryQuantity: shopifyProductsTable.inventoryQuantity,
+      shopifyProductId: shopifyProductsTable.shopifyProductId,
+      tags: shopifyProductsTable.tags,
+    }).from(shopifyProductsTable)
+      .where(and(
+        eq(shopifyProductsTable.status, "active"),
+        query.length > 1 ? or(ilike(shopifyProductsTable.title, `%${query}%`), ilike(shopifyProductsTable.tags, `%${query}%`)) : sql`false`,
+      ))
+      .orderBy(desc(shopifyProductsTable.inventoryQuantity))
+      .limit(limit * 3);
 
-  for (const p of dbProds.slice(0, limit)) {
-    results.push({
-      name: p.name,
-      price: `Rs. ${parseFloat(String(p.price)).toLocaleString("en-PK")}`,
-      compareAt: null,
-      description: p.description?.slice(0, 100) ?? null,
-      imageUrl: (p.images as string[])?.[0] ?? null,
-      productUrl: `${websiteUrl}/products/${p.slug}`,
-      variants: "",
-      inStock: p.stock > 0,
-    });
-  }
+    for (const sp of shopProds
+      .map((sp: any) => ({ sp, score: productMatchScore(query, sp.title, sp.tags) }))
+      .filter((x: any) => x.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, limit)) {
+      const variants = formatShopifyVariants(sp.sp.variants);
+      const basePrice = variants.cheapestPrice ?? Number.parseFloat(String(sp.sp.price ?? "0"));
+      const handle = sp.sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() ?? "product";
+      results.push({
+        name: sp.sp.title,
+        price: variants.lines.length ? `From ${formatRupees(basePrice)}` : formatRupees(sp.sp.price),
+        compareAt: sp.sp.compareAtPrice ? formatRupees(sp.sp.compareAtPrice) : null,
+        description: null,
+        imageUrl: sp.sp.imageUrl ?? null,
+        productUrl: `${websiteUrl}/products/${handle}`,
+        variants: variants.label,
+        variantLines: variants.lines,
+        rawPrice: basePrice,
+        inStock: (sp.sp.inventoryQuantity ?? 0) > 0 || variants.lines.length > 0,
+        source: "shopify",
+      });
+    }
+  } catch { /* Shopify table may be empty */ }
 
-  /* If not enough, also search Shopify products */
   if (results.length < limit) {
-    try {
-      const shopProds = await db.select({
-        title: shopifyProductsTable.title,
-        price: shopifyProductsTable.price,
-        compareAtPrice: shopifyProductsTable.compareAtPrice,
-        imageUrl: shopifyProductsTable.imageUrl,
-        variants: shopifyProductsTable.variants,
-        inventoryQuantity: shopifyProductsTable.inventoryQuantity,
-        shopifyProductId: shopifyProductsTable.shopifyProductId,
-      }).from(shopifyProductsTable)
-        .where(and(
-          eq(shopifyProductsTable.status, "active"),
-          query.length > 1 ? ilike(shopifyProductsTable.title, `%${query}%`) : sql`true`,
-        ))
-        .orderBy(desc(shopifyProductsTable.inventoryQuantity))
-        .limit(limit - results.length);
+    const dbProds = await db.select({
+      id: productsTable.id, name: productsTable.name, price: productsTable.price,
+      description: productsTable.description, images: productsTable.images,
+      slug: productsTable.slug, stock: productsTable.stock, featured: productsTable.featured,
+      variants: productsTable.variants, tags: productsTable.tags,
+    }).from(productsTable)
+      .where(query.length > 1
+        ? or(ilike(productsTable.name, `%${query}%`), ilike(productsTable.description, `%${query}%`), sql`${productsTable.tags}::text ILIKE ${"%" + query + "%"}`)
+        : sql`false`
+      )
+      .orderBy(desc(productsTable.featured))
+      .limit(limit * 2);
 
-      for (const sp of shopProds) {
-        const variantTitles = (sp.variants as any[])
-          ?.filter(v => (v.inventoryQuantity ?? 0) > 0)
-          .slice(0, 3)
-          .map(v => `${v.title}: Rs.${parseFloat(v.price).toLocaleString("en-PK")}`)
-          .join(", ") ?? "";
-        const handle = sp.shopifyProductId?.replace(/[^a-z0-9-]/gi, "-").toLowerCase() ?? "product";
-        results.push({
-          name: sp.title,
-          price: `Rs. ${parseFloat(String(sp.price ?? "0")).toLocaleString("en-PK")}`,
-          compareAt: sp.compareAtPrice ? `Rs. ${parseFloat(String(sp.compareAtPrice)).toLocaleString("en-PK")}` : null,
-          description: null,
-          imageUrl: sp.imageUrl ?? null,
-          productUrl: `${websiteUrl}/products/${handle}`,
-          variants: variantTitles,
-          inStock: (sp.inventoryQuantity ?? 0) > 0,
-        });
-      }
-    } catch { /* Shopify table may be empty */ }
+    for (const p of dbProds
+      .map((p: any) => ({ p, score: productMatchScore(query, p.name, p.tags) }))
+      .filter((x: any) => x.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, limit - results.length)) {
+      const variants = Array.isArray(p.p.variants)
+        ? p.p.variants.filter((v: any) => Number(v.stock ?? 0) > 0).slice(0, 8).map((v: any) => `${v.value || v.name} — ${formatRupees(v.price ?? p.p.price)}`)
+        : [];
+      const rawPrice = Number.parseFloat(String(p.p.price ?? "0"));
+      results.push({
+        name: p.p.name,
+        price: formatRupees(rawPrice),
+        compareAt: null,
+        description: p.p.description?.slice(0, 100) ?? null,
+        imageUrl: (p.p.images as string[])?.[0] ?? null,
+        productUrl: `${websiteUrl}/products/${p.p.slug}`,
+        variants: variants.join("\n"),
+        variantLines: variants,
+        rawPrice,
+        inStock: p.p.stock > 0,
+        source: "local",
+      });
+    }
   }
+
+  await logWaProcessingStep({
+    step: "shopify_product_lookup",
+    status: results.length ? "sent" : "failed",
+    detail: results.length ? `Shopify/live catalog lookup found ${results.length} matching product(s).` : `No exact Shopify/live catalog match for "${query}".`,
+    payload: { query, count: results.length, products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })) },
+    failureReason: results.length ? null : "no_matching_shopify_product",
+  });
 
   return results;
 }
@@ -1257,11 +1325,83 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   card += `💰 *Price:* ${p.price}`;
   if (p.compareAt) card += ` ~~${p.compareAt}~~ 🔥`;
   card += "\n";
-  if (p.variants) card += `📦 *Options:* ${p.variants}\n`;
+  if (p.variants) card += `📦 *Official Shopify options:*\n${p.variants}\n`;
   if (p.description) card += `📝 ${p.description}\n`;
   card += `${p.inStock ? "✅ In Stock" : "❌ Out of Stock"}\n`;
   card += `🔗 ${p.productUrl}`;
   return card;
+}
+
+async function calculateWhatsAppOrderTotal(opts: {
+  productQuery: string;
+  quantity?: number;
+  variantTitle?: string;
+  city?: string;
+  couponCode?: string;
+}) {
+  const products = await searchProductsForWa(opts.productQuery, 1);
+  const product = products[0];
+  if (!product) {
+    return { ok: false, reason: "No matching Shopify product found. Cannot calculate total without official price." };
+  }
+  const qty = Math.max(1, Math.min(99, Number(opts.quantity ?? 1) || 1));
+  let unitPrice = Number(product.rawPrice ?? 0);
+  let matchedVariant = product.variantLines?.[0] ?? "";
+  if (opts.variantTitle && product.variantLines?.length) {
+    const wanted = normalizeProductText(opts.variantTitle);
+    const found = product.variantLines.find((line) => normalizeProductText(line).includes(wanted));
+    if (found) {
+      matchedVariant = found;
+      const priceMatch = found.match(/Rs\.\s*([\d,]+)/i);
+      if (priceMatch) unitPrice = Number(priceMatch[1].replace(/,/g, ""));
+    }
+  }
+  const subtotal = unitPrice * qty;
+
+  let discount = 0;
+  let promo = "No active promotion applied";
+  if (opts.couponCode) {
+    const [coupon] = await db.select().from(couponsTable).where(eq(couponsTable.code, opts.couponCode.toUpperCase())).limit(1).catch(() => []);
+    if (coupon?.active && (!coupon.expiresAt || new Date(coupon.expiresAt) >= new Date()) && subtotal >= Number(coupon.minOrder ?? 0)) {
+      discount = coupon.type === "percentage" ? subtotal * Number(coupon.value) / 100 : Math.min(Number(coupon.value), subtotal);
+      promo = `${coupon.code} applied: -${formatRupees(discount)}`;
+    }
+  }
+
+  let delivery = 150;
+  let deliveryLabel = "Estimated standard delivery";
+  const city = normalizeProductText(opts.city ?? "");
+  const rules = await db.select().from(shippingRulesTable).where(eq(shippingRulesTable.enabled, true)).orderBy(asc(shippingRulesTable.priority), asc(shippingRulesTable.id)).catch(() => []);
+  const amountForShipping = subtotal - discount;
+  const matchingRule = rules.find((rule: any) => {
+    const cities = Array.isArray(rule.cities) ? rule.cities.map(normalizeProductText) : [];
+    if (cities.length && city && !cities.some((c: string) => city.includes(c))) return false;
+    const min = Number(rule.minValue ?? 0);
+    const max = Number(rule.maxValue ?? 0);
+    if (rule.type === "amount" && min && amountForShipping < min) return false;
+    if (rule.type === "amount" && max && amountForShipping > max) return false;
+    return ["amount", "flat"].includes(rule.type);
+  });
+  if (matchingRule) {
+    delivery = Number(matchingRule.price ?? 0);
+    deliveryLabel = `${matchingRule.methodName} (${matchingRule.deliveryTime})`;
+  }
+
+  const total = Math.max(0, subtotal - discount + delivery);
+  return {
+    ok: true,
+    product: product.name,
+    variant: matchedVariant,
+    quantity: qty,
+    unitPrice: formatRupees(unitPrice),
+    subtotal: formatRupees(subtotal),
+    discount: formatRupees(discount),
+    promotion: promo,
+    delivery: formatRupees(delivery),
+    deliveryLabel,
+    total: formatRupees(total),
+    note: "Totals use official catalog price and configured shipping/promotion rules.",
+  };
 }
 
 /* ─── Helper: WA Order placement flow ───────────────── */
