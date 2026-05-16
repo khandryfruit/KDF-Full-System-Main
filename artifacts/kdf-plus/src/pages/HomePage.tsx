@@ -158,6 +158,24 @@ function productMatchScore(product: Product, banner: any): number {
   return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
 }
 
+function customerMarketingText(value: unknown, fallback = ""): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const cleaned = raw
+    .replace(/AI\s*Smart\s*Seasonal\s*Picks/gi, "Healthy Seasonal Picks")
+    .replace(/AI\s*Smart\s*Pick/gi, "Seasonal Pick")
+    .replace(/AI\s*Limited\s*Deal/gi, "Limited Time Picks")
+    .replace(/AI\s*promotions?/gi, "Seasonal promotions")
+    .replace(/Smart\s*seasonal\s*picks/gi, "Premium seasonal picks")
+    .replace(/Smart\s*picks/gi, "Recommended picks")
+    .replace(/Picked\s*for\s*this\s*banner/gi, "Recommended for you")
+    .replace(/Generate safe seasonal homepage copy and matched products\.?/gi, "Fresh seasonal picks selected for you.")
+    .replace(/\bAI\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || fallback;
+}
+
 /* ─── AI Fallback Slides ─── */
 const BANNER_AI_SLIDES = [
   { label: '🚚 FREE DELIVERY', headline: "Pakistan's Finest\nNuts & Dry Fruits", sub: 'Order Rs. 1,500+ and get free shipping nationwide', cta: 'Shop Now', g1: '#0b2e00', g2: '#2d6600', g3: '#4a9e00', orb1: '#6dbf2f', orb2: '#a3d96e', orb3: '#1a5200', icon: '🥜' },
@@ -433,7 +451,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
               ) : bgImg ? (
                 <img
                   src={bgImg}
-                  alt={banner.title}
+                  alt={customerMarketingText(banner.title, "Premium dry fruit collection")}
                   className="absolute inset-0 h-full w-full object-cover object-center lg:object-[center_22%]"
                   loading={i === 0 ? "eager" : "lazy"}
                   decoding="async"
@@ -489,30 +507,30 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                   )}
                   {banner.label && (
                     <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/95 px-3 py-1.5 rounded-full mb-2 sm:mb-3 border border-amber-200/35 bg-white/12 backdrop-blur-md shadow-sm ring-1 ring-amber-300/25 motion-safe:animate-[pulse_3s_ease-in-out_infinite] sm:motion-safe:animate-[pulse_4s_ease-in-out_infinite]">
-                      {banner.label}
+                      {customerMarketingText(banner.label, "Seasonal Pick")}
                     </span>
                   )}
                   <h2
                     className="mb-1.5 max-w-[20rem] text-[1.45rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg sm:mb-2.5 sm:max-w-2xl sm:text-3xl md:text-4xl lg:max-w-3xl lg:text-[2.35rem] lg:leading-[1.08]"
                     style={{ textShadow: "0 3px 22px rgba(0,0,0,0.45)" }}
                   >
-                    {(banner.title || "").replace(/\boofer\b/gi, "offer")}
+                    {customerMarketingText(banner.title, "Premium Dry Fruit Collection").replace(/\boofer\b/gi, "offer")}
                   </h2>
                   {banner.subtitle && (
                     <p className="mb-2.5 max-w-[19rem] text-sm font-medium leading-snug text-white/90 sm:mb-4 sm:max-w-xl sm:text-base lg:text-lg">
-                      {(banner.subtitle || "").replace(/\boofer\b/gi, "offer")}
+                      {customerMarketingText(banner.subtitle).replace(/\boofer\b/gi, "offer")}
                     </p>
                   )}
                   {((banner as any).healthBenefitText || (banner as any).urgencyText) && (
                     <div className="mb-3 flex max-w-xl flex-wrap gap-2 text-[11px] font-bold text-white/90 sm:mb-4 sm:text-xs">
                       {(banner as any).healthBenefitText && (
                         <span className="rounded-full border border-white/20 bg-white/12 px-3 py-1 backdrop-blur-md">
-                          {(banner as any).healthBenefitText}
+                          {customerMarketingText((banner as any).healthBenefitText)}
                         </span>
                       )}
                       {(banner as any).urgencyText && (
                         <span className="rounded-full border border-amber-200/30 bg-amber-400/18 px-3 py-1 text-amber-50 backdrop-blur-md">
-                          {(banner as any).urgencyText}
+                          {customerMarketingText((banner as any).urgencyText)}
                         </span>
                       )}
                     </div>
@@ -531,7 +549,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                         handleBannerClick(banner);
                       }}
                     >
-                      {banner.cta || "Shop Now"} <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                      {customerMarketingText(banner.cta, "Shop Now")} <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
                     </button>
                     <button
                       type="button"
@@ -1113,21 +1131,21 @@ function SmartBannerProductStrip({
 }) {
   if (!banner || (!loading && products.length === 0)) return null;
   const b = banner as any;
-  const title = b.healthBenefitText || b.urgencyText || "Picked for this banner";
+  const title = customerMarketingText(b.healthBenefitText || b.urgencyText, "Recommended for you");
   return (
     <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9">
       <div className="rounded-2xl border border-emerald-100 bg-white/92 p-3 shadow-[0_12px_34px_rgba(13,43,0,0.07)] sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#5FA800]">
-              Smart picks
+              Recommended picks
             </p>
             <h2 className="mt-1 text-base font-black text-gray-950 sm:text-xl">
               {title}
             </h2>
             {b.urgencyText && (
               <p className="mt-1 text-xs font-semibold text-gray-500 sm:text-sm">
-                {b.urgencyText}
+                {customerMarketingText(b.urgencyText)}
               </p>
             )}
           </div>
@@ -1174,23 +1192,23 @@ function SmartPromoBannerCard({
         <div>
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/14 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/85 ring-1 ring-white/16 backdrop-blur">
             <Sparkles className="h-3 w-3 text-amber-200" />
-            {b.label || "AI Smart Pick"}
+            {customerMarketingText(b.label, "Seasonal Pick")}
           </div>
           <h3 className="max-w-[26rem] text-xl font-black leading-[1.04] tracking-tight sm:text-2xl">
-            {banner.title}
+            {customerMarketingText(banner.title, "Premium Dry Fruit Collection")}
           </h3>
           {(b.healthBenefitText || banner.subtitle) && (
             <p className="mt-2 max-w-md text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">
-              {b.healthBenefitText || banner.subtitle}
+              {customerMarketingText(b.healthBenefitText || banner.subtitle)}
             </p>
           )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="rounded-full bg-white/14 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white/80 ring-1 ring-white/14">
-            {productCount > 0 ? `${productCount} matched products` : b.urgencyText || "Seasonal picks"}
+            {productCount > 0 ? `${productCount} matched products` : customerMarketingText(b.urgencyText, "Seasonal picks")}
           </span>
           <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-black text-[#0D2B00] shadow-lg transition-transform group-hover:translate-x-1">
-            {banner.cta || "Shop Now"} <ArrowRight className="h-3.5 w-3.5" />
+            {customerMarketingText(banner.cta, "Shop Now")} <ArrowRight className="h-3.5 w-3.5" />
           </span>
         </div>
       </div>
@@ -1210,8 +1228,8 @@ function SmartPromoBannerSection({
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
       <div className="mb-4 flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#5FA800]">AI promotions</p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 sm:text-2xl">Smart seasonal picks</h2>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#5FA800]">Seasonal promotions</p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 sm:text-2xl">Premium seasonal picks</h2>
         </div>
         <Link href="/products" className="hidden rounded-full border border-[#5FA800]/25 px-4 py-2 text-sm font-black text-[#4d8a00] transition-colors hover:bg-[#5FA800]/10 sm:inline-flex">
           View products
@@ -1336,7 +1354,7 @@ function CountdownDealSection({
   const btnBg = b.buttonBgColor || "#ffffff";
   const btnText = b.buttonTextColor || DARK;
   const textColor = b.textColor || "#ffffff";
-  const supportingText = b.healthBenefitText || b.urgencyText || b.subtitle;
+  const supportingText = customerMarketingText(b.healthBenefitText || b.urgencyText || b.subtitle);
 
   return (
     <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pb-9 sm:pb-10">
@@ -1352,9 +1370,9 @@ function CountdownDealSection({
           <div className="relative z-10 grid gap-4 lg:grid-cols-[1.1fr_auto_auto] lg:items-center">
             <div className="min-w-0 lg:max-w-xl">
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/90 backdrop-blur">
-                <Flame className="h-3 w-3 text-orange-300" /> {b.label || "AI Limited Deal"}
+                <Flame className="h-3 w-3 text-orange-300" /> {customerMarketingText(b.label, "Limited Time Picks")}
               </div>
-              <h2 className="text-lg font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.7rem]">{banner.title || "Daily Energy Nuts"}</h2>
+              <h2 className="text-lg font-black leading-tight tracking-tight sm:text-2xl lg:text-[1.7rem]">{customerMarketingText(banner.title, "Daily Energy Nuts")}</h2>
               {supportingText && <p className="mt-1 max-w-xl text-xs font-semibold leading-relaxed text-white/78 sm:text-sm">{supportingText}</p>}
             </div>
             <div className="flex items-center lg:justify-center">
@@ -1367,7 +1385,7 @@ function CountdownDealSection({
                 className="inline-flex min-h-[38px] items-center gap-2 rounded-full px-4 py-2 text-xs font-black shadow-[0_14px_26px_rgba(0,0,0,0.20)] ring-1 ring-white/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(0,0,0,0.24)] active:translate-y-0 sm:text-sm"
                 style={{ backgroundColor: btnBg, color: btnText }}
               >
-                <ShoppingBag className="h-4 w-4" /> {banner.cta || "Explore Deals"}
+                <ShoppingBag className="h-4 w-4" /> {customerMarketingText(banner.cta, "Explore Deals")}
               </button>
             </div>
           </div>
