@@ -33,6 +33,13 @@ import {
   isActiveCommerceFlow,
 } from "../lib/whatsappConversationMemory.js";
 import { isDeliveryOnlyMessage, isTrackingOnlyMessage, tryDeterministicWaReply, sendDeterministicWaReply } from "../lib/waIntentEngine.js";
+import {
+  buildHumanWelcomeReply,
+  isLikelyProductInquiry,
+  shouldUseProductDatabaseFirst,
+  tryWaProductCatalogReply,
+} from "../lib/waProductBrain.js";
+import { productRootTermsFromQuery } from "../lib/shopifyProductSearch.js";
 
 const router = Router();
 
@@ -120,7 +127,18 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   if (has(["order krna", "order karna", "order karwana", "order place", "place order", "buy krna", "lena hai", "bill bna", "bill bana", "bill bna k", "bill bana k"])) return { intent: "order_start", confidence: 0.78, reason: "order intent without product" };
   if (has(productWords) && has(["recommend", "suggest", "best", "healthy", "gift", "kids", "energy"])) return { intent: "recommendation", confidence: 0.86, reason: "product recommendation keyword", productQuery: productWords.find((w) => t.includes(w)) };
   if (has(productWords) && has(["price", "rate", "qeemat", "kitna", "how much", "rs", "rupees"])) return { intent: "pricing", confidence: 0.9, reason: "product + price keyword", productQuery: productWords.find((w) => t.includes(w)) };
-  if (has(productWords) && (has(productActionWords) || t.split(" ").length <= 4)) return { intent: "product_search", confidence: 0.82, reason: "clear product keyword", productQuery: productWords.find((w) => t.includes(w)) };
+  if (has(productWords) && (has(productActionWords) || t.split(" ").length <= 6)) return { intent: "product_search", confidence: 0.82, reason: "clear product keyword", productQuery: text.trim() };
+  const productDescriptors = ["shelled", "unshelled", "raw", "roasted", "peeled", "premium", "organic", "without shell", "with shell", "salted", "unsalted"];
+  const catalogRoots = productRootTermsFromQuery(text);
+  if (catalogRoots.length > 0 && has(productDescriptors) && t.split(" ").length <= 10) {
+    return { intent: "product_search", confidence: 0.84, reason: `product descriptor + ${catalogRoots[0]}`, productQuery: text.trim() };
+  }
+  if (catalogRoots.length > 0 && !has(["cancel order", "complaint", "refund"]) && t.split(" ").length <= 12) {
+    if (has(["price", "rate", "qeemat", "kitna", "how much"])) {
+      return { intent: "pricing", confidence: 0.85, reason: `catalog root + price: ${catalogRoots[0]}`, productQuery: text.trim() };
+    }
+    return { intent: "product_search", confidence: 0.78, reason: `catalog alias root: ${catalogRoots[0]}`, productQuery: text.trim() };
+  }
   if (exact(["hi", "hello", "hey", "salam", "salaam", "assalam", "assalam o alaikum", "aoa", "helo", "hii"])) return { intent: "greeting", confidence: 0.88, reason: "greeting only" };
   if (has(["help", "madad", "support", "poochna", "sawal", "question"])) return { intent: "support", confidence: 0.72, reason: "support keyword" };
   return { intent: "general", confidence: 0.45, reason: "no strong deterministic intent" };
@@ -892,6 +910,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               });
               continue;
             }
+            if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: detected, log })) {
+              continue;
+            }
             await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
             continue;
           }
@@ -906,8 +927,16 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           });
 
           if (detected.intent === "greeting" && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
-            await sendQuickOrderMenu(phone, waSettings);
-            continue;
+            if (chatbot?.isEnabled) {
+              await sendWaText(phone, buildHumanWelcomeReply(textBody), waSettings, "human_greeting");
+              await setConversationState(phone, "ai_chat", { greetedAt: new Date().toISOString() });
+              await persistConversationTurn(phone, { intent: "greeting", topic: "greeting" });
+              continue;
+            }
+            if ((chatbot as any)?.menuEnabled) {
+              await sendQuickOrderMenu(phone, waSettings);
+              continue;
+            }
           }
 
           if (await handleQuickOrderNumber({ phone, textBody, currentState, waSettings, detectedIntent: detected })) {
@@ -941,6 +970,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               intent: detected.intent === "delivery" || isDeliveryOnlyMessage(textBody) ? "delivery" : detected.intent,
               send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
             });
+            continue;
+          }
+
+          if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: detected, log })) {
             continue;
           }
 
@@ -1540,12 +1573,75 @@ function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Pro
   return card;
 }
 
+async function trySendProductCatalogReply(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  detectedIntent: ReturnType<typeof detectWaIntent>;
+  log?: any;
+}): Promise<boolean> {
+  const { phone, textBody, waSettings, detectedIntent, log } = opts;
+  if (
+    !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody) &&
+    !isLikelyProductInquiry(textBody, detectedIntent.intent)
+  ) {
+    return false;
+  }
+  try {
+    const hit = await tryWaProductCatalogReply({
+      textBody,
+      productQuery: detectedIntent.productQuery,
+    });
+    if (!hit) return false;
+
+    await logWaProcessingStep({
+      phone,
+      step: "product_db_reply",
+      detail: `Product Knowledge DB reply (score ${hit.score}) for "${hit.query}".`,
+      payload: {
+        query: hit.query,
+        matchedRoots: hit.matchedRoots,
+        product: hit.product.name,
+        score: hit.score,
+        variants: hit.product.variantOptions.map((v) => v.title),
+      },
+    });
+
+    await sendDeterministicWaReply({
+      phone,
+      textBody,
+      reply: hit.reply,
+      intent: "product_search",
+      send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+    });
+    await persistConversationTurn(phone, {
+      intent: "product_search",
+      topic: "product",
+      mergeStateData: {
+        selectedProductName: hit.product.name,
+        shopifyProductId: hit.product.shopifyProductId,
+        lastUserMessage: textBody.slice(0, 500),
+      },
+    });
+    return true;
+  } catch (err) {
+    log?.warn(err, "Product catalog reply failed");
+    return false;
+  }
+}
+
 async function buildEmergencyAiFallback(opts: {
   textBody: string;
   intent: ReturnType<typeof detectWaIntent>;
   phone?: string;
 }): Promise<string> {
   const { textBody, intent, phone } = opts;
+  const catalogHit = await tryWaProductCatalogReply({
+    textBody,
+    productQuery: intent.productQuery ?? textBody,
+  }).catch(() => null);
+  if (catalogHit) return catalogHit.reply;
+
   const roman = /[a-z]/i.test(textBody) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(textBody);
   const state = phone ? await getConversationState(phone).catch(() => null) : null;
   if (state?.state?.startsWith("wa_order_")) {
@@ -1569,9 +1665,7 @@ async function buildEmergencyAiFallback(opts: {
     }
   }
   if (intent.intent === "greeting") {
-    return roman
-      ? "Assalam o Alaikum 😊 Alhamdulillah, main theek hoon. Aap batayein, kis product ya order mein madad chahiye?"
-      : "وعلیکم السلام 😊 الحمدللہ، میں ٹھیک ہوں۔ آپ بتائیں کس product یا order میں مدد چاہیے؟";
+    return buildHumanWelcomeReply(textBody);
   }
   if (intent.intent === "delivery") {
     const delivery = await tryDeterministicWaReply({
@@ -2670,6 +2764,11 @@ async function handleAiReply(opts: {
 }): Promise<void> {
   const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
   const intent = detectedIntent ?? detectWaIntent(textBody);
+
+  if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: intent, log })) {
+    return;
+  }
+
   try {
     await logWaProcessingStep({
       phone,
@@ -3579,6 +3678,36 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
     if (!chatbot) return res.status(404).json({ error: "Chatbot settings not found" });
     const testText = message.trim();
     const detected = detectWaIntent(testText);
+
+    const productHit = await tryWaProductCatalogReply({
+      textBody: testText,
+      productQuery: detected.productQuery,
+    }).catch(() => null);
+
+    if (
+      productHit &&
+      (shouldUseProductDatabaseFirst(detected.intent, testText) || isLikelyProductInquiry(testText, detected.intent))
+    ) {
+      return res.json({
+        success: true,
+        reply: productHit.reply,
+        source: "product_knowledge_db",
+        detectedIntent: detected,
+        debug: {
+          query: productHit.query,
+          matchedRoots: productHit.matchedRoots,
+          score: productHit.score,
+          product: productHit.product.name,
+          shopifyProductId: productHit.product.shopifyProductId,
+          variants: productHit.product.variantOptions.map((v) => ({
+            title: v.title,
+            price: v.price,
+            stock: v.inventoryQuantity ?? 0,
+          })),
+        },
+      });
+    }
+
     let catalogContext = "";
     if (shouldSendCatalogForIntent(detected.intent) && !isGenericCategoryQuery(detected.productQuery)) {
       const products = await searchProductsForWa(detected.productQuery ?? testText, 4);
@@ -3607,7 +3736,19 @@ router.post("/admin/whatsapp/test-ai-reply", adminMiddleware as any, async (req,
       max_tokens: 400,
     });
     const reply = completion.choices[0]?.message?.content?.trim() ?? "";
-    return res.json({ success: true, reply, model: chatbot.aiModel, promptLoaded: brainPrompt.promptLoaded, promptSource: brainPrompt.promptSource, promptVersion: brainPrompt.promptVersion });
+    return res.json({
+      success: true,
+      reply,
+      source: "openai",
+      model: chatbot.aiModel,
+      detectedIntent: detected,
+      promptLoaded: brainPrompt.promptLoaded,
+      promptSource: brainPrompt.promptSource,
+      promptVersion: brainPrompt.promptVersion,
+      debug: productHit
+        ? { catalogAttempt: { query: productHit.query, score: productHit.score, product: productHit.product.name } }
+        : { catalogAttempt: null },
+    });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e.message ?? "AI test failed" });
   }
@@ -4285,14 +4426,20 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
     if (!query) return res.status(400).json({ error: "query is required" });
     const limit = Math.min(25, Math.max(1, Number(req.body?.limit ?? 8)));
     const { searchShopifyCatalog, formatShopifyCatalogForOpenAI, formatShopifyCatalogWhatsAppReply, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
+    const { productRootsInMessage } = await import("../lib/waProductBrain.js");
     const products = await searchShopifyCatalog(query, limit);
     const totalMatches = await countShopifyCatalogMatches(query);
     const roman = /[a-z]/i.test(query) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(query);
+    const roots = productRootsInMessage(query);
     return res.json({
       query,
       count: products.length,
       totalMatches,
+      matchedAliasRoots: roots,
       whatsappReplyPreview: formatShopifyCatalogWhatsAppReply(products.slice(0, 1), roman),
+      topMatch: products[0]
+        ? { name: products[0].name, score: products[0].score, shopifyProductId: products[0].shopifyProductId }
+        : null,
       products: products.map((p) => ({
         name: p.name,
         shopifyProductId: p.shopifyProductId,

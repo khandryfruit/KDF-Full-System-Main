@@ -44,7 +44,12 @@ export async function loadConversationMemory(phone: string) {
     .catch(() => []);
 
   const assistantReplies = recentLogs
-    .filter((row) => row.templateName === "ai_reply" || row.templateName === "deterministic_reply" || row.templateName === "ai_fallback")
+    .filter((row) =>
+      row.templateName === "ai_reply" ||
+      row.templateName === "deterministic_reply" ||
+      row.templateName === "ai_fallback" ||
+      row.templateName === "human_greeting"
+    )
     .map((row) => String(row.message ?? "").trim())
     .filter(Boolean)
     .slice(0, 5);
