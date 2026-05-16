@@ -2540,6 +2540,11 @@ const ONDRIVE_BRAND = "OnDrive Logistics";
 
 /* ── Raw SQL helpers (automation tables not in Drizzle schema yet) ── */
 async function getAutomationSettings() {
+  await db.execute(sql`
+    ALTER TABLE courier_automation_settings
+      ADD COLUMN IF NOT EXISTS auto_book_on_confirmation boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS manual_booking_required boolean NOT NULL DEFAULT true
+  `).catch(() => {});
   const res = await db.execute(sql`SELECT * FROM courier_automation_settings WHERE id = 1 LIMIT 1`);
   return (res.rows?.[0] ?? {}) as Record<string, any>;
 }
@@ -2685,7 +2690,7 @@ router.get("/admin/logistics/automation/settings", adminMiddleware, async (req, 
 router.put("/admin/logistics/automation/settings", adminMiddleware, async (req, res) => {
   try {
     const {
-      enabled, autoBookOnSync, defaultCourierSlug, notifyWhatsapp, notifyBranding,
+      enabled, autoBookOnSync, autoBookOnConfirmation, manualBookingRequired, defaultCourierSlug, notifyWhatsapp, notifyBranding,
       highRiskCities, rules,
     } = req.body;
 
@@ -2695,6 +2700,8 @@ router.put("/admin/logistics/automation/settings", adminMiddleware, async (req, 
       UPDATE courier_automation_settings SET
         enabled = ${Boolean(enabled)},
         auto_book_on_sync = ${Boolean(autoBookOnSync)},
+        auto_book_on_confirmation = ${Boolean(autoBookOnConfirmation)},
+        manual_booking_required = ${manualBookingRequired !== false},
         default_courier_slug = ${defaultCourierSlug || null},
         notify_whatsapp = ${notifyWhatsapp !== false},
         notify_branding = ${notifyBranding || "OnDrive Logistics"},

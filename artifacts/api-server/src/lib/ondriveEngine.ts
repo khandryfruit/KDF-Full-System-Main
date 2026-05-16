@@ -15,6 +15,27 @@ import {
 import { logger } from "./logger";
 import { RIDER_PUSH_CHANNEL_ID, RIDER_PUSH_SOUND } from "./riderPushConfig.js";
 
+type CourierBookingControl = {
+  automationEnabled: boolean;
+  autoBookOnConfirmation: boolean;
+  manualBookingRequired: boolean;
+};
+
+async function getCourierBookingControl(): Promise<CourierBookingControl> {
+  const res = await db.execute(sql`
+    SELECT enabled, auto_book_on_confirmation, manual_booking_required
+    FROM courier_automation_settings
+    WHERE id = 1
+    LIMIT 1
+  `).catch(() => ({ rows: [] }));
+  const row = ((res.rows ?? [])[0] ?? {}) as Record<string, any>;
+  return {
+    automationEnabled: row.enabled === true,
+    autoBookOnConfirmation: row.auto_book_on_confirmation === true,
+    manualBookingRequired: row.manual_booking_required !== false,
+  };
+}
+
 /* ══════════════════════════════════════════════════════
    EXPO PUSH NOTIFICATION HELPER
    Sends push to rider device via Expo push API.
@@ -275,13 +296,15 @@ export async function upsertOrderConfirmationRecord(params: {
   messageId?: string | null;
 }) {
   const normalizedPhone = normalizePhone(params.phone);
+  const bookingControl = await getCourierBookingControl();
+  const autoBookEnabled = bookingControl.automationEnabled && bookingControl.autoBookOnConfirmation && !bookingControl.manualBookingRequired;
   await db.execute(sql`
     INSERT INTO shopify_order_confirmations
       (shopify_order_id, shopify_order_number, shopify_order_db_id, customer_phone, customer_name,
        wa_message_id, status, last_sent_at, auto_book_enabled)
     VALUES
       (${params.shopifyOrderId}, ${params.orderNumber}, ${params.shopifyOrderDbId ?? null}, ${normalizedPhone},
-       ${params.customerName}, ${params.messageId ?? null}, 'pending', NOW(), TRUE)
+       ${params.customerName}, ${params.messageId ?? null}, 'pending', NOW(), ${autoBookEnabled})
     ON CONFLICT (shopify_order_id) DO UPDATE SET
       status = CASE WHEN shopify_order_confirmations.status = 'confirmed' THEN 'confirmed' ELSE 'pending' END,
       wa_message_id = COALESCE(${params.messageId ?? null}, shopify_order_confirmations.wa_message_id),
@@ -339,13 +362,15 @@ export async function claimOrderConfirmationSend(params: {
   }
 
   const normalizedPhone = normalizePhone(params.phone);
+  const bookingControl = await getCourierBookingControl();
+  const autoBookEnabled = bookingControl.automationEnabled && bookingControl.autoBookOnConfirmation && !bookingControl.manualBookingRequired;
   const inserted = await db.execute(sql`
     INSERT INTO shopify_order_confirmations
       (shopify_order_id, shopify_order_number, shopify_order_db_id, customer_phone, customer_name,
        status, auto_book_enabled, updated_at)
     VALUES
       (${params.shopifyOrderId}, ${params.orderNumber}, ${params.shopifyOrderDbId ?? null}, ${normalizedPhone},
-       ${params.customerName}, 'sending', TRUE, NOW())
+       ${params.customerName}, 'sending', ${autoBookEnabled}, NOW())
     ON CONFLICT (shopify_order_id) DO NOTHING
     RETURNING id
   `).catch(() => ({ rows: [] }));
@@ -624,6 +649,22 @@ export async function autoBookShipmentForOrder(params: {
     const resolvedName    = addr.name    ?? order.customerName    ?? "";
     const resolvedPhone   = addr.phone   ?? order.customerPhone   ?? "";
     const resolvedAddress = addr.address1 ?? addr.address         ?? "";
+    const validationErrors = [
+      !String(resolvedName).trim() ? "customer name missing" : "",
+      !/^(?:\+?92|0)?3\d{9}$/.test(String(resolvedPhone).replace(/[^\d+]/g, "")) ? "valid phone missing" : "",
+      String(resolvedAddress).trim().length < 8 ? "complete address missing" : "",
+      !String(city).trim() ? "city missing" : "",
+      lineItems.length === 0 ? "products missing" : "",
+      Number(order.totalPrice ?? 0) <= 0 ? "valid total missing" : "",
+    ].filter(Boolean);
+    if (validationErrors.length > 0) {
+      await db.execute(sql`
+        UPDATE shopify_order_confirmations
+        SET status = 'confirmed', updated_at = NOW()
+        WHERE shopify_order_id = ${order.shopifyOrderId}
+      `).catch(() => {});
+      return { success: false, error: `Manual review required before courier booking: ${validationErrors.join(", ")}`, isRealApi: false };
+    }
 
     const courierOrderObj: Record<string, any> = {
       id:             order.id,
@@ -877,9 +918,13 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
       shopifyOrderId,
     });
 
-    /* Check auto-book enabled */
+    /* Check auto-book enabled. Manual review is the default and must not book courier. */
+    const bookingControl = await getCourierBookingControl();
     const confRes = await db.execute(sql`SELECT auto_book_enabled FROM shopify_order_confirmations WHERE shopify_order_id = ${shopifyOrderId} LIMIT 1`).catch(() => ({ rows: [] }));
-    const autoBook = (confRes.rows?.[0] as any)?.auto_book_enabled !== false;
+    const autoBook = bookingControl.automationEnabled
+      && bookingControl.autoBookOnConfirmation
+      && !bookingControl.manualBookingRequired
+      && (confRes.rows?.[0] as any)?.auto_book_enabled === true;
 
     if (autoBook) {
       setImmediate(async () => {
@@ -891,6 +936,8 @@ async function handleConfirmation(phone: string, shopifyOrderId: string, method:
           logger.warn({ shopifyOrderId, orderNumber: order.order_number, error: result.error }, "OnDrive: auto-booking failed after confirmation");
         }
       });
+    } else {
+      logger.info({ shopifyOrderId, orderNumber: order.order_number, bookingControl }, "OnDrive: courier booking held for manual admin review");
     }
 
     return { handled: true, action: "confirmed", orderId: shopifyOrderId };

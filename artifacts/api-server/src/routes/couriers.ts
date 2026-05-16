@@ -781,6 +781,43 @@ router.post("/admin/couriers/manual-book", adminMiddleware as any, async (req: A
   }
 });
 
+/* ─── Cancel courier booking for an ecommerce order ─── */
+router.post("/admin/orders/:orderId/cancel-booking", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const orderId = parseInt(req.params.orderId as string, 10);
+    if (!Number.isFinite(orderId)) {
+      res.status(400).json({ error: "Invalid order id" });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const rows = await db.select().from(shipmentsTable)
+      .where(and(eq(shipmentsTable.orderId, orderId), ne(shipmentsTable.status, "cancelled" as any)))
+      .orderBy(desc(shipmentsTable.createdAt))
+      .limit(1);
+    const shipment = rows[0];
+    if (!shipment) {
+      await db.update(ordersTable).set({ trackingId: null, courier: null, updatedAt: new Date() }).where(eq(ordersTable.id, orderId));
+      res.json({ ok: true, message: "No active shipment found. Order booking fields cleared." });
+      return;
+    }
+
+    const history = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : [];
+    await db.update(shipmentsTable).set({
+      status: "cancelled" as any,
+      isCancelled: true,
+      statusHistory: [...history, { status: "cancelled", timestamp: now, note: "Cancelled by admin before/after manual review" }],
+      updatedAt: new Date(),
+    }).where(eq(shipmentsTable.id, shipment.id));
+    await db.update(ordersTable).set({ trackingId: null, courier: null, updatedAt: new Date() }).where(eq(ordersTable.id, orderId));
+
+    res.json({ ok: true, shipmentId: shipment.id, message: "Courier booking cancelled locally. If courier API already accepted this shipment, cancel it in courier portal too." });
+  } catch (err: any) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message ?? "Failed to cancel booking" });
+  }
+});
+
 /* ─── Get label data for a shipment ────────────────── */
 router.get("/admin/shipments/:id/label", adminMiddleware as any, async (req: AuthRequest, res: Response): Promise<void> => {
   try {

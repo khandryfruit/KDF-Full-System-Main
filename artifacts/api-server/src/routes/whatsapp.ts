@@ -10,7 +10,6 @@ import { DEFAULT_GREETING, KHAN_BRAND_NAME, KHAN_WEBSITE_URL } from "../lib/waMe
 import { broadcastSSE } from "../lib/sse";
 import type OpenAI from "openai";
 import { resolveOpenAIClient } from "../lib/resolveOpenAI";
-import { runShopifyOrderAutomation } from "../lib/orderAutomationEngine.js";
 import { createAdminAlert } from "../lib/adminAlerts.js";
 import { buildAiBrainSystemPrompt } from "../lib/aiBrain.js";
 import crypto from "crypto";
@@ -651,6 +650,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* Get current conversation state */
           const convState = await getConversationState(phone);
           let currentState = convState?.state ?? "idle";
+          const voiceText = (msgType === "audio" || msgType === "voice")
+            ? await transcribeWhatsAppVoice({ mediaId: msg.audio?.id ?? msg.voice?.id, waSettings, phone, messageId: msgId })
+            : null;
+          const inboundText = voiceText ?? msg.text?.body ?? "";
+          const isTextLike = msgType === "text" || Boolean(voiceText);
+          if ((msgType === "audio" || msgType === "voice") && !voiceText) {
+            await sendWaText(phone, "Voice note clear nahi ho saka. Please dobara voice bhej dein ya 1, 2, 3 mein se option select kar dein.", waSettings, "voice_transcription_failed");
+            continue;
+          }
 
           /* ═══════════════════════════════════════════════
              BRANCH 1: Interactive reply (button / list tap)
@@ -703,8 +711,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
             /* "Main Menu" button — show the menu again */
             if (interactionId === "main_menu") {
-              await handleSendMenu(phone, waSettings, chatbot);
-              await setConversationState(phone, "menu_shown");
+              await sendQuickOrderMenu(phone, waSettings);
               continue;
             }
 
@@ -746,8 +753,8 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ═══════════════════════════════════════════════
              BRANCH 2: Awaiting order number (Track Order)
              ═══════════════════════════════════════════════ */
-          if (currentState === "track_order_wait" && msgType === "text" && msg.text?.body) {
-            const inputText = msg.text.body.trim();
+          if ((currentState === "track_order_wait" || currentState === "awaiting_tracking_input") && isTextLike && inboundText) {
+            const inputText = inboundText.trim();
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inputText, mode: "complex", log });
             await handleTrackOrder(phone, inputText, waSettings);
             await setConversationState(phone, "idle");
@@ -757,8 +764,8 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* ═══════════════════════════════════════════════
              BRANCH 2b: Order placement flow states
              ═══════════════════════════════════════════════ */
-          if (currentState === "wa_order_await_confirm" && msgType === "text" && msg.text?.body) {
-            const confirmStateText = msg.text.body.trim();
+          if (currentState === "wa_order_await_confirm" && isTextLike && inboundText) {
+            const confirmStateText = inboundText.trim();
             const confirmStateIntent = detectWaIntent(confirmStateText);
             if (
               ["greeting", "conversation", "general", "support"].includes(confirmStateIntent.intent) &&
@@ -776,10 +783,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               currentState = "idle";
             }
           }
-          if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
-            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
+          if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
+            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
             try {
-              await handleCommerceOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
+              await handleCommerceOrderFlow(phone, inboundText.trim(), currentState, waSettings, log);
             } catch (commerceErr) {
               await logWaProcessingStep({
                 phone,
@@ -787,7 +794,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 step: "commerce_text_processing_failed",
                 status: "failed",
                 detail: "Commerce text state reached backend but processing failed.",
-                payload: { error: commerceErr instanceof Error ? commerceErr.message : String(commerceErr), currentState, text: msg.text.body.trim() },
+                payload: { error: commerceErr instanceof Error ? commerceErr.message : String(commerceErr), currentState, text: inboundText.trim() },
                 failureReason: commerceErr instanceof Error ? commerceErr.message : String(commerceErr),
               });
               await sendWaText(phone, "Order flow mein issue aa gaya. Please product ka naam dobara bhej dein, main fresh bill bana deta hoon.", waSettings);
@@ -796,17 +803,17 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             continue;
           }
 
-          if (["order_await_qty", "order_await_name", "order_await_address", "order_await_city", "order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
-            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
-            await handleOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
+          if (["order_await_qty", "order_await_name", "order_await_address", "order_await_city", "order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
+            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
+            await handleOrderFlow(phone, inboundText.trim(), currentState, waSettings, log);
             continue;
           }
 
           /* ═══════════════════════════════════════════════
              BRANCH 3: Text message — greeting / AI / menu
              ═══════════════════════════════════════════════ */
-          if (msgType !== "text" || !msg.text?.body) continue;
-          const textBody = msg.text.body.trim();
+          if (!isTextLike || !inboundText) continue;
+          const textBody = inboundText.trim();
           await showHumanPresenceBeforeReply({
             inboundMessageId: msgId,
             text: textBody,
@@ -817,8 +824,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           /* Reset to idle if user says "menu" at any time */
           const isMenuKeyword = /^\s*(menu|main menu|back|home)\s*$/i.test(textBody);
           if (isMenuKeyword && (chatbot as any)?.menuEnabled) {
-            await handleSendMenu(phone, waSettings, chatbot);
-            await setConversationState(phone, "menu_shown");
+            await sendQuickOrderMenu(phone, waSettings);
             continue;
           }
 
@@ -845,6 +851,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { textBody, ...detected },
           });
 
+          if (detected.intent === "greeting" && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
+            await sendQuickOrderMenu(phone, waSettings);
+            continue;
+          }
+
+          if (await handleQuickOrderNumber({ phone, textBody, currentState, waSettings, detectedIntent: detected })) {
+            continue;
+          }
+
           if (detected.intent === "order_start" && ((chatbot as any)?.orderingEnabled !== false)) {
             const started = await startCommerceOrderFromText({ phone, textBody, waSettings, detectedIntent: detected });
             if (started) continue;
@@ -852,8 +867,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           /* Greeting menu is only a fallback when AI is disabled. If AI is enabled, OpenAI must use admin prompt. */
           if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
-            await handleSendMenu(phone, waSettings, chatbot);
-            await setConversationState(phone, "menu_shown");
+            await sendQuickOrderMenu(phone, waSettings);
             continue;
           }
 
@@ -1241,10 +1255,6 @@ function generateWhatsappOrderNumber(): string {
   return "KDF-WA-" + Date.now().toString().slice(-7) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 }
 
-function generateWhatsappTrackingId(): string {
-  return "WA" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-}
-
 function normalizeCheckoutPhone(value: unknown): string {
   return String(value ?? "").replace(/\D/g, "");
 }
@@ -1575,6 +1585,151 @@ async function buildEmergencyAiFallback(opts: {
   return roman
     ? "Ji 😊 aapka message receive ho gaya. Aap thori detail share kar dein, main madad karta hoon."
     : "جی 😊 آپ کا message receive ہو گیا۔ تھوڑی detail share کر دیں، میں مدد کرتا ہوں۔";
+}
+
+const QUICK_ORDER_CATEGORIES = [
+  { key: "badam", label: "بادام / Badam" },
+  { key: "akhrot", label: "اخروٹ / Akhrot" },
+  { key: "kaju", label: "کاجو / Kaju" },
+  { key: "pista", label: "پستہ / Pista" },
+  { key: "anjeer", label: "خشک انجیر / Anjeer" },
+];
+
+async function sendQuickOrderMenu(phone: string, waSettings: any): Promise<void> {
+  await setConversationState(phone, "quick_order_menu", { source: "quick_order_menu" });
+  await sendWaText(phone, `جی 😊 خوش آمدید
+
+آسان آرڈر کے لیے نمبر منتخب کریں:
+
+1️⃣ پروڈکٹس دیکھیں
+2️⃣ آرڈر کریں
+3️⃣ قیمت پوچھیں
+4️⃣ موجودہ آرڈر ٹریک کریں
+5️⃣ کسٹمر سپورٹ
+6️⃣ انسان سے بات کریں
+
+آپ صرف نمبر reply کر سکتے ہیں، مثال: 2`, waSettings, "quick_order_menu");
+}
+
+async function transcribeWhatsAppVoice(opts: {
+  mediaId?: string;
+  waSettings: any;
+  phone: string;
+  messageId?: string;
+}): Promise<string | null> {
+  if (!opts.mediaId || !opts.waSettings?.accessToken) return null;
+  try {
+    const version = opts.waSettings.apiVersion ?? "v18.0";
+    const meta = await fetch(`https://graph.facebook.com/${version}/${opts.mediaId}`, {
+      headers: { Authorization: `Bearer ${opts.waSettings.accessToken}` },
+    }).then((r) => r.json() as Promise<any>);
+    if (!meta?.url) throw new Error(meta?.error?.message ?? "WhatsApp media URL missing");
+    const mediaRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${opts.waSettings.accessToken}` } });
+    if (!mediaRes.ok) throw new Error(`WhatsApp media download failed: ${mediaRes.status}`);
+    const buffer = Buffer.from(await mediaRes.arrayBuffer());
+    const { client } = await resolveOpenAIClient();
+    const { toFile } = await import("openai");
+    const file = await toFile(buffer, "whatsapp-voice.ogg", { type: meta.mime_type ?? "audio/ogg" });
+    const result = await (client as any).audio.transcriptions.create({
+      file,
+      model: "whisper-1",
+      response_format: "text",
+    });
+    const text = String(result ?? "").trim();
+    if (text) {
+      await logWaProcessingStep({
+        phone: opts.phone,
+        messageId: opts.messageId,
+        step: "voice_transcribed",
+        detail: "WhatsApp voice note converted to text for AI/order flow.",
+        payload: { mediaId: opts.mediaId, textPreview: text.slice(0, 300) },
+      });
+    }
+    return text || null;
+  } catch (err) {
+    await logWaProcessingStep({
+      phone: opts.phone,
+      messageId: opts.messageId,
+      step: "voice_transcription_failed",
+      status: "failed",
+      detail: "Voice note could not be transcribed.",
+      payload: { error: err instanceof Error ? err.message : String(err) },
+      failureReason: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+async function sendQuickCategoryMenu(phone: string, waSettings: any, mode: "order" | "price"): Promise<void> {
+  await setConversationState(phone, mode === "order" ? "quick_order_category" : "quick_price_category", { mode });
+  await sendWaText(phone, `براہ کرم category منتخب کریں:
+
+${QUICK_ORDER_CATEGORIES.map((cat, idx) => `${idx + 1}️⃣ ${cat.label}`).join("\n")}
+
+0️⃣ انسان سے بات کریں`, waSettings, "quick_category_menu");
+}
+
+async function handleQuickOrderNumber(opts: {
+  phone: string;
+  textBody: string;
+  currentState: string;
+  waSettings: any;
+  detectedIntent?: ReturnType<typeof detectWaIntent>;
+}): Promise<boolean> {
+  const choice = opts.textBody.trim().replace(/[^0-9]/g, "");
+  if (!choice) return false;
+
+  if (choice === "0" || (opts.currentState === "quick_order_menu" && choice === "6")) {
+    await setConversationState(opts.phone, "human_requested", { requestedAt: new Date().toISOString() });
+    await createAdminAlert({ title: "WhatsApp human handoff requested", message: `Customer ${opts.phone} requested human support.`, type: "wa_human_handoff", dedupeMinutes: 5 });
+    await sendWaText(opts.phone, "جی 😊 ہماری team کو notify کر دیا ہے۔ ایک representative آپ سے جلد رابطہ کرے گا۔", opts.waSettings, "human_handoff_requested");
+    return true;
+  }
+
+  if (opts.currentState === "quick_order_category" || opts.currentState === "quick_price_category") {
+    const category = QUICK_ORDER_CATEGORIES[Number(choice) - 1];
+    if (!category) {
+      await sendQuickCategoryMenu(opts.phone, opts.waSettings, opts.currentState === "quick_order_category" ? "order" : "price");
+      return true;
+    }
+    if (opts.currentState === "quick_price_category") {
+      await handleProductCatalog({ phone: opts.phone, textBody: category.key, waSettings: opts.waSettings, detectedIntent: { intent: "product_price", confidence: 0.9, reason: "quick menu category", productQuery: category.key } as any });
+      await setConversationState(opts.phone, "idle", {});
+      return true;
+    }
+    return startCommerceOrderFromText({
+      phone: opts.phone,
+      textBody: `${category.key} order`,
+      waSettings: opts.waSettings,
+      detectedIntent: { intent: "order_start", confidence: 0.95, reason: "quick menu category", productQuery: category.key } as any,
+    });
+  }
+
+  if (opts.currentState !== "quick_order_menu" && opts.currentState !== "menu_shown") return false;
+
+  if (choice === "1") {
+    await sendQuickCategoryMenu(opts.phone, opts.waSettings, "price");
+    return true;
+  }
+  if (choice === "2") {
+    await sendQuickCategoryMenu(opts.phone, opts.waSettings, "order");
+    return true;
+  }
+  if (choice === "3") {
+    await sendQuickCategoryMenu(opts.phone, opts.waSettings, "price");
+    return true;
+  }
+  if (choice === "4") {
+    await setConversationState(opts.phone, "awaiting_tracking_input", {});
+    await sendWaText(opts.phone, "Order track karne ke liye apna order number, tracking ID, ya phone number bhej dein.", opts.waSettings, "quick_track_prompt");
+    return true;
+  }
+  if (choice === "5") {
+    await setConversationState(opts.phone, "ai_chat", {});
+    await sendWaText(opts.phone, "جی 😊 آپ اپنا سوال آسان الفاظ میں لکھ دیں یا voice note بھیج دیں۔", opts.waSettings, "quick_support_prompt");
+    return true;
+  }
+  return false;
 }
 
 async function calculateWhatsAppOrderTotal(opts: {
@@ -1914,7 +2069,6 @@ async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Rec
   }
 
   const orderNumber = generateWhatsappOrderNumber();
-  const trackingId = generateWhatsappTrackingId();
   const shippingAddress = {
     name: String(stateData.customerName).trim(),
     phone: normalizeCheckoutPhone(stateData.customerPhone || phone),
@@ -1938,11 +2092,11 @@ async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Rec
       walletDiscount: "0.00",
       total: Number(stateData.total).toFixed(2),
       deliveryType: "standard",
-      courier: "tcs",
+      courier: null,
       paymentMethod,
       shippingAddress,
-      notes: [stateData.notes ? `Customer note: ${stateData.notes}` : "", "Source: WhatsApp AI Commerce"].filter(Boolean).join("\n"),
-      trackingId,
+      notes: [stateData.notes ? `Customer note: ${stateData.notes}` : "", "Source: WhatsApp AI Commerce", "Courier booking: Manual review required"].filter(Boolean).join("\n"),
+      trackingId: null,
       confirmedAt: now,
     }).returning();
 
@@ -1961,10 +2115,10 @@ async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Rec
     const [shipment] = await tx.insert(shipmentsTable).values({
       orderId: order.id,
       courierId: null,
-      courierSlug: "tcs",
-      trackingId,
+      courierSlug: null,
+      trackingId: null,
       status: "pending",
-      statusHistory: [{ status: "pending", timestamp: now.toISOString(), note: "WhatsApp order confirmed; courier booking pending" }],
+      statusHistory: [{ status: "pending", timestamp: now.toISOString(), note: "Order confirmed; courier booking pending admin review" }],
       customerName: shippingAddress.name,
       customerPhone: shippingAddress.phone,
       customerAddress: shippingAddress.address,
@@ -1973,8 +2127,8 @@ async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Rec
       pieces: stateData.cart.reduce((sum: number, item: any) => sum + Number(item.quantity ?? 1), 0),
       contentDesc: stateData.cart.map((item: any) => item.productName).join(", ").slice(0, 250),
       isCod: paymentMethod === "cod",
-      bookingSource: "whatsapp_ai_commerce",
-      rawResponse: { note: "Internal tracking generated after ecommerce DB save", orderNumber },
+      bookingSource: "manual_pending",
+      rawResponse: { note: "Courier not booked yet. Admin must review and click Book Courier.", orderNumber },
     } as any).returning();
 
     return { order, insertedItems, shipment, stateData };
@@ -2312,8 +2466,8 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         phone,
         step: "ecommerce_order_saved",
         status: "sent",
-        detail: `Ecommerce order ${ecommerce.order.orderNumber} saved and shipment tracking generated.`,
-        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, trackingId: ecommerce.shipment.trackingId, total: ecommerce.order.total },
+        detail: `Ecommerce order ${ecommerce.order.orderNumber} saved. Courier booking is pending admin review.`,
+        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, shipmentId: ecommerce.shipment.id, bookingStatus: "manual_pending", total: ecommerce.order.total },
       });
       await setConversationState(phone, "idle", {});
 
@@ -2332,25 +2486,18 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         step: "admin_order_sync_completed",
         status: "sent",
         detail: "WhatsApp order is visible in Ecommerce Admin Orders.",
-        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, trackingId: ecommerce.shipment.trackingId, shopifySynced: Boolean(shopifyCreated) },
+        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, shipmentId: ecommerce.shipment.id, bookingStatus: "manual_pending", shopifySynced: Boolean(shopifyCreated) },
       });
       if (shopifyCreated) {
-        await runShopifyOrderAutomation({
-          shopifyOrderDbId: Number(shopifyCreated.orderRow.id),
-          shopifyOrderId: String(shopifyCreated.order.id),
-          orderNumber: String(shopifyCreated.order.name),
-          customerPhone: finalState.customerPhone || phone,
-          customerName: finalState.customerName,
-          shippingAddress: shopifyCreated.orderRow.shippingAddress,
-          totalPrice: String(shopifyCreated.order.total_price ?? ecommerce.order.total ?? 0),
-          financialStatus: shopifyCreated.order.financial_status ?? "pending",
-          lineItems: shopifyCreated.lineItems,
-          source: "manual",
-        }).catch(async (err) => {
-          await logWaProcessingStep({ phone, step: "template_triggered", status: "failed", detail: "Order automation/template trigger failed after Shopify sync.", payload: { error: err instanceof Error ? err.message : String(err) }, failureReason: err instanceof Error ? err.message : String(err) });
+        await logWaProcessingStep({
+          phone,
+          step: "courier_booking_held",
+          status: "sent",
+          detail: "Shopify sync completed, but courier/rider automation was not started because manual booking is required by default.",
+          payload: { shopifyOrderId: shopifyCreated.order.id, ecommerceOrderId: ecommerce.order.id },
         });
       }
-      await sendWaText(phone, `جزاک اللہ 😊\n\nآپ کا آرڈر کامیابی سے confirm ہو گیا ہے۔\n\nOrder ID:\n${ecommerce.order.orderNumber}\nTracking ID:\n${ecommerce.shipment.trackingId}\n\nAdmin panel mein order update ho gaya hai.`, waSettings);
+      await sendWaText(phone, `جزاک اللہ 😊\n\nآپ کا آرڈر کامیابی سے confirm ہو گیا ہے۔\n\nOrder ID:\n${ecommerce.order.orderNumber}\n\nہماری team order review کر کے courier book کرے گی۔ Booking کے بعد tracking update آپ کو WhatsApp پر مل جائے گا۔`, waSettings);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       log?.warn(err, "WhatsApp ecommerce order save failed");
@@ -2677,6 +2824,10 @@ async function handleAiReply(opts: {
 - Never spam catalog/products for greetings, support, or general conversation.
 - If customer wants to order a named product, ask for variant/quantity and keep the conversation moving naturally.
 - If customer wants tracking/order status, use recent order context if available; otherwise ask for order number/phone.
+- Detect customer language automatically: Urdu script, Roman Urdu, English, Punjabi, Pashto, or mixed. Reply in the same style.
+- Use senior-citizen mode by default on WhatsApp: short, clear, one question at a time, no long paragraphs.
+- Customers may reply with only numbers from the quick menu. Treat number replies as valid intent, not confusion.
+- Voice notes may arrive as transcribed text. Treat the transcription exactly like the customer typed it.
 - Keep replies short, human, and conversion-focused.`;
     let catalogContextBlock = "";
     if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {

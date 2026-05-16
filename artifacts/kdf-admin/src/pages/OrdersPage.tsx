@@ -14,7 +14,7 @@ import {
   getListOrdersQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -273,6 +273,15 @@ export default function OrdersPage() {
     },
     onError: (e: any) => toast({ title: "Booking failed", description: e.message, variant: "destructive" }),
   });
+  const cancelBooking = useMutation({
+    mutationFn: (order: any) => apiFetch(`/api/admin/orders/${order.id}/cancel-booking`, { method: "POST" }),
+    onSuccess: (d: any) => {
+      setViewOrder((prev: any) => prev ? { ...prev, trackingId: null, courier: null } : prev);
+      queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+      toast({ title: "Booking cancelled", description: d.message });
+    },
+    onError: (e: any) => toast({ title: "Cancel failed", description: e.message, variant: "destructive" }),
+  });
 
   /* edit-status state */
   const [editStatus, setEditStatus] = useState("");
@@ -389,6 +398,36 @@ export default function OrdersPage() {
 
   const queryParams: any = { page, limit: 20, ...(statusFilter !== "all" ? { status: statusFilter } : {}) };
   const { data: response, isLoading, refetch } = useListOrders(queryParams);
+  const { data: bookingSettings } = useQuery({
+    queryKey: ["/api/admin/logistics/automation/settings"],
+    queryFn: () => apiFetch("/api/admin/logistics/automation/settings").catch(() => null),
+  });
+  const autoBookEnabled = Boolean(bookingSettings?.settings?.enabled && bookingSettings?.settings?.auto_book_on_confirmation && !bookingSettings?.settings?.manual_booking_required);
+  const toggleAutoBooking = useMutation({
+    mutationFn: () => {
+      const s = bookingSettings?.settings ?? {};
+      const nextAuto = !autoBookEnabled;
+      return apiFetch("/api/admin/logistics/automation/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: nextAuto ? true : s.enabled ?? false,
+          autoBookOnSync: s.auto_book_on_sync ?? false,
+          autoBookOnConfirmation: nextAuto,
+          manualBookingRequired: !nextAuto,
+          defaultCourierSlug: s.default_courier_slug ?? "",
+          notifyWhatsapp: s.notify_whatsapp ?? true,
+          notifyBranding: s.notify_branding ?? "OnDrive Logistics",
+          highRiskCities: s.high_risk_cities ?? [],
+          rules: s.rules ?? [],
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logistics/automation/settings"] });
+      toast({ title: autoBookEnabled ? "Manual booking required" : "Auto booking enabled" });
+    },
+    onError: (e: any) => toast({ title: "Booking setting failed", description: e.message, variant: "destructive" }),
+  });
 
   const orders: any[] = response?.items ?? [];
   const total: number = response?.total ?? 0;
@@ -577,9 +616,20 @@ export default function OrdersPage() {
           <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground text-sm mt-1">{total} total order{total !== 1 ? "s" : ""}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="w-4 h-4 mr-2" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleAutoBooking.mutate()}
+            disabled={toggleAutoBooking.isPending}
+            className={autoBookEnabled ? "border-red-200 text-red-700" : "border-amber-200 text-amber-700"}
+          >
+            {autoBookEnabled ? "Auto Booking ON" : "Manual Booking ON"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -687,9 +737,10 @@ export default function OrdersPage() {
                     <TableCell className="font-bold text-sm">Rs. {Number(order.total).toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground capitalize">
-                        {order.deliveryType === "self" ? "🏪 Self" : `🚚 ${COURIERS[order.courier ?? "tcs"] ?? order.courier}`}
+                        {order.deliveryType === "self" ? "🏪 Self" : order.trackingId ? `🚚 ${COURIERS[order.courier ?? "tcs"] ?? order.courier}` : "⏳ Courier pending"}
                       </div>
                       {order.trackingId && <div className="text-xs font-mono text-blue-600 mt-0.5">{order.trackingId}</div>}
+                      {!order.trackingId && order.status !== "cancelled" && <div className="text-[11px] text-amber-600 mt-0.5">Manual booking required</div>}
                     </TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
                     <TableCell><PaymentStatusBadge status={order.paymentStatus} /></TableCell>
@@ -758,8 +809,19 @@ export default function OrdersPage() {
                       onClick={() => { setShowBookCourier(v => !v); setCourierBookingResult(null); }}
                       className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
                     >
-                      <Truck className="w-3.5 h-3.5 mr-1.5" /> Book Courier
+                      <Truck className="w-3.5 h-3.5 mr-1.5" /> {viewOrder.trackingId ? "Retry Booking" : "Book Courier"}
                     </Button>
+                    {viewOrder.trackingId && (
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => cancelBooking.mutate(viewOrder)}
+                        disabled={cancelBooking.isPending}
+                        className="border-red-200 text-red-700 hover:bg-red-50"
+                      >
+                        {cancelBooking.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <X className="w-3.5 h-3.5 mr-1.5" />}
+                        Cancel Booking
+                      </Button>
+                    )}
                     <button onClick={closeDialog} className="p-1.5 rounded-full hover:bg-muted transition-colors">
                       <X className="w-4 h-4 text-muted-foreground" />
                     </button>

@@ -75,6 +75,8 @@ export default function LogisticsAutomationPage() {
     setForm({
       enabled: settings.enabled ?? false,
       autoBookOnSync: settings.auto_book_on_sync ?? false,
+      autoBookOnConfirmation: settings.auto_book_on_confirmation ?? false,
+      manualBookingRequired: settings.manual_booking_required ?? true,
       defaultCourierSlug: settings.default_courier_slug ?? "",
       notifyWhatsapp: settings.notify_whatsapp ?? true,
       notifyBranding: settings.notify_branding ?? "OnDrive Logistics",
@@ -193,7 +195,24 @@ export default function LogisticsAutomationPage() {
 
           {/* Auto booking */}
           <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h3 className="font-semibold flex items-center gap-2"><Truck className="w-4 h-4 text-primary" /> Auto Booking</h3>
+            <h3 className="font-semibold flex items-center gap-2"><Truck className="w-4 h-4 text-primary" /> Courier Booking Control</h3>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Default safe mode: customer-confirmed orders are saved as Confirmed, but courier booking stays pending until Admin clicks Book Courier.
+            </div>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <p className="text-sm font-medium">Manual booking required</p>
+                <p className="text-xs text-muted-foreground">Admin must review order/address and click Book Courier before tracking is generated</p>
+              </div>
+              <Toggle checked={form.manualBookingRequired ?? true} onChange={v => set("manualBookingRequired", v)} />
+            </div>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <p className="text-sm font-medium">Auto-book after customer confirmation</p>
+                <p className="text-xs text-muted-foreground">Only works when automation is enabled and manual booking is off</p>
+              </div>
+              <Toggle checked={form.autoBookOnConfirmation ?? false} onChange={v => set("autoBookOnConfirmation", v)} />
+            </div>
             <div className="flex items-center justify-between py-3 border-b border-border">
               <div>
                 <p className="text-sm font-medium">Auto-book on Shopify sync</p>
