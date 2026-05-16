@@ -10,6 +10,7 @@ import {
 import { useListBanners, useListCategories, useListProducts } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ProductCard";
+import { HotDealsSection } from "@/components/home/HotDealsSection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -1316,10 +1317,19 @@ function CountdownDealSection({
             {showCategories ? (
               <CategoryGrid categories={shownCategories} loading={false} />
             ) : loading ? (
-              <ProductCarousel products={[]} loading skeletonCount={4} />
+              <div className="kdf-product-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i}>
+                    <Skeleton className="mb-2 h-[200px] rounded-xl sm:aspect-square sm:rounded-2xl" />
+                    <Skeleton className="h-3 w-3/4 rounded" />
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]" style={{ WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory" }}>
-                {shownProducts.map((p) => <DealProductCard key={p.id} product={p} />)}
+              <div className="kdf-product-grid">
+                {shownProducts.map((p) => (
+                  <ProductCard key={p.id} product={p} hotDealBadge />
+                ))}
               </div>
             )}
           </div>
@@ -1657,21 +1667,11 @@ export default function HomePage() {
           loading={countdownBanner ? (countdownProductsLoading || dealsLoading || featuredLoading) : smartBannerProductsLoading}
         />
 
-        {/* Deals / Hot Deals */}
-        {(dealsLoading || dealProducts.length > 0) && (
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-            <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-sm border border-gray-100">
-              <SectionHeader
-                icon={Flame}
-                label="Limited Time"
-                title="Hot Deals"
-                viewAllHref="/products"
-                testId="link-all-deals"
-              />
-              <ProductCarousel products={dealProducts} loading={dealsLoading} />
-            </div>
-          </section>
-        )}
+        <HotDealsSection
+          products={dealProducts}
+          extraPool={[...featuredProducts, ...allProducts]}
+          loading={dealsLoading}
+        />
 
         {/* Mobile Reels */}
         {mobileReels.length > 0 && (

@@ -9,9 +9,11 @@ import { VariantPickerModal } from "@/components/VariantPickerModal";
 
 interface ProductCardProps {
   product: Product;
+  /** Premium hot-deals badge with subtle fire accent */
+  hotDealBadge?: boolean;
 }
 
-function ProductCardInner({ product }: ProductCardProps) {
+function ProductCardInner({ product, hotDealBadge }: ProductCardProps) {
   const { addItem, items, updateQty, removeItem } = useCart();
   const [wished, setWished] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
@@ -103,7 +105,10 @@ function ProductCardInner({ product }: ProductCardProps) {
 
           {discount != null && discount > 0 && (
             <div className="absolute left-2 top-2 z-10 sm:left-2.5 sm:top-2.5">
-              <span className="kdf-discount-badge" aria-label={`${discount} percent off`}>
+              <span
+                className={`kdf-discount-badge${hotDealBadge ? " kdf-discount-badge-hot" : ""}`}
+                aria-label={`${discount} percent off`}
+              >
                 -{discount}%
               </span>
             </div>
