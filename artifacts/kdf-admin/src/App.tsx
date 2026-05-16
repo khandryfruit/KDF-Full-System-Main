@@ -48,6 +48,7 @@ const ChatConversationsPage = lazyPage(() => import("@/pages/ChatConversationsPa
 const ChatLeadsPage = lazyPage(() => import("@/pages/ChatLeadsPage"));
 const EmailSettingsPage = lazyPage(() => import("@/pages/EmailSettingsPage"));
 const ImageOptimizationPage = lazyPage(() => import("@/pages/ImageOptimizationPage"));
+const MediaLibraryPage = lazyPage(() => import("@/pages/MediaLibraryPage"));
 const SameDayDeliveryPage = lazyPage(() => import("@/pages/SameDayDeliveryPage"));
 const ShippingRulesPage = lazyPage(() => import("@/pages/ShippingRulesPage"));
 const HeaderBuilderPage = lazyPage(() => import("@/pages/HeaderBuilderPage"));
@@ -237,6 +238,7 @@ function Router() {
       <Route path="/chat-leads"><ProtectedRoute component={ChatLeadsPage} /></Route>
       <Route path="/email-settings"><ProtectedRoute component={EmailSettingsPage} /></Route>
       <Route path="/image-optimization"><ProtectedRoute component={ImageOptimizationPage} /></Route>
+      <Route path="/media"><ProtectedRoute component={MediaLibraryPage} /></Route>
       <Route path="/same-day-delivery"><ProtectedRoute component={SameDayDeliveryPage} /></Route>
       <Route path="/shipping-rules"><ProtectedRoute component={ShippingRulesPage} /></Route>
       <Route path="/header-builder"><ProtectedRoute component={HeaderBuilderPage} /></Route>

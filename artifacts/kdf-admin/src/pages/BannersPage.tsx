@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   Plus, Edit, Trash2, Upload, ImageOff, Loader2, AlertCircle,
   CheckCircle2, Package, LayoutGrid, Link2, ChevronDown, Search, Video, X,
-  Sparkles,
+  Sparkles, Image as ImageIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { apiPublicUrl, getApiBase } from "@/lib/apiBase";
 import { Link } from "wouter";
+import { MediaPicker } from "@/components/media/MediaPicker";
 
 function storagePublicUrl(path: string): string {
   if (!path) return "";
@@ -104,6 +105,7 @@ function BannerImageUploader({
   const [uploadError, setUploadError] = useState("");
   const [sizeWarning, setSizeWarning] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -155,13 +157,29 @@ function BannerImageUploader({
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm">
-        {label}{" "}
-        {optional && <span className="text-muted-foreground font-normal text-xs">(optional)</span>}
-        <span className="text-muted-foreground font-normal text-xs ml-1">
-          · Rec: {recommendedW}×{recommendedH}px · PNG, JPG, WebP
-        </span>
-      </Label>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Label className="text-sm">
+          {label}{" "}
+          {optional && <span className="text-muted-foreground font-normal text-xs">(optional)</span>}
+          <span className="text-muted-foreground font-normal text-xs ml-1">
+            · Rec: {recommendedW}×{recommendedH}px
+          </span>
+        </Label>
+        <Button type="button" size="sm" variant="outline" onClick={() => setLibraryOpen(true)}>
+          <ImageIcon className="w-3.5 h-3.5 mr-1" /> Media Library
+        </Button>
+      </div>
+
+      <MediaPicker
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        folderSlug="banners"
+        title={`Choose ${label.toLowerCase()}`}
+        onSelect={(path) => {
+          onChange(path);
+          setUploadSuccess(true);
+        }}
+      />
 
       {value ? (
         <div className="relative border rounded-xl overflow-hidden bg-muted" style={{ aspectRatio }}>

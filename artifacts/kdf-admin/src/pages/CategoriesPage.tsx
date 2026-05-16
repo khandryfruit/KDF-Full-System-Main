@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { apiPublicUrl } from "@/lib/apiBase";
+import { MediaPicker } from "@/components/media/MediaPicker";
 
 function getImageUrl(path: string): string {
   if (!path) return "";
@@ -84,6 +85,7 @@ function CategoryImageUploader({ value, altText, onImageChange, onAltChange }: {
   const { upload, isUploading, progress } = useCategoryImageUpload();
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const MAX_MB = 2;
 
@@ -115,10 +117,26 @@ function CategoryImageUploader({ value, altText, onImageChange, onAltChange }: {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Label className="text-sm font-medium">Category Image</Label>
-        <span className="text-[11px] text-muted-foreground">Recommended: 512×512 px · JPG/PNG/WEBP · Max {MAX_MB} MB</span>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setLibraryOpen(true)}>
+            <ImageIcon className="w-3.5 h-3.5 mr-1" /> Media Library
+          </Button>
+          <span className="text-[11px] text-muted-foreground">512×512 · Max {MAX_MB} MB</span>
+        </div>
       </div>
+
+      <MediaPicker
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        folderSlug="categories"
+        title="Choose category image"
+        onSelect={(path) => {
+          onImageChange(path);
+          toast({ title: "Image selected from library" });
+        }}
+      />
 
       {value ? (
         /* ── Preview card ── */

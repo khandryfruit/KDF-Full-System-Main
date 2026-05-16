@@ -1,7 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
-import { randomUUID } from "crypto";
-import { objectStorageClient, ObjectStorageService } from "../lib/objectStorage";
 import {
   getImageOptSettings,
   saveImageOptSettings,
@@ -9,6 +7,7 @@ import {
 } from "../lib/imageOptimizer";
 import { adminMiddleware } from "../lib/auth";
 import { isCloudinaryConfigured, uploadBufferToCloudinary } from "../lib/cloudinaryStorage";
+import { uploadBufferToStorage } from "../lib/objectUpload";
 
 /** True when running inside a Replit container (REPL_ID is always set there). */
 function isRunningOnReplit(): boolean {
@@ -23,9 +22,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/gif",
   "image/webp",
 ]);
-
-// ACL policy metadata key, matching objectAcl.ts
-const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
 
 /**
  * Verify actual file content against known image magic bytes.
@@ -70,58 +66,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
-const objectStorageService = new ObjectStorageService();
-
-function parseGcsPath(fullPath: string): { bucketName: string; objectName: string } {
-  const normalized = fullPath.startsWith("/") ? fullPath : `/${fullPath}`;
-  const parts = normalized.split("/");
-  return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
-}
-
-async function uploadBufferToGcs(
-  buffer: Buffer,
-  contentType: string,
-  extension: string,
-  visibility: "public" | "private" = "private"
-): Promise<string> {
-  // On Railway (or any non-Replit host), prefer Cloudinary when configured.
-  // Cloudinary errors propagate directly — no silent fallback to GCS, which is
-  // not available outside of Replit. This gives clear error messages instead of
-  // a confusing second failure from unconfigured object storage.
-  if (!isRunningOnReplit()) {
-    if (!isCloudinaryConfigured()) {
-      throw new Error(
-        "Image uploads on Railway require Cloudinary to be configured. " +
-        "Please set CLOUDINARY_URL (format: cloudinary://api_key:api_secret@cloud_name) " +
-        "in your Railway environment variables and redeploy."
-      );
-    }
-    return uploadBufferToCloudinary(buffer, "kdf-uploads");
-  }
-
-  // Replit / local: use Replit Object Storage (GCS-compatible).
-  const privateDir = objectStorageService.getPrivateObjectDir();
-  const objectId = randomUUID();
-  const fullPath = `${privateDir}/uploads/${objectId}.${extension}`;
-  const { bucketName, objectName } = parseGcsPath(fullPath);
-
-  const bucket = objectStorageClient.bucket(bucketName);
-  const gcsFile = bucket.file(objectName);
-  await gcsFile.save(buffer, {
-    contentType,
-    metadata: { cacheControl: "public, max-age=31536000" },
-  });
-
-  // Set ACL policy metadata so the download route can enforce access control.
-  await gcsFile.setMetadata({
-    metadata: {
-      [ACL_POLICY_METADATA_KEY]: JSON.stringify({ owner: "system", visibility }),
-    },
-  });
-
-  return `/objects/uploads/${objectId}.${extension}`;
-}
-
 /**
  * POST /uploads/review-image
  * Public endpoint for review image uploads (max 5 MB, auto-optimised).
@@ -155,13 +99,13 @@ router.post(
     try {
       const processed = await processImage(req.file.buffer, req.file.mimetype, { ...settings, maxWidthPx: Math.min(settings.maxWidthPx ?? 1200, 800) });
       // Mark as public so GET /storage/objects/* serves it without requiring auth.
-      const objectPath = await uploadBufferToGcs(processed.buffer, processed.contentType, processed.extension, "public");
+      const objectPath = await uploadBufferToStorage(processed.buffer, processed.contentType, processed.extension, "public");
       res.json({ objectPath, originalSize: processed.originalSize, processedSize: processed.processedSize });
     } catch {
       try {
         const ext = req.file.mimetype.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
         // Mark as public so GET /storage/objects/* serves it without requiring auth.
-        const objectPath = await uploadBufferToGcs(req.file.buffer, req.file.mimetype, ext, "public");
+        const objectPath = await uploadBufferToStorage(req.file.buffer, req.file.mimetype, ext, "public");
         res.json({ objectPath, originalSize: req.file.size, processedSize: req.file.size });
       } catch (fallbackErr: any) {
         res.status(500).json({ error: "Upload failed", detail: fallbackErr?.message ?? String(fallbackErr) });
@@ -199,7 +143,7 @@ async function handleAdminImageUpload(req: Request, res: Response): Promise<void
 
   try {
     const processed = await processImage(req.file.buffer, req.file.mimetype, settings);
-    objectPath = await uploadBufferToGcs(
+    objectPath = await uploadBufferToStorage(
       processed.buffer,
       processed.contentType,
       processed.extension,
@@ -220,7 +164,7 @@ async function handleAdminImageUpload(req: Request, res: Response): Promise<void
     }
     try {
       const ext = req.file.mimetype.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-      objectPath = await uploadBufferToGcs(req.file.buffer, req.file.mimetype, ext, "public");
+      objectPath = await uploadBufferToStorage(req.file.buffer, req.file.mimetype, ext, "public");
       processedSize = req.file.size;
     } catch (fallbackErr: any) {
       req.log.error({ err: fallbackErr }, "Fallback upload also failed");
@@ -305,7 +249,7 @@ router.post(
         "video/quicktime": "mov",
       };
       const ext = extMap[req.file.mimetype] ?? "mp4";
-      const objectPath = await uploadBufferToGcs(
+      const objectPath = await uploadBufferToStorage(
         req.file.buffer,
         req.file.mimetype,
         ext,

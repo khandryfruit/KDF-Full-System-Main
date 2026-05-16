@@ -147,6 +147,7 @@ const COMMERCE_NAV: SidebarNavLeaf[] = [
 ];
 
 const STORE_NAV: SidebarNavLeaf[] = [
+  { href: "/media",         label: "Media Library",  icon: ImageIcon   },
   { href: "/banners",       label: "Image Banners",  icon: ImageIcon   },
   { href: "/video-banners", label: "Video Banners",  icon: Video,       isNew: true, badgeColor: "#8b5cf6" },
   { href: "/mobile-reels",  label: "Mobile Reels",   icon: Smartphone, isNew: true, badgeColor: "#06b6d4" },

@@ -49,6 +49,8 @@ import {
 import { AIGenerateWithPreview, AIGenerateButton } from "@/components/AIGenerateButton";
 import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
 import { uploadFile } from "@/lib/upload";
+import { MediaPicker } from "@/components/media/MediaPicker";
+import { getProductImageSrc } from "@/lib/imageUrl";
 
 const EMPTY_FORM = {
   title: "",
@@ -81,6 +83,7 @@ function FeaturedImageUploader({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   async function handleFile(file: File) {
     setUploading(true);
@@ -96,11 +99,23 @@ function FeaturedImageUploader({
 
   return (
     <div className="space-y-2">
-      <Label>Featured Image</Label>
+      <div className="flex items-center justify-between">
+        <Label>Featured Image</Label>
+        <Button type="button" size="sm" variant="outline" onClick={() => setLibraryOpen(true)}>
+          <ImageIcon className="h-3.5 w-3.5 mr-1" /> Media Library
+        </Button>
+      </div>
+      <MediaPicker
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        folderSlug="blogs"
+        title="Choose featured image"
+        onSelect={(path) => onChange(path)}
+      />
       {value ? (
         <div className="relative rounded-lg overflow-hidden border">
           <img
-            src={`/api/storage${value}`}
+            src={getProductImageSrc(value)}
             alt="Featured"
             className="w-full h-40 object-cover"
           />

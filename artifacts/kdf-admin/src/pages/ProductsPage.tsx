@@ -38,6 +38,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { apiPublicUrl } from "@/lib/apiBase";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { optimizeCloudinaryDelivery } from "@/lib/imageDelivery";
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -156,6 +157,7 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [dragOver, setDragOver]   = useState(false);
   const [preview, setPreview]     = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const ALLOWED = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
   const MAX_MB  = 25;
@@ -261,6 +263,19 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button type="button" size="sm" variant="outline" onClick={() => setLibraryOpen(true)} disabled={isActive}>
+          <ImageIcon className="w-3.5 h-3.5 mr-1" /> Media Library
+        </Button>
+      </div>
+      <MediaPicker
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        folderSlug="products"
+        title="Choose product images"
+        multiple
+        onSelect={(path) => onChange([...images, path])}
+      />
 
       {/* Existing images grid */}
       {images.length > 0 && (

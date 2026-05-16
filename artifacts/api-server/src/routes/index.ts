@@ -65,6 +65,7 @@ import onlinePaymentsRouter from "./onlinePayments";
 import { saasRouter } from "./saas";
 import seoExtendedRouter from "./seoExtended";
 import orderAutomationRouter from "./orderAutomation";
+import mediaRouter from "./media";
 
 const router: IRouter = Router();
 
@@ -136,5 +137,6 @@ router.use(merchantRouter);
 router.use(saasRouter);
 router.use(seoExtendedRouter);
 router.use(orderAutomationRouter);
+router.use(mediaRouter);
 
 export default router;
