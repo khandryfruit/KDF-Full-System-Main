@@ -659,13 +659,45 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             log?.info({ phone, interactionId, interactionTitle }, "Interactive reply received");
 
             if (interactionId === "wa_chat_order_confirm" || interactionId === "wa_chat_order_cancel") {
-              await handleCommerceOrderFlow(
-                phone,
-                interactionId === "wa_chat_order_confirm" ? "confirm" : "cancel",
-                currentState,
-                waSettings,
-                log,
-              );
+              if (currentState !== "wa_order_await_confirm") {
+                await logWaProcessingStep({
+                  phone,
+                  messageId: msgId,
+                  step: "commerce_button_without_active_state",
+                  status: "failed",
+                  detail: "Customer clicked WhatsApp commerce confirm/cancel button but no active order confirmation state was found.",
+                  payload: { interactionId, interactionTitle, currentState },
+                  failureReason: "no_active_whatsapp_checkout_state",
+                });
+                await sendWaText(
+                  phone,
+                  interactionId === "wa_chat_order_cancel"
+                    ? "Order cancel request receive ho gayi. Is chat mein koi active checkout pending nahi mila. Naya order start karna ho to product ka naam bhej dein."
+                    : "Order session expire ya complete ho chuka hai. Please naya bill/order banane ke liye product ka naam bhej dein.",
+                  waSettings,
+                );
+                continue;
+              }
+              try {
+                await handleCommerceOrderFlow(
+                  phone,
+                  interactionId === "wa_chat_order_confirm" ? "confirm" : "cancel",
+                  currentState,
+                  waSettings,
+                  log,
+                );
+              } catch (commerceErr) {
+                await logWaProcessingStep({
+                  phone,
+                  messageId: msgId,
+                  step: "commerce_button_processing_failed",
+                  status: "failed",
+                  detail: "Commerce confirm/cancel button reached backend but processing failed.",
+                  payload: { error: commerceErr instanceof Error ? commerceErr.message : String(commerceErr), interactionId, currentState },
+                  failureReason: commerceErr instanceof Error ? commerceErr.message : String(commerceErr),
+                });
+                await sendWaText(phone, "Order button process nahi ho saka. Team ko alert kar diya gaya hai, please thori dair baad try karein.", waSettings);
+              }
               continue;
             }
 
@@ -727,7 +759,21 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
              ═══════════════════════════════════════════════ */
           if (["wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && msgType === "text" && msg.text?.body) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: msg.text.body.trim(), mode: "simple", log });
-            await handleCommerceOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
+            try {
+              await handleCommerceOrderFlow(phone, msg.text.body.trim(), currentState, waSettings, log);
+            } catch (commerceErr) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "commerce_text_processing_failed",
+                status: "failed",
+                detail: "Commerce text state reached backend but processing failed.",
+                payload: { error: commerceErr instanceof Error ? commerceErr.message : String(commerceErr), currentState, text: msg.text.body.trim() },
+                failureReason: commerceErr instanceof Error ? commerceErr.message : String(commerceErr),
+              });
+              await sendWaText(phone, "Order flow mein issue aa gaya. Please product ka naam dobara bhej dein, main fresh bill bana deta hoon.", waSettings);
+              await setConversationState(phone, "idle", {});
+            }
             continue;
           }
 
@@ -803,6 +849,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: "AI chatbot is disabled or missing in admin settings.",
               payload: { hasChatbotSettings: Boolean(chatbot), chatbotEnabled: chatbot?.isEnabled ?? false },
             });
+            await sendWaText(phone, "Ji 😊 bot currently limited mode mein hai. Aap product, price, order status ya delivery ka sawal bhej dein, team/AI assist karega.", waSettings);
           }
         }
       }
@@ -2197,7 +2244,17 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       await createAdminAlert({ title: "WhatsApp order save failed", message: reason, type: "wa_order_failure", dedupeMinutes: 10 });
       await sendWaText(phone, "Order save failed. Team ko alert kar diya gaya hai, confirmation abhi nahi hui.", waSettings);
     }
+    return;
   }
+  await logWaProcessingStep({
+    phone,
+    step: "commerce_state_unhandled",
+    status: "failed",
+    detail: "WhatsApp commerce flow received a message/button for an unsupported or stale state.",
+    payload: { state, text: trimmed },
+    failureReason: "unhandled_whatsapp_commerce_state",
+  });
+  await sendWaText(phone, "Is order session ka state expire ho gaya hai. Naya order start karne ke liye product ka naam bhej dein.", waSettings);
 }
 
 /* ─── Helper: WA Order placement flow ───────────────── */
@@ -2371,6 +2428,7 @@ async function handleAiReply(opts: {
         failureReason: "ai_daily_cap_reached",
       });
       log?.warn({ todaySent, maxDaily }, "AI reply daily cap reached");
+      await sendWaText(phone, "Ji 😊 aapka message receive ho gaya. Bot ka daily AI limit complete ho gaya hai, lekin team aapka message check kar rahi hai.", waSettings);
       return;
     }
 
