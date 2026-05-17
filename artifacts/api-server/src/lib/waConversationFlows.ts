@@ -42,16 +42,35 @@ function displayProductName(query: string): string {
   return map[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
 }
 
-/** Pure text welcome — no buttons (Hey / Hello / Salam). */
+/** Human welcome text (quick actions sent separately). */
 export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang): string {
+  const t = String(textBody ?? "").trim().toLowerCase();
+  const isAssalam =
+    /\b(assalam|asalam|salam|aoa|aslm)\b/i.test(t) && !/\b(wa alaikum|walikum|walaikum)\b/i.test(t);
   const roman = textBody ? isRomanUrduWa(textBody) : lang !== "ur";
+
+  if (isAssalam && !roman && lang !== "en") {
+    return (
+      `وعلیکم السلام 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\n` +
+      `آج کس چیز میں مدد کر سکتا ہوں؟\n\nمیں products، delivery، payments اور orders میں مدد کر سکتا ہوں۔`
+    );
+  }
   if (lang === "en") {
-    return `Assalam o Alaikum 😊\n\nWelcome to *Khan Dry Fruits*.\n\nHope you are well 🌟\n\nHow can I help you today?`;
+    return (
+      `Assalam o Alaikum 😊\n\nWelcome to *Khan Dry Fruits*.\n\nHope you are well 🌟\n\n` +
+      `How can I help you today?\n\nI can help with products, delivery, payments, and orders.`
+    );
   }
   if (roman) {
-    return `Assalam o Alaikum 😊\n\n*Khan Dry Fruits* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge 🌟\n\nAaj kis cheez mein madad kar sakta hoon?`;
+    return (
+      `Assalam o Alaikum 😊\n\n*Khan Dry Fruits* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge 🌟\n\n` +
+      `Aaj kis cheez mein madad kar sakta hoon?\n\nMain products, delivery, payments aur orders mein madad kar sakta hoon.`
+    );
   }
-  return `السلام علیکم 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے 🌟\n\nآج کس چیز میں مدد کر سکتا ہوں؟`;
+  return (
+    `السلام علیکم 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے 🌟\n\n` +
+    `آج کس چیز میں مدد کر سکتا ہوں؟\n\nمیں products، delivery، payments اور orders میں مدد کر سکتا ہوں۔`
+  );
 }
 
 /** Delivery charges — natural text + ask city. No menus. */

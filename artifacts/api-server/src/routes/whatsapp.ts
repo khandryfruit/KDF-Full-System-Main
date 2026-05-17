@@ -275,7 +275,12 @@ async function routeUnifiedCustomerSupport(opts: {
     waSettings: opts.waSettings,
     classified,
     sendText: async (p, text, template) => {
-      await sendWaText(p, text, opts.waSettings, template);
+      await sendWaReplyWithActions(p, text, opts.waSettings, {
+        templateName: template,
+        textBody: opts.textBody,
+        classified,
+        currentState: opts.currentState,
+      });
     },
     logStep: async (detail) => {
       await logWaProcessingStep({
@@ -1623,6 +1628,39 @@ async function sendWaText(phone: string, message: string, _waSettings: any, temp
   return row?.messageId ?? null;
 }
 
+/** Human text first, then context-aware quick-action template (hybrid reply). */
+async function sendWaReplyWithActions(
+  phone: string,
+  message: string,
+  waSettings: any,
+  opts: {
+    templateName?: string;
+    skipActions?: boolean;
+    actionContext?: import("../lib/waQuickActions.js").QuickActionContext;
+    textBody?: string;
+    classified?: import("../lib/waIntentClassifier.js").ClassifiedMessage;
+    intent?: string;
+    stateData?: Record<string, unknown>;
+    currentState?: string;
+  } = {},
+): Promise<string | null> {
+  const msgId = await sendWaText(phone, message, waSettings, opts.templateName ?? "bot_reply");
+  if (opts.skipActions) return msgId;
+  const conv = await getConversationState(phone).catch(() => null);
+  const { attachQuickActions } = await import("../lib/waQuickActions.js");
+  await attachQuickActions({
+    phone,
+    waSettings,
+    textBody: opts.textBody,
+    classified: opts.classified,
+    intent: opts.intent,
+    stateData: opts.stateData,
+    currentState: opts.currentState ?? conv?.state,
+    context: opts.actionContext,
+  }).catch(() => {});
+  return msgId;
+}
+
 /* ─── Helper: search products (DB + Shopify) ────────── */
 function formatRupees(value: unknown): string {
   const n = Number.parseFloat(String(value ?? "0"));
@@ -2310,7 +2348,12 @@ async function trySendHumanGreetingReply(opts: {
   try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
   const { hasConversationStarted, buildGreetingContinueReply } = await import("../lib/waAiSalesGuards.js");
   if (await hasConversationStarted(opts.phone)) {
-    await sendWaText(opts.phone, buildGreetingContinueReply(opts.textBody), opts.waSettings, "greeting_continue");
+    await sendWaReplyWithActions(opts.phone, buildGreetingContinueReply(opts.textBody), opts.waSettings, {
+      templateName: "greeting_continue",
+      actionContext: "greeting",
+      textBody: opts.textBody,
+      stateData: existing,
+    });
     await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_continue" });
     return true;
   }
@@ -2318,7 +2361,12 @@ async function trySendHumanGreetingReply(opts: {
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
   const lang = resolveWaLang(existing, opts.textBody);
-  await sendWaText(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, "human_greeting");
+  await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, {
+    templateName: "human_greeting",
+    actionContext: "greeting",
+    textBody: opts.textBody,
+    stateData: existing,
+  });
   await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
     ...existing,
     preferredLanguage: existing.preferredLanguage ?? lang,
@@ -2349,7 +2397,12 @@ async function tryResolveWaCustomerMessage(opts: {
         greetedAt: new Date().toISOString(),
       });
       const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
-      await sendWaText(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, "human_greeting");
+      await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, {
+        templateName: "human_greeting",
+        actionContext: "greeting",
+        textBody: opts.textBody,
+        stateData: { preferredLanguage: lang, waLang: lang },
+      });
       await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_text", mergeStateData: { preferredLanguage: lang } });
       return true;
     }
@@ -2448,14 +2501,29 @@ async function tryResolveWaCustomerMessage(opts: {
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
       await sendPaymentIssueRecovery({ phone: opts.phone, lang, waSettings: opts.waSettings });
+      // Recovery message includes payment buttons — no duplicate quick-action row.
       await persistConversationTurn(opts.phone, { intent: "payment_issue", topic: "payment" });
+      return true;
+    }
+    if (convReply.template === "standalone_price_text" && convReply.reply) {
+      await sendWaReplyWithActions(opts.phone, convReply.reply, opts.waSettings, {
+        templateName: "standalone_price_text",
+        actionContext: "product",
+        textBody: opts.textBody,
+      });
+      await persistConversationTurn(opts.phone, { intent: "pricing", topic: "price_faq" });
       return true;
     }
     if (convReply.template === "delivery_conversation") {
       const { buildDeliveryConversationText } = await import("../lib/waConversationFlows.js");
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
-      await sendWaText(opts.phone, buildDeliveryConversationText(opts.textBody, lang), opts.waSettings, "delivery_conversation");
+      await sendWaReplyWithActions(opts.phone, buildDeliveryConversationText(opts.textBody, lang), opts.waSettings, {
+        templateName: "delivery_conversation",
+        actionContext: "delivery",
+        textBody: opts.textBody,
+        stateData,
+      });
       await persistConversationTurn(opts.phone, { intent: "delivery", topic: "delivery" });
       return true;
     }
@@ -2464,7 +2532,12 @@ async function tryResolveWaCustomerMessage(opts: {
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
       const productQ = convReply.productQuery ?? extractProductQueryFromMessage(opts.textBody);
-      await sendWaText(opts.phone, buildProductEducationMessage(opts.textBody, lang), opts.waSettings, "product_education_text");
+      await sendWaReplyWithActions(opts.phone, buildProductEducationMessage(opts.textBody, lang), opts.waSettings, {
+        templateName: "product_education_text",
+        actionContext: "education",
+        textBody: opts.textBody,
+        stateData: { ...stateData, pendingEducationQuery: productQ },
+      });
       await setConversationState(opts.phone, "wa_sales_chat", {
         ...stateData,
         pendingEducationQuery: productQ,
@@ -2477,7 +2550,12 @@ async function tryResolveWaCustomerMessage(opts: {
       const productQ = convReply.productQuery ?? extractProductQueryFromMessage(opts.textBody);
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
-      await sendWaText(opts.phone, convReply.reply, opts.waSettings, "product_interest_text");
+      await sendWaReplyWithActions(opts.phone, convReply.reply, opts.waSettings, {
+        templateName: "product_interest_text",
+        actionContext: "product",
+        textBody: opts.textBody,
+        stateData: { ...stateData, pendingProductQuery: productQ },
+      });
       await setConversationState(opts.phone, WA_AWAIT_PRODUCT_INTENT_STATE, {
         pendingProductQuery: productQ,
         lastUserMessage: opts.textBody.slice(0, 300),
@@ -2490,13 +2568,22 @@ async function tryResolveWaCustomerMessage(opts: {
       const { buildProductPriceIntro } = await import("../lib/waConversationFlows.js");
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
-      await sendWaText(opts.phone, buildProductPriceIntro(convReply.productQuery, lang), opts.waSettings, "product_price_intro");
+      await sendWaReplyWithActions(opts.phone, buildProductPriceIntro(convReply.productQuery, lang), opts.waSettings, {
+        templateName: "product_price_intro",
+        skipActions: true,
+      });
       await deliverSingleProductOffer({ phone: opts.phone, query: convReply.productQuery, waSettings: opts.waSettings });
       await persistConversationTurn(opts.phone, { intent: "pricing", topic: "product_price" });
       return true;
     }
     if (convReply.reply) {
-      await sendWaText(opts.phone, convReply.reply, opts.waSettings, convReply.template ?? "conversational_sales");
+      await sendWaReplyWithActions(opts.phone, convReply.reply, opts.waSettings, {
+        templateName: convReply.template ?? "conversational_sales",
+        actionContext: convReply.triggerProduct ? "product" : undefined,
+        textBody: opts.textBody,
+        stateData,
+        skipActions: Boolean(convReply.triggerProduct),
+      });
       if (convReply.triggerProduct && convReply.productQuery) {
         await deliverSingleProductOffer({ phone: opts.phone, query: convReply.productQuery, waSettings: opts.waSettings });
       }
@@ -3392,6 +3479,183 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
+  if (id.startsWith("wa_qa_")) {
+    const lang = resolveWaLang(stateData);
+    const productQ = String(
+      stateData.pendingEducationQuery ?? stateData.pendingProductQuery ?? "",
+    ).trim();
+
+    if (id === "wa_qa_order") {
+      await sendWaReplyWithActions(
+        opts.phone,
+        lang === "en"
+          ? "Ji 😊 Which product would you like to order?\n\nExample: *badam*, *pista*, *kaju*"
+          : "Ji 😊 Kaun sa product order karna hai?\n\nJaise: *badam*, *pista*, *kaju*",
+        opts.waSettings,
+        { templateName: "qa_order_start", skipActions: true },
+      );
+      await setConversationState(opts.phone, "wa_sales_chat", {
+        ...stateData,
+        checkoutIntent: "order",
+      });
+      if (productQ) {
+        await deliverSingleProductOffer({ phone: opts.phone, query: productQ, waSettings: opts.waSettings });
+      }
+      return true;
+    }
+
+    if (id === "wa_qa_payment") {
+      const paymentChat = await import("../lib/waPaymentInChat.js");
+      await sendWaReplyWithActions(
+        opts.phone,
+        lang === "en"
+          ? "Ji 😊 Here are our payment options:"
+          : "Ji 😊 Payment options:",
+        opts.waSettings,
+        { templateName: "qa_payment_intro", skipActions: true },
+      );
+      await paymentChat.sendStandalonePaymentMenu({ phone: opts.phone, lang, waSettings: opts.waSettings });
+      return true;
+    }
+
+    if (id === "wa_qa_delivery") {
+      const { buildDeliveryConversationText } = await import("../lib/waConversationFlows.js");
+      await sendWaReplyWithActions(
+        opts.phone,
+        buildDeliveryConversationText(String(stateData.lastUserMessage ?? "delivery"), lang),
+        opts.waSettings,
+        { templateName: "qa_delivery", actionContext: "delivery", stateData },
+      );
+      return true;
+    }
+
+    if (id === "wa_qa_track" || id === "wa_qa_orders_track") {
+      await sendWaReplyWithActions(
+        opts.phone,
+        lang === "en"
+          ? "Ji 😊 Please send your *order number* or the phone used when you ordered."
+          : "Ji 😊 *Order number* ya order wala phone bhej dein.",
+        opts.waSettings,
+        { templateName: "qa_track_prompt", actionContext: "orders" },
+      );
+      return true;
+    }
+
+    if (id === "wa_qa_orders") {
+      await sendInteractiveList({
+        phone: opts.phone,
+        body: lang === "en" ? "📋 *Your orders*" : "📋 *Orders*",
+        buttonLabel: lang === "en" ? "Orders" : "Orders",
+        rows: [
+          { id: "wa_qa_orders_track", title: "📦 Track Order", description: "Current status" },
+          { id: "wa_qa_orders_past", title: "📜 Past Orders", description: "Order history" },
+          { id: "wa_qa_support", title: "📞 Support", description: "Need help?" },
+        ],
+        settings: opts.waSettings,
+        templateName: "qa_orders_menu",
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_orders_status" || id === "wa_qa_orders_past") {
+      await handleTrackOrder(opts.phone, stateData.lastOrderNumber ?? "", opts.waSettings);
+      return true;
+    }
+
+    if (id === "wa_qa_support") {
+      await sendWaReplyWithActions(
+        opts.phone,
+        lang === "en" ? "Ji 😊 How can we help?" : "Ji 😊 Kaise madad kar sakte hain?",
+        opts.waSettings,
+        { templateName: "qa_support_intro", actionContext: "support", skipActions: true },
+      );
+      await sendInteractiveButtons({
+        phone: opts.phone,
+        text: lang === "en" ? "Contact us:" : "Rabta:",
+        buttons: [
+          { id: "wa_qa_call", title: "📞 Call" },
+          { id: "wa_qa_whatsapp", title: "💬 WhatsApp" },
+          { id: "wa_qa_website", title: "🌐 Website" },
+        ],
+        settings: opts.waSettings,
+        templateName: "qa_support_buttons",
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_call") {
+      const { KDF_STORE } = await import("../lib/waSupportFlows.js");
+      await sendWaReplyWithActions(
+        opts.phone,
+        `📞 *Call Khan Dry Fruit*\n\n${KDF_STORE.phone}\n\nDaily 10 AM – 12 AM`,
+        opts.waSettings,
+        { templateName: "qa_call", actionContext: "default" },
+      );
+      return true;
+    }
+
+    if (id === "wa_qa_whatsapp") {
+      const { KDF_STORE } = await import("../lib/waSupportFlows.js");
+      const waNum = KDF_STORE.whatsapp.replace(/\D/g, "").replace(/^0/, "92");
+      await sendCtaUrlMessage({
+        phone: opts.phone,
+        text: `💬 WhatsApp: ${KDF_STORE.whatsapp}`,
+        buttonText: "💬 Chat on WhatsApp",
+        url: `https://wa.me/${waNum}`,
+        settings: opts.waSettings,
+        templateName: "qa_whatsapp",
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_website") {
+      const { KHAN_WEBSITE_URL: webUrl } = await import("../lib/waMenuDefaults.js");
+      await sendCtaUrlMessage({
+        phone: opts.phone,
+        text: lang === "en" ? "🌐 Visit our website:" : "🌐 Website:",
+        buttonText: "🌐 Visit Website",
+        url: webUrl,
+        settings: opts.waSettings,
+        templateName: "qa_website",
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_prices") {
+      const q = productQ || "badam";
+      const { buildTextOnlyPriceReply } = await import("../lib/waSalesConversation.js");
+      const roman = lang !== "ur";
+      const priceReply = await buildTextOnlyPriceReply(q, roman);
+      if (priceReply) {
+        await sendWaReplyWithActions(opts.phone, priceReply, opts.waSettings, {
+          templateName: "qa_prices",
+          actionContext: "product",
+          skipActions: true,
+        });
+        await deliverSingleProductOffer({ phone: opts.phone, query: q, waSettings: opts.waSettings });
+      } else {
+        await sendWaReplyWithActions(
+          opts.phone,
+          lang === "en" ? `Ji 😊 Which product price? (e.g. ${q})` : `Ji 😊 Kis product ki price? (jaise ${q})`,
+          opts.waSettings,
+          { templateName: "qa_prices_ask", actionContext: "product" },
+        );
+      }
+      return true;
+    }
+
+    if (id === "wa_qa_quality") {
+      const q = productQ || "badam";
+      const { buildProductQualityMessage } = await import("../lib/waConversationFlows.js");
+      await sendWaReplyWithActions(opts.phone, buildProductQualityMessage(q, lang), opts.waSettings, {
+        templateName: "qa_quality",
+        actionContext: "product",
+        stateData: { ...stateData, pendingEducationQuery: q },
+      });
+      return true;
+    }
+  }
+
   if (id === "wa_conv_shop") {
     const lang = resolveWaLang(stateData);
     await sendWaText(
@@ -3624,7 +3888,11 @@ async function handlePremiumCommerceButton(opts: {
     stateData.waLang = lang;
     await setConversationState(opts.phone, "wa_sales_chat", stateData);
     const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
-    await sendWaText(opts.phone, buildHumanWelcomeText(undefined, lang), opts.waSettings, "human_greeting");
+    await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(undefined, lang), opts.waSettings, {
+      templateName: "human_greeting",
+      actionContext: "greeting",
+      stateData,
+    });
     await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_text", mergeStateData: { preferredLanguage: lang } });
     return true;
   }
@@ -5371,6 +5639,27 @@ async function handleAiReply(opts: {
 
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
     const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+    const { attachQuickActions, resolveQuickActionContext } = await import("../lib/waQuickActions.js");
+    await attachQuickActions({
+      phone,
+      waSettings,
+      textBody,
+      classified,
+      intent: intent.intent,
+      stateData: {
+        ...((sessionMemory.stateData as Record<string, unknown>) ?? {}),
+        pendingProductQuery: sessionMemory.selectedProductName ?? intent.productQuery,
+        pendingEducationQuery: (sessionMemory.stateData as any)?.pendingEducationQuery,
+      },
+      currentState,
+      context: resolveQuickActionContext({
+        textBody,
+        classified,
+        intent: intent.intent,
+        stateData: sessionMemory.stateData as Record<string, unknown>,
+        currentState,
+      }),
+    }).catch(() => {});
     if (preloadedCatalogProducts.length > 0) {
       const { logProductSearch } = await import("../lib/productSearchDebug.js");
       await logProductSearch({

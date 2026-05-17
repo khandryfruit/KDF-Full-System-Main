@@ -96,6 +96,7 @@ function ProductCardInner({ product, hotDealBadge, compact }: ProductCardProps) 
     return (
       <>
         <KdfStoreProductCard
+          compact
           product={toStoreCardData(product)}
           hotDealBadge={hotDealBadge}
           onQuickAdd={hasVariants ? () => setShowVariants(true) : undefined}

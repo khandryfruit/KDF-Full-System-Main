@@ -33,8 +33,8 @@ export async function sendPaymentIssueRecovery(opts: {
   waSettings: WaSettings;
 }): Promise<void> {
   const body = opts.lang === "en"
-    ? `Ji 😊\n\nIt looks like the *payment page / link* had an issue.\n\nNo problem — you can complete payment *here in chat* 👇`
-    : `Ji 😊\n\nLagta hai *payment page / link* issue kar rahi hai.\n\nKoi baat nahi — aap *yahin chat* mein payment select kar sakte hain 👇`;
+    ? `Ji 😊\n\nI can help with that.\n\nDo you need to *verify payment* or see *transfer details*?\n\nSelect below 👇`
+    : `Ji 😊\n\nMain madad karta hoon.\n\nKya *payment verify* karni hai ya *transfer details* chahiye?\n\nNeeche select karein 👇`;
   await sendInteractiveButtons({
     phone: opts.phone,
     text: body,
@@ -138,6 +138,11 @@ export async function tryHandleClassifiedSupport(opts: {
     return true;
   }
   if (intent === "payment_info") {
+    const intro = lang === "en"
+      ? "Ji 😊 I can help with payment.\n\nDo you need to verify a payment or see transfer details?"
+      : "Ji 😊 Main payment mein madad karta hoon.\n\nKya payment verify karni hai ya transfer details chahiye?";
+    const { sendWhatsAppMessage } = await import("./whatsapp.js");
+    await sendWhatsAppMessage({ phone: opts.phone, message: intro, templateName: "payment_info_intro" });
     await sendStandalonePaymentMenu({ phone: opts.phone, lang, waSettings: opts.waSettings });
     return true;
   }
