@@ -6,8 +6,41 @@ export interface SiteSettings {
   siteName: string;
   logoPath: string | null;
   faviconPath: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  primaryKeywords: string | null;
+  secondaryKeywords: string | null;
+  longTailKeywords: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  twitterCardType: string | null;
+  robotsIndex: boolean;
+  schemaOrgEnabled: boolean;
+  schemaBreadcrumbEnabled: boolean;
+  schemaFaqEnabled: boolean;
   updatedAt: string;
 }
+
+export type SiteSettingsUpdate = Partial<
+  Pick<
+    SiteSettings,
+    | "siteName"
+    | "logoPath"
+    | "faviconPath"
+    | "metaTitle"
+    | "metaDescription"
+    | "primaryKeywords"
+    | "secondaryKeywords"
+    | "longTailKeywords"
+    | "ogTitle"
+    | "ogDescription"
+    | "twitterCardType"
+    | "robotsIndex"
+    | "schemaOrgEnabled"
+    | "schemaBreadcrumbEnabled"
+    | "schemaFaqEnabled"
+  >
+>;
 
 async function fetchSettings(): Promise<SiteSettings> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
@@ -15,10 +48,17 @@ async function fetchSettings(): Promise<SiteSettings> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("Failed to fetch");
-  return res.json();
+  const raw = await res.json();
+  return {
+    ...raw,
+    robotsIndex: raw.robotsIndex ?? raw.robots_index ?? true,
+    schemaOrgEnabled: raw.schemaOrgEnabled ?? raw.schema_org_enabled ?? true,
+    schemaBreadcrumbEnabled: raw.schemaBreadcrumbEnabled ?? raw.schema_breadcrumb_enabled ?? true,
+    schemaFaqEnabled: raw.schemaFaqEnabled ?? raw.schema_faq_enabled ?? false,
+  };
 }
 
-async function updateSettings(data: Partial<Pick<SiteSettings, "siteName" | "logoPath" | "faviconPath">>): Promise<SiteSettings> {
+async function updateSettings(data: SiteSettingsUpdate): Promise<SiteSettings> {
   const token = localStorage.getItem("kdf_admin_token") ?? "";
   const res = await fetch(apiPublicUrl("/api/admin/site-settings"), {
     method: "PUT",

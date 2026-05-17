@@ -318,6 +318,35 @@ export function normalizeSeoResponse(
   return out;
 }
 
+/** Homepage / site-wide defaults (Website Settings). */
+export function buildSiteHomeSeoPrompt(ctx: SeoGenerateContext): string {
+  return `${buildEcommerceSeoSystemPrompt()}
+
+Generate SITE-WIDE homepage SEO for ${SEO_BRAND.name} (${SEO_BRAND.legal}) — ${SEO_BRAND.domain}.
+
+Site name: ${ctx.name ?? SEO_BRAND.name}
+Existing title: ${ctx.existingContent?.slice(0, 120) ?? "none"}
+Existing description hint: ${ctx.description?.slice(0, 200) ?? "none"}
+Extra context: ${ctx.keywords ?? "premium dry fruits, nuts, almonds, pistachios, walnuts, dates, healthy snacks, Pakistan, Lahore, Karachi, fast delivery, cash on delivery"}
+
+${ctxBlock(ctx)}
+
+Return JSON:
+{
+  "metaTitle": "50-60 chars — e.g. KDF Nuts – Premium Dry Fruits Online in Pakistan | Fast Delivery",
+  "metaDescription": "140-160 chars, high CTR, mention almonds pistachios walnuts dates, delivery Pakistan, shop now CTA",
+  "ogTitle": "social share title (can match metaTitle)",
+  "ogDescription": "OG description 120-200 chars persuasive",
+  "primaryKeywords": ["6-10 head terms: almonds Pakistan, premium dry fruits, buy pistachio online, etc."],
+  "secondaryKeywords": ["8-12 supporting terms"],
+  "longTailKeywords": ["8-12 long-tail buyer phrases"],
+  "suggestedCompetitorKeywords": ["5-8 competitor-style terms dry fruits ecommerce Pakistan"],
+  "keywordDifficultyNotes": "brief note per primary keyword: low/medium/high (estimate for Pakistan market)"
+}
+
+Include cities: Lahore, Karachi, Islamabad where natural. Dry fruits + nuts focus. Transactional intent.`;
+}
+
 export function getPromptForType(type: SeoEntityType, ctx: SeoGenerateContext): string {
   switch (type) {
     case "product":

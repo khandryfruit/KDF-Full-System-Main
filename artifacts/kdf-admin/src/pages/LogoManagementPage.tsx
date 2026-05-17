@@ -4,10 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useSiteSettings, useUpdateSiteSettings, requestUploadUrl, uploadFileToGcs } from "@/hooks/useSiteSettings";
+import { SiteSeoSettingsPanel, type SiteSeoFormState } from "@/components/seo/SiteSeoSettingsPanel";
 import { useToast } from "@/hooks/use-toast";
+import { Separator } from "@/components/ui/separator";
+
+const EMPTY_SEO: SiteSeoFormState = {
+  metaTitle: "",
+  metaDescription: "",
+  primaryKeywords: "",
+  secondaryKeywords: "",
+  longTailKeywords: "",
+  ogTitle: "",
+  ogDescription: "",
+  twitterCardType: "summary_large_image",
+  robotsIndex: true,
+  schemaOrgEnabled: true,
+  schemaBreadcrumbEnabled: true,
+  schemaFaqEnabled: false,
+};
 
 const LOGO_BASE = "/api/storage";
 const ALLOWED_TYPES = ["image/png", "image/svg+xml", "image/jpeg", "image/jpg", "image/webp"];
@@ -151,6 +167,7 @@ export default function LogoManagementPage() {
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [faviconPath, setFaviconPath] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [seo, setSeo] = useState<SiteSeoFormState>(EMPTY_SEO);
 
   // Initialise local state once settings load
   const initialized = useRef(false);
@@ -158,6 +175,20 @@ export default function LogoManagementPage() {
     setSiteName(settings.siteName ?? "KDF NUTS");
     setLogoPath(settings.logoPath ?? null);
     setFaviconPath(settings.faviconPath ?? null);
+    setSeo({
+      metaTitle: settings.metaTitle ?? "",
+      metaDescription: settings.metaDescription ?? "",
+      primaryKeywords: settings.primaryKeywords ?? "",
+      secondaryKeywords: settings.secondaryKeywords ?? "",
+      longTailKeywords: settings.longTailKeywords ?? "",
+      ogTitle: settings.ogTitle ?? "",
+      ogDescription: settings.ogDescription ?? "",
+      twitterCardType: settings.twitterCardType ?? "summary_large_image",
+      robotsIndex: settings.robotsIndex ?? true,
+      schemaOrgEnabled: settings.schemaOrgEnabled ?? true,
+      schemaBreadcrumbEnabled: settings.schemaBreadcrumbEnabled ?? true,
+      schemaFaqEnabled: settings.schemaFaqEnabled ?? false,
+    });
     initialized.current = true;
   }
 
@@ -169,6 +200,7 @@ export default function LogoManagementPage() {
         siteName: siteName || undefined,
         logoPath: logoPath ?? undefined,
         faviconPath: faviconPath ?? undefined,
+        ...seo,
       },
       {
         onSuccess: () => {
@@ -194,9 +226,9 @@ export default function LogoManagementPage() {
     <div className="space-y-6 max-w-3xl">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Logo Management</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Website Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Manage your website logo, favicon, and site name. Changes reflect instantly on all storefronts.
+          Branding, logo, favicon, and AI-powered SEO for your storefront homepage.
         </p>
       </div>
 
@@ -272,6 +304,17 @@ export default function LogoManagementPage() {
           />
         </CardContent>
       </Card>
+
+      <Separator />
+
+      <SiteSeoSettingsPanel
+        siteName={siteName}
+        form={seo}
+        onChange={(patch) => {
+          setSeo((s) => ({ ...s, ...patch }));
+          markDirty();
+        }}
+      />
 
       {/* Guidelines */}
       <Card className="bg-muted/40 border-dashed">

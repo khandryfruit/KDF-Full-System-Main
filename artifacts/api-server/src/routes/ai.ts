@@ -247,9 +247,9 @@ router.put("/admin/ai/settings", adminMiddleware as any, async (req, res) => {
 ═══════════════════════════════════════════════ */
 router.post("/admin/ai/generate", adminMiddleware as any, async (req, res) => {
   try {
-    const { type, name, keywords, category, existingContent, tone: reqTone, language: reqLang } = req.body as {
+    const { type, name, keywords, category, existingContent, metaTitle: reqMetaTitle, tone: reqTone, language: reqLang } = req.body as {
       type: string; name?: string; keywords?: string; category?: string;
-      existingContent?: string; tone?: string; language?: string;
+      existingContent?: string; metaTitle?: string; tone?: string; language?: string;
     };
 
     const s = await getAiSettings();
@@ -309,6 +309,35 @@ Language: ${lang}.`;
           description: existingContent,
         });
         break;
+
+      case "site-seo":
+      case "site-seo-keywords":
+      case "site-seo-optimize": {
+        const { buildSiteHomeSeoPrompt } = await import("../lib/ecommerceSeoEngine.js");
+        userPrompt =
+          type === "site-seo-keywords"
+            ? `${buildSiteHomeSeoPrompt({ name, keywords, description: existingContent, existingContent })}
+
+Return ONLY keyword fields as JSON:
+{
+  "primaryKeywords": ["..."],
+  "secondaryKeywords": ["..."],
+  "longTailKeywords": ["..."],
+  "suggestedCompetitorKeywords": ["..."]
+}`
+            : type === "site-seo-optimize"
+              ? `${buildSiteHomeSeoPrompt({ name, keywords, description: existingContent, existingContent })}
+
+Improve this existing metadata for higher CTR. Current title: "${name ?? ""}". Current description: "${existingContent ?? ""}".
+Return JSON: { "metaTitle", "metaDescription", "ogTitle", "ogDescription" }`
+              : buildSiteHomeSeoPrompt({
+                  name,
+                  keywords,
+                  description: existingContent,
+                  existingContent: reqMetaTitle,
+                });
+        break;
+      }
 
       case "category-description":
         userPrompt = buildCategorySeoPrompt({ name, keywords, description: existingContent }, "category");
@@ -427,10 +456,15 @@ Language: ${lang}.`;
     }
 
     const routeKey =
-      type === "product-seo" || type === "category-description" || type === "collection-seo" || type === "blog-post"
+      type === "product-seo" ||
+      type === "category-description" ||
+      type === "collection-seo" ||
+      type === "blog-post" ||
+      type.startsWith("site-seo")
         ? "seo"
         : "content";
-    const maxTok = type === "blog-post" ? 4000 : type === "product-seo" ? 2200 : 1800;
+    const maxTok =
+      type === "blog-post" ? 4000 : type === "product-seo" || type === "site-seo" ? 2200 : 1800;
     const raw = await callAI(routeKey, sysPrompt, userPrompt, { maxTokens: maxTok });
     let parsed: Record<string, unknown>;
     try {

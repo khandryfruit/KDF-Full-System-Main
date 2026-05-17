@@ -245,11 +245,28 @@ function FaviconManager() {
 
 function SeoManager() {
   const { data: seo } = useGetSeoSettings();
-  if (!seo?.googleVerificationCode) return null;
+  const { data: site } = useSiteSettings();
+  const noindex = seo?.siteNoindex || site?.robotsIndex === false;
+  const hasVerification = !!seo?.googleVerificationCode;
+  const hasSiteMeta = !!(site?.metaTitle || site?.metaDescription || site?.ogTitle || site?.ogDescription);
+  if (!hasVerification && !noindex && !hasSiteMeta) return null;
+
+  const title = site?.metaTitle || site?.siteName;
+  const description = site?.metaDescription;
+  const ogTitle = site?.ogTitle || site?.metaTitle || site?.siteName;
+  const ogDescription = site?.ogDescription || site?.metaDescription;
+
   return (
-    <Helmet>
-      <meta name="google-site-verification" content={seo.googleVerificationCode} />
-      {seo.siteNoindex && <meta name="robots" content="noindex, nofollow" />}
+    <Helmet default>
+      {hasVerification && <meta name="google-site-verification" content={seo!.googleVerificationCode!} />}
+      {noindex && <meta name="robots" content="noindex, nofollow" />}
+      {title && <title>{title}</title>}
+      {description && <meta name="description" content={description} />}
+      {ogTitle && <meta property="og:title" content={ogTitle} />}
+      {ogDescription && <meta property="og:description" content={ogDescription} />}
+      {ogTitle && <meta name="twitter:title" content={ogTitle} />}
+      {ogDescription && <meta name="twitter:description" content={ogDescription} />}
+      <meta name="twitter:card" content={site?.twitterCardType || "summary_large_image"} />
     </Helmet>
   );
 }
