@@ -6,6 +6,22 @@ import { getProductImageSrc } from "@/lib/imageUrl";
 import { useCart } from "@/context/CartContext";
 import { Badge } from "@/components/ui/badge";
 import { VariantPickerModal } from "@/components/VariantPickerModal";
+import { KdfStoreProductCard, type KdfStoreProductCardData } from "@/components/KdfStoreProductCard";
+
+function toStoreCardData(product: Product): KdfStoreProductCardData {
+  return {
+    id: product.id,
+    name: product.name,
+    slug: (product as { slug?: string }).slug,
+    price: parseFloat(product.price),
+    originalPrice: product.originalPrice,
+    images: product.images,
+    unit: product.unit,
+    weight: product.weight,
+    stock: product.stock,
+    variants: product.variants,
+  };
+}
 
 interface ProductCardProps {
   product: Product;
@@ -75,6 +91,21 @@ function ProductCardInner({ product, hotDealBadge, compact }: ProductCardProps) 
   const stock = typeof product.stock === "number" ? product.stock : null;
   const lowStock = stock !== null && stock > 0 && stock <= 8;
   const outOfStock = stock === 0;
+
+  if (compact) {
+    return (
+      <>
+        <KdfStoreProductCard
+          product={toStoreCardData(product)}
+          hotDealBadge={hotDealBadge}
+          onQuickAdd={hasVariants ? () => setShowVariants(true) : undefined}
+        />
+        {showVariants && (
+          <VariantPickerModal product={product} onClose={() => setShowVariants(false)} />
+        )}
+      </>
+    );
+  }
 
   return (
     <>

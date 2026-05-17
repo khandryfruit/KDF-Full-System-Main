@@ -7,9 +7,9 @@ import {
   Truck,
   Banknote,
   BadgeCheck,
-  Package,
   Zap,
 } from "lucide-react";
+import { KdfStoreProductCard } from "@/components/KdfStoreProductCard";
 
 export type PairProduct = {
   id: number;
@@ -97,15 +97,7 @@ function DeliveryPromiseRow() {
   );
 }
 
-function PairsWellMini({
-  items,
-  getImageSrc,
-  onSelect,
-}: {
-  items: PairProduct[];
-  getImageSrc: (path: string) => string;
-  onSelect: (p: PairProduct) => void;
-}) {
+function PairsWellMini({ items }: { items: PairProduct[] }) {
   if (!items.length) return null;
   return (
     <div className="space-y-2.5">
@@ -125,44 +117,21 @@ function PairsWellMini({
         showArrows={items.length > 2}
         className="kdf-pdp-pairs-carousel"
       >
-        {items.map((p) => {
-          const img = p.images?.[0];
-          const old = p.originalPrice != null ? Number(p.originalPrice) : null;
-          const disc = old && old > p.price ? Math.round(((old - p.price) / old) * 100) : null;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onSelect(p)}
-              className="kdf-carousel-slide--peek kdf-pdp-pair-slide group flex w-full shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-gray-100/95 bg-white text-left ring-1 ring-black/[0.04] transition-[box-shadow,border-color] duration-300 hover:border-[#5FA800]/35 motion-reduce:transition-none"
-            >
-              <div className={`relative aspect-square w-full overflow-hidden bg-gradient-to-br ${p.gradient || "from-emerald-100 to-green-200"}`}>
-                {img ? (
-                  <img
-                    src={getImageSrc(img)}
-                    alt=""
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Package className="h-6 w-6 text-muted" />
-                  </div>
-                )}
-                {disc != null && (
-                  <span className="absolute left-1.5 top-1.5 rounded-full bg-[#F58300] px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
-                    {disc}% OFF
-                  </span>
-                )}
-              </div>
-              <div className="p-2">
-                <p className="line-clamp-2 text-[10px] font-semibold leading-snug text-foreground">{p.name}</p>
-                <p className="mt-1 text-[11px] font-black text-[#5FA800]">Rs. {p.price.toLocaleString()}</p>
-              </div>
-            </button>
-          );
-        })}
+        {items.map((p) => (
+          <div key={p.id} className="kdf-carousel-slide--peek">
+            <KdfStoreProductCard
+              product={{
+                id: p.id,
+                name: p.name,
+                slug: p.slug,
+                price: p.price,
+                originalPrice: p.originalPrice,
+                images: p.images,
+                gradient: p.gradient,
+              }}
+            />
+          </div>
+        ))}
       </KdfCarousel>
     </div>
   );
@@ -261,7 +230,7 @@ export function ProductConversionRail({
         <SocialPulseStrip productId={productId} stock={stock} />
       </div>
       <DeliveryPromiseRow />
-      <PairsWellMini items={pairs} getImageSrc={getImageSrc} onSelect={onPairClick} />
+      <PairsWellMini items={pairs} />
     </div>
   );
 }

@@ -5,13 +5,13 @@ import {
   Flame,
   Clock,
   Zap,
-  ShoppingCart,
   TrendingUp,
   Star,
   Leaf,
   ChevronRight,
   Package,
 } from "lucide-react";
+import { KdfStoreProductCard } from "@/components/KdfStoreProductCard";
 
 export type GalleryEngagementProduct = {
   id: number;
@@ -153,13 +153,9 @@ function CategoryOrbitStrip({
 
 function AiCarousel({
   products,
-  getImageSrc,
-  onOpen,
   onQuickAdd,
 }: {
   products: GalleryEngagementProduct[];
-  getImageSrc: (path: string) => string;
-  onOpen: (p: GalleryEngagementProduct) => void;
   onQuickAdd: (p: GalleryEngagementProduct) => void;
 }) {
   if (products.length === 0) return null;
@@ -184,45 +180,24 @@ function AiCarousel({
           fadeColor="#ffffff"
           className="kdf-pdp-ai-carousel"
         >
-          {products.map((p, i) => {
-            const img = p.images?.[0];
-            return (
-              <div
-                key={`${p.id}-${i}`}
-                className="kdf-carousel-slide--peek kdf-pdp-pick-card group relative shrink-0 overflow-hidden rounded-2xl border border-gray-100/90 bg-white shadow-md ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#5FA800]/15 hover:ring-[#5FA800]/25 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-              >
-                <button type="button" onClick={() => onOpen(p)} className="block w-full text-left">
-                  <div className={`relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br ${p.gradient || "from-emerald-100 to-green-200"}`}>
-                    {img ? (
-                      <img src={getImageSrc(img)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Package className="h-8 w-8 text-muted" />
-                      </div>
-                    )}
-                    <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-                      Pick
-                    </span>
-                  </div>
-                  <div className="p-2.5">
-                    <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-foreground">{p.name}</p>
-                    <p className="mt-1 text-sm font-black text-[#5FA800]">Rs. {p.price.toLocaleString()}</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onQuickAdd(p);
-                  }}
-                  className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#5FA800] text-white shadow-lg shadow-[#5FA800]/30 transition hover:scale-105 hover:brightness-110 active:scale-95"
-                  title="Quick add"
-                >
-                  <ShoppingCart className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
+          {products.map((p, i) => (
+            <div key={`${p.id}-${i}`} className="kdf-carousel-slide--peek">
+              <KdfStoreProductCard
+                product={{
+                  id: p.id,
+                  name: p.name,
+                  slug: p.slug,
+                  price: p.price,
+                  images: p.images,
+                  gradient: p.gradient,
+                  variants: p.variants,
+                }}
+                topBadge="Pick"
+                cartIcon="cart"
+                onQuickAdd={() => onQuickAdd(p)}
+              />
+            </div>
+          ))}
         </KdfCarousel>
       </div>
     </div>
@@ -347,7 +322,7 @@ export function ProductGalleryEngagementZone({
 
   return (
     <div className="mt-8 w-full space-y-8 lg:mt-10">
-      <AiCarousel products={carouselPool} getImageSrc={getImageSrc} onOpen={onProductNavigate} onQuickAdd={onQuickAdd} />
+      <AiCarousel products={carouselPool} onQuickAdd={onQuickAdd} />
       <FlashDealBlock productId={productId} discountPercent={discountPercent} stock={stock} />
       <CategoryOrbitStrip apiCategories={apiCategories} onNavigate={onPathNavigate} />
       <div className="space-y-2">
