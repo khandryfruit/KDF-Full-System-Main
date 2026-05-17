@@ -116,8 +116,16 @@ function PairsWellMini({
         </div>
         <BadgeCheck className="h-4 w-4 shrink-0 text-[#5FA800]/50" aria-hidden />
       </div>
-      <KdfCarousel mode="peek" itemCount={items.length} loopCopies={2} resumeMs={4000} fadeColor="hsl(var(--background))" showArrows={items.length > 2}>
-        {items.map((p, i) => {
+      <KdfCarousel
+        mode="peek"
+        itemCount={items.length}
+        loopCopies={2}
+        resumeMs={4000}
+        showEdgeFade={false}
+        showArrows={items.length > 2}
+        className="kdf-pdp-pairs-carousel"
+      >
+        {items.map((p) => {
           const img = p.images?.[0];
           const old = p.originalPrice != null ? Number(p.originalPrice) : null;
           const disc = old && old > p.price ? Math.round(((old - p.price) / old) * 100) : null;
@@ -126,7 +134,7 @@ function PairsWellMini({
               key={p.id}
               type="button"
               onClick={() => onSelect(p)}
-              className="kdf-carousel-slide--peek group flex min-w-[108px] max-w-[120px] shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-100/95 bg-white/90 text-left shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-[#5FA800]/35 hover:shadow-lg motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              className="kdf-carousel-slide--peek kdf-pdp-pair-slide group flex w-full shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-gray-100/95 bg-white text-left ring-1 ring-black/[0.04] transition-[box-shadow,border-color] duration-300 hover:border-[#5FA800]/35 motion-reduce:transition-none"
             >
               <div className={`relative aspect-square w-full overflow-hidden bg-gradient-to-br ${p.gradient || "from-emerald-100 to-green-200"}`}>
                 {img ? (

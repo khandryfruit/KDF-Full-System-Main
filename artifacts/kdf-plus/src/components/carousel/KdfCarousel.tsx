@@ -7,6 +7,8 @@ export interface KdfCarouselProps extends UseKdfCarouselOptions {
   className?: string;
   trackClassName?: string;
   fadeColor?: string;
+  /** Edge gradient masks — off by default (clean cards, no cut-off look) */
+  showEdgeFade?: boolean;
   showArrows?: boolean;
   children: ReactNode;
 }
@@ -16,12 +18,13 @@ export function KdfCarousel({
   className = "",
   trackClassName = "",
   fadeColor = "#fff",
+  showEdgeFade = false,
   showArrows = true,
   children,
   itemCount,
   ...carouselOpts
 }: KdfCarouselProps) {
-  const { scrollerRef, scrollerClassName, scrollerProps, scrollBy } = useKdfCarousel({
+  const { scrollerRef, scrollerClassName, scrollerProps, scrollBy, rootProps } = useKdfCarousel({
     itemCount,
     ...carouselOpts,
   });
@@ -35,11 +38,16 @@ export function KdfCarousel({
 
   return (
     <div
-      className={`kdf-carousel kdf-carousel--${mode} ${className}`}
+      {...rootProps}
+      className={`kdf-carousel kdf-carousel--${mode} kdf-carousel--responsive ${className}`}
       style={{ ["--kdf-carousel-fade" as string]: fadeColor }}
     >
-      <div className="kdf-carousel-fade kdf-carousel-fade--left" aria-hidden />
-      <div className="kdf-carousel-fade kdf-carousel-fade--right" aria-hidden />
+      {showEdgeFade && (
+        <>
+          <div className="kdf-carousel-fade kdf-carousel-fade--left" aria-hidden />
+          <div className="kdf-carousel-fade kdf-carousel-fade--right" aria-hidden />
+        </>
+      )}
 
       {showArrows && itemCount > 1 && (
         <>

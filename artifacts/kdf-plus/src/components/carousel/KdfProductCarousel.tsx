@@ -36,7 +36,7 @@ export function KdfProductCarousel({
     return Array.from({ length: n }, () => products).flat();
   }, [products, loopCopies]);
 
-  const { scrollerRef, scrollerClassName, scrollerProps, scrollBy } = useKdfCarousel({
+  const { scrollerRef, scrollerClassName, scrollerProps, scrollBy, rootProps } = useKdfCarousel({
     itemCount: products.length,
     loopCopies,
     resumeMs,
@@ -90,11 +90,10 @@ export function KdfProductCarousel({
 
   return (
     <div
-      className={"kdf-carousel kdf-carousel--" + mode + " " + className}
+      {...rootProps}
+      className={`kdf-carousel kdf-carousel--${mode} kdf-carousel--responsive ${className}`}
       style={{ ["--kdf-carousel-fade" as string]: fadeColor }}
     >
-      <div className="kdf-carousel-fade kdf-carousel-fade--left" aria-hidden />
-      <div className="kdf-carousel-fade kdf-carousel-fade--right" aria-hidden />
 
       {products.length > 1 && (
         <>
