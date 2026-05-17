@@ -1977,72 +1977,75 @@ async function searchProductsForWa(query: string, limit = 4): Promise<WaCatalogP
   const q = String(query ?? "").trim();
   if (!q) return [];
 
+  const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+  const searchQ = extractProductSearchQuery(q) || q;
+
   const {
-    searchCommerceProducts,
-    listCommerceProductsForCustomerQuery,
+    searchCommerceProductsRanked,
     searchRelatedCommerceProducts,
     commerceToWaCatalogProducts,
     logCommerceProductSearch,
   } = await import("../lib/commerceProductSearch.js");
   const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
-  const categoryId = resolveCanonicalCategoryId(q);
+  const { resolveSpecificProductKey } = await import("../lib/waProductEntity.js");
+  const categoryId = resolveCanonicalCategoryId(searchQ);
+  const specificKey = resolveSpecificProductKey(searchQ);
 
   const finishCommerce = async (
-    hits: Awaited<ReturnType<typeof searchCommerceProducts>>,
+    hits: Awaited<ReturnType<typeof searchCommerceProductsRanked>>["products"],
     engine: string,
+    debug?: Awaited<ReturnType<typeof searchCommerceProductsRanked>>["debug"],
     related = false,
   ): Promise<WaCatalogProduct[]> => {
-    const results = commerceToWaCatalogProducts(hits.slice(0, limit));
-    await logWaProductRetrieval({ query: q, engine, products: results, categoryId, related });
-    await logCommerceProductSearch({ userQuery: q, products: hits, matchMethod: engine }).catch(() => {});
+    const max = specificKey || (debug?.confidence ?? 0) >= 80 ? Math.min(limit, 1) : Math.min(limit, 2);
+    const results = commerceToWaCatalogProducts(hits.slice(0, max));
+    await logWaProductRetrieval({ query: searchQ, engine, products: results, categoryId: specificKey ?? categoryId, related });
+    await logCommerceProductSearch({
+      userQuery: q,
+      products: hits,
+      matchMethod: engine,
+      debug,
+    }).catch(() => {});
     return results;
   };
 
-  if (categoryId) {
-    const commerceListed = await listCommerceProductsForCustomerQuery(q);
-    if (commerceListed.products.length > 0) {
-      return finishCommerce(commerceListed.products, "commerce_category_primary");
-    }
-    const commerceHits = await searchCommerceProducts(q, limit);
-    if (commerceHits.length > 0) {
-      return finishCommerce(commerceHits, "commerce_category_search");
-    }
-    const related = await searchRelatedCommerceProducts(q, limit);
+  const ranked = await searchCommerceProductsRanked(searchQ, 12);
+  if (ranked.products.length > 0) {
+    return finishCommerce(
+      ranked.products,
+      `commerce_ranked_${ranked.confidence}`,
+      ranked.debug,
+    );
+  }
+
+  if (categoryId && !specificKey) {
+    const related = await searchRelatedCommerceProducts(searchQ, limit);
     if (related.length > 0) {
-      return finishCommerce(related, "commerce_category_related", true);
+      return finishCommerce(related, "commerce_category_related", undefined, true);
     }
 
     const { listProductsForCustomerQuery } = await import("../lib/waCategoryIndex.js");
-    const shopifyListed = await listProductsForCustomerQuery(q);
+    const shopifyListed = await listProductsForCustomerQuery(searchQ);
     if (shopifyListed.products.length > 0) {
       const { toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
-      const results = toWhatsAppCatalogProducts(shopifyListed.products.slice(0, limit));
-      await logWaProductRetrieval({ query: q, engine: "shopify_category_fallback", products: results, categoryId });
+      const results = toWhatsAppCatalogProducts(shopifyListed.products.slice(0, Math.min(limit, 2)));
+      await logWaProductRetrieval({ query: searchQ, engine: "shopify_category_fallback", products: results, categoryId });
       return results;
     }
-    const relatedShopify = await searchRelatedCommerceProducts(q, limit);
-    if (relatedShopify.length > 0) {
-      return finishCommerce(relatedShopify, "commerce_related_before_empty", true);
-    }
-    await logWaProductRetrieval({ query: q, engine: "no_match", products: [], categoryId });
+    await logWaProductRetrieval({ query: searchQ, engine: "no_match", products: [], categoryId });
     return [];
   }
 
-  const commerceHits = await searchCommerceProducts(q, limit);
-  if (commerceHits.length > 0) {
-    return finishCommerce(commerceHits, "commerce_primary");
-  }
-
-  const related = await searchRelatedCommerceProducts(q, limit);
+  const related = await searchRelatedCommerceProducts(searchQ, limit);
   if (related.length > 0) {
-    return finishCommerce(related, "commerce_related", true);
+    return finishCommerce(related, "commerce_related", undefined, true);
   }
 
   const { searchShopifyCatalog, toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
-  const catalog = await searchShopifyCatalog(q, limit);
+  const catalog = await searchShopifyCatalog(searchQ, limit);
   if (catalog.length > 0) {
     const results = toWhatsAppCatalogProducts(catalog);
-    await logWaProductRetrieval({ query: q, engine: "shopify_fallback", products: results, categoryId });
+    await logWaProductRetrieval({ query: searchQ, engine: "shopify_fallback", products: results, categoryId });
     return results;
   }
 
@@ -2051,7 +2054,7 @@ async function searchProductsForWa(query: string, limit = 4): Promise<WaCatalogP
     return finishCommerce(featured, "commerce_featured_fallback", true);
   }
 
-  await logWaProductRetrieval({ query: q, engine: "no_match", products: [], categoryId });
+  await logWaProductRetrieval({ query: searchQ, engine: "no_match", products: [], categoryId });
   return [];
 }
 
@@ -2110,18 +2113,41 @@ async function deliverSingleProductOffer(opts: {
   waSettings: any;
   showMore?: boolean;
 }): Promise<boolean> {
-  const q = String(opts.query ?? "").trim();
-  if (q.length < 2) return false;
+  const rawQ = String(opts.query ?? "").trim();
+  if (rawQ.length < 2) return false;
+
+  const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+  const q = extractProductSearchQuery(rawQ) || rawQ;
 
   const { isShowMoreProductsMessage, buildNumberedProductList, buildSingleProductIntro } = await import("../lib/waOrderJourney.js");
-  const { resolveCommerceImageUrl } = await import("../lib/commerceProductSearch.js");
+  const { resolveCommerceImageUrl, searchCommerceProductsRanked } = await import("../lib/commerceProductSearch.js");
   const { sendWhatsAppImage } = await import("../lib/whatsapp.js");
-  const roman = isRomanUrduWa(q);
-  const allMatches = await searchProductsForWa(q, 8);
+  const roman = isRomanUrduWa(rawQ);
+  const ranked = await searchCommerceProductsRanked(q, 12);
+  const { commerceToWaCatalogProducts, formatCommerceProductsWhatsAppReply } = await import("../lib/commerceProductSearch.js");
+  const allMatches = ranked.products.length
+    ? commerceToWaCatalogProducts(ranked.products)
+    : await searchProductsForWa(q, 2);
 
   if (!allMatches.length) return false;
 
-  if (opts.showMore || isShowMoreProductsMessage(q)) {
+  if (ranked.ambiguous && allMatches.length === 2 && !opts.showMore) {
+    await sendWaText(
+      opts.phone,
+      formatCommerceProductsWhatsAppReply(ranked.products, roman),
+      opts.waSettings,
+      "product_disambiguation",
+    );
+    await setConversationState(opts.phone, "wa_order_await_product_choice", {
+      productQuery: q,
+      products: allMatches,
+      lastUserMessage: rawQ,
+      browseMode: "disambiguation",
+    });
+    return true;
+  }
+
+  if (opts.showMore || isShowMoreProductsMessage(rawQ)) {
     await sendWaText(opts.phone, buildNumberedProductList(allMatches as any, roman), opts.waSettings, "product_list_more");
     await setConversationState(opts.phone, "wa_order_await_product_choice", {
       productQuery: q,
@@ -2198,7 +2224,17 @@ async function deliverSingleProductOffer(opts: {
     step: "single_product_offered",
     status: "sent",
     detail: `Top match: ${product.name}`,
-    payload: { query: q, product: product.name, source: product.source, alternates: allMatches.length - 1 },
+    payload: {
+      query: q,
+      rawQuery: rawQ,
+      entity: ranked.entity,
+      specificKey: ranked.specificKey,
+      confidence: ranked.confidence,
+      topScore: ranked.debug.topScore,
+      product: product.name,
+      source: product.source,
+      alternates: allMatches.length - 1,
+    },
   });
   return true;
 }

@@ -29,6 +29,7 @@ import {
   isPaymentInfoMessage,
   isAddressFaqMessage,
 } from "./waIntentClassifier.js";
+import { extractProductSearchQuery, resolveSpecificProductKey } from "./waProductEntity.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -48,15 +49,9 @@ export function isRomanUrduWa(text: string): boolean {
   return /[a-z]/i.test(text) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(text);
 }
 
-/** Strip filler words so "I need almonds" → "almonds" */
+/** Strip filler words so "Mujhe goji berry chahiye" → "goji berry" */
 export function extractProductQueryFromMessage(text: string): string {
-  let q = String(text ?? "").trim();
-  const patterns = [
-    /^(i|me|we|please|pls|kindly|want|need|looking for|searching for|show me|give me|send me|mujhe|muje|mje|mjy|chahiye|chaye|chahye|chaiye|lena|lenay|karna hai|krna hai)\b/gi,
-    /\b(please|pls|want|need|some|any|a|an|the|for me|for us)\b/gi,
-  ];
-  for (const re of patterns) q = q.replace(re, " ");
-  return q.replace(/\s+/g, " ").trim() || String(text ?? "").trim();
+  return extractProductSearchQuery(text);
 }
 
 export function productRootsInMessage(text: string): string[] {
@@ -225,12 +220,38 @@ async function tryCategoryCatalogReply(opts: {
     formatCommerceProductsWhatsAppReply,
     commerceToWaCatalogProducts,
     commerceHitToCatalogProduct,
-    searchCommerceProducts,
+    searchCommerceProductsRanked,
+    logCommerceProductSearch,
   } = await import("./commerceProductSearch.js");
 
-  if (categoryId && categoryId !== "all") {
+  const specificKey = resolveSpecificProductKey(searchQ) ?? resolveSpecificProductKey(raw);
+  const ranked = await searchCommerceProductsRanked(searchQ, 8);
+  if (ranked.products.length > 0) {
+    const catalogProducts = ranked.products.map(commerceHitToCatalogProduct);
+    await logCommerceProductSearch({
+      userQuery: raw,
+      products: ranked.products,
+      matchMethod: `ranked_${ranked.confidence}`,
+      debug: ranked.debug,
+    }).catch(() => {});
+    return {
+      reply: formatCommerceProductsWhatsAppReply(ranked.products, roman),
+      product: catalogProducts[0]!,
+      products: catalogProducts,
+      query,
+      matchedRoots: productRootTermsFromQuery(searchQ),
+      score: ranked.products[0]?.score ?? 100,
+      mode: ranked.products.length === 1 || ranked.confidence >= 80 ? "single" : "category",
+      categoryId: specificKey ?? categoryId,
+      waProducts: commerceToWaCatalogProducts(ranked.products),
+      catalogPage: 0,
+      hasMore: false,
+    };
+  }
+
+  if (categoryId && categoryId !== "all" && !specificKey) {
     const commerceListed = await listCommerceProductsForCustomerQuery(searchQ);
-    if (commerceListed.products.length > 0) {
+    if (commerceListed.products.length > 0 && commerceListed.products.length <= 2) {
       const catalogProducts = commerceListed.products.map(commerceHitToCatalogProduct);
       return {
         reply: formatCommerceProductsWhatsAppReply(commerceListed.products, roman),
@@ -243,13 +264,13 @@ async function tryCategoryCatalogReply(opts: {
         categoryId,
         waProducts: commerceToWaCatalogProducts(commerceListed.products),
         catalogPage: 0,
-        hasMore: commerceListed.products.length > 30,
+        hasMore: false,
       };
     }
 
     const { searchRelatedCommerceProducts } = await import("./commerceProductSearch.js");
-    const relatedCommerce = await searchRelatedCommerceProducts(searchQ, 12);
-    if (relatedCommerce.length > 0) {
+    const relatedCommerce = await searchRelatedCommerceProducts(searchQ, 3);
+    if (relatedCommerce.length > 0 && relatedCommerce.length <= 2) {
       const catalogProducts = relatedCommerce.map(commerceHitToCatalogProduct);
       return {
         reply: formatCommerceProductsWhatsAppReply(relatedCommerce, roman),
@@ -262,7 +283,7 @@ async function tryCategoryCatalogReply(opts: {
         categoryId,
         waProducts: commerceToWaCatalogProducts(relatedCommerce),
         catalogPage: 0,
-        hasMore: relatedCommerce.length > 30,
+        hasMore: false,
       };
     }
 
@@ -294,38 +315,19 @@ async function tryCategoryCatalogReply(opts: {
     return null;
   }
 
-  const commerceSearch = await searchCommerceProducts(searchQ, 20);
-  if (commerceSearch.length > 0) {
-    const catalogProducts = commerceSearch.map(commerceHitToCatalogProduct);
+  const fallbackRanked = await searchCommerceProductsRanked(searchQ, 4);
+  if (fallbackRanked.products.length > 0) {
+    const catalogProducts = fallbackRanked.products.map(commerceHitToCatalogProduct);
     return {
-      reply: formatCommerceProductsWhatsAppReply(commerceSearch, roman),
+      reply: formatCommerceProductsWhatsAppReply(fallbackRanked.products, roman),
       product: catalogProducts[0]!,
       products: catalogProducts,
       query,
       matchedRoots: productRootTermsFromQuery(searchQ),
-      score: commerceSearch[0]?.score ?? 100,
-      mode: catalogProducts.length === 1 ? "single" : "category",
+      score: fallbackRanked.products[0]?.score ?? 100,
+      mode: fallbackRanked.products.length === 1 ? "single" : "category",
       categoryId: categoryId ?? null,
-      waProducts: commerceToWaCatalogProducts(commerceSearch),
-      catalogPage: 0,
-      hasMore: false,
-    };
-  }
-
-  const { searchRelatedCommerceProducts } = await import("./commerceProductSearch.js");
-  const related = await searchRelatedCommerceProducts(searchQ, 12);
-  if (related.length > 0) {
-    const catalogProducts = related.map(commerceHitToCatalogProduct);
-    return {
-      reply: formatCommerceProductsWhatsAppReply(related, roman),
-      product: catalogProducts[0]!,
-      products: catalogProducts,
-      query,
-      matchedRoots: productRootTermsFromQuery(searchQ),
-      score: 70,
-      mode: "category",
-      categoryId: categoryId ?? null,
-      waProducts: commerceToWaCatalogProducts(related),
+      waProducts: commerceToWaCatalogProducts(fallbackRanked.products),
       catalogPage: 0,
       hasMore: false,
     };

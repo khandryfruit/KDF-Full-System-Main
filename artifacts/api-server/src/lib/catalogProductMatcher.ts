@@ -72,7 +72,48 @@ export const CATEGORY_PRIMARY_TOKENS: Record<string, RegExp> = {
   peanuts: /\b(peanut|peanuts|mungphali|مونگ)\b/i,
   hazelnut: /\b(hazelnut|hazelnuts|filbert)\b/i,
   berries: /\b(goji|cranberry|blueberry|strawberry|berry|berries)\b/i,
+  goji: /\b(goji|گوجی)\b/i,
+  cranberry: /\b(cranberr(?:y|ies)|کرین)\b/i,
+  blueberry: /\b(blueberr(?:y|ies)|بلیو)\b/i,
+  mango: /\b(mango|آم)\b/i,
+  kiwi: /\b(kiwi)\b/i,
 };
+
+/** When customer asks for one berry, block other berries in results */
+const SPECIFIC_PRODUCT_EXCLUDES: Record<string, RegExp> = {
+  goji: /\b(cranberr|blueberr|strawberr)\b/i,
+  cranberry: /\b(goji|blueberr|strawberr)\b/i,
+  blueberry: /\b(goji|cranberr|strawberr)\b/i,
+  strawberry: /\b(goji|cranberr|blueberr)\b/i,
+  pista: /\b(almond|badam|cashew|kaju|walnut|akhrot|cranberr|goji)\b/i,
+  badam: /\b(pista|pistachio|kaju|cashew|walnut|akhrot|goji|cranberr)\b/i,
+  kaju: /\b(almond|badam|pista|pistachio|walnut|akhrot)\b/i,
+  akhrot: /\b(almond|badam|pista|pistachio|kaju|cashew)\b/i,
+};
+
+export function productExcludedForSpecificQuery(
+  title: string,
+  tags: unknown,
+  description: unknown,
+  specificKey: string,
+): boolean {
+  const exclude = SPECIFIC_PRODUCT_EXCLUDES[specificKey];
+  if (!exclude) return false;
+  const blob = `${title} ${Array.isArray(tags) ? tags.join(" ") : tags ?? ""} ${description ?? ""}`;
+  return exclude.test(blob);
+}
+
+export function productMatchesSpecificKey(
+  title: string,
+  tags: unknown,
+  description: unknown,
+  specificKey: string,
+): boolean {
+  const primary = CATEGORY_PRIMARY_TOKENS[specificKey];
+  if (!primary) return true;
+  const blob = `${title} ${Array.isArray(tags) ? tags.join(" ") : tags ?? ""} ${description ?? ""}`;
+  return primary.test(blob);
+}
 
 export function productMatchesCategoryPrimary(
   title: string,

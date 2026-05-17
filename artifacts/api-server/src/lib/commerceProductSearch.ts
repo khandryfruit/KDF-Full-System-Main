@@ -9,12 +9,19 @@ import { WA_PRODUCT_ALIASES, expandWaProductSearchTerms, productRootTermsFromQue
 import {
   productBelongsToFamilies,
   productMatchesCategoryPrimary,
+  productExcludedForSpecificQuery,
+  productMatchesSpecificKey,
   resolveQueryFamilies,
   expandFamilyTerms,
 } from "./catalogProductMatcher.js";
 import { resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 import { KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 import { logProductSearch } from "./productSearchDebug.js";
+import {
+  extractWaProductEntity,
+  isGenericBerryBrowse,
+  resolveSpecificProductKey,
+} from "./waProductEntity.js";
 
 const STORE_BASE = (process.env.STOREFRONT_URL ?? process.env.PUBLIC_STORE_URL ?? KHAN_WEBSITE_URL).replace(/\/$/, "");
 const API_PUBLIC_BASE = (process.env.API_PUBLIC_URL ?? process.env.PUBLIC_API_URL ?? "").replace(/\/$/, "");
@@ -58,11 +65,26 @@ export type CommerceProductHit = {
 
 export type CommerceSearchDebug = {
   query: string;
+  entity: string;
+  specificKey: string | null;
   terms: string[];
   families: string[];
   matchCount: number;
+  confidence: number;
+  topScore: number;
+  secondScore: number;
+  ambiguous: boolean;
   methods: Record<string, number>;
   topHits: Array<{ id: string; name: string; score: number; method: string }>;
+};
+
+export type CommerceRankedSearch = {
+  products: CommerceProductHit[];
+  entity: string;
+  specificKey: string | null;
+  confidence: number;
+  ambiguous: boolean;
+  debug: CommerceSearchDebug;
 };
 
 const CACHE_TTL_MS = 45_000;
@@ -89,24 +111,58 @@ function productUrl(slug: string): string {
   return `${STORE_BASE}/products/${slug}`;
 }
 
-function expandCommerceTerms(query: string): string[] {
+function expandCommerceTerms(query: string, specificKey: string | null): string[] {
   const terms = new Set<string>();
   for (const t of expandWaProductSearchTerms(query)) terms.add(t);
   const q = normalizeText(query);
   if (q) terms.add(q);
+  const hasSpecificBerry = Boolean(specificKey && ["goji", "cranberry", "blueberry", "strawberry"].includes(specificKey));
   for (const token of q.split(/\s+/)) {
     if (token.length >= 2) {
       terms.add(token);
-      for (const syn of WA_PRODUCT_ALIASES[token] ?? []) terms.add(normalizeText(syn));
+      if (!(hasSpecificBerry && (token === "berry" || token === "berries"))) {
+        for (const syn of WA_PRODUCT_ALIASES[token] ?? []) terms.add(normalizeText(syn));
+      }
     }
   }
   for (const [key, syns] of Object.entries(WA_PRODUCT_ALIASES)) {
     if (key.length >= 3 && q.includes(key)) {
+      if (hasSpecificBerry && (key === "berry" || key === "berries")) continue;
       terms.add(key);
-      for (const s of syns) terms.add(normalizeText(s));
+      for (const s of syns) {
+        const sn = normalizeText(s);
+        if (hasSpecificBerry && /\b(berry|berries)\b/.test(sn) && !sn.includes(specificKey!)) continue;
+        terms.add(sn);
+      }
     }
   }
+  if (specificKey) {
+    terms.add(specificKey);
+    for (const syn of WA_PRODUCT_ALIASES[specificKey] ?? []) terms.add(normalizeText(syn));
+  }
   return [...terms].filter((t) => t.length >= 1);
+}
+
+function computeSearchConfidence(topScore: number, secondScore: number): { confidence: number; ambiguous: boolean } {
+  if (topScore < 35) return { confidence: 0, ambiguous: false };
+  const gap = topScore - secondScore;
+  if (topScore >= 220) return { confidence: 98, ambiguous: false };
+  if (topScore >= 180 && gap >= 50) return { confidence: 95, ambiguous: false };
+  if (topScore >= 150 && gap >= 70) return { confidence: 92, ambiguous: false };
+  if (gap < 25 && secondScore >= 100) return { confidence: 55, ambiguous: true };
+  if (topScore >= 120 && gap >= 40) return { confidence: 88, ambiguous: false };
+  return { confidence: Math.min(85, Math.round((topScore / 250) * 100)), ambiguous: gap < 30 && secondScore >= 80 };
+}
+
+function filterByConfidence(scored: CommerceProductHit[]): CommerceProductHit[] {
+  if (!scored.length) return [];
+  const top = scored[0]!.score;
+  const second = scored[1]?.score ?? 0;
+  const { confidence, ambiguous } = computeSearchConfidence(top, second);
+  if (confidence >= 80 || (top >= 150 && top - second >= 50)) return [scored[0]!];
+  if (ambiguous && scored.length >= 2) return scored.slice(0, 2);
+  if (top >= 100) return [scored[0]!];
+  return scored.slice(0, Math.min(2, scored.length));
 }
 
 async function loadActiveCommerceRows() {
@@ -146,6 +202,7 @@ function scoreCommerceProduct(
   query: string,
   terms: string[],
   families: string[],
+  specificKey: string | null,
 ): { score: number; method: string } | null {
   const name = row.name ?? "";
   const slug = row.slug ?? "";
@@ -156,22 +213,36 @@ function scoreCommerceProduct(
     .map((v: ProductVariant) => `${v.name ?? ""} ${v.value ?? ""} ${v.sku ?? ""}`)
     .join(" ");
 
-  const categoryId = resolveCanonicalCategoryId(query);
-  if (categoryId && !productMatchesCategoryPrimary(name, tags, desc, categoryId)) {
-    return null;
-  }
-  if (families.length > 0 && !productBelongsToFamilies(name, tags, desc, families)) {
-    return null;
+  if (specificKey) {
+    if (!productMatchesSpecificKey(name, tags, desc, specificKey)) return null;
+    if (productExcludedForSpecificQuery(name, tags, desc, specificKey)) return null;
+  } else {
+    const categoryId = resolveCanonicalCategoryId(query);
+    if (categoryId && categoryId !== "berries" && !productMatchesCategoryPrimary(name, tags, desc, categoryId)) {
+      return null;
+    }
+    if (categoryId === "berries" && !isGenericBerryBrowse(query)) {
+      /* specific berry handled via specificKey */
+    }
+    if (families.length > 0 && !productBelongsToFamilies(name, tags, desc, families)) {
+      return null;
+    }
   }
 
   const qNorm = normalizeText(query);
+  const entityNorm = normalizeText(extractWaProductEntity(query).entity);
   const nameNorm = normalizeText(name);
   const slugNorm = normalizeText(slug.replace(/-/g, " "));
   const tagNorm = normalizeText(tags);
   const variantNorm = normalizeText(variantText);
+  const blob = `${nameNorm} ${tagNorm} ${slugNorm} ${variantNorm}`;
 
   let score = 0;
   let method = "lexical";
+
+  if (entityNorm.length >= 4 && nameNorm.includes(entityNorm)) {
+    return { score: 280, method: "exact_entity_phrase" };
+  }
 
   if (qNorm && nameNorm === qNorm) {
     return { score: 250, method: "exact_name" };
@@ -182,8 +253,14 @@ function scoreCommerceProduct(
     method = "exact_name_contains";
   }
 
+  if (specificKey && blob.includes(specificKey)) {
+    score = Math.max(score, 240);
+    method = "specific_key";
+  }
+
   for (const term of terms) {
     if (term.length < 2) continue;
+    if (specificKey && term === "berry" && term !== specificKey) continue;
     if (nameNorm === term) {
       score = Math.max(score, 220);
       method = "exact_name_token";
@@ -193,6 +270,8 @@ function scoreCommerceProduct(
     } else if (nameNorm.includes(term)) {
       score = Math.max(score, 160);
       method = "name_match";
+    } else if (term.length >= 4 && blob.includes(term)) {
+      score = Math.max(score, 90);
     }
     if (tagNorm.includes(term)) {
       score = Math.max(score, 140);
@@ -208,9 +287,17 @@ function scoreCommerceProduct(
     }
   }
 
-  if (families.length > 0) {
+  if (specificKey) {
+    const others = ["goji", "cranberry", "blueberry", "strawberry"].filter((b) => b !== specificKey);
+    for (const other of others) {
+      if (blob.includes(other) && !blob.includes(specificKey)) {
+        score = Math.max(0, score - 120);
+      }
+    }
+  }
+
+  if (families.length > 0 && !specificKey) {
     const familyTerms = expandFamilyTerms(families);
-    const blob = `${nameNorm} ${tagNorm} ${slugNorm}`;
     const familyHit = familyTerms.some((f) => f.length >= 3 && blob.includes(f));
     if (!familyHit) return null;
     score += 30;
@@ -264,27 +351,84 @@ function mapRowToHit(
   };
 }
 
-/** Primary search — Commerce → Products table */
-export async function searchCommerceProducts(
-  query: string,
-  limit = 8,
-): Promise<CommerceProductHit[]> {
+async function scoreAllCommerceProducts(query: string): Promise<CommerceProductHit[]> {
   const q = String(query ?? "").trim();
   if (!q) return [];
 
-  const terms = expandCommerceTerms(q);
-  const families = resolveQueryFamilies(q);
+  const { entity, specificKey } = extractWaProductEntity(q);
+  const searchQ = entity || q;
+  const terms = expandCommerceTerms(searchQ, specificKey);
+  const families = specificKey ? [specificKey] : resolveQueryFamilies(searchQ);
   const rows = await getAllActiveProducts();
 
   const scored: CommerceProductHit[] = [];
   for (const row of rows) {
-    const hit = scoreCommerceProduct(row, q, terms, families);
+    const hit = scoreCommerceProduct(row, searchQ, terms, families, specificKey);
     if (!hit) continue;
     scored.push(mapRowToHit(row, hit.score, hit.method));
   }
 
   scored.sort((a, b) => b.score - a.score);
+  return scored;
+}
+
+/** Primary search — Commerce → Products table */
+export async function searchCommerceProducts(
+  query: string,
+  limit = 8,
+): Promise<CommerceProductHit[]> {
+  const scored = await scoreAllCommerceProducts(query);
   return scored.slice(0, limit);
+}
+
+/** Ranked search with confidence — use for WhatsApp single-product replies */
+export async function searchCommerceProductsRanked(
+  query: string,
+  limit = 8,
+): Promise<CommerceRankedSearch> {
+  const q = String(query ?? "").trim();
+  const { entity, specificKey } = extractWaProductEntity(q);
+  const searchQ = entity || q;
+  const scored = await scoreAllCommerceProducts(q);
+  const filtered = filterByConfidence(scored);
+  const topScore = scored[0]?.score ?? 0;
+  const secondScore = scored[1]?.score ?? 0;
+  const { confidence, ambiguous } = computeSearchConfidence(topScore, secondScore);
+
+  const methods: Record<string, number> = {};
+  for (const p of scored) {
+    const m = p.matchMethod.split("+")[0] ?? p.matchMethod;
+    methods[m] = (methods[m] ?? 0) + 1;
+  }
+
+  const products = (confidence >= 80 ? filtered : scored).slice(0, limit);
+
+  return {
+    products: products.length ? products : filtered.slice(0, limit),
+    entity: searchQ,
+    specificKey,
+    confidence,
+    ambiguous,
+    debug: {
+      query: q,
+      entity: searchQ,
+      specificKey,
+      terms: expandCommerceTerms(searchQ, specificKey),
+      families: specificKey ? [specificKey] : resolveQueryFamilies(searchQ),
+      matchCount: scored.length,
+      confidence,
+      topScore,
+      secondScore,
+      ambiguous,
+      methods,
+      topHits: scored.slice(0, 6).map((p) => ({
+        id: p.id,
+        name: p.name,
+        score: p.score,
+        method: p.matchMethod,
+      })),
+    },
+  };
 }
 
 /** Related / same-family products when exact query has no hit (never leave customer empty) */
@@ -329,29 +473,8 @@ export async function searchCommerceProductsWithDebug(
   query: string,
   limit = 8,
 ): Promise<{ products: CommerceProductHit[]; debug: CommerceSearchDebug }> {
-  const q = String(query ?? "").trim();
-  const products = await searchCommerceProducts(q, limit);
-  const methods: Record<string, number> = {};
-  for (const p of products) {
-    const m = p.matchMethod.split("+")[0] ?? p.matchMethod;
-    methods[m] = (methods[m] ?? 0) + 1;
-  }
-  return {
-    products,
-    debug: {
-      query: q,
-      terms: expandCommerceTerms(q),
-      families: resolveQueryFamilies(q),
-      matchCount: products.length,
-      methods,
-      topHits: products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        score: p.score,
-        method: p.matchMethod,
-      })),
-    },
-  };
+  const ranked = await searchCommerceProductsRanked(query, limit);
+  return { products: ranked.products, debug: ranked.debug };
 }
 
 /** List all commerce products in a product family (badam → almonds) */
@@ -362,15 +485,27 @@ export async function listCommerceProductsForCustomerQuery(query: string): Promi
 }> {
   const q = String(query ?? "").trim();
   const roots = productRootTermsFromQuery(q);
-  const families = resolveQueryFamilies(q);
-  const rows = await getAllActiveProducts();
+  const specificKey = resolveSpecificProductKey(q);
 
+  /* Specific product (goji, pista) — never dump whole category */
+  if (specificKey) {
+    const ranked = await searchCommerceProductsRanked(q, 12);
+    return { products: ranked.products, roots, familyId: specificKey };
+  }
+
+  const families = resolveQueryFamilies(q);
   const categoryId = resolveCanonicalCategoryId(q);
   if (!families.length && !categoryId) {
     const hits = await searchCommerceProducts(q, 50);
     return { products: hits, roots, familyId: null };
   }
 
+  if (categoryId === "berries" && !isGenericBerryBrowse(q)) {
+    const ranked = await searchCommerceProductsRanked(q, 12);
+    return { products: ranked.products, roots, familyId: "berries" };
+  }
+
+  const rows = await getAllActiveProducts();
   const products: CommerceProductHit[] = [];
   const catKey = categoryId ?? (families[0] ? resolveCanonicalCategoryId(families[0]) : null);
   for (const row of rows) {
@@ -380,7 +515,8 @@ export async function listCommerceProductsForCustomerQuery(query: string): Promi
     products.push(mapRowToHit(row, 100, "family_list"));
   }
   products.sort((a, b) => a.name.localeCompare(b.name));
-  return { products, roots, familyId: families[0] ?? null };
+  const final = products.length > 0 ? products : (await searchCommerceProductsRanked(q, 8)).products;
+  return { products: final, roots, familyId: families[0] ?? null };
 }
 
 /** API response shape for GET /api/products/search */
@@ -429,6 +565,24 @@ export function commerceToWaCatalogProducts(hits: CommerceProductHit[]) {
   }));
 }
 
+export function formatSingleCommerceProductReply(hit: CommerceProductHit, roman = true): string {
+  const variantLines = hit.variations.length
+    ? hit.variations.map((v, i) => `${i + 1}️⃣ ${v.name}${v.value ? ` (${v.value})` : ""} — ${formatRupees(parsePrice(v.price))}`).join("\n")
+    : "";
+  const stock = hit.inStock
+    ? roman ? "📦 *Stock:* Available ✅" : "📦 *Stock:* Available ✅"
+    : roman ? "📦 *Stock:* Out of stock ❌" : "📦 *Stock:* Out of stock ❌";
+  const opener = roman ? "😊 Ji bilkul — yeh available hai:\n\n" : "😊 جی بالکل — یہ available ہے:\n\n";
+  return (
+    opener +
+    `🥜 *${hit.name}*\n\n` +
+    `💰 *Price:* ${hit.price}\n` +
+    `${stock}\n` +
+    (variantLines ? `⭐ *Variants:*\n${variantLines}\n` : "") +
+    (roman ? "\n🛒 Size select karne ke liye *1*, *2*… reply karein 😊" : "\n🛒 Size کے لیے *1*, *2*… reply کریں 😊")
+  );
+}
+
 export function formatCommerceProductsWhatsAppReply(hits: CommerceProductHit[], roman = true): string {
   if (!hits.length) {
     return roman
@@ -437,24 +591,19 @@ export function formatCommerceProductsWhatsAppReply(hits: CommerceProductHit[], 
   }
 
   if (hits.length === 1) {
-    const p = hits[0]!;
-    const lines = p.variations.length
-      ? p.variations.map((v, i) => `${i + 1}️⃣ ${v.name}${v.value ? ` (${v.value})` : ""} — ${formatRupees(parsePrice(v.price))}`)
-      : [`1️⃣ ${p.price}`];
-    return roman
-      ? `🥜 *${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Out of stock ❌"}\n\nReply *1*, *2*… to select size 😊`
-      : `🥜 *${p.name}*\n\n${lines.join("\n")}\n\nStock: ${p.inStock ? "Available ✅" : "Out of stock ❌"}\n\nSize کے لیے *1*, *2*… reply کریں 😊`;
+    return formatSingleCommerceProductReply(hits[0]!, roman);
   }
 
-  const header = roman ? "🥜 *Matching products:*\n\n" : "🥜 *Matching products:*\n\n";
-  const list = hits
-    .slice(0, 12)
-    .map((p, i) => `${i + 1}. ${p.name} — ${p.price}${p.inStock ? "" : " (out)"}`)
-    .join("\n");
-  const footer = roman
-    ? "\n\nReply with product number (1, 2, 3…) 😊"
-    : "\n\nProduct number reply کریں (1, 2, 3…) 😊";
-  return header + list + footer;
+  if (hits.length === 2) {
+    const header = roman ? "😊 Dono options mil gaye — kaunsa chahiye?\n\n" : "😊 دونوں options ملے — کون سا چاہیے؟\n\n";
+    const list = hits
+      .map((p, i) => `${i + 1}. ${p.name} — ${p.price}${p.inStock ? "" : " (out)"}`)
+      .join("\n");
+    const footer = roman ? "\n\nReply *1* ya *2* 😊" : "\n\n*1* یا *2* reply کریں 😊";
+    return header + list + footer;
+  }
+
+  return formatSingleCommerceProductReply(hits[0]!, roman);
 }
 
 export async function logCommerceProductSearch(opts: {
@@ -462,13 +611,17 @@ export async function logCommerceProductSearch(opts: {
   userQuery: string;
   products: CommerceProductHit[];
   matchMethod?: string;
+  debug?: CommerceSearchDebug;
   gptOutput?: string | null;
 }): Promise<void> {
+  const entityNote = opts.debug
+    ? `entity=${opts.debug.entity}; confidence=${opts.debug.confidence}; top=${opts.debug.topScore}`
+    : undefined;
   await logProductSearch({
     phone: opts.phone,
     channel: "whatsapp_commerce",
     userQuery: opts.userQuery,
-    matchMethod: opts.matchMethod ?? "commerce_hybrid",
+    matchMethod: opts.matchMethod ?? entityNote ?? "commerce_hybrid",
     matches: opts.products.map((p) => ({
       shopifyProductId: p.id,
       name: p.name,

@@ -41,9 +41,13 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   makhana: ["foxnut", "fox nuts"],
   peanut: ["peanuts", "mungphali", "مونگ پھلی"],
   peanuts: ["peanut", "mungphali"],
-  goji: ["goji berry", "goji berries", "گوجی"],
-  cranberry: ["cranberries", "کرین بیری"],
-  blueberry: ["blueberries", "بلیو بیری"],
+  goji: ["goji berry", "goji berries", "dried goji", "گوجی"],
+  "goji berry": ["goji", "goji berries", "dried goji"],
+  gogi: ["goji", "goji berry"],
+  cranberry: ["cranberries", "dried cranberry", "کرین بیری"],
+  blueberry: ["blueberries", "dried blueberry", "بلیو بیری"],
+  mango: ["dried mango", "mango slices", "خشک آم"],
+  kiwi: ["dried kiwi", "kiwi slices"],
   berry: ["berries", "بیری"],
   berries: ["berry", "بیریز"],
   sunflower: ["sunflower seeds", "soorajmukhi", "سورج مخی"],
@@ -55,7 +59,7 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
 const PRODUCT_ROOT_WORDS = new Set([
   ...Object.keys(WA_PRODUCT_ALIASES),
   "khajoor", "dates", "date", "کھجور", "anjeer", "fig", "figs", "kishmish", "raisin", "raisins", "munakka", "makhana",
-  "peanut", "peanuts", "chilgoza", "dry fruit", "dry fruits",
+  "peanut", "peanuts", "chilgoza", "dry fruit", "dry fruits", "goji", "gogi", "mango", "kiwi",
   "پستہ", "پستے", "بادام", "کاجو", "اخروٹ",
 ]);
 
