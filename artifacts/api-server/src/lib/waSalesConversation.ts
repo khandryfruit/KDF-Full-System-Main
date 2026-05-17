@@ -96,7 +96,7 @@ export function isStandaloneFaqMessage(text: string): boolean {
 export function isProductEducationMessage(text: string): boolean {
   const t = String(text ?? "").trim();
   if (!t || hasExplicitProductShowIntent(t)) return false;
-  return /\b(faide|fayde|faida|benefit|benefits|uses|use for|kya hoti|kya hai|kya hota|what is|quality|review|reviews|taste|flavour|flavor|kaise use|how to eat|healthy|nutrition|protein|energy)\b/i.test(t);
+  return /\b(faide|fayde|faida|benefit|benefits|uses|use for|kya hoti|kya hai|kya hota|what is|quality|review|reviews|taste|flavour|flavor|kaise use|how to eat|healthy|nutrition|protein|energy|weight gain|weight loss|behtar|best hai|kya best|kis liye|recommend|suggest)\b/i.test(t);
 }
 
 export function hasExplicitProductShowIntent(text: string): boolean {
@@ -368,13 +368,8 @@ export async function tryConversationalSalesReply(opts: {
     }
   }
 
-  if (isProductEducationMessage(text)) {
-    const productQ = extractProductQueryFromMessage(text) || text;
-    return {
-      handled: true,
-      template: "product_education_text",
-      productQuery: productQ,
-    };
+  if (isProductEducationMessage(text) && !hasExplicitProductShowIntent(text)) {
+    return { handled: false };
   }
 
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {

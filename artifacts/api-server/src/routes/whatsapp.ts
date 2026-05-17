@@ -322,6 +322,17 @@ async function routeUnifiedCustomerSupport(opts: {
     return true;
   }
 
+  const { shouldDeferToOpenAI } = await import("../lib/waCustomerPipeline.js");
+  if (shouldDeferToOpenAI(opts.textBody, classified)) {
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "defer_to_gpt",
+      detail: "Education / open conversation — routed to OpenAI, not clarification template.",
+      payload: { intent: classified.intent, topic: classified.topic },
+    });
+    return false;
+  }
+
   if (shouldBlockProductCatalog(classified)) {
     const { sendIntentClarification } = await import("../lib/waSupportFlows.js");
     await sendIntentClarification({
@@ -1175,9 +1186,12 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 if (isCheckoutContinuationMessage(commerceText)) return false;
                 return respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log });
               },
-              aiReply: chatbot?.isEnabled
-                ? () => handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent })
-                : undefined,
+              aiReply: async () => {
+                const { isWaAutoReplyEnabled } = await import("../lib/waCustomerPipeline.js");
+                if (!(await isWaAutoReplyEnabled())) return;
+                const chatbotForAi = chatbot ?? { isEnabled: true, aiModel: "gpt-4o-mini" };
+                await handleAiReply({ phone, textBody: commerceText, chatbot: chatbotForAi, waSettings, log, detectedIntent: trappedIntent });
+              },
             });
             if (staleRouted) continue;
 
@@ -1204,8 +1218,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               if (await respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log })) {
                 continue;
               }
-              if (chatbot?.isEnabled) {
-                await handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent });
+              const { isWaAutoReplyEnabled } = await import("../lib/waCustomerPipeline.js");
+              if (await isWaAutoReplyEnabled()) {
+                const chatbotForAi = chatbot ?? { isEnabled: true, aiModel: "gpt-4o-mini" };
+                await handleAiReply({ phone, textBody: commerceText, chatbot: chatbotForAi, waSettings, log, detectedIntent: trappedIntent });
                 continue;
               }
               const { sendWaSessionResetFallback } = await import("../lib/waSessionRecovery.js");
@@ -1323,7 +1339,11 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               const started = await startCommerceOrderFromText({ phone, textBody, waSettings, detectedIntent: detected });
               if (started) continue;
             }
-            await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
+            const { isWaAutoReplyEnabled } = await import("../lib/waCustomerPipeline.js");
+            if (await isWaAutoReplyEnabled()) {
+              const chatbotForAi = chatbot ?? { isEnabled: true, aiModel: "gpt-4o-mini" };
+              await handleAiReply({ phone, textBody, chatbot: chatbotForAi, waSettings, log, detectedIntent: detected });
+            }
             continue;
           }
 
@@ -1358,16 +1378,22 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             if (started) continue;
           }
 
-          /* AI chatbot — only when product DB + deterministic paths could not answer */
-          if (chatbot?.isEnabled) {
-            await handleAiReply({ phone, textBody, chatbot, waSettings, log, detectedIntent: detected });
+          /* Unified pipeline step 5: GPT-4o mini when rules + product DB did not answer */
+          const { isWaAutoReplyEnabled } = await import("../lib/waCustomerPipeline.js");
+          const aiEnabled = await isWaAutoReplyEnabled();
+          if (aiEnabled) {
+            const chatbotForAi = chatbot ?? { isEnabled: true, aiModel: await (await import("../lib/waCustomerPipeline.js")).resolveWaAiModel() };
+            await handleAiReply({ phone, textBody, chatbot: chatbotForAi, waSettings, log, detectedIntent: detected });
           } else {
             await logWaProcessingStep({
               phone,
               messageId: msgId,
               step: "ai_skipped",
-              detail: "AI chatbot is disabled or missing in admin settings.",
-              payload: { hasChatbotSettings: Boolean(chatbot), chatbotEnabled: chatbot?.isEnabled ?? false },
+              detail: "AI unavailable — enable in Admin → AI Command Center (Providers) or WhatsApp chatbot settings.",
+              payload: {
+                hasChatbotSettings: Boolean(chatbot),
+                chatbotEnabled: chatbot?.isEnabled ?? false,
+              },
             });
             if (greetingOpener && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
               continue;
@@ -2768,17 +2794,26 @@ async function tryResolveWaCustomerMessage(opts: {
     });
     return true;
   }
+
+  const { shouldDeferToOpenAI, shouldPrioritizeProductDatabase } = await import("../lib/waCustomerPipeline.js");
+  if (shouldDeferToOpenAI(opts.textBody, classified)) {
+    return false;
+  }
+
   if (
     !isConversationOpenerNotCatalog(opts.textBody) &&
     !shouldBlockProductCatalog(classified) &&
-    shouldShowProductCatalogNow({
-      text: opts.textBody,
-      intent: opts.detectedIntent.intent,
-      state: opts.currentState,
-    }) &&
+    (shouldPrioritizeProductDatabase(opts.textBody, classified) ||
+      shouldShowProductCatalogNow({
+        text: opts.textBody,
+        intent: opts.detectedIntent.intent,
+        state: opts.currentState,
+      }) ||
+      shouldPrioritizeProductDatabase(opts.textBody, classified)) &&
     (isProductInquiryMessage(opts.textBody) ||
       shouldUseProductDatabaseFirst(opts.detectedIntent.intent, opts.textBody, opts.currentState) ||
-      isLikelyProductInquiry(opts.textBody, opts.detectedIntent.intent))
+      isLikelyProductInquiry(opts.textBody, opts.detectedIntent.intent) ||
+      shouldPrioritizeProductDatabase(opts.textBody, classified))
   ) {
     if (await trySendProductCatalogReply({
       phone: opts.phone,
@@ -5455,8 +5490,9 @@ async function handleAiReply(opts: {
   if (classified.intent === "greeting" && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
     return;
   }
-  if (shouldBlockProductCatalog(classified)) {
-    await routeUnifiedCustomerSupport({
+  const { shouldDeferToOpenAI } = await import("../lib/waCustomerPipeline.js");
+  if (shouldBlockProductCatalog(classified) && !shouldDeferToOpenAI(textBody, classified)) {
+    const routed = await routeUnifiedCustomerSupport({
       phone,
       textBody,
       waSettings,
@@ -5464,7 +5500,7 @@ async function handleAiReply(opts: {
       detectedIntent: intent,
       log,
     });
-    return;
+    if (routed) return;
   }
 
   try {
@@ -5794,10 +5830,13 @@ async function handleAiReply(opts: {
         catalogContextLoaded: Boolean(catalogContextBlock),
       },
     });
+    const { resolveWaAiModel } = await import("../lib/waCustomerPipeline.js");
+    const aiModel = chatbot?.aiModel ?? (await resolveWaAiModel());
     const completion = await aiClient.chat.completions.create({
-      model: chatbot.aiModel ?? "gpt-4o-mini",
+      model: aiModel,
       messages,
-      max_tokens: 600,
+      max_tokens: 500,
+      temperature: 0.65,
     });
     const choice = completion.choices[0];
     reply = choice?.message?.content?.trim() ?? "";
