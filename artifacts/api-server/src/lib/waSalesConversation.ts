@@ -273,8 +273,7 @@ export async function tryConversationalSalesReply(opts: {
   if (isStandaloneFaqMessage(text) && /^(price|prices|qeemat|kitna|how much|rate)/i.test(lower)) {
     return {
       handled: true,
-      reply: buildStandalonePricePrompt(roman),
-      template: "standalone_price_prompt",
+      template: "standalone_price_list",
     };
   }
 
@@ -313,8 +312,8 @@ export async function tryConversationalSalesReply(opts: {
     const productQ = extractProductQueryFromMessage(text);
     return {
       handled: true,
-      reply: buildProductInterestClarification(productQ || text, roman),
       template: "product_interest_clarify",
+      productQuery: productQ || text,
     };
   }
 

@@ -376,6 +376,64 @@ export async function sendInteractiveMenu(opts: {
   }
 }
 
+/* ─── Send Interactive List (up to 10 rows) ───────────── */
+export async function sendInteractiveList(opts: {
+  phone: string;
+  header?: string;
+  body: string;
+  footer?: string;
+  buttonLabel: string;
+  rows: Array<{ id: string; title: string; description?: string }>;
+  settings: Awaited<ReturnType<typeof getSettings>>;
+  templateName?: string;
+}): Promise<boolean> {
+  try {
+    const { settings } = opts;
+    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+    const normalizedPhone = normalizePhone(opts.phone);
+    const rows = opts.rows.slice(0, 10).map((r) => ({
+      id: String(r.id).slice(0, 200),
+      title: String(r.title).slice(0, 24),
+      ...(r.description ? { description: String(r.description).slice(0, 72) } : {}),
+    }));
+    if (!rows.length) return false;
+
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizedPhone,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        ...(opts.header ? { header: { type: "text", text: opts.header.slice(0, 60) } } : {}),
+        body: { text: opts.body.slice(0, 1024) },
+        ...(opts.footer ? { footer: { text: opts.footer.slice(0, 60) } } : {}),
+        action: {
+          button: opts.buttonLabel.slice(0, 20),
+          sections: [{ title: "Options".slice(0, 24), rows }],
+        },
+      },
+    };
+
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json() as any;
+    const messageId = data?.messages?.[0]?.id as string | undefined;
+    await log({ phone: opts.phone, templateName: opts.templateName ?? "interactive_list", message: opts.body.slice(0, 200), status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
+    if (res.ok && messageId) {
+      mirrorOutboundToInbox({ phone: opts.phone, content: opts.body.slice(0, 500), waMessageId: messageId, isBot: true, type: "interactive", templateName: opts.templateName ?? "interactive_list" });
+    }
+    if (!res.ok) logger.warn({ data }, "sendInteractiveList failed");
+    return !!(res.ok && messageId);
+  } catch (err) {
+    logger.error(err, "sendInteractiveList error");
+    return false;
+  }
+}
+
 /* ─── Send Interactive Reply Buttons (up to 3) ──────────── */
 export async function sendInteractiveButtons(opts: {
   phone: string;

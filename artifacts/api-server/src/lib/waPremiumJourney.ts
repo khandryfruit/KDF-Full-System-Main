@@ -10,6 +10,9 @@ export type WaLang = "ur" | "en" | "ps";
 
 export const WA_AWAIT_LANGUAGE_STATE = "wa_await_language";
 export const WA_ORDER_AWAIT_BANK_SCREENSHOT = "wa_order_await_bank_screenshot";
+export const WA_ORDER_AWAIT_EASYPAISA_SCREENSHOT = "wa_order_await_easypaisa_screenshot";
+export const WA_ORDER_AWAIT_ADDRESS_DETAIL = "wa_order_await_address_detail";
+export const WA_ORDER_AWAIT_ADDRESS_EXTRAS = "wa_order_await_address_extras";
 
 /** Default bank details (user-provided); DB manual_payments overrides when configured */
 export const KDF_DEFAULT_BANK = {
@@ -85,6 +88,66 @@ export function buildLanguageSavedAck(lang: WaLang): string {
     return `مننه 😊\n\nزه به په *پښتو* کې دوام ورکړم.\n\nنن مو څه مرسته غواړئ؟`;
   }
   return `Shukriya 😊\n\nMain *اردو* mein baat karunga.\n\nAaj aap kis cheez ke baare mein poochna chahenge?`;
+}
+
+export function buildProductIntentPrompt(productName: string, lang: WaLang): string {
+  const name = productName.trim();
+  if (lang === "en") return `Yes 😊\n\nWhat would you like about *${name}*?`;
+  if (lang === "ps") return `هو 😊\n\nد *${name}* په اړه څه غواړئ؟`;
+  return `Ji 😊\n\nAap *${name}* ke baare mein kya dekhna chahenge?`;
+}
+
+export function buildLiveTotalPreview(state: Record<string, any>, lang: WaLang): string {
+  const unit = Number(state.unitPrice ?? state.cart?.[0]?.unitPrice ?? 0);
+  const qty = Number(state.quantity ?? state.cart?.[0]?.quantity ?? 1);
+  const subtotal = Number(state.subtotal ?? unit * qty);
+  let delivery = Number(state.delivery ?? 0);
+  let deliveryLabel = String(state.deliveryLabel ?? "").trim();
+  if (!deliveryLabel) {
+    const city = String(state.city ?? "").toLowerCase();
+    const lahore = /\b(lahore|lhr|لاہور)\b/i.test(city);
+    delivery = subtotal >= 10000 ? 0 : lahore ? 300 : 300;
+    deliveryLabel = delivery === 0
+      ? "Rs. 0 (FREE above Rs. 10,000)"
+      : lahore
+        ? "Rs. 300 (Lahore est.)"
+        : "Rs. 300 (Pakistan est.)";
+  }
+  const discount = Number(state.discount ?? 0);
+  const total = Number(state.total ?? Math.max(0, subtotal - discount + delivery));
+  const L = (ur: string, en: string, ps: string) => (lang === "en" ? en : lang === "ps" ? ps : ur);
+  return [
+    L("💰 *Live total*", "💰 *Live total*", "💰 *Live total*"),
+    `${L("Subtotal", "Subtotal", "Subtotal")}: ${formatRupeesLocal(subtotal)}`,
+    `${L("Delivery", "Delivery", "Delivery")}: ${deliveryLabel || formatRupeesLocal(delivery)}`,
+    `${L("Est. final", "Est. final", "Est. final")}: ${formatRupeesLocal(total)}`,
+  ].join("\n");
+}
+
+export async function buildEasypaisaMessage(lang: WaLang): Promise<string> {
+  const b = await loadWaBankDetails();
+  if (lang === "en") {
+    return (
+      `Yes 😊\n\n*Easypaisa payment:*\n\n` +
+      `📱 *Number:* ${b.easypaisa}\n` +
+      `👤 *Name:* ${b.easypaisaName}\n\n` +
+      `Send *screenshot* after payment 📸`
+    );
+  }
+  if (lang === "ps") {
+    return (
+      `هو 😊\n\n*ایزی پیسہ:*\n\n` +
+      `📱 ${b.easypaisa}\n` +
+      `👤 ${b.easypaisaName}\n\n` +
+      `تادیې وروسته screenshot ولېږئ 📸`
+    );
+  }
+  return (
+    `Ji 😊\n\n*Easypaisa payment:*\n\n` +
+    `📱 *Number:* ${b.easypaisa}\n` +
+    `👤 *Name:* ${b.easypaisaName}\n\n` +
+    `Payment ke baad *screenshot* bhej dein 📸`
+  );
 }
 
 export function buildProductIntroLine(productName: string, lang: WaLang): string {
@@ -203,7 +266,11 @@ export function buildPremiumOrderSummary(state: Record<string, any>, lang: WaLan
   const discount = Number(state.discount ?? 0);
   const total = Number(state.total ?? subtotal - discount + delivery);
   const pay = String(state.paymentMethod ?? "COD");
-  const payLabel = /bank/i.test(pay) ? "Bank Transfer" : "Cash on Delivery (COD)";
+  const payLabel = /easypaisa/i.test(pay)
+    ? "Easypaisa"
+    : /bank/i.test(pay)
+      ? "Bank Transfer"
+      : "Cash on Delivery (COD)";
 
   const L = (ur: string, en: string, ps: string) => (lang === "en" ? en : lang === "ps" ? ps : ur);
 
@@ -237,7 +304,11 @@ export function buildOrderPlacedPremium(
   lang: WaLang,
 ): string {
   const delivery = estimateDeliveryReply(city, useRomanUrdu(lang));
-  const pay = /bank/i.test(paymentMethod) ? "Bank Transfer" : "Cash on Delivery (COD)";
+  const pay = /easypaisa/i.test(paymentMethod)
+    ? "Easypaisa"
+    : /bank/i.test(paymentMethod)
+      ? "Bank Transfer"
+      : "Cash on Delivery (COD)";
   if (lang === "en") {
     return (
       `Thank you 😊\n\nYour order was placed successfully.\n\n` +
@@ -298,13 +369,39 @@ export function parseLanguageChoice(textOrId: string): WaLang | null {
   return null;
 }
 
-export function parseQuantityChoice(textOrId: string): number | "custom" | null {
+export function parseQuantityChoice(textOrId: string): number | null {
   const t = String(textOrId ?? "").trim().toLowerCase();
-  if (t === "wa_qty_1" || t === "1") return 1;
-  if (t === "wa_qty_2" || t === "2") return 2;
-  if (t === "wa_qty_3" || t === "3") return 3;
-  if (t === "wa_qty_custom" || /custom|apni|khud/i.test(t)) return "custom";
+  const map: Record<string, number> = {
+    wa_qty_1: 1, wa_qty_2: 2, wa_qty_3: 3, wa_qty_4: 4, wa_qty_5: 5,
+    wa_qty_6: 6, wa_qty_8: 8, wa_qty_10: 10,
+  };
+  if (map[t] != null) return map[t];
+  if (/^wa_qty_(\d+)$/.test(t)) {
+    const n = Number.parseInt(t.replace(/\D/g, ""), 10);
+    if (n >= 1 && n <= 99) return n;
+  }
   const n = Number.parseInt(t.replace(/[^\d]/g, ""), 10);
   if (n >= 1 && n <= 99) return n;
   return null;
+}
+
+export function parseVariantListId(id: string): number | null {
+  const m = String(id ?? "").match(/^wa_v_(\d+)$/i);
+  if (!m) return null;
+  const n = Number.parseInt(m[1]!, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+export function parseCityChoice(id: string): string | null {
+  const map: Record<string, string> = {
+    wa_city_lahore: "Lahore",
+    wa_city_karachi: "Karachi",
+    wa_city_islamabad: "Islamabad",
+    wa_city_rawalpindi: "Rawalpindi",
+    wa_city_faisalabad: "Faisalabad",
+    wa_city_multan: "Multan",
+    wa_city_peshawar: "Peshawar",
+    wa_city_other: "__other__",
+  };
+  return map[String(id ?? "").toLowerCase()] ?? null;
 }
