@@ -839,6 +839,28 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           if (["wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
             const commerceText = inboundText.trim();
+            const trappedIntent = detectWaIntent(commerceText);
+            const { shouldEscapeOrderFlowForProductSearch } = await import("../lib/waFlowEscape.js");
+            if (shouldEscapeOrderFlowForProductSearch(commerceText, currentState, trappedIntent.intent)) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "order_flow_escape",
+                detail: "Customer sent product/FAQ text — exiting stale order menu state.",
+                payload: { previousState: currentState, text: commerceText, intent: trappedIntent },
+              });
+              await setConversationState(phone, "idle", {});
+              if (await tryResolveWaCustomerMessage({ phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log })) {
+                continue;
+              }
+              if (await respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log })) {
+                continue;
+              }
+              if (chatbot?.isEnabled) {
+                await handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent });
+                continue;
+              }
+            }
             if (isDeliveryOnlyMessage(commerceText) || isTrackingOnlyMessage(commerceText)) {
               const midFlowIntent = detectWaIntent(commerceText);
               const midReply = await tryDeterministicWaReply({
@@ -1618,6 +1640,77 @@ async function sendCommerceProductWaCards(opts: {
   }
 }
 
+/** Fresh DB search — never trap in "select number" without showing products */
+async function respondWithFreshProductSearch(opts: {
+  phone: string;
+  query: string;
+  waSettings: any;
+  log?: { warn?: (e: unknown, msg?: string) => void };
+  limit?: number;
+}): Promise<boolean> {
+  const q = String(opts.query ?? "").trim();
+  if (q.length < 2) return false;
+
+  const { searchCommerceProducts, formatCommerceProductsWhatsAppReply, logCommerceProductSearch, commerceToWaCatalogProducts } = await import("../lib/commerceProductSearch.js");
+
+  let hits = await searchCommerceProducts(q, opts.limit ?? 6);
+  if (!hits.length) {
+    const products = await searchProductsForWa(q, opts.limit ?? 6);
+    if (!products.length) {
+      const roman = isRomanUrduWa(q);
+      await sendWaText(
+        opts.phone,
+        roman
+          ? `Ji 😊 "${q}" ke exact match nahi mile. Related products ke liye badam, pista, kaju, akhrot try karein — ya product ka full naam bhej dein 😊`
+          : `جی 😊 "${q}" کا exact match نہیں ملا۔ badam، pista، kaju try کریں یا product کا پورا نام بھیجیں 😊`,
+        opts.waSettings,
+        "product_no_match",
+      );
+      await logWaProcessingStep({
+        phone: opts.phone,
+        step: "product_search_empty",
+        status: "failed",
+        detail: `No commerce/shopify match for "${q}".`,
+        payload: { query: q },
+        failureReason: "no_matching_product",
+      });
+      return true;
+    }
+    await setConversationState(opts.phone, "wa_order_await_product_choice", {
+      productQuery: q,
+      products,
+      lastUserMessage: q,
+    });
+    if (products.length <= 3 && products.some((p) => p.imageUrl?.startsWith("https://"))) {
+      await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
+    } else {
+      const intro = isRomanUrduWa(q) ? "Ji 😊 yeh related products milay:" : "جی 😊 yeh related products ملے:";
+      await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
+      for (let i = 0; i < Math.min(products.length, 4); i++) {
+        await sendWaText(opts.phone, formatProductCard(products[i]!, i), opts.waSettings, "product_card");
+        if (i < products.length - 1) await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+    return true;
+  }
+
+  const waProducts = commerceToWaCatalogProducts(hits);
+  await setConversationState(opts.phone, "wa_order_await_product_choice", {
+    productQuery: q,
+    products: waProducts,
+    categoryProducts: hits,
+    lastUserMessage: q,
+  });
+  await logCommerceProductSearch({ phone: opts.phone, userQuery: q, products: hits, matchMethod: "fresh_search_escape" }).catch(() => {});
+
+  if (waProducts.length <= 3) {
+    await sendCommerceProductWaCards({ phone: opts.phone, products: waProducts, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
+  } else {
+    await sendWaText(opts.phone, formatCommerceProductsWhatsAppReply(hits, isRomanUrduWa(q)), opts.waSettings, "product_search_results");
+  }
+  return true;
+}
+
 /* ─── Helper: format product card as WA text ────────── */
 function formatProductCard(p: ReturnType<typeof searchProductsForWa> extends Promise<Array<infer T>> ? T : never, idx: number): string {
   let card = `*${idx + 1}. ${p.name}*\n`;
@@ -1675,7 +1768,13 @@ async function tryHandleCatalogBrowseReply(opts: {
     const { resolveCategoryFromMenuNumber, buildCategoryBrowseFromMenuPick } = await import("../lib/waSalesAgent.js");
     const picked = resolveCategoryFromMenuNumber(num, await summaries);
     if (!picked) {
-      await sendWaText(opts.phone, "Please category ka number reply karein (1, 2, 3…) ya product naam bhej dein: badam, pista, kaju.", opts.waSettings);
+      if (isProductInquiryMessage(trimmed) || productRootsInMessage(trimmed).length > 0) {
+        await setConversationState(opts.phone, "idle", {});
+        if (await respondWithFreshProductSearch({ phone: opts.phone, query: trimmed, waSettings: opts.waSettings, log: opts.log })) {
+          return true;
+        }
+      }
+      await sendWaText(opts.phone, "Product naam bhej dein — jaise *badam*, *pista*, *kaju* — ya category number (1, 2, 3…).", opts.waSettings);
       return true;
     }
 
@@ -1873,6 +1972,7 @@ async function trySendProductCatalogReply(opts: {
       productQuery: detectedIntent.productQuery ?? extractProductQueryFromMessage(textBody),
     });
     if (!hit) {
+      if (await respondWithFreshProductSearch({ phone, query: textBody, waSettings, log })) return true;
       const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
       const catId = resolveCanonicalCategoryId(textBody);
       if (catId || isProductInquiryMessage(textBody)) {
@@ -1880,8 +1980,8 @@ async function trySendProductCatalogReply(opts: {
         await sendWaText(
           phone,
           roman
-            ? "Ji 😊 ek lamha — main catalog sync check kar raha hoon. Admin mein *Rebuild Index* zaroor chalayein. Phir dubara badam / pista try karein 😊"
-            : "جی 😊 ایک لمحہ — catalog sync check کر رہا ہوں۔ Admin میں *Rebuild Index* ضرور چلائیں۔ پھر dubara badam / pista try کریں 😊",
+            ? "Ji 😊 is query ke liye abhi product match nahi mila. *badam*, *pista*, *kaju* try karein — ya Admin → Commerce → Products check karein 😊"
+            : "جی 😊 اس query کے لیے product match نہیں ملا۔ *badam*، *pista* try کریں 😊",
           waSettings,
           "catalog_sync_hint",
         );
@@ -2297,7 +2397,8 @@ function parseCommerceOrderRequest(text: string, fallbackQuery?: string) {
 async function findCommerceProductVariant(productQuery: string, variantHint?: string) {
   const products = await searchProductsForWa(productQuery, 1);
   const product = products[0];
-  if (!product || product.source !== "shopify") return null;
+  const { isOfficialCatalogProductSource } = await import("../lib/waFlowEscape.js");
+  if (!product || !isOfficialCatalogProductSource(product.source)) return null;
   let selected = product.variantOptions?.[0] ?? null;
   if (variantHint && product.variantOptions?.length) {
     const wanted = normalizeVariantText(variantHint);
@@ -2449,16 +2550,20 @@ async function startCommerceOrderFromText(opts: {
   }
   const products = await searchProductsForWa(parsed.productQuery, 15);
   const product = products[0];
-  if (!product || product.source !== "shopify") {
+  const { isOfficialCatalogProductSource } = await import("../lib/waFlowEscape.js");
+  if (!product || !isOfficialCatalogProductSource(product.source)) {
+    if (await respondWithFreshProductSearch({ phone: opts.phone, query: parsed.productQuery, waSettings: opts.waSettings })) {
+      return true;
+    }
     await logWaProcessingStep({
       phone: opts.phone,
       step: "commerce_order_start_failed",
       status: "failed",
-      detail: "Could not start WhatsApp commerce order because no official Shopify product matched.",
+      detail: "No official catalog product matched for order start.",
       payload: parsed,
-      failureReason: "shopify_product_not_found",
+      failureReason: "product_not_found",
     });
-    await sendWaText(opts.phone, "Sorry, is product ka official data nahi mila. Please product ka exact naam bhej dein.", opts.waSettings);
+    await sendWaText(opts.phone, "Sorry, is product ka data nahi mila. Please product ka naam bhej dein — jaise badam, pista, kaju.", opts.waSettings);
     return true;
   }
   const specificProductNamed = /\b(shell|kaghzi|kagzi|with shell|without shell|baghair|bghair|soft|hard|australian|mamra|american|irani|ajwa|mazafati|kalmi|sukkari|kaghazi)\b/i.test(opts.textBody);
@@ -2784,7 +2889,9 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         ?? allProducts.find((p: any) => normalizeProductText(String(p.name ?? p.title ?? "")).includes(normalizeProductText(trimmed)));
     }
     if (!selected) {
-      await sendWaText(phone, `Please in options mein se number ya naam select karein.\n\nAgar list lambi ho to *next* reply karein, ya product number bhej dein.`, waSettings);
+      const freshQuery = extractProductQueryFromMessage(trimmed) || trimmed;
+      if (await respondWithFreshProductSearch({ phone, query: freshQuery, waSettings, log })) return;
+      await sendWaText(phone, `Ji 😊 product samajh nahi aaya.\n\nProduct naam bhej dein — jaise *badam*, *pista*, *kaju* — ya list se number (1, 2, 3).`, waSettings);
       return;
     }
     const { formatVariantSelectionReply } = await import("../lib/waSalesAgent.js");
@@ -2869,7 +2976,18 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     })
       ?? null;
     if (!product || !selected) {
-      await sendWaText(phone, `Please available Shopify variants mein se number select karein:\n\n${options.map((v: any, i: number) => `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}`).join("\n")}`, waSettings);
+      const freshQuery = extractProductQueryFromMessage(trimmed) || trimmed;
+      if (productRootsInMessage(freshQuery).length > 0 || isProductInquiryMessage(freshQuery)) {
+        await setConversationState(phone, "idle", {});
+        if (await respondWithFreshProductSearch({ phone, query: freshQuery, waSettings, log })) return;
+      }
+      if (options.length) {
+        await sendWaText(phone, `Size/weight ke liye number select karein:\n\n${options.map((v: any, i: number) => `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}`).join("\n")}`, waSettings);
+      } else if (await respondWithFreshProductSearch({ phone, query: freshQuery || stateData.productQuery || "badam", waSettings, log })) {
+        return;
+      } else {
+        await sendWaText(phone, "Ji 😊 product variant clear nahi. Product naam dobara bhej dein — jaise badam 500g.", waSettings);
+      }
       return;
     }
     const unitPrice = parseCatalogUnitPrice(selected.price);

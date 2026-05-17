@@ -97,7 +97,7 @@ export function isProductInquiryMessage(text: string): boolean {
   for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
     if (lower.includes(key)) return true;
   }
-  return /\b(almond|badam|pista|kaju|akhrot|walnut|cashew|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry)\b/i.test(t);
+  return /\b(almond|almonds|badam|badaam|almod|pista|pistachio|kaju|cashew|akhrot|walnut|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry|price|qeemat|kitna)\b/i.test(t);
 }
 
 export function shouldUseProductDatabaseFirst(intent: string, text: string): boolean {

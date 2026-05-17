@@ -5,6 +5,9 @@ import { logger } from "./logger.js";
 /** Roman Urdu / English / Urdu script roots → search synonyms */
 export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   badam: ["almond", "almonds", "بادام"],
+  badaam: ["almond", "almonds", "badam", "بادام"],
+  baadam: ["almond", "almonds", "badam", "بادام"],
+  almod: ["almond", "almonds", "badam"],
   almond: ["badam", "almonds", "بادام"],
   almonds: ["badam", "almond", "بادام"],
   بادام: ["badam", "almond", "almonds"],

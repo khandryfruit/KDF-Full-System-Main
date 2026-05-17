@@ -84,6 +84,12 @@ function expandCommerceTerms(query: string): string[] {
       for (const syn of WA_PRODUCT_ALIASES[token] ?? []) terms.add(normalizeText(syn));
     }
   }
+  for (const [key, syns] of Object.entries(WA_PRODUCT_ALIASES)) {
+    if (key.length >= 3 && q.includes(key)) {
+      terms.add(key);
+      for (const s of syns) terms.add(normalizeText(s));
+    }
+  }
   return [...terms].filter((t) => t.length >= 1);
 }
 
