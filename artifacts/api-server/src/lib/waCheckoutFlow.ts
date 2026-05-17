@@ -4,6 +4,9 @@
 import { sendInteractiveButtons } from "./whatsapp.js";
 import { WA_ACTIVE_CHECKOUT_STATES } from "./waSessionRecovery.js";
 import type { WaLang } from "./waPremiumJourney.js";
+import { WA_ORDER_AWAIT_ADDRESS_CONFIRM } from "./waAddressFlow.js";
+
+export { WA_ORDER_AWAIT_ADDRESS_CONFIRM };
 
 export const WA_ORDER_AWAIT_CITY_SEARCH = "wa_order_await_city_search";
 export const WA_ORDER_AWAIT_AREA = "wa_order_await_area";
@@ -16,6 +19,7 @@ export const CHECKOUT_FLOW_STATES = new Set([
   WA_ORDER_AWAIT_AREA,
   WA_ORDER_AWAIT_LANDMARK,
   WA_ORDER_AWAIT_COD_CONFIRM,
+  "wa_order_await_address_confirm",
   "wa_order_await_variant",
   "wa_order_await_quantity",
   "wa_order_await_preconfirm",
@@ -30,13 +34,14 @@ export function isActiveCheckoutState(state: string): boolean {
 export function getCheckoutBackState(current: string): string | null {
   const back: Record<string, string> = {
     wa_order_await_cod_confirm: "wa_order_await_payment",
-    wa_order_await_payment: "wa_order_await_landmark",
+    wa_order_await_payment: "wa_order_await_address_confirm",
     wa_order_await_bank_screenshot: "wa_order_await_payment",
     wa_order_await_easypaisa_screenshot: "wa_order_await_payment",
+    wa_order_await_address_confirm: "wa_order_await_address_detail",
     wa_order_await_landmark: "wa_order_await_address_detail",
-    wa_order_await_address_detail: "wa_order_await_area",
+    wa_order_await_address_detail: "wa_order_await_city",
     wa_order_await_address_extras: "wa_order_await_address_detail",
-    wa_order_await_area: "wa_order_await_city",
+    wa_order_await_area: "wa_order_await_address_detail",
     wa_order_await_city_search: "wa_order_await_city",
     wa_order_await_city: "wa_order_await_phone",
     wa_order_await_phone: "wa_order_await_name",
@@ -97,12 +102,24 @@ export async function resumeCheckoutStepUi(opts: {
     await ui.sendCitySearchPrompt(opts.phone, opts.lang, opts.waSettings);
     return;
   }
-  if (s === "wa_order_await_area") {
-    await ui.sendAreaPrompt(opts.phone, opts.lang, opts.waSettings, String(d.city ?? ""));
+  if (s === "wa_order_await_area" || s === "wa_order_await_address_detail") {
+    const { sendAddressInputPrompt } = await import("./waAddressFlow.js");
+    await sendAddressInputPrompt({
+      phone: opts.phone,
+      city: String(d.city ?? "Pakistan"),
+      lang: opts.lang,
+      waSettings: opts.waSettings,
+    });
     return;
   }
-  if (s === "wa_order_await_address_detail") {
-    await ui.sendAddressDetailPrompt(opts.phone, opts.lang, opts.waSettings);
+  if (s === "wa_order_await_address_confirm") {
+    const { sendAddressConfirmPrompt } = await import("./waAddressFlow.js");
+    await sendAddressConfirmPrompt({
+      phone: opts.phone,
+      stateData: d,
+      lang: opts.lang,
+      waSettings: opts.waSettings,
+    });
     return;
   }
   if (s === "wa_order_await_landmark") {

@@ -16,6 +16,7 @@ export const WA_CHECKOUT_COLLECTION_STATES = new Set([
   "wa_order_await_bank_screenshot",
   "wa_order_await_easypaisa_screenshot",
   "wa_order_await_address_detail",
+  "wa_order_await_address_confirm",
   "wa_order_await_address_extras",
   "wa_order_await_landmark",
   "wa_order_await_confirm",

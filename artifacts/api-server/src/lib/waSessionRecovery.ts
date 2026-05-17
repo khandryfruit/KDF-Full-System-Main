@@ -7,6 +7,7 @@ import { resolveWaLang, parseLanguageChoice, buildLanguageWelcomeMessage, WA_AWA
 import { isPureGreetingMessage, isProductInquiryMessage, productRootsInMessage } from "./waProductBrain.js";
 import { isPaymentIssueMessage, isAddressFaqMessage, isPaymentInfoMessage } from "./waIntentClassifier.js";
 import { isWaCheckoutCollectionState } from "./waOrderJourney.js";
+import { resolveCityInput } from "./waPakistanCities.js";
 import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
 
 export const WA_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -43,6 +44,7 @@ export const WA_ACTIVE_CHECKOUT_STATES = new Set([
   "wa_order_await_easypaisa_screenshot",
   "wa_order_await_notes",
   "wa_order_await_confirm",
+  "wa_order_await_address_confirm",
   "wa_catalog_pick_category",
 ]);
 
@@ -108,6 +110,23 @@ export function shouldPrioritizeNewIntent(text: string, intent?: string): boolea
   return false;
 }
 
+/** Customer typing city/address during checkout — must NOT reset the cart */
+const CHECKOUT_TYPED_ENTRY_STATES = new Set([
+  "wa_order_await_city",
+  "wa_order_await_city_search",
+  "wa_order_await_area",
+  "wa_order_await_address_detail",
+  "wa_order_await_landmark",
+  "wa_order_await_address",
+  "wa_order_await_address_extras",
+  "wa_order_await_address_confirm",
+  "wa_order_await_delivery_notes",
+]);
+
+export function isCheckoutTypedEntryState(state: string): boolean {
+  return CHECKOUT_TYPED_ENTRY_STATES.has(state);
+}
+
 export function shouldResetCheckoutForMessage(
   text: string,
   state: string,
@@ -115,6 +134,18 @@ export function shouldResetCheckoutForMessage(
 ): boolean {
   if (isUiTrapState(state)) return true;
   if (state === "wa_order_await_confirm") return shouldPrioritizeNewIntent(text, intent);
+
+  if (isCheckoutTypedEntryState(state)) {
+    if (isPureGreetingMessage(text)) return true;
+    const roots = productRootsInMessage(text);
+    if (roots.length > 0 && intent === "product_search") return true;
+    if (state === "wa_order_await_city" || state === "wa_order_await_city_search") {
+      const cityGuess = resolveCityInput(text);
+      if (cityGuess.kind === "confirm" || cityGuess.kind === "suggest") return false;
+    }
+    return false;
+  }
+
   if (isWaCheckoutCollectionState(state) && state !== "wa_order_await_confirm") {
     return shouldPrioritizeNewIntent(text, intent);
   }

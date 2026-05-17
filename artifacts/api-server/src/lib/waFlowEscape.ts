@@ -39,6 +39,7 @@ export const ORDER_FLOW_TRAP_STATES = new Set([
   "wa_order_await_city_search",
   "wa_order_await_area",
   "wa_order_await_landmark",
+  "wa_order_await_address_confirm",
   "wa_order_await_cod_confirm",
   "wa_order_await_delivery_notes",
   "wa_order_await_payment",

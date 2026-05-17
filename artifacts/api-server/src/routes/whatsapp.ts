@@ -1069,13 +1069,45 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             "wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice",
             "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity",
             "wa_order_await_name", "wa_order_await_phone", "wa_order_await_city", waCitySearch,
-            waArea, waLandmark, "wa_order_await_address", waAddrDetail, waAddrExtras,
+            waArea, waLandmark, "wa_order_await_address", waAddrDetail, waAddrExtras, "wa_order_await_address_confirm",
             "wa_order_await_delivery_notes", "wa_order_await_payment", waCodConfirm,
             "wa_order_await_bank_screenshot", waBankShot, waEasyShot,
             "wa_order_await_notes", "wa_order_await_confirm", "wa_await_language", "wa_await_product_intent",
           ];
+          const checkoutFastStates = new Set([
+            "wa_order_await_city", "wa_order_await_city_search", "wa_order_await_area",
+            "wa_order_await_address_detail", "wa_order_await_address_confirm", "wa_order_await_landmark",
+            "wa_order_await_phone", "wa_order_await_name", "wa_order_await_payment",
+            "wa_order_await_cod_confirm", "wa_order_await_quantity", "wa_order_await_variant",
+          ]);
+          if (msgType === "location" && checkoutFastStates.has(currentState)) {
+            const { startWaPerfTimer, logWaPerf } = await import("../lib/waPerfLog.js");
+            startWaPerfTimer(msgId);
+            let sd: Record<string, any> = {};
+            try { sd = JSON.parse((convState as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+            const { applyLocationShare, sendAddressConfirmPrompt, WA_ORDER_AWAIT_ADDRESS_CONFIRM } = await import("../lib/waAddressFlow.js");
+            const loc = msg.location;
+            if (loc?.latitude != null && loc?.longitude != null) {
+              const next = applyLocationShare(sd, {
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                name: loc.name,
+                address: loc.address,
+              });
+              await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_CONFIRM, next);
+              const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+              const lang = resolveWaLang(next);
+              await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
+              await logWaPerf({ phone, messageId: msgId, step: "checkout_location_saved", payload: { state: currentState } });
+            }
+            continue;
+          }
+
           if (commerceTextStates.includes(currentState) && isTextLike && inboundText) {
-            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
+            const { startWaPerfTimer, isFastCheckoutState } = await import("../lib/waPerfLog.js");
+            startWaPerfTimer(msgId);
+            const presenceMode = isFastCheckoutState(currentState) ? "checkout" as const : "simple";
+            await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: presenceMode, log });
             const commerceText = inboundText.trim();
             const trappedIntent = detectWaIntent(commerceText);
             const { tryRouteStaleCommerceMessage } = await import("../lib/waSessionRecovery.js");
@@ -1165,6 +1197,13 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             }
             try {
               await handleCommerceOrderFlow(phone, commerceText, currentState, waSettings, log);
+              const { logWaPerf } = await import("../lib/waPerfLog.js");
+              await logWaPerf({
+                phone,
+                messageId: msgId,
+                step: "checkout_reply_done",
+                payload: { state: currentState, text: commerceText.slice(0, 80) },
+              });
             } catch (commerceErr) {
               await logWaProcessingStep({
                 phone,
@@ -1285,12 +1324,13 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
   }
 }
 
-function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" = "simple"): number {
+function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" | "checkout" = "simple"): number {
+  if (mode === "checkout") return 80 + Math.floor(Math.random() * 120);
   const lower = text.toLowerCase();
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   const looksProduct = mode === "product" || /price|rate|product|almond|badam|pista|kaju|akhrot|bulk|kg|order|buy|catalog|available|need|want/.test(lower);
-  const looksComplex = mode === "complex" || words > 18 || /bulk|20kg|complaint|refund|return|urgent|problem|tracking|status|address|change/.test(lower);
-  const [min, max] = looksComplex ? [4000, 7000] : looksProduct ? [5000, 8000] : [2000, 3500];
+  const looksComplex = mode === "complex" || words > 18 || /bulk|20kg|complaint|refund|return|urgent|problem|tracking|status/.test(lower);
+  const [min, max] = looksComplex ? [1200, 2200] : looksProduct ? [1500, 2800] : [400, 900];
   const jitter = Math.floor(Math.random() * (max - min + 1));
   return min + jitter;
 }
@@ -1298,7 +1338,7 @@ function humanReplyDelayMs(text: string, mode: "simple" | "product" | "complex" 
 async function showHumanPresenceBeforeReply(opts: {
   inboundMessageId?: string | null;
   text: string;
-  mode?: "simple" | "product" | "complex";
+  mode?: "simple" | "product" | "complex" | "checkout";
   log?: any;
 }): Promise<void> {
   try {
@@ -3290,11 +3330,15 @@ async function handlePremiumCommerceButton(opts: {
   } = await import("../lib/waCheckoutFlow.js");
   const paymentChat = await import("../lib/waPaymentInChat.js");
 
-  async function goToAreaStep(city: string) {
-    stateData.city = city;
-    const lang = resolveWaLang(stateData);
-    await setConversationState(opts.phone, WA_ORDER_AWAIT_AREA, stateData);
-    await sendAreaPrompt(opts.phone, lang, opts.waSettings, city);
+  async function goToAddressAfterCity(city: string, data: Record<string, any> = stateData) {
+    const { mergeCheckoutMemory } = await import("../lib/waCheckoutMemory.js");
+    const { sendAddressInputPrompt } = await import("../lib/waAddressFlow.js");
+    const next = mergeCheckoutMemory(data, { city });
+    const lang = resolveWaLang(next);
+    await setConversationState(opts.phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, next);
+    await sendAddressInputPrompt({ phone: opts.phone, city, lang, waSettings: opts.waSettings });
+    const { persistConversationTurn } = await import("../lib/whatsappConversationMemory.js");
+    await persistConversationTurn(opts.phone, { intent: "checkout", topic: "city", mergeStateData: { city } });
   }
 
   if (id === "wa_checkout_back" || id === "wa_checkout_continue") {
@@ -3622,6 +3666,67 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
+  if (id === "wa_city_confirm") {
+    const city = String(stateData.pendingCity ?? stateData.city ?? "").trim();
+    if (city) {
+      delete stateData.pendingCity;
+      await goToAddressAfterCity(city);
+    }
+    return true;
+  }
+
+  if (id === "wa_addr_share_loc") {
+    const { sendLocationShareHint } = await import("../lib/waAddressFlow.js");
+    const lang = resolveWaLang(stateData);
+    await sendLocationShareHint({ phone: opts.phone, lang, waSettings: opts.waSettings });
+    return true;
+  }
+
+  if (id === "wa_addr_type") {
+    const { sendAddressTypeHint } = await import("../lib/waAddressFlow.js");
+    const lang = resolveWaLang(stateData);
+    await sendAddressTypeHint({
+      phone: opts.phone,
+      city: String(stateData.city ?? ""),
+      lang,
+      waSettings: opts.waSettings,
+    });
+    return true;
+  }
+
+  if (id === "wa_addr_confirm") {
+    const { buildFullDeliveryAddress } = await import("../lib/waCheckoutMemory.js");
+    stateData.address = buildFullDeliveryAddress(stateData);
+    await sendPaymentMethodButtons(opts.phone, stateData, opts.waSettings);
+    return true;
+  }
+
+  if (id === "wa_addr_edit") {
+    const { sendAddressInputPrompt } = await import("../lib/waAddressFlow.js");
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, stateData);
+    await sendAddressInputPrompt({
+      phone: opts.phone,
+      city: String(stateData.city ?? ""),
+      lang,
+      waSettings: opts.waSettings,
+    });
+    return true;
+  }
+
+  if (id === "wa_city_change") {
+    delete stateData.pendingCity;
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, "wa_order_await_city", stateData);
+    await sendCityPicker({
+      phone: opts.phone,
+      lang,
+      waSettings: opts.waSettings,
+      suggestedCity: null,
+    });
+    return true;
+  }
+
   if (id === "wa_city_search") {
     const lang = resolveWaLang(stateData);
     await setConversationState(opts.phone, WA_ORDER_AWAIT_CITY_SEARCH, stateData);
@@ -3645,9 +3750,12 @@ async function handlePremiumCommerceButton(opts: {
     city !== "__search__" &&
     city !== "__page__" &&
     city !== "__other__" &&
+    city !== "__confirm__" &&
+    city !== "__change__" &&
     (opts.currentState === "wa_order_await_city" || opts.currentState === WA_ORDER_AWAIT_CITY_SEARCH)
   ) {
-    await goToAreaStep(city);
+    delete stateData.pendingCity;
+    await goToAddressAfterCity(city);
     return true;
   }
 
@@ -4307,70 +4415,74 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     WA_ORDER_AWAIT_AREA: waAreaSt,
     WA_ORDER_AWAIT_LANDMARK: waLandmarkSt,
   } = await import("../lib/waCheckoutFlow.js");
-  if (state === waCitySearchSt) {
-    const { searchCities } = await import("../lib/waPakistanCities.js");
-    const { sendCitySearchResults, sendCitySearchPrompt } = await import("../lib/waPremiumUi.js");
-    const lang = resolveWaLangJ(stateData);
-    const hits = searchCities(trimmed, 1);
-    if (hits.length === 1 && hits[0]!.toLowerCase() === trimmed.toLowerCase()) {
-      stateData.city = hits[0]!;
-      await setConversationState(phone, waAreaSt, stateData);
-      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
-      await sendAreaPrompt(phone, lang, waSettings, hits[0]!);
-      return;
-    }
-    if (hits.length) {
-      await sendCitySearchResults({ phone, query: trimmed, lang, waSettings });
-      return;
-    }
-    await sendCitySearchPrompt(phone, lang, waSettings);
-    return;
-  }
-  if (state === "wa_order_await_city") {
-    const { searchCities } = await import("../lib/waPakistanCities.js");
-    const { sendCityPicker: pickCity, sendCitySearchResults } = await import("../lib/waPremiumUi.js");
-    const lang = resolveWaLangJ(stateData);
-    const hits = searchCities(trimmed, 5);
-    if (hits.length === 1) {
-      stateData.city = hits[0]!;
-      await setConversationState(phone, waAreaSt, stateData);
-      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
-      await sendAreaPrompt(phone, lang, waSettings, hits[0]!);
-      return;
-    }
-    if (hits.length > 1) {
-      await sendCitySearchResults({ phone, query: trimmed, lang, waSettings });
-      return;
-    }
-    const { suggestCityFromPhone } = await import("../lib/waPakistanCities.js");
-    await pickCity({ phone, lang, waSettings, suggestedCity: suggestCityFromPhone(stateData.customerPhone) });
+  if (state === waCitySearchSt || state === "wa_order_await_city") {
+    const { handleSmartCityTextInput } = await import("../lib/waCityCheckout.js");
+    await handleSmartCityTextInput({
+      phone,
+      text: trimmed,
+      stateData,
+      waSettings,
+      setConversationState,
+      goToAddressStep: async (city, data) => {
+        const { sendAddressInputPrompt } = await import("../lib/waAddressFlow.js");
+        const { mergeCheckoutMemory } = await import("../lib/waCheckoutMemory.js");
+        const next = mergeCheckoutMemory(data, { city });
+        const lang = resolveWaLangJ(next);
+        await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, next);
+        await sendAddressInputPrompt({ phone, city, lang, waSettings });
+        const { persistConversationTurn } = await import("../lib/whatsappConversationMemory.js");
+        await persistConversationTurn(phone, { intent: "checkout", topic: "city", mergeStateData: { city } });
+      },
+    });
     return;
   }
   if (state === waAreaSt) {
+    const {
+      applyAddressText,
+      sendAddressConfirmPrompt,
+      WA_ORDER_AWAIT_ADDRESS_CONFIRM,
+    } = await import("../lib/waAddressFlow.js");
     const lang = resolveWaLangJ(stateData);
-    if (trimmed.length < 2) {
-      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
-      await sendAreaPrompt(phone, lang, waSettings, String(stateData.city ?? ""));
+    if (trimmed.length < 4) {
+      const { sendAddressInputPrompt } = await import("../lib/waAddressFlow.js");
+      await sendAddressInputPrompt({ phone, city: String(stateData.city ?? ""), lang, waSettings });
       return;
     }
-    stateData.area = trimmed;
-    await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, stateData);
-    const { sendAddressDetailPrompt } = await import("../lib/waPremiumUi.js");
-    await sendAddressDetailPrompt(phone, lang, waSettings);
+    const next = applyAddressText(stateData, trimmed, String(stateData.city ?? ""));
+    await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_CONFIRM, next);
+    await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
     return;
   }
   if (state === WA_ORDER_AWAIT_ADDRESS_DETAIL) {
+    const {
+      applyAddressText,
+      sendAddressConfirmPrompt,
+      sendAddressInputPrompt,
+      WA_ORDER_AWAIT_ADDRESS_CONFIRM,
+    } = await import("../lib/waAddressFlow.js");
     const lang = resolveWaLangJ(stateData);
     if (trimmed.length < 6) {
-      const { sendAddressDetailPrompt } = await import("../lib/waPremiumUi.js");
-      await sendAddressDetailPrompt(phone, lang, waSettings);
+      await sendAddressInputPrompt({ phone, city: String(stateData.city ?? ""), lang, waSettings });
       return;
     }
-    stateData.address = trimmed;
-    stateData.streetAddress = trimmed;
-    await setConversationState(phone, waLandmarkSt, stateData);
-    const { sendLandmarkPrompt } = await import("../lib/waPremiumUi.js");
-    await sendLandmarkPrompt(phone, lang, waSettings);
+    const next = applyAddressText(stateData, trimmed, String(stateData.city ?? ""));
+    await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_CONFIRM, next);
+    await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
+    const { persistConversationTurn } = await import("../lib/whatsappConversationMemory.js");
+    await persistConversationTurn(phone, {
+      intent: "checkout",
+      topic: "address",
+      mergeStateData: { address: next.address, streetAddress: next.streetAddress, city: next.city },
+    });
+    return;
+  }
+  const { WA_ORDER_AWAIT_ADDRESS_CONFIRM: waAddrConfirm } = await import("../lib/waAddressFlow.js");
+  if (state === waAddrConfirm) {
+    const { applyAddressText, sendAddressConfirmPrompt } = await import("../lib/waAddressFlow.js");
+    const lang = resolveWaLangJ(stateData);
+    const next = applyAddressText(stateData, trimmed, String(stateData.city ?? ""));
+    await setConversationState(phone, waAddrConfirm, next);
+    await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
     return;
   }
   if (state === waLandmarkSt) {

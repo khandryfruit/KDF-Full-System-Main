@@ -397,6 +397,14 @@ export function parseVariantListId(id: string): number | null {
 
 export function parseCityChoice(id: string): string | null {
   const parsed = parseCityButtonId(id);
-  if (parsed === "__search__" || parsed === "__page__" || parsed === "__other__") return parsed;
+  if (
+    parsed === "__search__" ||
+    parsed === "__page__" ||
+    parsed === "__other__" ||
+    parsed === "__confirm__" ||
+    parsed === "__change__"
+  ) {
+    return parsed;
+  }
   return parsed;
 }
