@@ -421,6 +421,24 @@ router.get("/admin/products", adminMiddleware as any, async (req, res) => {
  * PUT /api/admin/products/:id/toggle-active
  * Admin-only: flip the active flag on a product.
  */
+/**
+ * POST /api/admin/products/wa-chat-test
+ * Simulate WhatsApp + Commerce product card pipeline for admin debugging.
+ */
+router.post("/admin/products/wa-chat-test", adminMiddleware as any, async (req, res) => {
+  try {
+    const query = String(req.body?.query ?? "").trim();
+    if (!query) return res.status(400).json({ error: "query is required" });
+    const productId = req.body?.productId != null ? Number(req.body.productId) : undefined;
+    const { runAdminWaChatTest } = await import("../lib/waAdminChatTest.js");
+    const result = await runAdminWaChatTest({ query, productId });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "WA chat test failed" });
+  }
+});
+
 router.put("/admin/products/:id/toggle-active", adminMiddleware as any, async (req, res) => {
   try {
     const id = parseInt(req.params.id);

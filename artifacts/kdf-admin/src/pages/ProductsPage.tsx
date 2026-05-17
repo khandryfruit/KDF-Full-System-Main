@@ -30,6 +30,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription,
 } from "@/components/ui/dialog";
 import { ProductBulkUpload } from "@/components/products/ProductBulkUpload";
+import { ProductWaChatTestDialog } from "@/components/products/ProductWaChatTestDialog";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -1617,6 +1618,7 @@ export default function ProductsPage() {
                             : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
                           }
                         </Button>
+                        <ProductWaChatTestDialog productId={product.id} productName={product.name} />
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(product)}>
                           <Edit className="w-4 h-4 text-muted-foreground" />
                         </Button>

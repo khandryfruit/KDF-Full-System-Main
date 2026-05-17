@@ -137,6 +137,55 @@ export async function sendCommerceProductCard(opts: {
   });
 }
 
+/** After GPT education reply — attach ONE real product card (no list). */
+export async function attachEducationProductCard(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: WaSettings;
+}): Promise<boolean> {
+  const { extractWaProductEntity, extractProductSearchQuery } = await import("./waProductEntity.js");
+  const { searchCommerceProductsRanked, commerceToWaCatalogProducts } = await import("./commerceProductSearch.js");
+  const { resolveWaLang } = await import("./waPremiumJourney.js");
+
+  const entity = extractWaProductEntity(opts.textBody);
+  const searchQ = entity.specificKey ?? extractProductSearchQuery(opts.textBody) ?? opts.textBody;
+  const ranked = await searchCommerceProductsRanked(searchQ, 3);
+  if (!ranked.products.length || ranked.confidence < 50) return false;
+
+  const wa = commerceToWaCatalogProducts(ranked.products)[0];
+  if (!wa) return false;
+
+  const lang = resolveWaLang({}, opts.textBody);
+  const roman = /[a-z]/i.test(opts.textBody);
+  const opener = roman
+    ? "Agar order karna ho to yeh official product hai 👇"
+    : "اگر order کرنا ہو تو یہ official product ہے 👇";
+
+  await sendCommerceProductCard({
+    phone: opts.phone,
+    product: catalogProductToCard({
+      name: wa.name,
+      price: wa.price,
+      rawPrice: wa.rawPrice,
+      imageUrl: wa.imageUrl,
+      productUrl: wa.productUrl,
+      description: wa.description,
+      inStock: wa.inStock,
+      variantOptions: (wa.variantOptions ?? []).map((v) => ({
+        id: String(v.id),
+        title: String(v.title),
+        price: Number(v.price) || 0,
+      })),
+      commerceProductId: wa.commerceProductId ?? wa.shopifyProductId,
+      slug: wa.slug,
+    }),
+    lang,
+    waSettings: opts.waSettings,
+    opener,
+  });
+  return true;
+}
+
 export function catalogProductToCard(p: {
   name: string;
   price: string;

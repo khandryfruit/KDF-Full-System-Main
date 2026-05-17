@@ -5888,6 +5888,21 @@ async function handleAiReply(opts: {
 
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
     const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+
+    const { isProductEducationMessage } = await import("../lib/waSalesConversation.js");
+    const { shouldDeferToOpenAI: deferGpt } = await import("../lib/waCustomerPipeline.js");
+    if (isProductEducationMessage(textBody) || deferGpt(textBody, classified)) {
+      const { attachEducationProductCard } = await import("../lib/waCommerceProductCard.js");
+      await attachEducationProductCard({ phone, textBody, waSettings }).catch(() => {});
+    } else if (intent.productQuery && preloadedCatalogProducts.length === 0) {
+      const { shouldShowProductCatalogNow: showCatalog } = await import("../lib/waSalesConversation.js");
+      if (showCatalog({ text: textBody, intent: intent.intent, state: currentState })) {
+        const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+        const q = extractProductSearchQuery(textBody) || intent.productQuery;
+        await deliverSingleProductOffer({ phone, query: q, waSettings, showMore: false }).catch(() => {});
+      }
+    }
+
     const { attachQuickActions, resolveQuickActionContext } = await import("../lib/waQuickActions.js");
     await attachQuickActions({
       phone,
