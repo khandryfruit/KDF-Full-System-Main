@@ -269,7 +269,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         const d = safeJsonParse<Record<string, unknown>>(e.data, {});
         if (d.direction !== "in") return;
 
-        setWaUnread(n => n + 1);
         playSound("wa_message");
 
         const name = String(d.contactName ?? d.phone ?? "Customer");

@@ -7,15 +7,27 @@ import { normalizePhone } from "./waPhone";
 import { logger } from "./logger";
 
 let lastSyncAt = 0;
-const SYNC_COOLDOWN_MS = 45_000;
+const SYNC_COOLDOWN_MS = 12_000;
 
 const BOT_TEMPLATES = new Set([
   "ai_reply",
   "ai_fallback",
   "deterministic_reply",
   "human_greeting",
+  "greeting_continue",
+  "mixed_greeting_product",
   "catalog_intro",
+  "catalog_reply",
+  "product_db_reply",
+  "single_product_detail",
+  "single_product_image",
   "quick_order_menu",
+  "interactive_buttons",
+  "interactive_list",
+  "cta_url",
+  "menu_sent",
+  "bot_reply",
+  "conversation_fallback",
 ]);
 
 function phoneLookupKeys(raw: string, normalized: string): string[] {

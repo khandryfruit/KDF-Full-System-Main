@@ -486,15 +486,15 @@ export default function WaInboxPage() {
   const { data: convData, isLoading: convLoading, refetch: refetchConvs, isError: convError } = useQuery({
     queryKey: ["wa-conversations", search, statusFilter],
     queryFn: async () => {
-      const r = await api(`/admin/wa/conversations?search=${encodeURIComponent(search)}&status=${statusFilter}&limit=60`);
+      const r = await api(`/admin/wa/conversations?search=${encodeURIComponent(search)}&status=${statusFilter}&limit=60&sync=1`);
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
         throw new Error((d as { error?: string }).error ?? `Failed to load (${r.status})`);
       }
       return r.json();
     },
-    staleTime: 10_000,
-    refetchInterval: 20_000,
+    staleTime: 3_000,
+    refetchInterval: 6_000,
   });
 
   const { data: convDetail } = useQuery({
@@ -508,8 +508,8 @@ export default function WaInboxPage() {
     queryKey: ["wa-messages", selectedId],
     queryFn: () => api(`/admin/wa/conversations/${selectedId}/messages?limit=100`).then(r => r.json()),
     enabled: !!selectedId,
-    staleTime: 3_000,
-    refetchInterval: selectedId ? 10_000 : false,
+    staleTime: 1_000,
+    refetchInterval: selectedId ? 4_000 : false,
   });
 
   const replyMutation = useMutation({

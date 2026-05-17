@@ -96,7 +96,7 @@ export async function sendRiskRecovery(opts: {
     opts.sendText ??
     (async (phone: string, text: string) => {
       const { sendWhatsAppMessage } = await import("./whatsapp.js");
-      await sendWhatsAppMessage({ phone, text, settings: opts.waSettings });
+      await sendWhatsAppMessage({ phone, message: text, templateName: "risk_recovery_text" });
     });
   await sendText(opts.phone, body, "risk_recovery_text");
 }
@@ -152,9 +152,9 @@ export async function tryHandleClassifiedSupport(opts: {
   }
   const sendText =
     opts.sendText ??
-    (async (phone: string, text: string, _template: string) => {
+    (async (phone: string, text: string, template: string) => {
       const { sendWhatsAppMessage } = await import("./whatsapp.js");
-      await sendWhatsAppMessage({ phone, text, settings: opts.waSettings });
+      await sendWhatsAppMessage({ phone, message: text, templateName: template });
     });
 
   if (intent === "delivery") {

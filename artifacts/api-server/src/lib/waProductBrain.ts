@@ -338,10 +338,14 @@ export async function tryWaProductCatalogReply(opts: {
   textBody: string;
   productQuery?: string;
 }): Promise<WaProductBrainHit | null> {
+  const { isCheckoutContinuationMessage } = await import("./waAddressFlow.js");
+  if (isCheckoutContinuationMessage(opts.textBody)) return null;
+
   const query = extractProductQueryFromMessage(
     buildWaProductSearchQuery(opts.textBody, opts.productQuery),
   );
   if (!query || query.length < 1) return null;
+  if (isCheckoutContinuationMessage(query)) return null;
 
   if (isFullCatalogBrowseMessage(query) || isFullCatalogBrowseMessage(opts.textBody)) {
     return tryWaFullCatalogMenuReply(opts.textBody);

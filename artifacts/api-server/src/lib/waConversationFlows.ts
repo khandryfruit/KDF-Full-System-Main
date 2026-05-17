@@ -6,6 +6,7 @@ import type { WaLang } from "./waPremiumJourney.js";
 import { extractProductQueryFromMessage, isRomanUrduWa } from "./waProductBrain.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 import { KDF_STORE, buildMapsUrl } from "./waSupportFlows.js";
+import { buildPremiumWelcomeText } from "./waPremiumMenu.js";
 
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
@@ -50,34 +51,9 @@ export function buildUniversalFallbackText(lang: WaLang = "ur"): string {
   return "السلام علیکم 😊\n\n*KDF MART* میں خوش آمدید۔\n\nبراہ کرم بتائیں کس چیز میں مدد چاہیے؟";
 }
 
-/** Human welcome text — pure greeting (buttons: Order + Support only). */
+/** Human welcome text — premium greeting (menu attached separately). */
 export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang, repeatCustomer = false): string {
-  const t = String(textBody ?? "").trim().toLowerCase();
-  const isAssalam =
-    /\b(assalam|asalam|salam|aoa|aslm)\b/i.test(t) && !/\b(wa alaikum|walikum|walaikum)\b/i.test(t);
-  const roman = textBody ? isRomanUrduWa(textBody) : lang !== "ur";
-  const welcomeBack = repeatCustomer
-    ? (roman ? "Dobara khush aamdeed 😊\n\n" : lang === "en" ? "Welcome back 😊\n\n" : "دوبارہ خوش آمدید 😊\n\n")
-    : "";
-
-  if (isAssalam && !roman && lang !== "en") {
-    return (
-      `${welcomeBack}وعلیکم السلام 😊\n\n*KDF MART* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے۔\n\nآج کس چیز میں مدد کر سکتا ہوں؟`
-    );
-  }
-  if (lang === "en") {
-    return (
-      `${welcomeBack}Assalam o Alaikum 😊\n\nWelcome to *KDF MART / Khan Dry Fruits*.\n\nHope you are well.\n\nHow can I help you today?`
-    );
-  }
-  if (roman) {
-    return (
-      `${welcomeBack}Assalam o Alaikum 😊\n\n*KDF MART* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge.\n\nAaj kis cheez mein madad kar sakta hoon?`
-    );
-  }
-  return (
-    `${welcomeBack}السلام علیکم 😊\n\n*KDF MART* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے۔\n\nآج کس چیز میں مدد کر سکتا ہوں؟`
-  );
+  return buildPremiumWelcomeText(textBody, lang, repeatCustomer);
 }
 
 /** Mixed greeting + product e.g. "Hello almonds chahiye" */

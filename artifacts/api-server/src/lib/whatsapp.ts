@@ -524,10 +524,10 @@ export async function sendWhatsAppImage(opts: {
       response: JSON.stringify(data),
       messageId,
     });
-    if (res.ok && messageId && opts.caption) {
+    if (res.ok && messageId) {
       mirrorOutboundToInbox({
         phone: opts.phone,
-        content: opts.caption.slice(0, 500),
+        content: (opts.caption ?? opts.imageUrl).slice(0, 500),
         waMessageId: messageId,
         isBot: true,
         type: "image",
@@ -579,6 +579,16 @@ export async function sendCtaUrlMessage(opts: {
     const messageId = data?.messages?.[0]?.id as string | undefined;
 
     await log({ phone: opts.phone, templateName: opts.templateName ?? "cta_url", message: opts.text.slice(0, 200), status: res.ok && messageId ? "sent" : "failed", response: JSON.stringify(data), messageId });
+    if (res.ok && messageId) {
+      mirrorOutboundToInbox({
+        phone: opts.phone,
+        content: opts.text.slice(0, 500),
+        waMessageId: messageId,
+        isBot: true,
+        type: "interactive",
+        templateName: opts.templateName ?? "cta_url",
+      });
+    }
     return !!(res.ok && messageId);
   } catch (err) {
     logger.error(err, "sendCtaUrlMessage error");

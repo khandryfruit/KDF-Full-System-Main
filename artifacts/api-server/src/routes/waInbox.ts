@@ -128,17 +128,15 @@ router.post("/admin/wa/conversations/:id/reply", adminMiddleware, async (req: Re
     const [conv] = await db.select().from(waConversationsTable).where(eq(waConversationsTable.id, id)).limit(1);
     if (!conv) { res.status(404).json({ error: "Not found" }); return; }
 
-    const sent = await sendWhatsAppMessage({ phone: normalizePhone(conv.contactPhone), message: message.trim() });
+    const adminUserId = (req as { user?: { id?: number; adminUserId?: number } }).user?.adminUserId
+      ?? (req as { user?: { id?: number } }).user?.id;
+    const sent = await sendWhatsAppMessage({
+      phone: normalizePhone(conv.contactPhone),
+      message: message.trim(),
+      userId: adminUserId,
+      templateName: "admin_reply",
+    });
     if (!sent) { res.status(400).json({ error: "Failed to send — check WhatsApp settings" }); return; }
-
-    const [msg] = await db.insert(waMessagesTable).values({
-      conversationId: id,
-      direction: "out",
-      type: "text",
-      content: message.trim(),
-      status: "sent",
-      isBot: false,
-    }).returning();
 
     await db.update(waConversationsTable).set({
       lastMessage: message.trim().slice(0, 120),
@@ -147,9 +145,7 @@ router.post("/admin/wa/conversations/:id/reply", adminMiddleware, async (req: Re
       updatedAt: new Date(),
     }).where(eq(waConversationsTable.id, id));
 
-    broadcastSSE("wa_message", { conversationId: id, direction: "out", content: message.trim(), isBot: false });
-
-    res.json({ success: true, message: msg });
+    res.json({ success: true });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: String(err) });

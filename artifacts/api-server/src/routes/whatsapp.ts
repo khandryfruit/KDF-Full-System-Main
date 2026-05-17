@@ -1170,7 +1170,11 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               tryCustomerMessage: () => tryResolveWaCustomerMessage({
                 phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log,
               }),
-              freshProductSearch: () => respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log }),
+              freshProductSearch: async () => {
+                const { isCheckoutContinuationMessage } = await import("../lib/waAddressFlow.js");
+                if (isCheckoutContinuationMessage(commerceText)) return false;
+                return respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log });
+              },
               aiReply: chatbot?.isEnabled
                 ? () => handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent })
                 : undefined,
@@ -2181,6 +2185,10 @@ async function respondWithFreshProductSearch(opts: {
 }): Promise<boolean> {
   const q = String(opts.query ?? "").trim();
   if (q.length < 2) return false;
+  const { isCheckoutContinuationMessage } = await import("../lib/waAddressFlow.js");
+  if (isCheckoutContinuationMessage(q)) return false;
+  const conv = await getConversationState(opts.phone);
+  if (/^wa_order_await_/.test(conv?.state ?? "")) return false;
 
   const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
   const shown = await deliverSingleProductOffer({
@@ -2795,6 +2803,8 @@ async function trySendProductCatalogReply(opts: {
   const { phone, textBody, waSettings, detectedIntent, log } = opts;
   const conv = await getConversationState(phone);
   const currentState = conv?.state ?? "idle";
+  const { isCheckoutContinuationMessage } = await import("../lib/waAddressFlow.js");
+  if (isCheckoutContinuationMessage(textBody) || /^wa_order_await_/.test(currentState)) return false;
   const { shouldShowProductCatalogNow } = await import("../lib/waSalesConversation.js");
   if (isPureGreetingMessage(textBody) || detectedIntent.intent === "greeting") return false;
   if (!shouldShowProductCatalogNow({ text: textBody, intent: detectedIntent.intent, state: currentState })) {
@@ -3580,28 +3590,76 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
+  if (id.startsWith("wa_cat_")) {
+    const { resolveCategoryIdFromButtonId, sendCategoryProductPicker } = await import("../lib/waPremiumMenu.js");
+    const categoryId = resolveCategoryIdFromButtonId(id);
+    if (categoryId) {
+      const lang = resolveWaLang(stateData);
+      await sendCategoryProductPicker({
+        phone: opts.phone,
+        categoryId,
+        waSettings: opts.waSettings,
+        lang,
+      });
+      return true;
+    }
+  }
+
   if (id.startsWith("wa_qa_")) {
     const lang = resolveWaLang(stateData);
     const productQ = String(
       stateData.pendingEducationQuery ?? stateData.pendingProductQuery ?? "",
     ).trim();
 
-    if (id === "wa_qa_order" || id === "wa_qa_buy") {
+    if (id === "wa_qa_products") {
+      const { sendProductCategoryMenu } = await import("../lib/waPremiumMenu.js");
+      await sendProductCategoryMenu({ phone: opts.phone, waSettings: opts.waSettings, lang });
+      await setConversationState(opts.phone, "wa_catalog_pick_category", {
+        ...stateData,
+        preferredLanguage: lang,
+        waLang: lang,
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_place_order" || id === "wa_qa_order" || id === "wa_qa_buy") {
       await sendWaReplyWithActions(
         opts.phone,
         lang === "en"
-          ? "Ji 😊 Which product would you like to order?\n\nExample: *badam*, *pista*, *kaju*"
-          : "Ji 😊 Kaun sa product order karna hai?\n\nJaise: *badam*, *pista*, *kaju*",
+          ? "Ji 😊 Let's place your order 😊\n\nTap *Products* to browse — or type a product name (e.g. *badam*, *pista*)."
+          : "Ji 😊 Order shuru karte hain 😊\n\n*Products* se browse karein — ya product naam likhein (jaise *badam*, *pista*).",
         opts.waSettings,
-        { templateName: "qa_order_start", skipActions: true },
+        { templateName: "qa_order_start", actionContext: "product", skipActions: true },
       );
       await setConversationState(opts.phone, "wa_sales_chat", {
         ...stateData,
         checkoutIntent: "order",
+        preferredLanguage: lang,
+        waLang: lang,
       });
       if (productQ) {
         await deliverSingleProductOffer({ phone: opts.phone, query: productQ, waSettings: opts.waSettings });
+      } else {
+        const { sendProductCategoryMenu } = await import("../lib/waPremiumMenu.js");
+        await sendProductCategoryMenu({ phone: opts.phone, waSettings: opts.waSettings, lang });
       }
+      return true;
+    }
+
+    if (id === "wa_qa_address") {
+      const { sendShopAddressCard } = await import("../lib/waSupportFlows.js");
+      await sendShopAddressCard({
+        phone: opts.phone,
+        textBody: "address",
+        waSettings: opts.waSettings,
+        sendText: async (p, text, t) => { await sendWaText(p, text, opts.waSettings, t); },
+      });
+      return true;
+    }
+
+    if (id === "wa_qa_app") {
+      const { sendAppInstallCta } = await import("../lib/waPremiumMenu.js");
+      await sendAppInstallCta({ phone: opts.phone, waSettings: opts.waSettings, lang });
       return true;
     }
 
@@ -4577,6 +4635,16 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     return;
   }
   if (state === WA_AWAIT_PRODUCT_INTENT_STATE) {
+    const { isCheckoutContinuationMessage } = await import("../lib/waAddressFlow.js");
+    if (isCheckoutContinuationMessage(trimmed)) {
+      await sendWaText(
+        phone,
+        "Ji 😊 order ke liye pehle product select karein — *badam*, *pista* ya menu se order 😊",
+        waSettings,
+        "checkout_need_product",
+      );
+      return;
+    }
     const { preservedIdleState } = await import("../lib/waSessionRecovery.js");
     await setConversationState(phone, "idle", preservedIdleState(stateData));
     const intent = detectWaIntent(trimmed);
@@ -5002,9 +5070,19 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   if (state === waAddrConfirm) {
     const { applyAddressText, sendAddressConfirmPrompt } = await import("../lib/waAddressFlow.js");
     const lang = resolveWaLangJ(stateData);
-    const next = applyAddressText(stateData, trimmed, String(stateData.city ?? ""));
-    await setConversationState(phone, waAddrConfirm, next);
-    await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
+    if (/^(confirm|confirmed|yes|ji|jee|han|haan|ok|okay|theek|thik|1)$/i.test(trimmed)) {
+      const { buildFullDeliveryAddress } = await import("../lib/waCheckoutMemory.js");
+      stateData.address = buildFullDeliveryAddress(stateData);
+      await sendPaymentMethodButtons(phone, stateData, waSettings);
+      return;
+    }
+    if (trimmed.length >= 12) {
+      const next = applyAddressText(stateData, trimmed, String(stateData.city ?? ""));
+      await setConversationState(phone, waAddrConfirm, next);
+      await sendAddressConfirmPrompt({ phone, stateData: next, lang, waSettings });
+      return;
+    }
+    await sendAddressConfirmPrompt({ phone, stateData, lang, waSettings });
     return;
   }
   if (state === waLandmarkSt) {

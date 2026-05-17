@@ -322,8 +322,9 @@ async function routeAfterSessionReset(opts: {
   freshProductSearch: () => Promise<boolean>;
   aiReply?: () => Promise<void>;
 }): Promise<boolean> {
+  const { isCheckoutContinuationMessage } = await import("./waAddressFlow.js");
   if (await opts.tryCustomerMessage()) return true;
-  if (await opts.freshProductSearch()) return true;
+  if (!isCheckoutContinuationMessage(opts.text) && (await opts.freshProductSearch())) return true;
   if (opts.aiReply) {
     await opts.aiReply();
     return true;

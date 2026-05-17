@@ -8,6 +8,7 @@ import { isGreetingLikeMessage } from "./waIntentSwitch.js";
 import type { ClassifiedMessage } from "./waIntentClassifier.js";
 import { isPaymentIssueMessage } from "./waIntentClassifier.js";
 import { isProductEducationMessage } from "./waSalesConversation.js";
+import { sendPremiumMainMenu, QA as PremiumQA } from "./waPremiumMenu.js";
 
 export type QuickActionContext =
   | "greeting"
@@ -26,16 +27,20 @@ type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>
 export type QuickActionItem = { id: string; title: string; description?: string };
 
 export const QA = {
-  order: "wa_qa_order",
-  payment: "wa_qa_payment",
-  delivery: "wa_qa_delivery",
-  track: "wa_qa_track",
-  support: "wa_qa_support",
+  products: PremiumQA.products,
+  placeOrder: PremiumQA.placeOrder,
+  order: PremiumQA.order,
+  payment: PremiumQA.payment,
+  delivery: PremiumQA.delivery,
+  address: PremiumQA.address,
+  track: PremiumQA.track,
+  support: PremiumQA.support,
+  app: PremiumQA.app,
   orders: "wa_qa_orders",
   prices: "wa_qa_prices",
   benefits: "wa_qa_benefits",
   quality: "wa_qa_quality",
-  buy: "wa_qa_buy",
+  buy: PremiumQA.buy,
   call: "wa_qa_call",
   whatsapp: "wa_qa_whatsapp",
   website: "wa_qa_website",
@@ -87,15 +92,19 @@ export function resolveQuickActionContext(opts: {
   return "greeting";
 }
 
-/** V5: minimal relevant buttons per context */
+/** Context-aware buttons — greeting uses full premium main menu (list). */
 export function buildQuickActions(context: QuickActionContext, lang: WaLang): QuickActionItem[] {
   switch (context) {
     case "greeting":
       return [
-        { id: QA.order, title: "🛒 Order" },
+        { id: QA.products, title: "🛒 Products" },
+        { id: QA.placeOrder, title: "📦 Place Order" },
         { id: QA.payment, title: "💳 Payment" },
-        { id: QA.track, title: "📦 Track Order" },
-        { id: QA.support, title: "📞 Support" },
+        { id: QA.delivery, title: "🚚 Delivery" },
+        { id: QA.address, title: "📍 Address" },
+        { id: QA.track, title: "📦 Track" },
+        { id: QA.support, title: "☎ Support" },
+        { id: QA.app, title: "📱 App" },
       ];
     case "mixed_greeting_product":
       return [
@@ -107,23 +116,26 @@ export function buildQuickActions(context: QuickActionContext, lang: WaLang): Qu
     case "education":
       return [
         { id: QA.prices, title: "💰 Price" },
-        { id: QA.benefits, title: "⭐ Benefits" },
-        { id: QA.buy, title: "🛒 Buy" },
+        { id: QA.quality, title: "⭐ Quality" },
+        { id: QA.buy, title: "🛒 Order" },
       ];
     case "delivery":
       return [
         { id: QA.delivery, title: "🚚 Delivery" },
         { id: QA.track, title: "📦 Track" },
-        { id: QA.support, title: "📞 Support" },
+        { id: QA.support, title: "☎ Support" },
       ];
     case "payment":
     case "payment_issue":
-      return [{ id: QA.payment, title: "💳 Payment" }];
+      return [
+        { id: QA.payment, title: "💳 Payment" },
+        { id: QA.support, title: "☎ Support" },
+      ];
     case "orders":
       return [
         { id: QA.orders, title: "📋 Orders" },
         { id: QA.track, title: "📦 Track" },
-        { id: QA.support, title: "📞 Support" },
+        { id: QA.support, title: "☎ Support" },
       ];
     case "support":
       return [
@@ -133,14 +145,14 @@ export function buildQuickActions(context: QuickActionContext, lang: WaLang): Qu
       ];
     default:
       return [
-        { id: QA.order, title: "🛒 Order" },
-        { id: QA.support, title: "📞 Support" },
+        { id: QA.products, title: "🛒 Products" },
+        { id: QA.support, title: "☎ Support" },
       ];
   }
 }
 
 function quickActionsFooter(lang: WaLang): string {
-  return lang === "en" ? "Quick actions 👇" : "Neeche option 👇";
+  return lang === "en" ? "Choose an option below 😊" : "Neeche se option choose kar lein 😊";
 }
 
 export async function sendQuickActionTemplate(opts: {
@@ -152,6 +164,17 @@ export async function sendQuickActionTemplate(opts: {
 }): Promise<void> {
   if (opts.context === "none") return;
   const lang = opts.lang ?? resolveWaLang({}, opts.textBody ?? "");
+
+  if (opts.context === "greeting") {
+    await sendPremiumMainMenu({
+      phone: opts.phone,
+      waSettings: opts.waSettings,
+      lang,
+      textBody: opts.textBody,
+    });
+    return;
+  }
+
   const items = buildQuickActions(opts.context, lang);
   if (!items.length) return;
 

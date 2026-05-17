@@ -47,8 +47,33 @@ export async function persistWaOutboundMessage(opts: PersistOutboundOpts): Promi
     const conversationId = conv?.id;
     if (!conversationId) return null;
 
+    if (opts.waMessageId) {
+      const [existing] = await db
+        .select({ id: waMessagesTable.id })
+        .from(waMessagesTable)
+        .where(eq(waMessagesTable.waMessageId, opts.waMessageId))
+        .limit(1);
+      if (existing?.id) {
+        await db
+          .update(waConversationsTable)
+          .set({
+            lastMessage: preview,
+            lastMessageAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(waConversationsTable.id, conversationId));
+        broadcastSSE("wa_message", {
+          conversationId,
+          direction: "out",
+          content: opts.content,
+          phone,
+          isBot: opts.isBot ?? true,
+        });
+        return existing.id;
+      }
+    }
+
     const [msg] = await db
-      .insert(waMessagesTable)
       .values({
         conversationId,
         waMessageId: opts.waMessageId ?? null,

@@ -50,11 +50,11 @@ export async function resetSalesContextForGreeting(opts: {
 /** Map legacy menu button ids → quick-action handlers */
 export const LEGACY_MENU_TO_QA: Record<string, string> = {
   payment_methods: "wa_qa_payment",
-  shop_products: "wa_qa_order",
+  shop_products: "wa_qa_products",
   track_order: "wa_qa_track",
   track_again: "wa_qa_track",
   talk_support: "wa_qa_support",
-  main_menu: "wa_qa_support",
+  main_menu: "wa_qa_products",
 };
 
 export function resolveQuickActionId(interactionId: string): string {

@@ -158,25 +158,21 @@ Aaj aap kis cheez ke baare mein poochna chahenge?`;
 }
 
 export function buildProductInterestClarification(productLabel: string, roman: boolean): string {
-  const name = productLabel.charAt(0).toUpperCase() + productLabel.slice(1);
+  const roots = productRootsInMessage(productLabel);
+  const key = roots[0] ?? productLabel.toLowerCase().split(/\s+/)[0] ?? "product";
+  const names: Record<string, string> = {
+    badam: "Badam (Almonds)",
+    almond: "Almonds",
+    pista: "Pista",
+    pistachio: "Pistachio",
+    kaju: "Kaju",
+    cashew: "Cashew",
+  };
+  const name = names[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
   if (roman) {
-    return `Ji 😊 *${name}* ke baare mein poocha aap ne.
-
-Kya aap:
-• *Prices* dekhna chahte hain?
-• *Recommendation* chahte hain?
-• Ya *order* karna chahte hain?
-
-Reply karein: *price* / *recommend* / *order* 😊`;
+    return `Ji 😊 *${name}* chahiye — bohat acha choice 😊\n\nPopular sizes:\n• 250g\n• 500g\n• 1KG\n\nBatayein kitni quantity — ya main best option suggest kar doon 😊`;
   }
-  return `جی 😊 *${name}* کے بارے میں پوچھا۔
-
-کیا آپ:
-• *Prices* دیکھنا چاہتے ہیں؟
-• *Recommendation* چاہیے؟
-• یا *order* کرنا چاہتے ہیں؟
-
-Reply: *price* / *recommend* / *order* 😊`;
+  return `جی 😊 *${name}* چاہیے — بہت اچھا choice 😊\n\nPopular sizes:\n• 250g\n• 500g\n• 1KG\n\nبتائیے کتنی quantity — یا میں best option suggest کر دوں 😊`;
 }
 
 export function buildProductRecommendationIntro(productName: string, roman: boolean): string {
@@ -382,12 +378,15 @@ export async function tryConversationalSalesReply(opts: {
   }
 
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {
-    const productQ = extractProductQueryFromMessage(text);
+    const productQ = extractProductQueryFromMessage(text) || text;
+    const wantsProduct = /\b(chahiye|chahye|chaiye|chahie|lena|mangwana|need|want)\b/i.test(lower);
     return {
-      handled: true,
-      template: "product_interest_text",
-      productQuery: productQ || text,
-      reply: buildProductInterestClarification(productQ || text, roman),
+      handled: wantsProduct,
+      template: wantsProduct ? "product_memory_offer" : "product_interest_text",
+      productQuery: productQ,
+      reply: buildProductInterestClarification(productQ, roman),
+      triggerProduct: wantsProduct,
+      clearIntentState: wantsProduct,
     };
   }
 

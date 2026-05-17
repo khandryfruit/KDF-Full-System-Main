@@ -7,6 +7,25 @@ import { mergeCheckoutMemory, buildFullDeliveryAddress } from "./waCheckoutMemor
 
 export const WA_ORDER_AWAIT_ADDRESS_CONFIRM = "wa_order_await_address_confirm";
 
+/** Address / confirm text must never trigger product catalog search. */
+export function isCheckoutContinuationMessage(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (/^(confirm|confirmed|yes confirm|ji confirm|han confirm|haan|ji|jee|ok|okay|theek|thik|confirm order)$/i.test(t)) {
+    return true;
+  }
+  if (/^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+/.test(t)) return true;
+  if (
+    t.length >= 20 &&
+    /\b(lahore|karachi|islamabad|rawalpindi|faisalabad|multan|peshawar|johar|model town|defence|phase|block|house|street|road|town|pakistan|landmark|area)\b/i.test(lower)
+  ) {
+    return true;
+  }
+  if (/\b\d{4,6}\b/.test(t) && t.length >= 28) return true;
+  return false;
+}
+
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
 export async function sendAddressInputPrompt(opts: {

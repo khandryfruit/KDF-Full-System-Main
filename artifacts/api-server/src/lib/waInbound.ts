@@ -113,6 +113,17 @@ export async function persistInboundWaMessage(
       return { conversationId: null, phone };
     }
 
+    if (payload.msgId) {
+      const [dup] = await db
+        .select({ id: waMessagesTable.id })
+        .from(waMessagesTable)
+        .where(eq(waMessagesTable.waMessageId, payload.msgId))
+        .limit(1);
+      if (dup?.id) {
+        return { conversationId, phone };
+      }
+    }
+
     await db.insert(waMessagesTable).values({
       conversationId,
       waMessageId: payload.msgId ?? null,

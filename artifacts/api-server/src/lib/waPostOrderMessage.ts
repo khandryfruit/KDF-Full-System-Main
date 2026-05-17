@@ -1,7 +1,7 @@
 /**
  * Premium post-order thank you + helpful app install (not forced).
  */
-import { sendWhatsAppMessage, sendCtaUrlMessage, sendInteractiveButtons } from "./whatsapp.js";
+import { sendWhatsAppMessage, sendCtaUrlMessage } from "./whatsapp.js";
 import { KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 import type { WaLang } from "./waPremiumJourney.js";
 
@@ -15,52 +15,32 @@ export function buildOrderThankYouMessage(orderNumber: string, lang: WaLang): st
   const id = orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`;
   if (lang === "en") {
     return (
-      `🌟 Thank you 😊\n\n` +
-      `Thank you for trusting *Khan Dry Fruits* and placing your order.\n\n` +
-      `Your order has been received successfully ✅\n\n` +
-      `🧾 *Order Number:* ${id}\n\n` +
-      `🚚 Delivery updates will be sent on this WhatsApp chat.\n\n` +
-      `Questions?\n` +
-      `💬 WhatsApp: ${KDF_SUPPORT_WHATSAPP}\n` +
-      `📞 Call: ${KDF_SUPPORT_CALL}`
+      `🌟 JazakAllah 😊\n\n` +
+      `Thank you for ordering from *Khan Dry Fruits*.\n\n` +
+      `Your order is confirmed ✅\n\n` +
+      `🧾 *Order:* ${id}\n\n` +
+      `We hope to serve you again 🌟`
     );
   }
   return (
     `🌟 جزاک اللہ 😊\n\n` +
-    `*Khan Dry Fruits* پر اعتماد کرنے اور آرڈر کرنے کا بہت شکریہ۔\n\n` +
-    `آپ کا آرڈر کامیابی سے موصول ہو گیا ہے ✅\n\n` +
-    `🧾 *Order Number:*\n${id}\n\n` +
-    `🚚 Delivery updates آپ کو اسی WhatsApp پر ملتی رہیں گی۔\n\n` +
-    `اگر کوئی سوال ہو:\n` +
-    `💬 WhatsApp: ${KDF_SUPPORT_WHATSAPP}\n` +
-    `📞 Call: ${KDF_SUPPORT_CALL}`
+    `*Khan Dry Fruits* سے آرڈر کرنے کا بہت شکریہ۔\n\n` +
+    `آپ کا آرڈر موصول ہو گیا ہے ✅\n\n` +
+    `🧾 *Order:* ${id}\n\n` +
+    `امید ہے دوبارہ خدمت کا موقع ملے گا 🌟`
   );
 }
 
 export function buildAppInstallPitch(lang: WaLang): string {
   if (lang === "en") {
     return (
-      `📱 A small request 😊\n\n` +
-      `For easier shopping, offers, order tracking and fast updates — try our mobile app.\n` +
-      `Your support means a lot to us 🌟\n\n` +
-      `With the app:\n` +
-      `✅ Fast ordering\n` +
-      `✅ Order tracking\n` +
-      `✅ Latest deals\n` +
-      `✅ Easy re-order\n` +
-      `✅ Exclusive offers`
+      `⭐ If you liked our service, please install our mobile app 😊\n\n` +
+      `Faster ordering · tracking · exclusive offers`
     );
   }
   return (
-    `📱 ایک چھوٹی سی گزارش 😊\n\n` +
-    `مزید آسان shopping، offers، order tracking اور fast updates کے لیے ہماری mobile app install کریں۔\n` +
-    `آپ کی support اور اعتماد ہمارے لیے بہت اہم ہے 🌟\n\n` +
-    `App کے ذریعے:\n` +
-    `✅ Fast ordering\n` +
-    `✅ Order tracking\n` +
-    `✅ Latest deals\n` +
-    `✅ Easy re-order\n` +
-    `✅ Exclusive offers`
+    `⭐ Agar service pasand aaye to hamari mobile app install karein 😊\n\n` +
+    `آسان ordering · tracking · exclusive offers`
   );
 }
 
@@ -103,30 +83,11 @@ export async function sendPremiumOrderConfirmationSequence(opts: {
   await sendCtaUrlMessage({
     phone: opts.phone,
     text: opts.lang === "en"
-      ? "Install the KDF app for the best experience 👇"
-      : "Behtar experience ke liye app install karein 👇",
+      ? "Tap below to install 👇"
+      : "Neeche tap karke install karein 👇",
     buttonText: "📲 Install App",
     url: KDF_APP_INSTALL_URL,
     settings: opts.waSettings,
     templateName: "order_app_install_cta",
-  });
-
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: opts.lang === "en" ? "Quick actions:" : "Agla step:",
-    buttons: [
-      { id: "wa_post_visit_website", title: "🌐 Website" },
-      { id: "wa_post_shop_again", title: "🛒 Shop Again" },
-      { id: "wa_post_track_order", title: "📦 Track Order" },
-    ],
-    settings: opts.waSettings,
-    templateName: "order_post_actions",
-  });
-
-  const closing = buildOrderClosingMessage(opts.lang);
-  await sendWhatsAppMessage({
-    phone: opts.phone,
-    message: closing,
-    templateName: "order_closing_premium",
   });
 }
