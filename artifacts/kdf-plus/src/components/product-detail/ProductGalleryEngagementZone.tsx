@@ -178,11 +178,13 @@ function AiCarousel({
           loopCopies={2}
           resumeMs={4000}
           fadeColor="#ffffff"
-          className="kdf-pdp-ai-carousel"
+          showArrows={products.length > 3}
+          className="kdf-pdp-ai-carousel kdf-carousel--rec"
         >
           {products.map((p, i) => (
             <div key={`${p.id}-${i}`} className="kdf-carousel-slide--peek">
               <KdfStoreProductCard
+                compact
                 product={{
                   id: p.id,
                   name: p.name,
@@ -193,7 +195,7 @@ function AiCarousel({
                   variants: p.variants,
                 }}
                 topBadge="Pick"
-                cartIcon="cart"
+                cartIcon="plus"
                 onQuickAdd={() => onQuickAdd(p)}
               />
             </div>

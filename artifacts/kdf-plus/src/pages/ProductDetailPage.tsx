@@ -400,10 +400,12 @@ function ProductDetailPageView() {
     { query: { queryKey: ["products", "pdp-gallery-engagement"], staleTime: 60_000, refetchOnWindowFocus: false } },
   );
   const galleryEngagementProducts: GalleryEngagementProduct[] = useMemo(() => {
-    if (!productId || !engagementPool) return [];
-    return normalizeProductsListResponse(engagementPool)
-      .items.filter((p: any) => p.id !== productId)
-      .slice(0, 20)
+    const fromRec = [
+      ...(recommendationData?.recommendedWithThis ?? []),
+      ...(recommendationData?.customersAlsoBought ?? []),
+      ...(recommendationData?.relatedProducts ?? []),
+    ]
+      .filter((p: any) => p?.id && p.id !== productId)
       .map((p: any) => ({
         id: p.id,
         name: p.name,
@@ -413,7 +415,32 @@ function ProductDetailPageView() {
         gradient: p.gradient,
         variants: ensureVariantArray(p.variants),
       }));
-  }, [engagementPool, productId]);
+    const seen = new Set<number>();
+    const merged: GalleryEngagementProduct[] = [];
+    for (const p of fromRec) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      merged.push(p);
+      if (merged.length >= 12) break;
+    }
+    if (merged.length >= 6) return merged;
+    if (!engagementPool) return merged;
+    for (const p of normalizeProductsListResponse(engagementPool).items) {
+      if (!p?.id || p.id === productId || seen.has(p.id)) continue;
+      seen.add(p.id);
+      merged.push({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: Number(p.price),
+        images: p.images,
+        gradient: p.gradient,
+        variants: ensureVariantArray(p.variants),
+      });
+      if (merged.length >= 12) break;
+    }
+    return merged;
+  }, [engagementPool, productId, recommendationData]);
 
   const { data: recommendationData } = useProductRecommendations({
     context: "product",

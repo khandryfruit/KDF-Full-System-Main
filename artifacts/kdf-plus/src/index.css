@@ -1547,6 +1547,74 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   aspect-ratio: 1 / 1;
 }
 
+/* Homepage hero banner — sharp imagery, lighter overlay */
+.kdf-hero-banner__media {
+  object-fit: cover;
+  object-position: center;
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Compact product cards in PDP recommendation carousels */
+.kdf-store-card--compact {
+  border-radius: 18px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+.kdf-store-card--compact .kdf-store-card__media-wrap {
+  aspect-ratio: 1 / 1;
+  max-height: 140px;
+  width: 100%;
+  overflow: hidden;
+}
+@media (min-width: 640px) {
+  .kdf-store-card--compact .kdf-store-card__media-wrap {
+    max-height: 160px;
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-store-card--compact .kdf-store-card__media-wrap {
+    max-height: 180px;
+  }
+}
+.kdf-store-card--compact .kdf-store-card__body {
+  padding: 0.75rem 0.75rem 0.625rem;
+}
+.kdf-store-card--compact h3 {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+}
+.kdf-store-card--compact .kdf-store-card__price-row {
+  padding: 0 0.75rem 0.75rem;
+}
+
+/* PDP AI / pairs carousels — more cards visible on desktop */
+@media (min-width: 640px) {
+  .kdf-pdp-ai-carousel .kdf-carousel-slide--peek,
+  .kdf-pdp-pairs-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100% - 30px) / 3);
+    max-width: calc((100% - 30px) / 3);
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-pdp-ai-carousel .kdf-carousel-slide--peek,
+  .kdf-pdp-pairs-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100% - 40px) / 4);
+    max-width: calc((100% - 40px) / 4);
+  }
+}
+@media (min-width: 1280px) {
+  .kdf-pdp-ai-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100% - 48px) / 5);
+    max-width: calc((100% - 48px) / 5);
+  }
+}
+.kdf-pdp-ai-carousel .kdf-carousel-track,
+.kdf-pdp-pairs-carousel .kdf-carousel-track {
+  align-items: flex-start;
+}
+
 /* PDP — unified hero (image + buy column in one premium shell on desktop) */
 .kdf-pdp-hero {
   display: grid;

@@ -121,6 +121,7 @@ function PairsWellMini({ items }: { items: PairProduct[] }) {
         {items.map((p) => (
           <div key={p.id} className="kdf-carousel-slide--peek">
             <KdfStoreProductCard
+              compact
               product={{
                 id: p.id,
                 name: p.name,

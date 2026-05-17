@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 
 export const bannersTable = pgTable("banners", {
   id: serial("id").primaryKey(),
-  title: text("title").notNull(),
+  title: text("title").default(""),
   subtitle: text("subtitle"),
   imageUrl: text("image_url"),
   mobileImageUrl: text("mobile_image_url"),
@@ -50,6 +50,14 @@ export const bannersTable = pgTable("banners", {
   relatedKeywords: jsonb("related_keywords").$type<string[]>().default([]),
   relatedProductIds: jsonb("related_product_ids").$type<number[]>().default([]),
   bannerStyle: text("banner_style").default("premium"),
+  showTitle: boolean("show_title").notNull().default(true),
+  showSubtitle: boolean("show_subtitle").notNull().default(true),
+  showLabel: boolean("show_label").notNull().default(true),
+  showCta: boolean("show_cta").notNull().default(true),
+  showExploreCta: boolean("show_explore_cta").notNull().default(false),
+  enableAiText: boolean("enable_ai_text").notNull().default(true),
+  heroAutoplay: boolean("hero_autoplay").notNull().default(true),
+  enableFallbackBanner: boolean("enable_fallback_banner").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

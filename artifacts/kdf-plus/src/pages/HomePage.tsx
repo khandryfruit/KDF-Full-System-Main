@@ -20,6 +20,7 @@ import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 import { asArrayFromApi } from "@/lib/asArrayFromApi";
 import { useCart } from "@/context/CartContext";
+import { bannerCopy, bannerFlags, heroOverlayStyle } from "@/lib/bannerDisplay";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 type Banner = import("@workspace/api-client-react").Banner;
@@ -185,10 +186,11 @@ function buildAutoPromotionBanner(products: Product[]): Banner {
 
 /* ─── AI Fallback Slides ─── */
 const BANNER_AI_SLIDES = [
-  { label: '🚚 FREE DELIVERY', headline: "Pakistan's Finest\nNuts & Dry Fruits", sub: 'Order Rs. 1,500+ and get free shipping nationwide', cta: 'Shop Now', g1: '#0b2e00', g2: '#2d6600', g3: '#4a9e00', orb1: '#6dbf2f', orb2: '#a3d96e', orb3: '#1a5200', icon: '🥜' },
-  { label: '⚡ FLASH OFFER', headline: "Flat 20% OFF\nPremium Selection", sub: 'Today only · Limited stock available', cta: 'Claim Offer', g1: '#4a0e00', g2: '#8c2200', g3: '#c23000', orb1: '#f97316', orb2: '#fb923c', orb3: '#7c2d12', icon: '⚡' },
-  { label: '🎁 GIFT PACKS', headline: "Perfect for Every\nOccasion", sub: 'Eid · Birthdays · Corporate gifting — curated with love', cta: 'Explore Gifts', g1: '#200832', g2: '#5e1155', g3: '#9e1a7a', orb1: '#db2777', orb2: '#e879a0', orb3: '#6b21a8', icon: '🎁' },
-  { label: '✨ NEW ARRIVALS', headline: "Fresh Premium\nNuts Just Landed", sub: '100% authentic · Sourced directly from farms', cta: 'See New', g1: '#051830', g2: '#0a3870', g3: '#0e5aaa', orb1: '#38bdf8', orb2: '#7dd3fc', orb3: '#0369a1', icon: '✨' },
+  { label: "Premium delivery", headline: "Premium Dry Fruits\nDelivered Fast", sub: "Fresh • Authentic • Fast delivery across Pakistan", cta: "Shop Now", offer: "Up to 20% OFF", g1: "#0b2e00", g2: "#2d6600", g3: "#4a9e00", orb1: "#6dbf2f", orb2: "#a3d96e", orb3: "#1a5200", icon: "🥜" },
+  { label: "Healthy snacking", headline: "Healthy Snacking\nStarts Here", sub: "Almonds, walnuts & premium nuts for your routine", cta: "Explore", offer: "Rs. 1,500+ free delivery", g1: "#0f3d2a", g2: "#166534", g3: "#15803d", orb1: "#4ade80", orb2: "#86efac", orb3: "#14532d", icon: "🌿" },
+  { label: "Trending now", headline: "Fresh Almonds\n& Dry Fruits", sub: "Customer favourites · Hygienically packed", cta: "Shop trending", offer: "Limited stock", g1: "#4a0e00", g2: "#8c2200", g3: "#c23000", orb1: "#f97316", orb2: "#fb923c", orb3: "#7c2d12", icon: "⚡" },
+  { label: "Seasonal picks", headline: "Gift-Ready\nPremium Packs", sub: "Eid · Birthdays · Corporate — curated with care", cta: "View gifts", offer: "Flat 15% OFF", g1: "#200832", g2: "#5e1155", g3: "#9e1a7a", orb1: "#db2777", orb2: "#e879a0", orb3: "#6b21a8", icon: "🎁" },
+  { label: "New arrivals", headline: "Farm-Fresh\nQuality You Trust", sub: "100% authentic lots · Same-day in key cities", cta: "See new", offer: "New this week", g1: "#051830", g2: "#0a3870", g3: "#0e5aaa", orb1: "#38bdf8", orb2: "#7dd3fc", orb3: "#0369a1", icon: "✨" },
 ];
 
 const HERO_FRAME_CLASS =
@@ -345,23 +347,30 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
             style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)' }} />
           {/* Content */}
           <div className="relative z-10 px-6 pb-8 pt-12 sm:px-14 sm:pb-0 sm:pt-0 flex-1 flex flex-col justify-end sm:justify-center">
-            <span className="inline-block text-[11px] sm:text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 sm:mb-4"
-              style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', backdropFilter: 'blur(10px)' }}>
-              {s.label}
-            </span>
-            <h1 className="mb-2 text-2xl font-black leading-tight text-white sm:mb-3 sm:text-4xl lg:text-5xl"
-              style={{ textShadow: '0 2px 20px rgba(0,0,0,0.45)' }}>
-              {s.headline.split('\n').map((line, i) => (
-                <Fragment key={i}>{line}{i < s.headline.split('\n').length - 1 && <br />}</Fragment>
+            {s.label && (
+              <span className="mb-3 inline-block rounded-full border border-white/25 bg-white/18 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white backdrop-blur-md sm:mb-4 sm:text-xs">
+                {s.label}
+              </span>
+            )}
+            {s.offer && (
+              <span className="mb-2 inline-block rounded-full bg-[#F58300]/90 px-2.5 py-0.5 text-[10px] font-bold text-white shadow sm:mb-3">
+                {s.offer}
+              </span>
+            )}
+            <h1 className="mb-2 text-2xl font-black leading-tight text-white sm:mb-3 sm:text-4xl lg:text-5xl" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.35)" }}>
+              {s.headline.split("\n").map((line, i) => (
+                <Fragment key={i}>{line}{i < s.headline.split("\n").length - 1 && <br />}</Fragment>
               ))}
             </h1>
-            <p className="text-white/70 text-xs sm:text-base mb-4 sm:mb-6 max-w-md">{s.sub}</p>
-            <button
-              className="plus-cta-glow inline-flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-black text-sm text-white shadow-xl hover:brightness-110 active:scale-95 transition-all"
-              style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.3)' }}
-            >
-              {s.cta} <ArrowRight className="w-4 h-4" />
-            </button>
+            {s.sub && <p className="mb-4 max-w-md text-xs text-white/80 sm:mb-6 sm:text-base">{s.sub}</p>}
+            {s.cta && (
+              <button
+                type="button"
+                className="plus-cta-glow inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/20 px-6 py-2.5 text-sm font-black text-white shadow-xl backdrop-blur-md transition-all hover:brightness-110 active:scale-95 sm:px-8 sm:py-3.5"
+              >
+                {s.cta} <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
           </div>
           {/* Floating icon right */}
           <div className="plus-icon-float absolute right-6 sm:right-16 bottom-4 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 pointer-events-none select-none"
@@ -423,12 +432,27 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
         >
         {heroSlides.map((banner, i) => {
           const desktopImg = banner.imageUrl
-            ? getProductImageSrc(banner.imageUrl, { maxWidth: isMobile ? 960 : 1600 })
+            ? getProductImageSrc(banner.imageUrl, { maxWidth: isMobile ? 1200 : 1920 })
             : null;
           const mobileImg = (banner as any).mobileImageUrl
-            ? getProductImageSrc((banner as any).mobileImageUrl, { maxWidth: 800 })
+            ? getProductImageSrc((banner as any).mobileImageUrl, { maxWidth: 960 })
             : desktopImg;
           const bgImg = isMobile ? mobileImg : desktopImg;
+          const flags = bannerFlags(banner as Record<string, unknown>);
+          const labelText = bannerCopy(banner.label);
+          const titleText = bannerCopy(banner.title);
+          const subtitleText = bannerCopy(banner.subtitle);
+          const ctaText = bannerCopy(banner.cta);
+          const healthText = bannerCopy((banner as any).healthBenefitText);
+          const urgencyText = bannerCopy((banner as any).urgencyText);
+          const hasTextBlock =
+            (flags.showLabel && labelText) ||
+            (flags.showTitle && titleText) ||
+            (flags.showSubtitle && subtitleText) ||
+            healthText ||
+            urgencyText ||
+            (flags.showCta && ctaText) ||
+            flags.showExploreCta;
 
           const videoSrc = isMobile
             ? ((banner as any).mobileVideoUrl || (banner as any).videoUrl || null)
@@ -447,7 +471,7 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
               {i === idx && videoSrc ? (
                 <video
                   key={videoSrc}
-                  className="absolute inset-0 w-full h-full object-cover object-center"
+                  className="kdf-hero-banner__media absolute inset-0 h-full w-full object-cover object-center"
                   src={videoSrc.startsWith("http") ? videoSrc : `/api/storage/objects/${videoSrc}`}
                   autoPlay={i === idx}
                   muted
@@ -458,12 +482,12 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
               ) : bgImg ? (
                 <img
                   src={bgImg}
-                  alt={customerMarketingText(banner.title, "Premium dry fruit collection")}
-                  className="absolute inset-0 h-full w-full object-cover object-center lg:object-[center_22%]"
+                  alt={titleText || labelText || "Khan Dry Fruit promotion"}
+                  className="kdf-hero-banner__media absolute inset-0 h-full w-full object-cover object-center lg:object-[center_24%]"
                   loading={i === 0 ? "eager" : "lazy"}
                   decoding="async"
                   fetchPriority={i === 0 ? "high" : "low"}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
                 /* No image — AI gradient background */
@@ -485,19 +509,9 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
               <div className="plus-shine-anim absolute inset-y-0 w-24 pointer-events-none z-[5]"
                 style={{ background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%)' }} />
 
-              {/* Gradient overlay — mobile: bottom-heavy for luxury editorial layout */}
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: bgImg
-                    ? isMobile
-                      ? "linear-gradient(180deg, rgba(13,43,0,0.15) 0%, rgba(0,0,0,0.25) 38%, rgba(0,0,0,0.82) 100%)"
-                      : "linear-gradient(to right, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.05) 100%)"
-                    : `linear-gradient(135deg, ${DARK} 0%, #1a4d00 60%, #2d7a00 100%)`,
-                }}
-              />
+              <div className="absolute inset-0" style={heroOverlayStyle(!!(bgImg || videoSrc), isMobile)} />
 
-              {/* Content — mobile: bottom stack + glass CTAs; desktop: side-by-side */}
+              {hasTextBlock && (
               <div className="absolute inset-0 z-10 flex flex-col justify-end gap-3 px-4 pb-5 pt-12 sm:flex-row sm:items-center sm:justify-start sm:gap-10 sm:px-14 sm:pb-0 sm:pt-0 lg:gap-14 lg:px-16">
 
                 <div className="flex-1 min-w-0 sm:self-center">
@@ -512,34 +526,28 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                       </span>
                     </div>
                   )}
-                  {banner.label && (
-                    <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/95 px-3 py-1.5 rounded-full mb-2 sm:mb-3 border border-amber-200/35 bg-white/12 backdrop-blur-md shadow-sm ring-1 ring-amber-300/25 motion-safe:animate-[pulse_3s_ease-in-out_infinite] sm:motion-safe:animate-[pulse_4s_ease-in-out_infinite]">
-                      {customerMarketingText(banner.label, "Seasonal Pick")}
+                  {flags.showLabel && labelText && (
+                    <span className="mb-2 inline-block rounded-full border border-amber-200/35 bg-white/12 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-white/95 shadow-sm ring-1 ring-amber-300/25 backdrop-blur-md sm:mb-3 sm:text-xs">
+                      {labelText}
                     </span>
                   )}
-                  <h2
-                    className="mb-1.5 max-w-[20rem] text-[1.45rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg sm:mb-2.5 sm:max-w-2xl sm:text-3xl md:text-4xl lg:max-w-3xl lg:text-[2.35rem] lg:leading-[1.08]"
-                    style={{ textShadow: "0 3px 22px rgba(0,0,0,0.45)" }}
-                  >
-                    {customerMarketingText(banner.title, "Premium Dry Fruit Collection").replace(/\boofer\b/gi, "offer")}
-                  </h2>
-                  {banner.subtitle && (
+                  {flags.showTitle && titleText && (
+                    <h2
+                      className="mb-1.5 max-w-[20rem] text-[1.45rem] font-black leading-[1.12] tracking-tight text-white drop-shadow-lg sm:mb-2.5 sm:max-w-2xl sm:text-3xl md:text-4xl lg:max-w-3xl lg:text-[2.35rem] lg:leading-[1.08]"
+                      style={{ textShadow: "0 2px 16px rgba(0,0,0,0.35)" }}
+                    >
+                      {titleText}
+                    </h2>
+                  )}
+                  {flags.showSubtitle && subtitleText && (
                     <p className="mb-2.5 max-w-[19rem] text-sm font-medium leading-snug text-white/90 sm:mb-4 sm:max-w-xl sm:text-base lg:text-lg">
-                      {customerMarketingText(banner.subtitle).replace(/\boofer\b/gi, "offer")}
+                      {subtitleText}
                     </p>
                   )}
-                  {((banner as any).healthBenefitText || (banner as any).urgencyText) && (
+                  {(healthText || urgencyText) && (
                     <div className="mb-3 flex max-w-xl flex-wrap gap-2 text-[11px] font-bold text-white/90 sm:mb-4 sm:text-xs">
-                      {(banner as any).healthBenefitText && (
-                        <span className="rounded-full border border-white/20 bg-white/12 px-3 py-1 backdrop-blur-md">
-                          {customerMarketingText((banner as any).healthBenefitText)}
-                        </span>
-                      )}
-                      {(banner as any).urgencyText && (
-                        <span className="rounded-full border border-amber-200/30 bg-amber-400/18 px-3 py-1 text-amber-50 backdrop-blur-md">
-                          {customerMarketingText((banner as any).urgencyText)}
-                        </span>
-                      )}
+                      {healthText && <span className="rounded-full border border-white/20 bg-white/12 px-3 py-1 backdrop-blur-md">{healthText}</span>}
+                      {urgencyText && <span className="rounded-full border border-amber-200/30 bg-amber-400/18 px-3 py-1 text-amber-50 backdrop-blur-md">{urgencyText}</span>}
                     </div>
                   )}
                   {(banner as any).countdownEndAt && (
@@ -547,31 +555,39 @@ function HeroBanner({ banners, loading, smartCatalog = [] }: { banners: Banner[]
                       <CountdownTimer endAt={(banner as any).countdownEndAt} />
                     </div>
                   )}
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                    <button
-                      className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white ring-1 ring-white/20 transition-transform duration-200 ease-out hover:opacity-95 active:scale-[0.97] sm:hover:scale-[1.02] sm:px-7 sm:py-3 sm:text-[15px]"
-                      style={{ backgroundColor: GREEN, boxShadow: `0 8px 24px ${GREEN}45` }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleBannerClick(banner);
-                      }}
-                    >
-                      {customerMarketingText(banner.cta, "Shop Now")} <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/12 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-opacity duration-200 hover:bg-white/20 active:opacity-95 sm:px-7 sm:py-3 sm:text-[15px]"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLocation("/products");
-                      }}
-                    >
-                      Explore catalog
-                    </button>
-                  </div>
+                  {((flags.showCta && ctaText) || flags.showExploreCta) && (
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                      {flags.showCta && ctaText && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white ring-1 ring-white/20 transition-transform duration-200 ease-out hover:opacity-95 active:scale-[0.97] sm:hover:scale-[1.02] sm:px-7 sm:py-3 sm:text-[15px]"
+                          style={{ backgroundColor: GREEN, boxShadow: `0 8px 24px ${GREEN}45` }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleBannerClick(banner);
+                          }}
+                        >
+                          {ctaText} <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                        </button>
+                      )}
+                      {flags.showExploreCta && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/12 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-opacity duration-200 hover:bg-white/20 active:opacity-95 sm:px-7 sm:py-3 sm:text-[15px]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocation("/products");
+                          }}
+                        >
+                          Explore catalog
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
               </div>
+              )}
             </div>
           );
         })}

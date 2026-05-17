@@ -42,6 +42,8 @@ export interface KdfStoreProductCardProps {
   cartIcon?: "plus" | "cart";
   onQuickAdd?: (product: KdfStoreProductCardData) => void;
   className?: string;
+  /** Smaller card for PDP / sidebar carousels */
+  compact?: boolean;
 }
 
 function KdfStoreProductCardInner({
@@ -51,6 +53,7 @@ function KdfStoreProductCardInner({
   cartIcon = "plus",
   onQuickAdd,
   className = "",
+  compact = false,
 }: KdfStoreProductCardProps) {
   const { addItem } = useCart();
   const [wished, setWished] = useState(false);
@@ -72,7 +75,7 @@ function KdfStoreProductCardInner({
 
   const href = `/products/${product.slug || product.id}`;
   const rawImage = product.images?.[0];
-  const imageUrl = rawImage ? getProductImageSrc(rawImage, { maxWidth: 560 }) : null;
+  const imageUrl = rawImage ? getProductImageSrc(rawImage, { maxWidth: compact ? 400 : 560 }) : null;
   const initial = product.name?.[0]?.toUpperCase() ?? "N";
   const outOfStock = product.stock === 0;
   const hasVariants = (product.variants?.length ?? 0) > 0;
@@ -103,11 +106,11 @@ function KdfStoreProductCardInner({
 
   return (
     <div
-      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-gray-100/90 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.07)] ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)] hover:ring-[#5FA800]/20 ${className}`}
+      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-gray-100/90 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.07)] ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)] hover:ring-[#5FA800]/20 ${compact ? "kdf-store-card--compact" : ""} ${className}`}
       data-testid={`card-product-${product.id}`}
     >
       <Link href={href} className="flex min-h-0 flex-1 flex-col">
-        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-white">
+        <div className={`kdf-store-card__media-wrap relative w-full shrink-0 overflow-hidden bg-white ${compact ? "" : "aspect-square"}`}>
           {badgeText && (
             <span
               className={`absolute left-2 top-2 z-[8] rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ${
@@ -133,7 +136,7 @@ function KdfStoreProductCardInner({
               decoding="async"
               sizes="(max-width: 640px) 49vw, (max-width: 1024px) 33vw, 240px"
               onError={() => setImgError(true)}
-              className="absolute inset-0 h-full w-full object-contain p-1 transition-transform duration-500 group-hover:scale-[1.03]"
+              className={`absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-[1.03] ${compact ? "object-cover p-0" : "object-contain p-1"}`}
             />
           )}
 
@@ -146,8 +149,8 @@ function KdfStoreProductCardInner({
           )}
         </div>
 
-        <div className="flex flex-col px-2.5 pt-2">
-          <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-gray-900 sm:text-[15px] md:text-[17px]">
+        <div className={`kdf-store-card__body flex flex-col ${compact ? "px-3 pt-2" : "px-2.5 pt-2"}`}>
+          <h3 className={`line-clamp-2 font-semibold leading-snug text-gray-900 ${compact ? "text-[13px]" : "text-[13px] sm:text-[15px] md:text-[17px]"}`}>
             {displayName}
           </h3>
           {weightLine && (
@@ -156,7 +159,7 @@ function KdfStoreProductCardInner({
         </div>
       </Link>
 
-      <div className="flex items-end justify-between gap-2 px-2.5 pb-2.5">
+      <div className={`kdf-store-card__price-row flex items-end justify-between gap-2 ${compact ? "px-3 pb-3" : "px-2.5 pb-2.5"}`}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-0.5">
             <span className="text-[15px] font-bold leading-none text-gray-900 sm:text-base">
