@@ -4,6 +4,7 @@
 import { isDeliveryOnlyMessage, isTrackingOnlyMessage } from "./waIntentEngine.js";
 import {
   isPureGreetingMessage,
+  isMixedGreetingProductMessage,
   productRootsInMessage,
   extractProductQueryFromMessage,
 } from "./waProductBrain.js";
@@ -121,6 +122,17 @@ export function classifyWaMessage(text: string, ctx: IntentContext = {}): Classi
 
   if (!t) {
     return { intent: "general", topic: "general", confidence: 0.2, reason: "empty", blockProductCatalog: true };
+  }
+
+  if (isMixedGreetingProductMessage(raw)) {
+    return {
+      intent: "product_search",
+      topic: "product",
+      confidence: 0.9,
+      reason: "mixed greeting + product intent",
+      productQuery: extractProductQueryFromMessage(raw),
+      blockProductCatalog: true,
+    };
   }
 
   if (isPureGreetingMessage(raw)) {

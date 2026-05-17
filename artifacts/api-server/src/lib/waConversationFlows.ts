@@ -42,35 +42,48 @@ function displayProductName(query: string): string {
   return map[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
 }
 
-/** Human welcome text (quick actions sent separately). */
-export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang): string {
+/** Human welcome text — pure greeting (buttons: Order + Support only). */
+export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang, repeatCustomer = false): string {
   const t = String(textBody ?? "").trim().toLowerCase();
   const isAssalam =
     /\b(assalam|asalam|salam|aoa|aslm)\b/i.test(t) && !/\b(wa alaikum|walikum|walaikum)\b/i.test(t);
   const roman = textBody ? isRomanUrduWa(textBody) : lang !== "ur";
+  const welcomeBack = repeatCustomer
+    ? (roman ? "Dobara khush aamdeed 😊\n\n" : lang === "en" ? "Welcome back 😊\n\n" : "دوبارہ خوش آمدید 😊\n\n")
+    : "";
 
   if (isAssalam && !roman && lang !== "en") {
     return (
-      `وعلیکم السلام 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\n` +
-      `آج کس چیز میں مدد کر سکتا ہوں؟\n\nمیں products، delivery، payments اور orders میں مدد کر سکتا ہوں۔`
+      `${welcomeBack}وعلیکم السلام 😊\n\n*KDF MART* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے۔\n\nآج کس چیز میں مدد کر سکتا ہوں؟`
     );
   }
   if (lang === "en") {
     return (
-      `Assalam o Alaikum 😊\n\nWelcome to *Khan Dry Fruits*.\n\nHope you are well 🌟\n\n` +
-      `How can I help you today?\n\nI can help with products, delivery, payments, and orders.`
+      `${welcomeBack}Assalam o Alaikum 😊\n\nWelcome to *KDF MART / Khan Dry Fruits*.\n\nHope you are well.\n\nHow can I help you today?`
     );
   }
   if (roman) {
     return (
-      `Assalam o Alaikum 😊\n\n*Khan Dry Fruits* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge 🌟\n\n` +
-      `Aaj kis cheez mein madad kar sakta hoon?\n\nMain products, delivery, payments aur orders mein madad kar sakta hoon.`
+      `${welcomeBack}Assalam o Alaikum 😊\n\n*KDF MART* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge.\n\nAaj kis cheez mein madad kar sakta hoon?`
     );
   }
   return (
-    `السلام علیکم 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے 🌟\n\n` +
-    `آج کس چیز میں مدد کر سکتا ہوں؟\n\nمیں products، delivery، payments اور orders میں مدد کر سکتا ہوں۔`
+    `${welcomeBack}السلام علیکم 😊\n\n*KDF MART* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے۔\n\nآج کس چیز میں مدد کر سکتا ہوں؟`
   );
+}
+
+/** Mixed greeting + product e.g. "Hello almonds chahiye" */
+export function buildMixedGreetingProductReply(textBody: string, lang: WaLang): string {
+  const query = extractProductQueryFromMessage(textBody);
+  const name = displayProductName(query || textBody);
+  const roman = isRomanUrduWa(textBody);
+  if (lang === "en") {
+    return `Ji 😊\n\nLooking for *${name}*?\n\nI can share *price* or *quality* details — just tell me 😊`;
+  }
+  if (roman) {
+    return `Ji 😊\n\n*${name}* chahiye?\n\nMain *price* ya *quality* bata sakta hoon 😊`;
+  }
+  return `جی 😊\n\n*${name}* چاہیے؟\n\nمیں *قیمت* یا *quality* بتا سکتا ہوں 😊`;
 }
 
 /** Delivery charges — natural text + ask city. No menus. */

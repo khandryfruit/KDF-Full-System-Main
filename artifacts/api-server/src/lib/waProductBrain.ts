@@ -63,8 +63,26 @@ export function productRootsInMessage(text: string): string[] {
   return productRootTermsFromQuery(text);
 }
 
+/** Greeting + product in one message e.g. "Hello almonds chahiye" */
+export function isMixedGreetingProductMessage(text: string): boolean {
+  const raw = String(text ?? "").trim();
+  if (!raw) return false;
+  const lower = raw.toLowerCase();
+  const hasGreet =
+    /\b(hi|hello|hey|hy|hii|helo|salam|salaam|assalam|assalamu|aoa|aslam|good morning|good evening|السلام|سلام)\b/i.test(lower) ||
+    /\b(wa alaikum|walikum|walaikum)\b/i.test(lower);
+  if (!hasGreet) return false;
+  if (productRootsInMessage(raw).length > 0) return true;
+  for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
+    if (lower.includes(key)) return true;
+  }
+  return /\b(almond|badam|pista|kaju|akhrot|walnut|dry fruit|nuts)\b/i.test(lower) &&
+    /\b(chahiye|chahie|chaiye|lena|mangwana|need|want)\b/i.test(lower);
+}
+
 export function isPureGreetingMessage(text: string): boolean {
   const raw = String(text ?? "").trim();
+  if (isMixedGreetingProductMessage(raw)) return false;
   if (!raw || raw.length > 80) return false;
   const n = raw
     .toLowerCase()

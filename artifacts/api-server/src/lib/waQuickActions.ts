@@ -1,15 +1,14 @@
 /**
- * Hybrid replies: human text first, context-aware quick-action template second.
+ * Hybrid replies: human text first, context-aware quick-action template second (V5).
  */
 import { sendInteractiveButtons, sendInteractiveList } from "./whatsapp.js";
 import { resolveWaLang, type WaLang } from "./waPremiumJourney.js";
-import { extractProductQueryFromMessage, isRomanUrduWa } from "./waProductBrain.js";
+import { extractProductQueryFromMessage, isRomanUrduWa, isMixedGreetingProductMessage } from "./waProductBrain.js";
 import type { ClassifiedMessage } from "./waIntentClassifier.js";
 import { isPaymentIssueMessage } from "./waIntentClassifier.js";
 import { isProductEducationMessage } from "./waSalesConversation.js";
 
 export type QuickActionContext =
-  | "default"
   | "greeting"
   | "product"
   | "delivery"
@@ -18,13 +17,14 @@ export type QuickActionContext =
   | "support"
   | "orders"
   | "education"
+  | "mixed_greeting_product"
   | "none";
 
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
 export type QuickActionItem = { id: string; title: string; description?: string };
 
-const QA = {
+export const QA = {
   order: "wa_qa_order",
   payment: "wa_qa_payment",
   delivery: "wa_qa_delivery",
@@ -32,7 +32,9 @@ const QA = {
   support: "wa_qa_support",
   orders: "wa_qa_orders",
   prices: "wa_qa_prices",
+  benefits: "wa_qa_benefits",
   quality: "wa_qa_quality",
+  buy: "wa_qa_buy",
   call: "wa_qa_call",
   whatsapp: "wa_qa_whatsapp",
   website: "wa_qa_website",
@@ -55,11 +57,14 @@ export function resolveQuickActionContext(opts: {
   const intent = opts.classified?.intent ?? opts.intent ?? "";
   const topic = opts.classified?.topic ?? "";
 
+  if (isMixedGreetingProductMessage(text)) return "mixed_greeting_product";
+
   if (intent === "payment_issue" || isPaymentIssueMessage(text)) return "payment_issue";
   if (intent === "payment_info" || topic === "payment") return "payment";
   if (intent === "delivery" || topic === "delivery") return "delivery";
   if (intent === "tracking" || topic === "tracking") return "orders";
   if (intent === "address_faq") return "support";
+  if (intent === "complaint") return "support";
 
   if (isProductEducationMessage(text) || (intent === "conversation" && /faide|fayde|benefit|quality|review/i.test(text))) {
     return "education";
@@ -73,84 +78,66 @@ export function resolveQuickActionContext(opts: {
     intent === "product_search" ||
     intent === "pricing" ||
     intent === "recommendation" ||
-    /\b(badam|almond|pista|kaju|akhrot|dry fruit|nuts)\b/i.test(text)
+    /\b(badam|almond|pista|kaju|akhrot|dry fruit|nuts|chahiye|chahie)\b/i.test(text)
   ) {
     return "product";
   }
 
-  if (intent === "greeting" || /^(hi|hello|hey|salam|assalam|aoa)\b/i.test(text.trim())) return "greeting";
-  if (intent === "support" || intent === "complaint") return "support";
+  if (intent === "greeting") return "greeting";
+  if (intent === "support") return "support";
 
-  return "default";
+  return "greeting";
 }
 
+/** V5: minimal relevant buttons per context */
 export function buildQuickActions(context: QuickActionContext, lang: WaLang): QuickActionItem[] {
-  const en = lang === "en";
   switch (context) {
-    case "product":
+    case "greeting":
       return [
-        { id: QA.order, title: "🛒 Order", description: en ? "Start order" : "Order shuru" },
-        { id: QA.prices, title: "💰 Prices", description: en ? "See prices" : "Prices dekhein" },
-        { id: QA.quality, title: "⭐ Quality", description: en ? "Quality info" : "Quality" },
-        { id: QA.support, title: "📞 Support", description: en ? "Talk to us" : "Madad" },
+        { id: QA.order, title: "🛒 Order" },
+        { id: QA.support, title: "📞 Support" },
+      ];
+    case "mixed_greeting_product":
+    case "product":
+    case "education":
+      return [
+        { id: QA.prices, title: "💰 Price" },
+        { id: QA.benefits, title: "⭐ Benefits" },
+        { id: QA.buy, title: "🛒 Buy" },
       ];
     case "delivery":
       return [
-        { id: QA.delivery, title: "🚚 Delivery", description: en ? "Charges & time" : "Charges" },
-        { id: QA.track, title: "📦 Track Order", description: en ? "Order status" : "Track" },
-        { id: QA.support, title: "📞 Support", description: en ? "Help" : "Madad" },
+        { id: QA.delivery, title: "🚚 Delivery" },
+        { id: QA.track, title: "📦 Track" },
+        { id: QA.support, title: "📞 Support" },
       ];
     case "payment":
     case "payment_issue":
-      return [
-        { id: QA.payment, title: "💳 Payment", description: en ? "COD / Bank / Easy" : "Payment methods" },
-        { id: QA.support, title: "📞 Support", description: en ? "Help" : "Madad" },
-        { id: QA.orders, title: "📋 Orders", description: en ? "Your orders" : "Aapke orders" },
-      ];
+      return [{ id: QA.payment, title: "💳 Payment" }];
     case "orders":
       return [
-        { id: QA.orders, title: "📋 Orders", description: en ? "Status & history" : "Orders" },
-        { id: QA.track, title: "📦 Track", description: en ? "Track parcel" : "Track" },
-        { id: QA.support, title: "📞 Support", description: en ? "Help" : "Madad" },
-      ];
-    case "education":
-      return [
-        { id: QA.order, title: "🛒 Order", description: en ? "Buy now" : "Order" },
-        { id: QA.prices, title: "💰 Prices", description: en ? "Price list" : "Prices" },
-        { id: QA.quality, title: "⭐ Quality", description: en ? "More info" : "Quality" },
-        { id: QA.support, title: "📞 Support", description: en ? "Help" : "Madad" },
+        { id: QA.orders, title: "📋 Orders" },
+        { id: QA.track, title: "📦 Track" },
+        { id: QA.support, title: "📞 Support" },
       ];
     case "support":
       return [
-        { id: QA.call, title: "📞 Call", description: KDF_STORE_PHONE },
-        { id: QA.whatsapp, title: "💬 WhatsApp", description: "Chat with us" },
-        { id: QA.website, title: "🌐 Website", description: "khandryfruit.com" },
+        { id: QA.call, title: "📞 Call" },
+        { id: QA.website, title: "🌐 Website" },
+        { id: QA.whatsapp, title: "💬 WhatsApp" },
       ];
-    case "greeting":
-    case "default":
     default:
       return [
-        { id: QA.order, title: "🛒 Order", description: en ? "Place order" : "Order karein" },
-        { id: QA.payment, title: "💳 Payment", description: en ? "Payment info" : "Payment" },
-        { id: QA.delivery, title: "🚚 Delivery", description: en ? "Delivery charges" : "Delivery" },
-        { id: QA.track, title: "📦 Track Order", description: en ? "Track parcel" : "Track" },
-        { id: QA.orders, title: "📋 Orders", description: en ? "Past orders" : "Orders" },
-        { id: QA.support, title: "📞 Support", description: en ? "Call / chat" : "Madad" },
+        { id: QA.order, title: "🛒 Order" },
+        { id: QA.support, title: "📞 Support" },
       ];
   }
 }
 
-const KDF_STORE_PHONE = "04237444400";
-
 function quickActionsFooter(lang: WaLang): string {
-  return lang === "en" ? "Tap an option below 👇" : "Neeche option select karein 👇";
+  return lang === "en" ? "Quick actions 👇" : "Neeche option 👇";
 }
 
-function quickActionsListLabel(lang: WaLang): string {
-  return lang === "en" ? "Quick Actions" : "Quick Actions";
-}
-
-/** Send quick-action row (list if 4+, else 3 buttons). */
 export async function sendQuickActionTemplate(opts: {
   phone: string;
   context: QuickActionContext;
@@ -177,7 +164,7 @@ export async function sendQuickActionTemplate(opts: {
   await sendInteractiveList({
     phone: opts.phone,
     body: quickActionsFooter(lang),
-    buttonLabel: quickActionsListLabel(lang).slice(0, 20),
+    buttonLabel: "Menu",
     rows: items.map((i) => ({
       id: i.id,
       title: i.title.slice(0, 24),

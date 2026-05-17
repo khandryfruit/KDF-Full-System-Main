@@ -2342,11 +2342,38 @@ async function trySendHumanGreetingReply(opts: {
   textBody: string;
   waSettings: any;
 }): Promise<boolean> {
+  const { isMixedGreetingProductMessage } = await import("../lib/waProductBrain.js");
+  if (isMixedGreetingProductMessage(opts.textBody)) {
+    const { buildMixedGreetingProductReply } = await import("../lib/waConversationFlows.js");
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
+    const conv = await getConversationState(opts.phone);
+    let existing: Record<string, unknown> = {};
+    try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+    const lang = resolveWaLang(existing, opts.textBody);
+    const productQ = extractProductQueryFromMessage(opts.textBody);
+    await sendWaReplyWithActions(opts.phone, buildMixedGreetingProductReply(opts.textBody, lang), opts.waSettings, {
+      templateName: "mixed_greeting_product",
+      actionContext: "mixed_greeting_product",
+      textBody: opts.textBody,
+      stateData: { ...existing, pendingProductQuery: productQ, pendingEducationQuery: productQ },
+    });
+    await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
+      ...existing,
+      pendingProductQuery: productQ,
+      greetedAt: new Date().toISOString(),
+    });
+    await persistConversationTurn(opts.phone, { intent: "product_search", topic: "mixed_greeting" });
+    return true;
+  }
+
   if (!isPureGreetingMessage(opts.textBody) && !isGreeting(opts.textBody)) return false;
   const conv = await getConversationState(opts.phone);
   let existing: Record<string, unknown> = {};
   try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
   const { hasConversationStarted, buildGreetingContinueReply } = await import("../lib/waAiSalesGuards.js");
+  const mem = await loadConversationMemory(opts.phone).catch(() => null);
+  const repeatCustomer = Boolean(mem?.lastIntent && mem.lastIntent !== "greeting");
   if (await hasConversationStarted(opts.phone)) {
     await sendWaReplyWithActions(opts.phone, buildGreetingContinueReply(opts.textBody), opts.waSettings, {
       templateName: "greeting_continue",
@@ -2361,7 +2388,7 @@ async function trySendHumanGreetingReply(opts: {
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
   const lang = resolveWaLang(existing, opts.textBody);
-  await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, {
+  await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang, repeatCustomer), opts.waSettings, {
     templateName: "human_greeting",
     actionContext: "greeting",
     textBody: opts.textBody,
@@ -2503,6 +2530,16 @@ async function tryResolveWaCustomerMessage(opts: {
       await sendPaymentIssueRecovery({ phone: opts.phone, lang, waSettings: opts.waSettings });
       // Recovery message includes payment buttons — no duplicate quick-action row.
       await persistConversationTurn(opts.phone, { intent: "payment_issue", topic: "payment" });
+      return true;
+    }
+    if (convReply.template === "complaint_reply" && convReply.reply) {
+      await sendWaReplyWithActions(opts.phone, convReply.reply, opts.waSettings, {
+        templateName: "complaint_reply",
+        actionContext: "support",
+        textBody: opts.textBody,
+        stateData,
+      });
+      await persistConversationTurn(opts.phone, { intent: "complaint", topic: "complaint" });
       return true;
     }
     if (convReply.template === "standalone_price_text" && convReply.reply) {
@@ -3485,7 +3522,7 @@ async function handlePremiumCommerceButton(opts: {
       stateData.pendingEducationQuery ?? stateData.pendingProductQuery ?? "",
     ).trim();
 
-    if (id === "wa_qa_order") {
+    if (id === "wa_qa_order" || id === "wa_qa_buy") {
       await sendWaReplyWithActions(
         opts.phone,
         lang === "en"
@@ -3644,13 +3681,16 @@ async function handlePremiumCommerceButton(opts: {
       return true;
     }
 
-    if (id === "wa_qa_quality") {
+    if (id === "wa_qa_quality" || id === "wa_qa_benefits") {
       const q = productQ || "badam";
-      const { buildProductQualityMessage } = await import("../lib/waConversationFlows.js");
-      await sendWaReplyWithActions(opts.phone, buildProductQualityMessage(q, lang), opts.waSettings, {
-        templateName: "qa_quality",
+      const { buildProductQualityMessage, buildProductEducationMessage } = await import("../lib/waConversationFlows.js");
+      const body = id === "wa_qa_benefits"
+        ? buildProductEducationMessage(q, lang)
+        : buildProductQualityMessage(q, lang);
+      await sendWaReplyWithActions(opts.phone, body, opts.waSettings, {
+        templateName: id === "wa_qa_benefits" ? "qa_benefits" : "qa_quality",
         actionContext: "product",
-        stateData: { ...stateData, pendingEducationQuery: q },
+        stateData: { ...stateData, pendingEducationQuery: q, pendingProductQuery: q },
       });
       return true;
     }

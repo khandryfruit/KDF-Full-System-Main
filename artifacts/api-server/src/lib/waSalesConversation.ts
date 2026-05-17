@@ -315,6 +315,13 @@ export async function tryConversationalSalesReply(opts: {
     return { handled: true, template: "payment_issue_recovery" };
   }
 
+  if (/\b(complaint|shikayat|refund|return|damage|kharab|ganda)\b/i.test(text)) {
+    const sorry = roman
+      ? "Maazrat chahte hain 😊\n\nMain foran madad karta hoon. Batayein kya masla aaya?"
+      : "معذرت چاہتے ہیں 😊\n\nمیں فوراً مدد کرتا ہوں۔ بتائیے کیا مسئلہ آیا؟";
+    return { handled: true, reply: sorry, template: "complaint_reply" };
+  }
+
   if (isStandaloneFaqMessage(text) && /^(price|prices|qeemat|kitna|how much|rate)/i.test(lower)) {
     return {
       handled: true,
