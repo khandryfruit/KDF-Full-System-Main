@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useProductRecommendations } from "@/components/ProductRecommendations";
 import { ProductDetailRecommendations } from "@/components/product-detail/ProductDetailRecommendations";
 import { MobilePurchaseSheet, type PurchaseIntent } from "@/components/purchase/MobilePurchaseSheet";
 import { useToast } from "@/hooks/use-toast";
@@ -323,6 +324,27 @@ function ProductDetailPageView() {
   });
 
   const productId: number = (product as any)?.id ?? 0;
+
+  const { data: sheetRecommendations } = useProductRecommendations({
+    context: "product",
+    productId,
+    limit: 4,
+    enabled: purchaseSheetOpen && productId > 0,
+  });
+
+  const mobileSheetRecommendations = useMemo(() => {
+    const fbt = sheetRecommendations?.frequentlyBoughtTogether ?? [];
+    const related = sheetRecommendations?.relatedProducts ?? [];
+    const seen = new Set<number>();
+    const out: typeof fbt = [];
+    for (const p of [...fbt, ...related]) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+      if (out.length >= 4) break;
+    }
+    return out;
+  }, [sheetRecommendations]);
 
   const { ref: desktopCtaRef, inView: desktopCtaInView } = useCtaInView<HTMLDivElement>();
 
@@ -856,7 +878,7 @@ function ProductDetailPageView() {
         availableStock={availableStock}
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
-        recommendations={recommendationData?.recommendedWithThis ?? []}
+        recommendations={mobileSheetRecommendations}
       />
 
       {/* Notify Me mobile modal */}
