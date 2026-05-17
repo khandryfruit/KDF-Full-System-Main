@@ -399,6 +399,14 @@ function ProductDetailPageView() {
     { limit: 24, sortBy: "newest" as const },
     { query: { queryKey: ["products", "pdp-gallery-engagement"], staleTime: 60_000, refetchOnWindowFocus: false } },
   );
+
+  const { data: recommendationData } = useProductRecommendations({
+    context: "product",
+    productId,
+    limit: 10,
+    enabled: !!productId,
+  });
+
   const galleryEngagementProducts: GalleryEngagementProduct[] = useMemo(() => {
     const fromRec = [
       ...(recommendationData?.recommendedWithThis ?? []),
@@ -441,13 +449,6 @@ function ProductDetailPageView() {
     }
     return merged;
   }, [engagementPool, productId, recommendationData]);
-
-  const { data: recommendationData } = useProductRecommendations({
-    context: "product",
-    productId,
-    limit: 10,
-    enabled: !!productId,
-  });
   const recommendedPairItems: PairProduct[] = useMemo(
     () => (recommendationData?.frequentlyBoughtTogether ?? []).slice(0, 4).map((p: any) => ({
       id: p.id,
