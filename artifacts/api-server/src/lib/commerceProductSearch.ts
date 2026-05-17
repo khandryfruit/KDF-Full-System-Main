@@ -17,6 +17,20 @@ import { KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 import { logProductSearch } from "./productSearchDebug.js";
 
 const STORE_BASE = (process.env.STOREFRONT_URL ?? process.env.PUBLIC_STORE_URL ?? KHAN_WEBSITE_URL).replace(/\/$/, "");
+const API_PUBLIC_BASE = (process.env.API_PUBLIC_URL ?? process.env.PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
+/** Absolute HTTPS URL for WhatsApp image messages */
+export function resolveCommerceImageUrl(image: string | null | undefined): string | null {
+  const raw = String(image ?? "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+  if (raw.startsWith("/")) {
+    if (API_PUBLIC_BASE) return `${API_PUBLIC_BASE}${raw}`;
+    return `${STORE_BASE}${raw}`;
+  }
+  return `${STORE_BASE}/${raw.replace(/^\//, "")}`;
+}
 
 export type CommerceProductHit = {
   id: string;
@@ -238,7 +252,7 @@ function mapRowToHit(
     slug: row.slug,
     price: variations.length ? `From ${formatRupees(basePrice)}` : formatRupees(basePrice),
     stock: row.stock ?? 0,
-    image: imgs[0] ?? null,
+    image: resolveCommerceImageUrl(imgs[0] ?? null),
     variations,
     tags,
     url: productUrl(row.slug),
@@ -271,6 +285,44 @@ export async function searchCommerceProducts(
 
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit);
+}
+
+/** Related / same-family products when exact query has no hit (never leave customer empty) */
+export async function searchRelatedCommerceProducts(
+  query: string,
+  limit = 4,
+): Promise<CommerceProductHit[]> {
+  const q = String(query ?? "").trim();
+  if (!q) return getCommerceFeaturedProducts(limit);
+
+  const categoryId = resolveCanonicalCategoryId(q);
+  const families = resolveQueryFamilies(q);
+  const rows = await getAllActiveProducts();
+  const related: CommerceProductHit[] = [];
+
+  for (const row of rows) {
+    const tags = Array.isArray(row.tags) ? row.tags.join(" ") : "";
+    if (categoryId && !productMatchesCategoryPrimary(row.name, tags, row.description, categoryId)) continue;
+    if (!categoryId && families.length > 0 && !productBelongsToFamilies(row.name, tags, row.description, families)) continue;
+    related.push(mapRowToHit(row, 45, categoryId ? "related_category" : "related_family"));
+  }
+
+  if (related.length > 0) {
+    related.sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name));
+    return related.slice(0, limit);
+  }
+
+  const loose = await searchCommerceProducts(q, limit * 2);
+  if (loose.length > 0) return loose.slice(0, limit);
+
+  return getCommerceFeaturedProducts(limit);
+}
+
+export async function getCommerceFeaturedProducts(limit = 4): Promise<CommerceProductHit[]> {
+  const rows = await getAllActiveProducts();
+  const featured = rows.filter((r) => r.featured && (r.stock ?? 0) > 0);
+  const pool = featured.length ? featured : rows.filter((r) => (r.stock ?? 0) > 0);
+  return pool.slice(0, limit).map((row) => mapRowToHit(row, 30, "featured_fallback"));
 }
 
 export async function searchCommerceProductsWithDebug(
@@ -356,7 +408,7 @@ export function commerceToWaCatalogProducts(hits: CommerceProductHit[]) {
     price: p.price,
     compareAt: null as string | null,
     description: p.description ?? null,
-    imageUrl: p.image,
+    imageUrl: resolveCommerceImageUrl(p.image),
     productUrl: p.url,
     variants: p.variations.map((v) => `${v.name}${v.value ? ` (${v.value})` : ""} — ${formatRupees(parsePrice(v.price))}`).join("\n"),
     variantLines: p.variations.map((v) => `${v.name}${v.value ? ` (${v.value})` : ""} — ${formatRupees(parsePrice(v.price))}`),
@@ -453,7 +505,7 @@ export function commerceHitToCatalogProduct(p: CommerceProductHit): import("./sh
     tags: p.tags.join(", "),
     category: p.tags[0] ?? null,
     score: p.score,
-    source: "shopify",
+    source: "commerce",
   };
 }
 
