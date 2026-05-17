@@ -9,6 +9,8 @@ export const WA_CHECKOUT_COLLECTION_STATES = new Set([
   "wa_order_await_city",
   "wa_order_await_address",
   "wa_order_await_delivery_notes",
+  "wa_order_await_payment",
+  "wa_order_await_bank_screenshot",
   "wa_order_await_confirm",
 ]);
 

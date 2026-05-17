@@ -17,6 +17,7 @@ import {
   sendRefundEmail,
 } from "../lib/email.js";
 import type { Response } from "express";
+import { enrichOrderItemsWithProductImages } from "../lib/waCommerceOrder.js";
 
 const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: string }> = {
   confirmed:         { title: "✅ Order Confirmed",        message: "Great news! Your order has been confirmed and will be processed soon." },
@@ -62,10 +63,14 @@ router.get("/orders", authMiddleware as any, async (req: AuthRequest, res: Respo
       ? await db.select().from(orderItemsTable).where(sql`${orderItemsTable.orderId} = ANY(${sql.raw(`ARRAY[${orderIds.join(",")}]`)})`)
       : [];
 
-    const ordersWithItems = orders.map(order => ({
-      ...order,
-      items: items.filter(item => item.orderId === order.id),
-    }));
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => ({
+        ...order,
+        items: await enrichOrderItemsWithProductImages(
+          items.filter((item) => item.orderId === order.id),
+        ),
+      })),
+    );
 
     res.json({ items: ordersWithItems, total: Number(countResult[0]?.count ?? 0), page, limit });
   } catch (err) {
@@ -137,7 +142,7 @@ router.get("/orders/:id", authMiddleware as any, async (req: AuthRequest, res: R
       res.status(403).json({ error: "Forbidden" }); return;
     }
     const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, id));
-    res.json({ ...order, items });
+    res.json({ ...order, items: await enrichOrderItemsWithProductImages(items) });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Failed" });

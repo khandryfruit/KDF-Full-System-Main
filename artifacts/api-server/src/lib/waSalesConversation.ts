@@ -126,6 +126,8 @@ export function buildStandalonePricePrompt(roman: boolean): string {
   return `جی 😊 کس product کی price چاہیے؟\n\nجیسے: *badam*، *pista*، *kaju*\n\nیا product + weight بھیجیں — جیسے *badam 500g* 😊`;
 }
 
+export { buildLanguageWelcomeMessage } from "./waPremiumJourney.js";
+
 export function buildWarmWelcomeReply(textBody: string): string {
   const roman = isRomanUrduWa(textBody);
   if (roman) {

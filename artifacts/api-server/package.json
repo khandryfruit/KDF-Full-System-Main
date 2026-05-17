@@ -10,7 +10,8 @@
     "railway:build": "pnpm run build:railway",
     "railway:start": "pnpm run start",
     "start": "node --max-http-header-size=65536 ./dist/index.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:wa-commerce": "esbuild src/lib/waCommerceOrder.test.ts --bundle --platform=node --format=esm --outfile=/tmp/waCommerceOrder.test.mjs && node --test /tmp/waCommerceOrder.test.mjs"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

@@ -1362,7 +1362,15 @@ export default function OrdersPage() {
                               {(viewOrder.items?.length ?? 0) > 0
                                 ? viewOrder.items.map((item: any, i: number) => (
                                     <div key={i} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
-                                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br flex-shrink-0 shadow-sm ${item.gradient ?? "from-green-300 to-emerald-500"}`} />
+                                      {item.productImage ? (
+                                        <img
+                                          src={item.productImage}
+                                          alt={item.name}
+                                          className="w-10 h-10 rounded-xl object-cover flex-shrink-0 shadow-sm border border-slate-100"
+                                        />
+                                      ) : (
+                                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br flex-shrink-0 shadow-sm ${item.gradient ?? "from-green-300 to-emerald-500"}`} />
+                                      )}
                                       <div className="flex-1 min-w-0">
                                         <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                                         {item.variant && <p className="text-xs text-slate-400">{item.variant}</p>}
