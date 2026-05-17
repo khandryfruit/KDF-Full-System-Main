@@ -375,13 +375,20 @@ export async function tryConversationalSalesReply(opts: {
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {
     const productQ = extractProductQueryFromMessage(text) || text;
     const wantsProduct = /\b(chahiye|chahye|chaiye|chahie|lena|mangwana|need|want)\b/i.test(lower);
+    if (wantsProduct) {
+      return {
+        handled: false,
+        triggerProduct: true,
+        productQuery: productQ,
+        clearIntentState: true,
+      };
+    }
     return {
-      handled: wantsProduct,
-      template: wantsProduct ? "product_memory_offer" : "product_interest_text",
+      handled: true,
+      template: "product_interest_text",
       productQuery: productQ,
       reply: buildProductInterestClarification(productQ, roman),
-      triggerProduct: wantsProduct,
-      clearIntentState: wantsProduct,
+      triggerProduct: false,
     };
   }
 

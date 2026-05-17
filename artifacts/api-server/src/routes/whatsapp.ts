@@ -2106,7 +2106,7 @@ async function sendCommerceProductWaCards(opts: {
   }
 }
 
-/** Show ONE best product (+ image). "Show more" reveals numbered list. */
+/** eCommerce DB → WhatsApp product card (image, URL, sizes, order). */
 async function deliverSingleProductOffer(opts: {
   phone: string;
   query: string;
@@ -2119,28 +2119,56 @@ async function deliverSingleProductOffer(opts: {
   const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
   const q = extractProductSearchQuery(rawQ) || rawQ;
 
-  const { isShowMoreProductsMessage, buildNumberedProductList, buildSingleProductIntro } = await import("../lib/waOrderJourney.js");
-  const { resolveCommerceImageUrl, searchCommerceProductsRanked } = await import("../lib/commerceProductSearch.js");
-  const { sendWhatsAppImage } = await import("../lib/whatsapp.js");
+  const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
+  const { searchCommerceProductsRanked, commerceToWaCatalogProducts } = await import("../lib/commerceProductSearch.js");
+  const { sendCommerceProductCard, catalogProductToCard } = await import("../lib/waCommerceProductCard.js");
+  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const roman = isRomanUrduWa(rawQ);
+  const lang = resolveWaLang({ lastUserMessage: rawQ }, rawQ);
   const ranked = await searchCommerceProductsRanked(q, 12);
-  const { commerceToWaCatalogProducts, formatCommerceProductsWhatsAppReply } = await import("../lib/commerceProductSearch.js");
   const allMatches = ranked.products.length
     ? commerceToWaCatalogProducts(ranked.products)
     : await searchProductsForWa(q, 2);
 
   if (!allMatches.length) return false;
 
-  if (ranked.ambiguous && allMatches.length === 2 && !opts.showMore) {
+  const opener = roman ? "😊 Ji bilkul — yeh available hai:" : "😊 جی بالکل — یہ available ہے:";
+
+  if (ranked.ambiguous && allMatches.length >= 2 && !opts.showMore) {
     await sendWaText(
       opts.phone,
-      formatCommerceProductsWhatsAppReply(ranked.products, roman),
+      roman ? "Dono options mil gaye — pehle dekhein, phir size select karein 👇" : "دونوں options ملے — نیچے دیکھیں 👇",
       opts.waSettings,
-      "product_disambiguation",
+      "product_disambiguation_hint",
     );
+    for (let i = 0; i < Math.min(2, allMatches.length); i++) {
+      const p = allMatches[i]!;
+      await sendCommerceProductCard({
+        phone: opts.phone,
+        product: catalogProductToCard({
+          name: p.name,
+          price: p.price,
+          rawPrice: p.rawPrice,
+          imageUrl: p.imageUrl,
+          productUrl: p.productUrl,
+          description: p.description,
+          inStock: p.inStock,
+          variantOptions: (p.variantOptions ?? []).map((v: any) => ({
+            id: String(v.id),
+            title: String(v.title),
+            price: parseCatalogUnitPrice(v.price),
+          })),
+          slug: p.slug,
+          commerceProductId: p.commerceProductId ?? p.shopifyProductId,
+        }),
+        lang,
+        waSettings: opts.waSettings,
+      });
+      if (i === 0) await new Promise((r) => setTimeout(r, 800));
+    }
     await setConversationState(opts.phone, "wa_order_await_product_choice", {
       productQuery: q,
-      products: allMatches,
+      products: allMatches.slice(0, 2),
       lastUserMessage: rawQ,
       browseMode: "disambiguation",
     });
@@ -2148,76 +2176,75 @@ async function deliverSingleProductOffer(opts: {
   }
 
   if (opts.showMore || isShowMoreProductsMessage(rawQ)) {
-    await sendWaText(opts.phone, buildNumberedProductList(allMatches as any, roman), opts.waSettings, "product_list_more");
+    const extra = allMatches.slice(0, 2);
+    for (const p of extra) {
+      await sendCommerceProductCard({
+        phone: opts.phone,
+        product: catalogProductToCard({
+          name: p.name,
+          price: p.price,
+          rawPrice: p.rawPrice,
+          imageUrl: p.imageUrl,
+          productUrl: p.productUrl,
+          description: p.description,
+          inStock: p.inStock,
+          variantOptions: (p.variantOptions ?? []).map((v: any) => ({
+            id: String(v.id),
+            title: String(v.title),
+            price: parseCatalogUnitPrice(v.price),
+          })),
+          commerceProductId: p.commerceProductId ?? p.shopifyProductId,
+        }),
+        lang,
+        waSettings: opts.waSettings,
+      });
+      await new Promise((r) => setTimeout(r, 700));
+    }
     await setConversationState(opts.phone, "wa_order_await_product_choice", {
       productQuery: q,
       products: allMatches,
-      lastUserMessage: q,
+      lastUserMessage: rawQ,
       browseMode: "show_more",
     });
     return true;
   }
 
   const product = allMatches[0]!;
-  const intro = buildSingleProductIntro(product as any, roman);
-  const imageUrl = resolveCommerceImageUrl(product.imageUrl) ?? product.imageUrl;
-  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-  const { sendPremiumProductOffer } = await import("../lib/waPremiumUi.js");
-  const lang = resolveWaLang({ lastUserMessage: q }, q);
-
-  await setConversationState(opts.phone, "wa_order_await_variant", {
-    productQuery: q,
-    product,
-    moreProducts: allMatches.slice(1),
-    lastUserMessage: q,
-    cart: [],
-    preferredLanguage: lang,
-  });
-
   const options = (product.variantOptions ?? []).map((v: any) => ({
     id: String(v.id),
     title: String(v.title),
     price: parseCatalogUnitPrice(v.price),
   }));
 
-  if (options.length) {
-    await sendPremiumProductOffer({
-      phone: opts.phone,
-      product: {
-        name: product.name,
-        imageUrl: imageUrl?.startsWith("https://") ? imageUrl : null,
-        description: product.description ?? null,
-        inStock: product.inStock ?? true,
-        variantOptions: options,
-      },
-      lang,
-      waSettings: opts.waSettings,
-      sendImage: async (p) => {
-        await sendWhatsAppImage({
-          phone: p.phone,
-          imageUrl: p.imageUrl,
-          caption: p.caption,
-          settings: opts.waSettings,
-          templateName: "single_product_image",
-        });
-      },
-      sendText: async (phone, text, template) => {
-        await sendWaText(phone, text, opts.waSettings, template);
-      },
-    });
-  } else {
-    if (imageUrl?.startsWith("https://")) {
-      await sendWhatsAppImage({
-        phone: opts.phone,
-        imageUrl,
-        caption: intro.imageCaption,
-        settings: opts.waSettings,
-        templateName: "single_product_image",
-      });
-    } else {
-      await sendWaText(opts.phone, intro.detailBody, opts.waSettings, "single_product_detail");
-    }
-  }
+  await setConversationState(opts.phone, "wa_order_await_variant", {
+    productQuery: q,
+    product,
+    moreProducts: allMatches.slice(1),
+    lastUserMessage: rawQ,
+    cart: [],
+    preferredLanguage: lang,
+    commerceProductId: product.commerceProductId ?? product.shopifyProductId,
+    productUrl: product.productUrl,
+  });
+
+  await sendCommerceProductCard({
+    phone: opts.phone,
+    product: catalogProductToCard({
+      name: product.name,
+      price: product.price,
+      rawPrice: product.rawPrice,
+      imageUrl: product.imageUrl,
+      productUrl: product.productUrl,
+      description: product.description,
+      inStock: product.inStock,
+      variantOptions: options,
+      slug: product.slug,
+      commerceProductId: product.commerceProductId ?? product.shopifyProductId,
+    }),
+    lang,
+    waSettings: opts.waSettings,
+    opener,
+  });
 
   await logWaProcessingStep({
     phone: opts.phone,
@@ -2731,32 +2758,23 @@ async function tryResolveWaCustomerMessage(opts: {
       return true;
     }
     if (convReply.template === "product_price_then_card" && convReply.productQuery) {
-      const { buildProductPriceIntro } = await import("../lib/waConversationFlows.js");
-      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-      const lang = resolveWaLang(stateData, opts.textBody);
-      await sendWaReplyWithActions(opts.phone, buildProductPriceIntro(convReply.productQuery, lang), opts.waSettings, {
-        templateName: "product_price_intro",
-        skipActions: true,
-      });
       await deliverSingleProductOffer({ phone: opts.phone, query: convReply.productQuery, waSettings: opts.waSettings });
       await persistConversationTurn(opts.phone, { intent: "pricing", topic: "product_price" });
       return true;
     }
-    if (convReply.reply) {
+    if (convReply.reply && !convReply.triggerProduct) {
       await sendWaReplyWithActions(opts.phone, convReply.reply, opts.waSettings, {
         templateName: convReply.template ?? "conversational_sales",
-        actionContext: convReply.triggerProduct ? "product" : undefined,
+        actionContext: undefined,
         textBody: opts.textBody,
         stateData,
-        skipActions: Boolean(convReply.triggerProduct),
       });
-      if (convReply.triggerProduct && convReply.productQuery) {
-        await deliverSingleProductOffer({ phone: opts.phone, query: convReply.productQuery, waSettings: opts.waSettings });
-      }
+    }
+    if (convReply.triggerProduct && convReply.productQuery) {
+      await deliverSingleProductOffer({ phone: opts.phone, query: convReply.productQuery, waSettings: opts.waSettings });
       await persistConversationTurn(opts.phone, {
         intent: opts.detectedIntent.intent,
-        topic: convReply.template ?? "conversation",
-        assistantReply: convReply.reply,
+        topic: "product_card",
       });
       return true;
     }
@@ -2768,9 +2786,6 @@ async function tryResolveWaCustomerMessage(opts: {
   }
 
   if (convReply.triggerProduct && convReply.productQuery) {
-    if (convReply.reply) {
-      await sendWaText(opts.phone, convReply.reply, opts.waSettings, convReply.template ?? "product_recommend_intro");
-    }
     await setConversationState(opts.phone, "idle", {});
     await deliverSingleProductOffer({
       phone: opts.phone,
@@ -2889,75 +2904,36 @@ async function trySendProductCatalogReply(opts: {
     return false;
   }
   try {
-    const hit = await tryWaProductCatalogReply({
-      textBody,
-      productQuery: detectedIntent.productQuery ?? extractProductQueryFromMessage(textBody),
-    });
-    if (!hit) {
-      if (await respondWithFreshProductSearch({ phone, query: textBody, waSettings, log })) return true;
-      const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
-      const catId = resolveCanonicalCategoryId(textBody);
-      if (catId || isProductInquiryMessage(textBody)) {
-        const roman = isRomanUrduWa(textBody);
-        await sendWaText(
-          phone,
-          roman
-            ? "Ji 😊 is query ke liye abhi product match nahi mila. *badam*, *pista*, *kaju* try karein — ya Admin → Commerce → Products check karein 😊"
-            : "جی 😊 اس query کے لیے product match نہیں ملا۔ *badam*، *pista* try کریں 😊",
-          waSettings,
-          "catalog_sync_hint",
-        );
-        return true;
-      }
-      return false;
+    const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+    const searchQ =
+      extractProductSearchQuery(textBody) ||
+      detectedIntent.productQuery ||
+      extractProductQueryFromMessage(textBody);
+
+    if (await respondWithFreshProductSearch({ phone, query: searchQ, waSettings, log })) {
+      await persistConversationTurn(phone, {
+        intent: "product_search",
+        topic: "product_card",
+        mergeStateData: { productQuery: searchQ, source: "commerce_db" },
+      });
+      return true;
     }
 
-    await logWaProcessingStep({
-      phone,
-      step: "product_db_reply",
-      detail: `Product Knowledge DB reply (score ${hit.score}) for "${hit.query}".`,
-      payload: {
-        query: hit.query,
-        matchedRoots: hit.matchedRoots,
-        product: hit.product.name,
-        score: hit.score,
-        variants: hit.product.variantOptions.map((v) => v.title),
-      },
-    });
-
-    const searchQ = hit.query || extractProductQueryFromMessage(textBody);
-    await deliverSingleProductOffer({ phone, query: searchQ, waSettings, showMore: false });
-
-    const mergeState: Record<string, unknown> = {
-      selectedProductName: hit.product.name,
-      shopifyProductId: hit.product.shopifyProductId,
-      lastUserMessage: textBody.slice(0, 500),
-      productQuery: hit.query,
-      categoryId: hit.categoryId ?? null,
-      source: "product_knowledge",
-      matchedRoots: hit.matchedRoots,
-    };
-
-    await persistConversationTurn(phone, {
-      intent: "product_search",
-      topic: "product",
-      mergeStateData: mergeState,
-    });
-
-    const { logProductSearch } = await import("../lib/productSearchDebug.js");
-    await logProductSearch({
-      phone,
-      userQuery: textBody,
-      matchMethod: hit.mode ?? "product_db",
-      matches: hit.products.slice(0, 12).map((p) => ({
-        shopifyProductId: p.shopifyProductId,
-        name: p.name,
-        score: p.score ?? hit.score,
-        method: hit.mode ?? "catalog",
-      })),
-    }).catch(() => {});
-
-    return true;
+    const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
+    const catId = resolveCanonicalCategoryId(searchQ);
+    if (catId || isProductInquiryMessage(textBody)) {
+      const roman = isRomanUrduWa(textBody);
+      await sendWaText(
+        phone,
+        roman
+          ? "Ji 😊 is query ke liye abhi product match nahi mila. *badam*, *pista*, *goji* try karein 😊"
+          : "جی 😊 اس query کے لیے product match نہیں ملا۔ *badam*، *pista* try کریں 😊",
+        waSettings,
+        "catalog_sync_hint",
+      );
+      return true;
+    }
+    return false;
   } catch (err) {
     log?.warn(err, "Product catalog reply failed");
     return false;
