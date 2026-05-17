@@ -11,6 +11,7 @@ import {
   isBareProductMention,
   isStandaloneFaqMessage,
   hasExplicitProductShowIntent,
+  isProductEducationMessage,
 } from "./waSalesConversation.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 
@@ -124,6 +125,17 @@ export function classifyWaMessage(text: string, ctx: IntentContext = {}): Classi
 
   if (isPureGreetingMessage(raw)) {
     return { intent: "greeting", topic: "greeting", confidence: 0.92, reason: "pure greeting", blockProductCatalog: true };
+  }
+
+  if (isProductEducationMessage(raw)) {
+    return {
+      intent: "conversation",
+      topic: "product_education",
+      confidence: 0.9,
+      reason: "benefits/usage/education question",
+      productQuery: extractProductQueryFromMessage(raw),
+      blockProductCatalog: true,
+    };
   }
 
   if (isAmbiguousFollowUp(raw) && (lastTopic === "payment" || lastTopic === "payment_issue")) {

@@ -2305,6 +2305,12 @@ async function trySendHumanGreetingReply(opts: {
   const conv = await getConversationState(opts.phone);
   let existing: Record<string, unknown> = {};
   try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+  const { hasConversationStarted, buildGreetingContinueReply } = await import("../lib/waAiSalesGuards.js");
+  if (await hasConversationStarted(opts.phone)) {
+    await sendWaText(opts.phone, buildGreetingContinueReply(opts.textBody), opts.waSettings, "greeting_continue");
+    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_continue" });
+    return true;
+  }
   if (!existing.preferredLanguage && !existing.waLang) {
     const { buildLanguageWelcomeMessage, WA_AWAIT_LANGUAGE_STATE } = await import("../lib/waPremiumJourney.js");
     const { sendLanguagePicker } = await import("../lib/waPremiumUi.js");
@@ -5029,8 +5035,10 @@ async function handleAiReply(opts: {
       },
     ];
 
-    let whatsappInstructions = `WhatsApp sales behavior:
-- For any product/price/variant question, use the official catalog context if provided and answer only from that data.
+    let whatsappInstructions = `WhatsApp sales behavior (KDF MART human mode):
+- CONVERSATION-FIRST: Do NOT send product templates, catalogs, or menus unless customer clearly wants to buy or see prices.
+- Benefits/faide/kya hoti hai/usage questions: educate warmly FIRST, then ask if they want price — NO catalog preload.
+- For any product/price/variant question when buying intent is clear, use official catalog context only.
 - Product, variant, price, stock, discount, SKU, image, and availability data must come from ONE synced Shopify catalog (KDF Product Knowledge / shopifyProductKnowledge). Never use local/manual products or guessed prices.
 - For quantity + variant total questions, use official catalog prices shown in context. If no official match is found, ask for exact product/weight.
 - If customer asks "Badam price", "Pistachio", "Almond 500g", etc., show only matching products and their official options/prices.
@@ -5054,7 +5062,9 @@ async function handleAiReply(opts: {
     let catalogContextBlock = "";
     let preloadedCatalogProducts: Array<{ shopifyProductId: string; name: string; score?: number }> = [];
     const { shouldShowProductCatalogNow } = await import("../lib/waSalesConversation.js");
+    const { shouldSkipAiCatalogPreload, looksLikeRepeatWelcome } = await import("../lib/waAiSalesGuards.js");
     const allowCatalogPreload =
+      !shouldSkipAiCatalogPreload({ text: textBody, intent: intent.intent, state: currentState }) &&
       shouldShowProductCatalogNow({ text: textBody, intent: intent.intent, state: currentState }) &&
       shouldSendCatalogForIntent(intent.intent) &&
       !isGenericCategoryQuery(intent.productQuery);
@@ -5121,7 +5131,7 @@ async function handleAiReply(opts: {
     const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
       channel: "whatsapp",
       detectedIntent: `${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}`,
-      extraInstructions: `${whatsappInstructions}\n\nCONVERSATION-FIRST: Greet warmly. On bare product names (e.g. "badam") ask if they want price, recommendation, or order — do NOT dump products. Only describe catalog after intent is clear. Use BUSINESS KNOWLEDGE for address, delivery, timings — never invent.`,
+      extraInstructions: `${whatsappInstructions}\n\nULTIMATE RULES: Never repeat full welcome. Max 2–3 products. Answer education before selling. Order flow only on order/buy/send. Payment: COD, Easypaisa 03049996000 Qadir Khan, Meezan 02460105204017 Khan Dry Fruit.`,
       contextBlocks: [businessKnowledge, orderContextBlock, catalogContextBlock],
       globalAiSettings,
       memorySummary,
@@ -5212,6 +5222,10 @@ async function handleAiReply(opts: {
       throw new Error("ai_empty_reply");
     }
 
+    const aiGuards = await import("../lib/waAiSalesGuards.js");
+    if (aiGuards.looksLikeRepeatWelcome(reply) && await aiGuards.hasConversationStarted(phone)) {
+      reply = aiGuards.buildGreetingContinueReply(textBody);
+    }
     if (shouldBlockRepeatedReply(reply, sessionMemory) && !isVariantMenuSelection(textBody)) {
       const roman = /[a-z]/i.test(textBody);
       reply = roman

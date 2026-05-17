@@ -92,6 +92,13 @@ export function isStandaloneFaqMessage(text: string): boolean {
   return false;
 }
 
+/** Benefits, usage, "kya hoti hai" — answer first, no catalog */
+export function isProductEducationMessage(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (!t || hasExplicitProductShowIntent(t)) return false;
+  return /\b(faide|fayde|faida|benefit|benefits|uses|use for|kya hoti|kya hai|kya hota|what is|quality|review|reviews|taste|flavour|flavor|kaise use|how to eat|healthy|nutrition|protein|energy)\b/i.test(t);
+}
+
 export function hasExplicitProductShowIntent(text: string): boolean {
   const t = String(text ?? "").toLowerCase();
   return (
@@ -314,6 +321,10 @@ export async function tryConversationalSalesReply(opts: {
         clearIntentState: true,
       };
     }
+  }
+
+  if (isProductEducationMessage(text)) {
+    return { handled: false };
   }
 
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {
