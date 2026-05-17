@@ -547,10 +547,10 @@ function ProductDetailPageView() {
     typeof product.description === "string" ? product.description : "";
 
   const stockStatus = availableStock === 0
-    ? { label: "Out of Stock", cls: "text-red-600 bg-red-50 border-red-200" }
+    ? { label: "Out of Stock", cls: "text-red-700 bg-red-50" }
     : availableStock < 10
-    ? { label: `Low Stock — only ${availableStock} left`, cls: "text-orange-600 bg-orange-50 border-orange-200" }
-    : { label: "In Stock", cls: "text-green-700 bg-green-50 border-green-200" };
+    ? { label: `Low Stock — only ${availableStock} left`, cls: "text-orange-700 bg-orange-50" }
+    : { label: "In Stock", cls: "text-green-800 bg-green-50" };
 
   const openPurchaseSheet = (intent: PurchaseIntent) => {
     setPurchaseIntent(intent);
@@ -625,9 +625,8 @@ function ProductDetailPageView() {
           <span className="text-foreground font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
 
-        {/* 2-column grid — min-w-0 prevents flex/grid overflow at high zoom; gallery width capped for stable aspect-square */}
         <div className="kdf-pdp-hero">
-          <motion.div className="kdf-pdp-hero__gallery">
+          <div className="kdf-pdp-hero__gallery">
             <div className="mx-auto w-full max-w-[min(100%,24rem)] space-y-3 sm:max-w-[min(100%,26rem)] lg:mx-0 lg:max-w-full">
             <div
               ref={imgRef}
@@ -730,30 +729,26 @@ function ProductDetailPageView() {
               </div>
             )}
 
-            <div className="flex flex-wrap items-end gap-3">
-              <span
-                className="font-black tracking-tight text-foreground"
-                style={{ fontSize: "clamp(1.5rem, 0.9rem + 2vw, 2.25rem)" }}
-                data-testid="text-price"
-              >
+            <div className="flex flex-wrap items-baseline gap-2.5">
+              <span className="text-2xl font-bold tracking-tight text-foreground lg:text-[1.75rem] xl:text-3xl" data-testid="text-price">
                 Rs. {price.toLocaleString()}
               </span>
-              {originalPrice && originalPrice > price && <span className="text-base text-muted-foreground line-through sm:text-lg">Rs. {originalPrice.toLocaleString()}</span>}
-              {discount && <Badge className="bg-[#5FA800]/10 text-[#5FA800] border border-[#5FA800]/30 font-bold">{discount}% OFF</Badge>}
+              {originalPrice && originalPrice > price && (
+                <span className="text-sm text-muted-foreground line-through sm:text-base">Rs. {originalPrice.toLocaleString()}</span>
+              )}
+              {discount && (
+                <Badge className="border-0 bg-[#5FA800]/12 px-2 py-0.5 text-[11px] font-bold text-[#5FA800]">{discount}% OFF</Badge>
+              )}
             </div>
 
-            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border w-fit ${stockStatus.cls}`}>
-              <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: availableStock === 0 ? "#ef4444" : availableStock < 10 ? "#f97316" : "#16a34a" }} />
+            <div className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${stockStatus.cls}`}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: availableStock === 0 ? "#ef4444" : availableStock < 10 ? "#f97316" : "#16a34a" }} />
               {stockStatus.label}
             </div>
 
-            {(product as any).weight && <p className="text-sm text-muted-foreground">Weight: <span className="font-medium">{(product as any).weight} {(product as any).unit || ""}</span></p>}
-
-            <Separator />
-
             {/* Variants */}
             {variantGroups.length > 0 && (
-              <div className="space-y-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+              <div className="space-y-4 rounded-2xl border border-gray-100/80 bg-gray-50/50 p-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
                 {variantGroups.map(({ type, items }) => (
                   <div key={type}>
                     <div className="flex items-center justify-between mb-2.5">
@@ -779,7 +774,7 @@ function ProductDetailPageView() {
             )}
 
             {/* Quantity */}
-            <div className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+            <div className="flex items-center gap-4 rounded-2xl border border-gray-100/80 bg-gray-50/50 p-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
               <span className="text-sm font-semibold">Quantity</span>
               <div className="flex items-center gap-2 border border-border rounded-xl px-2 py-1">
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))} disabled={safeQty <= 1} className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center disabled:opacity-40 hover:bg-muted/80" data-testid="button-qty-decrement"><Minus className="w-3.5 h-3.5" /></button>
@@ -851,11 +846,11 @@ function ProductDetailPageView() {
             )}
 
             {/* CTA — in-flow on mobile; anchor for desktop sticky repurchase bar */}
-            <div ref={desktopCtaRef} className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-              <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={() => openPurchaseSheet("cart")} disabled={availableStock === 0} data-testid="button-add-to-cart">
+            <div ref={desktopCtaRef} className="kdf-pdp-cta-row">
+              <Button size="lg" variant="outline" className="kdf-pdp-cta kdf-pdp-cta--outline w-full transition-[transform,box-shadow] hover:scale-[1.01] active:scale-[0.99]" onClick={() => openPurchaseSheet("cart")} disabled={availableStock === 0} data-testid="button-add-to-cart">
                 <ShoppingCart className="mr-2 h-4 w-4" /> Add to Cart
               </Button>
-              <Button size="lg" className="flex-1 rounded-xl font-semibold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-300 hover:scale-[1.02] active:scale-[0.98]" onClick={() => openPurchaseSheet("buy")} disabled={availableStock === 0} style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }} data-testid="button-buy-now">
+              <Button size="lg" className="kdf-pdp-cta kdf-pdp-cta--primary w-full transition-[transform,box-shadow] hover:scale-[1.01] active:scale-[0.99]" onClick={() => openPurchaseSheet("buy")} disabled={availableStock === 0} style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }} data-testid="button-buy-now">
                 <Zap className="mr-2 h-4 w-4" /> Buy Now
               </Button>
             </div>
@@ -932,7 +927,7 @@ function ProductDetailPageView() {
           {accordionSections.map(({ key, emoji, label, count }) => {
             const isOpen = openSection === key;
             return (
-              <div key={key} className="overflow-hidden rounded-2xl border border-gray-100/90 bg-card shadow-md ring-1 ring-black/[0.03] md:rounded-[1.75rem] md:shadow-lg md:ring-black/[0.04]">
+              <div key={key} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] md:rounded-2xl md:shadow-md">
                 {/* Header row */}
                 <button
                   onClick={() => {
@@ -955,7 +950,7 @@ function ProductDetailPageView() {
                 {/* Animated body — CSS grid row trick (no JS height measurement) */}
                 <div style={{ display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows 0.28s ease" }}>
                   <div style={{ overflow: "hidden" }}>
-                    <div className="px-5 pb-6 pt-2 border-t border-border/40">
+                    <div className="px-5 pb-6 pt-3">
 
                       {key === "description" && (
                         descriptionText ? (

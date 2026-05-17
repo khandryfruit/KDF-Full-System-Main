@@ -40,7 +40,7 @@ function SocialPulseStrip({ productId, stock }: { productId: number; stock: numb
 
   return (
     <div
-      className={`rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-white/90 via-emerald-50/40 to-white/80 p-3.5 shadow-sm ring-1 ring-emerald-900/[0.04] backdrop-blur-md transition-shadow duration-500 ${pulse ? "shadow-md shadow-emerald-900/8" : ""}`}
+      className={`kdf-pdp-rail__pulse rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-white/90 via-emerald-50/40 to-white/80 p-3.5 shadow-sm ring-1 ring-emerald-900/[0.04] backdrop-blur-md transition-shadow duration-500 ${pulse ? "shadow-md shadow-emerald-900/8" : ""}`}
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] sm:text-xs">
         <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900/90">
@@ -86,7 +86,7 @@ function DeliveryPromiseRow() {
         {DELIVERY_CARDS.map(({ icon: Icon, title, sub, accent }) => (
           <div
             key={title}
-            className={`min-w-[132px] shrink-0 rounded-2xl border border-white/80 bg-gradient-to-br ${accent} p-3 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:min-w-0`}
+            className={`kdf-pdp-rail__delivery-card min-w-[132px] shrink-0 rounded-2xl border border-white/80 bg-gradient-to-br ${accent} p-3 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:min-w-0`}
           >
             <Icon className="mb-1.5 h-4 w-4 text-[#5FA800]" />
             <p className="text-[11px] font-bold leading-tight text-foreground">{title}</p>
@@ -226,7 +226,7 @@ export function ProductConversionRail({
   onPairClick: (p: PairProduct) => void;
 }) {
   return (
-    <div className="space-y-4 border-t border-border/50 pt-4">
+    <div className="kdf-pdp-rail space-y-4 pt-2">
       <div className="hidden sm:block">
         <SocialPulseStrip productId={productId} stock={stock} />
       </div>
