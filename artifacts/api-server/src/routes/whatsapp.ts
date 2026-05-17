@@ -53,6 +53,11 @@ import {
 } from "../lib/waProductBrain.js";
 import { productRootTermsFromQuery } from "../lib/shopifyProductSearch.js";
 import { isStandaloneFaqMessage } from "../lib/waSalesConversation.js";
+import {
+  classifyWaMessage,
+  shouldBlockProductCatalog,
+  type IntentContext,
+} from "../lib/waIntentClassifier.js";
 
 const router = Router();
 
@@ -116,7 +121,55 @@ function normalizeIntentText(text: string): string {
     .trim();
 }
 
-function detectWaIntent(text: string): { intent: WaIntent; confidence: number; reason: string; productQuery?: string } {
+function detectWaIntent(
+  text: string,
+  ctx: IntentContext = {},
+): { intent: WaIntent; confidence: number; reason: string; productQuery?: string; classified?: ReturnType<typeof classifyWaMessage> } {
+  const classified = classifyWaMessage(text, ctx);
+  if (classified.intent === "payment_issue" || classified.intent === "payment_info") {
+    return { intent: "support", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "address_faq") {
+    return { intent: "support", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "clarify") {
+    return { intent: "support", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "delivery") {
+    return { intent: "delivery", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "tracking") {
+    return { intent: "tracking", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "cancellation") {
+    return { intent: "cancellation", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "complaint") {
+    return { intent: "complaint", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "greeting") {
+    return { intent: "greeting", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "conversation") {
+    return { intent: "conversation", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "bulk_order") {
+    return { intent: "bulk_order", confidence: classified.confidence, reason: classified.reason, productQuery: classified.productQuery, classified };
+  }
+  if (classified.intent === "order_start") {
+    return { intent: "order_start", confidence: classified.confidence, reason: classified.reason, productQuery: classified.productQuery, classified };
+  }
+  if (classified.intent === "product_search" || classified.intent === "pricing" || classified.intent === "recommendation") {
+    const legacy: WaIntent = classified.intent === "pricing" ? "pricing" : classified.intent === "recommendation" ? "recommendation" : "product_search";
+    return { intent: legacy, confidence: classified.confidence, reason: classified.reason, productQuery: classified.productQuery, classified };
+  }
+  if (classified.intent === "variant_selection") {
+    return { intent: "variant_selection", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+  if (classified.intent === "support") {
+    return { intent: "support", confidence: classified.confidence, reason: classified.reason, classified };
+  }
+
   const t = normalizeIntentText(text);
   const has = (words: string[]) => words.some((w) => t.includes(w));
   const exact = (words: string[]) => words.includes(t);
@@ -172,8 +225,95 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   if (isPureGreetingMessage(text)) return { intent: "greeting", confidence: 0.92, reason: "pure greeting" };
   if (/^[1-9]$/.test(t)) return { intent: "variant_selection", confidence: 0.9, reason: "numbered menu choice" };
   if (isOrderAffirmationMessage(text)) return { intent: "order_start", confidence: 0.85, reason: "order affirmation after catalog" };
-  if (has(["help", "madad", "support", "poochna", "sawal", "question"])) return { intent: "support", confidence: 0.72, reason: "support keyword" };
-  return { intent: "general", confidence: 0.45, reason: "no strong deterministic intent" };
+  if (has(["help", "madad", "support", "poochna", "sawal", "question"])) return { intent: "support", confidence: 0.72, reason: "support keyword", classified };
+  return { intent: "general", confidence: 0.45, reason: "no strong deterministic intent", classified };
+}
+
+async function routeUnifiedCustomerSupport(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: any;
+  currentState: string;
+  detectedIntent: ReturnType<typeof detectWaIntent>;
+  log?: any;
+}): Promise<boolean> {
+  let mem: Awaited<ReturnType<typeof loadConversationMemory>> | null = null;
+  try {
+    mem = await loadConversationMemory(opts.phone);
+  } catch { /* ignore */ }
+
+  const classified =
+    opts.detectedIntent.classified ??
+    classifyWaMessage(opts.textBody, {
+      lastTopic: mem?.lastTopic,
+      lastIntent: mem?.lastIntent,
+      currentState: opts.currentState,
+    });
+
+  await logWaProcessingStep({
+    phone: opts.phone,
+    step: "intent_classified",
+    detail: `${classified.intent} → ${classified.topic} (${classified.reason})`,
+    payload: {
+      text: opts.textBody.slice(0, 200),
+      intent: classified.intent,
+      topic: classified.topic,
+      confidence: classified.confidence,
+      blockProductCatalog: classified.blockProductCatalog,
+      detectedLegacy: opts.detectedIntent.intent,
+    },
+  });
+
+  if (!shouldBlockProductCatalog(classified) && classified.intent !== "clarify") {
+    return false;
+  }
+
+  const { tryHandleClassifiedSupport } = await import("../lib/waSupportFlows.js");
+  const handled = await tryHandleClassifiedSupport({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    waSettings: opts.waSettings,
+    classified,
+    logStep: async (detail) => {
+      await logWaProcessingStep({
+        phone: opts.phone,
+        step: String(detail.step ?? "support_route"),
+        detail: String(detail.reason ?? detail.step ?? "support"),
+        payload: detail,
+      });
+    },
+  });
+
+  if (handled) {
+    await persistConversationTurn(opts.phone, {
+      intent: classified.intent,
+      topic: classified.topic,
+      mergeStateData: { lastTopic: classified.topic },
+    });
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "intent_blocked_product",
+      detail: `Support routed; product catalog blocked for: ${classified.intent}`,
+      payload: { intent: classified.intent, topic: classified.topic },
+    });
+    return true;
+  }
+
+  if (shouldBlockProductCatalog(classified)) {
+    const { sendIntentClarification } = await import("../lib/waSupportFlows.js");
+    await sendIntentClarification({
+      phone: opts.phone,
+      lang: (await import("../lib/waPremiumJourney.js")).resolveWaLang({}, opts.textBody),
+      waSettings: opts.waSettings,
+    });
+    await persistConversationTurn(opts.phone, {
+      intent: classified.intent,
+      topic: classified.topic,
+      mergeStateData: { lastTopic: classified.topic },
+    });
+    return true;
+  }
+  return false;
 }
 
 function shouldSendCatalogForIntent(intent: WaIntent): boolean {
@@ -1068,14 +1208,19 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           /* In ai_chat state — go straight to AI (skip menu/static shortcuts) */
           if (currentState === "ai_chat") {
-            const detected = detectWaIntent(textBody);
-            await logWaProcessingStep({
-              phone,
-              messageId: msgId,
-              step: "intent_detected",
-              detail: `Detected intent: ${detected.intent} (${detected.reason})`,
-              payload: { textBody, ...detected, route: "ai_chat", roots: productRootsInMessage(textBody) },
-            });
+          const memIntent = await loadConversationMemory(phone).catch(() => null);
+          const detected = detectWaIntent(textBody, {
+            lastTopic: memIntent?.lastTopic,
+            lastIntent: memIntent?.lastIntent,
+            currentState,
+          });
+          await logWaProcessingStep({
+            phone,
+            messageId: msgId,
+            step: "intent_detected",
+            detail: `Detected intent: ${detected.intent} (${detected.reason})`,
+            payload: { textBody, ...detected, route: "ai_chat", roots: productRootsInMessage(textBody) },
+          });
             if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
               continue;
             }
@@ -1087,13 +1232,18 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             continue;
           }
 
-          const detected = detectWaIntent(textBody);
+          const memIntent = await loadConversationMemory(phone).catch(() => null);
+          const detected = detectWaIntent(textBody, {
+            lastTopic: memIntent?.lastTopic,
+            lastIntent: memIntent?.lastIntent,
+            currentState,
+          });
           await logWaProcessingStep({
             phone,
             messageId: msgId,
             step: "intent_detected",
             detail: `Detected intent: ${detected.intent} (${detected.reason})`,
-            payload: { textBody, ...detected },
+            payload: { textBody, ...detected, classified: detected.classified },
           });
 
           if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
@@ -2169,6 +2319,33 @@ async function tryResolveWaCustomerMessage(opts: {
   if (isWaCheckoutCollectionState(opts.currentState)) {
     return false;
   }
+
+  let memForIntent: Awaited<ReturnType<typeof loadConversationMemory>> | null = null;
+  try {
+    memForIntent = await loadConversationMemory(opts.phone);
+  } catch { /* ignore */ }
+  const intentCtx: IntentContext = {
+    lastTopic: memForIntent?.lastTopic,
+    lastIntent: memForIntent?.lastIntent,
+    currentState: opts.currentState,
+  };
+  const classified =
+    opts.detectedIntent.classified ?? classifyWaMessage(opts.textBody, intentCtx);
+  const detectedWithClass = opts.detectedIntent.classified
+    ? opts.detectedIntent
+    : detectWaIntent(opts.textBody, intentCtx);
+
+  if (await routeUnifiedCustomerSupport({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    waSettings: opts.waSettings,
+    currentState: opts.currentState,
+    detectedIntent: detectedWithClass,
+    log: opts.log,
+  })) {
+    return true;
+  }
+
   if (opts.currentState === "wa_order_await_variant" && isShowMoreProductsMessage(opts.textBody)) {
     const conv = await getConversationState(opts.phone);
     let data: Record<string, any> = {};
@@ -2207,6 +2384,26 @@ async function tryResolveWaCustomerMessage(opts: {
   });
 
   if (convReply.handled) {
+    if (convReply.template === "shop_address_card") {
+      const { sendShopAddressCard } = await import("../lib/waSupportFlows.js");
+      await sendShopAddressCard({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
+      await persistConversationTurn(opts.phone, { intent: "address_faq", topic: "address" });
+      return true;
+    }
+    if (convReply.template === "payment_issue_recovery") {
+      const { sendPaymentIssueRecovery } = await import("../lib/waSupportFlows.js");
+      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+      const lang = resolveWaLang(stateData, opts.textBody);
+      await sendPaymentIssueRecovery({ phone: opts.phone, lang, waSettings: opts.waSettings });
+      await persistConversationTurn(opts.phone, { intent: "payment_issue", topic: "payment" });
+      return true;
+    }
+    if (convReply.template === "delivery_info_buttons") {
+      const { sendDeliveryInfoButtons } = await import("../lib/waSupportFlows.js");
+      await sendDeliveryInfoButtons({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
+      await persistConversationTurn(opts.phone, { intent: "delivery", topic: "delivery" });
+      return true;
+    }
     if (convReply.template === "standalone_price_list") {
       const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
       const lang = resolveWaLang(stateData, opts.textBody);
@@ -2320,6 +2517,7 @@ async function tryResolveWaCustomerMessage(opts: {
     return true;
   }
   if (
+    !shouldBlockProductCatalog(classified) &&
     shouldShowProductCatalogNow({
       text: opts.textBody,
       intent: opts.detectedIntent.intent,
@@ -3133,8 +3331,63 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
+  if (id === "wa_support_call") {
+    const { KDF_STORE } = await import("../lib/waSupportFlows.js");
+    await sendWaText(
+      opts.phone,
+      `📞 *Call Khan Dry Fruit*\n\n${KDF_STORE.phone}\n\nTimings: Mon–Sat 10am – 8pm`,
+      opts.waSettings,
+      "support_call",
+    );
+    return true;
+  }
+
+  if (id === "wa_support_wa") {
+    const { KDF_STORE } = await import("../lib/waSupportFlows.js");
+    const waNum = KDF_STORE.whatsapp.replace(/\D/g, "").replace(/^0/, "92");
+    await sendCtaUrlMessage({
+      phone: opts.phone,
+      text: `💬 *WhatsApp Support*\n\n${KDF_STORE.whatsapp}`,
+      buttonText: "💬 Chat on WhatsApp",
+      url: `https://wa.me/${waNum}`,
+      settings: opts.waSettings,
+      templateName: "support_whatsapp",
+    });
+    return true;
+  }
+
+  if (id === "wa_delivery_lahore" || id === "wa_delivery_nation" || id === "wa_delivery_time") {
+    const lang = resolveWaLang(stateData);
+    const body =
+      id === "wa_delivery_lahore"
+        ? (lang === "en"
+          ? "🚚 *Lahore delivery*\n\nRs. 150–250 (area). Usually 1–2 working days."
+          : "🚚 *Lahore delivery*\n\nRs. 150–250 (area). Aam tor par 1–2 din.")
+        : id === "wa_delivery_nation"
+          ? (lang === "en"
+            ? "📦 *Nationwide*\n\nCourier charges apply by city/weight. 2–5 working days."
+            : "📦 *Pakistan delivery*\n\nCourier charges city/weight ke hisaab se. 2–5 din.")
+          : (lang === "en"
+            ? "⏱ *Delivery time*\n\nLahore: 1–2 days | Other cities: 2–5 days"
+            : "⏱ *Delivery time*\n\nLahore: 1–2 din | Doosre shehr: 2–5 din");
+    await sendInteractiveButtons({
+      phone: opts.phone,
+      text: body,
+      buttons: [
+        { id: "wa_support_wa", title: "💬 Support" },
+        { id: "wa_support_call", title: "📞 Call" },
+        { id: "main_menu", title: "🏠 Menu" },
+      ],
+      settings: opts.waSettings,
+      templateName: "delivery_detail",
+    });
+    await persistConversationTurn(opts.phone, { intent: "delivery", topic: "delivery" });
+    return true;
+  }
+
   if (id === "wa_info_pay_cod" || id === "wa_info_pay_bank" || id === "wa_info_pay_easy") {
     const lang = resolveWaLang(stateData);
+    await persistConversationTurn(opts.phone, { intent: "payment_info", topic: "payment" });
     if (id === "wa_info_pay_cod") await paymentChat.sendCodInfoOnly({ phone: opts.phone, lang, waSettings: opts.waSettings });
     else if (id === "wa_info_pay_bank") await paymentChat.sendBankDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: false });
     else await paymentChat.sendEasypaisaDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: false });
@@ -3755,6 +4008,19 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
       if (isShowMoreProductsMessage(trimmed)) {
         await deliverSingleProductOffer({ phone, query: stateData.productQuery ?? trimmed, waSettings, showMore: true });
+        return;
+      }
+      if (/^\d+$/.test(trimmed)) {
+        const list = waList.length ? waList : allProducts;
+        const max = Math.max(waList.length, allProducts.length);
+        await sendWaText(
+          phone,
+          max > 0
+            ? `Ji 😊 list mein *1 se ${max}* tak number select karein — dobara try karein.`
+            : `Ji 😊 pehle product list bhej di jaye gi — thori der wait karein ya product naam bhej dein.`,
+          waSettings,
+          "product_choice_retry",
+        );
         return;
       }
       const freshQuery = extractProductQueryFromMessage(trimmed) || trimmed;
@@ -4451,11 +4717,33 @@ async function handleAiReply(opts: {
   detectedIntent?: ReturnType<typeof detectWaIntent>;
 }): Promise<void> {
   const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
-  const intent = detectedIntent ?? detectWaIntent(textBody);
   const conv = await getConversationState(phone);
   const currentState = conv?.state ?? "idle";
+  const memIntent = await loadConversationMemory(phone).catch(() => null);
+  const intent = detectedIntent ?? detectWaIntent(textBody, {
+    lastTopic: memIntent?.lastTopic,
+    lastIntent: memIntent?.lastIntent,
+    currentState,
+  });
 
   if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: intent, log })) {
+    return;
+  }
+
+  const classified = intent.classified ?? classifyWaMessage(textBody, {
+    lastTopic: memIntent?.lastTopic,
+    lastIntent: memIntent?.lastIntent,
+    currentState,
+  });
+  if (shouldBlockProductCatalog(classified)) {
+    await routeUnifiedCustomerSupport({
+      phone,
+      textBody,
+      waSettings,
+      currentState,
+      detectedIntent: intent,
+      log,
+    });
     return;
   }
 

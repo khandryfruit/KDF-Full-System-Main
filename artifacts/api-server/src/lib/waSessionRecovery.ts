@@ -5,6 +5,7 @@
 import { sendInteractiveButtons } from "./whatsapp.js";
 import { resolveWaLang, parseLanguageChoice, buildLanguageWelcomeMessage, WA_AWAIT_LANGUAGE_STATE } from "./waPremiumJourney.js";
 import { isPureGreetingMessage, isProductInquiryMessage, productRootsInMessage } from "./waProductBrain.js";
+import { isPaymentIssueMessage, isAddressFaqMessage, isPaymentInfoMessage } from "./waIntentClassifier.js";
 import { isWaCheckoutCollectionState } from "./waOrderJourney.js";
 import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
 
@@ -95,6 +96,7 @@ export function isUiTrapState(state: string): boolean {
 export function shouldPrioritizeNewIntent(text: string, intent?: string): boolean {
   const t = String(text ?? "").trim();
   if (!t) return false;
+  if (isPaymentIssueMessage(t) || isPaymentInfoMessage(t) || isAddressFaqMessage(t)) return true;
   if (isPureGreetingMessage(t)) return true;
   if (/^(hello|hi|hey|salam|salaam|assalam|assalamu|aoa|aslam)\b/i.test(t)) return true;
   const roots = productRootsInMessage(t);

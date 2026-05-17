@@ -14,6 +14,7 @@ import {
 import { resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 import { isShowMoreProductsMessage } from "./waOrderJourney.js";
 import { buildDeliveryReply, isDeliveryOnlyMessage } from "./waIntentEngine.js";
+import { classifyWaMessage, shouldBlockProductCatalog, isPaymentIssueMessage } from "./waIntentClassifier.js";
 import { searchCommerceProducts } from "./commerceProductSearch.js";
 
 function formatRupees(value: number): string {
@@ -106,6 +107,9 @@ export function shouldShowProductCatalogNow(opts: {
   state: string;
 }): boolean {
   const { text, intent, state } = opts;
+  const classified = classifyWaMessage(text, {});
+  if (shouldBlockProductCatalog(classified)) return false;
+  if (isPaymentIssueMessage(text)) return false;
   if (isPureGreetingMessage(text) || intent === "greeting") return false;
   if (isStandaloneFaqMessage(text)) return false;
   if (intent === "conversation" || intent === "support" || intent === "general") return false;
@@ -267,7 +271,11 @@ export async function tryConversationalSalesReply(opts: {
   const pendingQ = String(opts.stateData?.pendingProductQuery ?? opts.productQuery ?? "").trim();
 
   if (/\b(address|location|shop|store|dokan|dukan|kahan hai|kaha hai|where)\b/i.test(text) && !/\b(deliver|delivery)\b/i.test(text)) {
-    return { handled: true, reply: await buildShopAddressReply(text), template: "shop_address" };
+    return { handled: true, template: "shop_address_card" };
+  }
+
+  if (isPaymentIssueMessage(text)) {
+    return { handled: true, template: "payment_issue_recovery" };
   }
 
   if (isStandaloneFaqMessage(text) && /^(price|prices|qeemat|kitna|how much|rate)/i.test(lower)) {
@@ -278,7 +286,7 @@ export async function tryConversationalSalesReply(opts: {
   }
 
   if (opts.detectedIntent === "delivery" || isDeliveryOnlyMessage(text) || /^(delivery|shipping)/i.test(lower)) {
-    return { handled: true, reply: await buildDeliveryReply(text), template: "delivery_info" };
+    return { handled: true, template: "delivery_info_buttons" };
   }
 
   if (opts.currentState === WA_AWAIT_PRODUCT_INTENT_STATE && pendingQ) {

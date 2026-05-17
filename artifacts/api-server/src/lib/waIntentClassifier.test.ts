@@ -1,0 +1,34 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  classifyWaMessage,
+  isPaymentIssueMessage,
+  shouldBlockProductCatalog,
+} from "./waIntentClassifier.js";
+
+describe("waIntentClassifier", () => {
+  it("classifies payment link failure as payment_issue", () => {
+    const msg = "Payment link open nahi ho raha";
+    assert.equal(isPaymentIssueMessage(msg), true);
+    const c = classifyWaMessage(msg);
+    assert.equal(c.intent, "payment_issue");
+    assert.equal(c.topic, "payment");
+    assert.equal(shouldBlockProductCatalog(c), true);
+  });
+
+  it("does not classify payment issue as product search", () => {
+    const c = classifyWaMessage("Payment link open nahi ho raha");
+    assert.notEqual(c.intent, "product_search");
+  });
+
+  it("uses context for ambiguous payment follow-up", () => {
+    const c = classifyWaMessage("not working", { lastTopic: "payment" });
+    assert.equal(c.intent, "payment_issue");
+  });
+
+  it("classifies shop address FAQ", () => {
+    const c = classifyWaMessage("Shop address?");
+    assert.equal(c.intent, "address_faq");
+    assert.equal(shouldBlockProductCatalog(c), true);
+  });
+});

@@ -24,6 +24,11 @@ import {
   shouldShowProductCatalogNow,
   isStandaloneFaqMessage,
 } from "./waSalesConversation.js";
+import {
+  isPaymentIssueMessage,
+  isPaymentInfoMessage,
+  isAddressFaqMessage,
+} from "./waIntentClassifier.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -98,6 +103,7 @@ export function isLikelyProductInquiry(text: string, intent?: string): boolean {
 export function isProductInquiryMessage(text: string): boolean {
   const t = String(text ?? "").trim();
   if (!t || isPureGreetingMessage(t) || isVariantMenuSelection(t) || isStandaloneFaqMessage(t)) return false;
+  if (isPaymentIssueMessage(t) || isPaymentInfoMessage(t) || isAddressFaqMessage(t)) return false;
   if (isBareProductMention(t)) return true;
   if (productRootsInMessage(t).length > 0) return true;
   const lower = t.toLowerCase();

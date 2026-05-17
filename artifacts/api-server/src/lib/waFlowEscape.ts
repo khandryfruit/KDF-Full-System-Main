@@ -18,6 +18,12 @@ import {
 import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
 import { WA_AWAIT_LANGUAGE_STATE } from "./waPremiumJourney.js";
 import { isUiTrapState } from "./waSessionRecovery.js";
+import {
+  isPaymentIssueMessage,
+  isPaymentInfoMessage,
+  isAddressFaqMessage,
+} from "./waIntentClassifier.js";
+import { isDeliveryOnlyMessage, isTrackingOnlyMessage } from "./waIntentEngine.js";
 
 export const ORDER_FLOW_TRAP_STATES = new Set([
   "wa_catalog_pick_category",
@@ -61,6 +67,8 @@ export function shouldEscapeOrderFlowForProductSearch(
 
   if (isCheckoutCancellationMessage(t)) return false;
   if (isShowMoreProductsMessage(t)) return false;
+  if (isPaymentIssueMessage(t) || isPaymentInfoMessage(t) || isAddressFaqMessage(t)) return true;
+  if (isDeliveryOnlyMessage(t) || isTrackingOnlyMessage(t)) return true;
 
   /* UI trap states: any real message should exit to sales/product flow */
   if (isUiTrapState(state) || state === WA_AWAIT_LANGUAGE_STATE) return t.length >= 2;
