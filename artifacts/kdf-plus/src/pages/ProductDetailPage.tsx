@@ -840,8 +840,8 @@ function ProductDetailPageView() {
               </div>
             )}
 
-            {/* CTA — desktop (intersection anchor for sticky repurchase bar) */}
-            <div ref={desktopCtaRef} className="hidden gap-3 lg:flex">
+            {/* CTA — in-flow on mobile; anchor for desktop sticky repurchase bar */}
+            <div ref={desktopCtaRef} className="flex flex-col gap-2 sm:flex-row sm:gap-3">
               <Button size="lg" variant="outline" className="flex-1 rounded-xl border-2 font-semibold shadow-sm transition-[transform,box-shadow] duration-300 hover:scale-[1.02] hover:border-[#5FA800]/35 hover:shadow-md active:scale-[0.98]" onClick={() => openPurchaseSheet("cart")} disabled={availableStock === 0} data-testid="button-add-to-cart">
                 <ShoppingCart className="mr-2 h-4 w-4" /> Add to Cart
               </Button>
@@ -850,9 +850,9 @@ function ProductDetailPageView() {
               </Button>
             </div>
 
-            {/* Notify Me When Available — desktop */}
+            {/* Notify Me When Available */}
             {product.stock === 0 && !bidData?.isLive && (
-              <div className="hidden lg:block">
+              <div>
                 {!notifyOpen ? (
                   <Button variant="outline" size="lg" className="w-full font-semibold rounded-xl border-2 border-orange-300 text-orange-700 hover:bg-orange-50" onClick={() => setNotifyOpen(true)} data-testid="button-notify-me">
                     <Bell className="w-4 h-4 mr-2" /> Notify Me When Available
@@ -998,50 +998,6 @@ function ProductDetailPageView() {
         onBuy={() => openPurchaseSheet("buy")}
         disabled={availableStock === 0}
       />
-
-      {/* Sticky mobile CTA — compact premium */}
-      <div className="kdf-suppress-for-fullscreen-sheet fixed left-0 right-0 z-[500] lg:hidden bg-white/96 backdrop-blur-md border-t border-gray-100 px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] sm:bottom-0"
-        style={{ bottom: "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))" }}
-      >
-        {/* Price + selected variant strip */}
-        <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-gray-600 truncate max-w-[62vw]">{product.name}</p>
-            <p className="text-[10px] font-medium text-gray-400 truncate">{selectedVariantLabel} · Qty {safeQty}</p>
-          </div>
-          <p className="shrink-0 text-sm font-extrabold" style={{ color: "#5FA800" }}>Rs. {(price * safeQty).toLocaleString()}</p>
-        </div>
-        {/* Buttons */}
-        {product.stock === 0 && !bidData?.isLive ? (
-          <button
-            onClick={() => setNotifyOpen(true)}
-            data-testid="button-notify-me-mobile"
-            className="w-full h-9 rounded-xl text-xs font-semibold border-2 border-orange-300 text-orange-600 flex items-center justify-center gap-1.5 bg-orange-50 transition-all active:scale-[0.98]"
-          >
-            <Bell className="w-3.5 h-3.5" /> Notify Me When Available
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              onClick={() => openPurchaseSheet("cart")}
-              disabled={availableStock === 0}
-              data-testid="button-add-to-cart-mobile"
-              className="flex-1 h-9 rounded-xl text-xs font-semibold border-2 border-gray-200 text-gray-700 flex items-center justify-center gap-1.5 bg-white transition-all active:scale-[0.98] hover:border-gray-400 disabled:opacity-40"
-            >
-              <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
-            </button>
-            <button
-              onClick={() => openPurchaseSheet("buy")}
-              disabled={availableStock === 0}
-              data-testid="button-buy-now-mobile"
-              className="flex-[1.4] h-9 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
-            >
-              <Zap className="w-3.5 h-3.5" /> Buy Now
-            </button>
-          </div>
-        )}
-      </div>
 
       <MobilePurchaseSheet
         open={purchaseSheetOpen}

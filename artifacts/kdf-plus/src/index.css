@@ -1522,9 +1522,9 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   aspect-ratio: 1 / 1;
 }
 
-/* PDP safe zone above sticky mobile CTA + bottom nav */
+/* PDP safe zone above bottom nav (no duplicate sticky product bar) */
 .kdf-pdp-main {
-  padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 7.5rem);
+  padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 1.25rem);
 }
 @media (min-width: 640px) {
   .kdf-pdp-main {
