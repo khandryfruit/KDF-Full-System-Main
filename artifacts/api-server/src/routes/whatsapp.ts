@@ -1549,6 +1549,58 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
     logCommerceProductSearch,
   } = await import("../lib/commerceProductSearch.js");
 
+  const { resolveCanonicalCategoryId, listProductsForCustomerQuery, getCategoryById } = await import("../lib/waCategoryIndex.js");
+  const { listCommerceProductsForCustomerQuery } = await import("../lib/commerceProductSearch.js");
+  const categoryId = resolveCanonicalCategoryId(query);
+
+  if (categoryId) {
+    const listed = await listProductsForCustomerQuery(query);
+    if (listed.products.length > 0) {
+      const results = listed.products.slice(0, limit).map((p) => ({
+        name: p.name,
+        price: p.price,
+        compareAt: p.compareAt,
+        description: p.description ?? null,
+        imageUrl: p.imageUrl,
+        productUrl: p.productUrl,
+        variants: p.variants,
+        variantLines: p.variantLines,
+        inStock: p.inStock,
+        source: "shopify" as const,
+        rawPrice: p.rawPrice,
+        shopifyProductId: p.shopifyProductId,
+        variantOptions: p.variantOptions,
+      }));
+      await logWaProcessingStep({
+        step: "shopify_category_lookup",
+        status: "sent",
+        detail: `Strict ${categoryId} catalog: ${results.length} product(s) for "${query}".`,
+        payload: { query, categoryId, products: results.map((p) => p.name) },
+      });
+      return results;
+    }
+    const commerceListed = await listCommerceProductsForCustomerQuery(query);
+    if (commerceListed.products.length > 0) {
+      const results = commerceToWaCatalogProducts(commerceListed.products.slice(0, limit));
+      await logWaProcessingStep({
+        step: "commerce_category_lookup",
+        status: "sent",
+        detail: `Strict Commerce ${categoryId}: ${results.length} product(s) for "${query}".`,
+        payload: { query, categoryId, products: results.map((p) => p.name) },
+      });
+      return results;
+    }
+    const catLabel = getCategoryById(categoryId)?.labelEn ?? categoryId;
+    await logWaProcessingStep({
+      step: "category_strict_empty",
+      status: "failed",
+      detail: `No strict ${categoryId} products for "${query}" — blocking loose fallback.`,
+      payload: { query, categoryId, catLabel },
+      failureReason: "category_no_products",
+    });
+    return [];
+  }
+
   const commerceHits = await searchCommerceProducts(query, limit);
   if (commerceHits.length > 0) {
     const results = commerceToWaCatalogProducts(commerceHits);
@@ -1651,62 +1703,47 @@ async function respondWithFreshProductSearch(opts: {
   const q = String(opts.query ?? "").trim();
   if (q.length < 2) return false;
 
-  const { searchCommerceProducts, formatCommerceProductsWhatsAppReply, logCommerceProductSearch, commerceToWaCatalogProducts } = await import("../lib/commerceProductSearch.js");
+  const { resolveCanonicalCategoryId, getCategoryById } = await import("../lib/waCategoryIndex.js");
 
-  let hits = await searchCommerceProducts(q, opts.limit ?? 6);
-  if (!hits.length) {
-    const products = await searchProductsForWa(q, opts.limit ?? 6);
-    if (!products.length) {
-      const roman = isRomanUrduWa(q);
-      await sendWaText(
-        opts.phone,
-        roman
-          ? `Ji 😊 "${q}" ke exact match nahi mile. Related products ke liye badam, pista, kaju, akhrot try karein — ya product ka full naam bhej dein 😊`
-          : `جی 😊 "${q}" کا exact match نہیں ملا۔ badam، pista، kaju try کریں یا product کا پورا نام بھیجیں 😊`,
-        opts.waSettings,
-        "product_no_match",
-      );
-      await logWaProcessingStep({
-        phone: opts.phone,
-        step: "product_search_empty",
-        status: "failed",
-        detail: `No commerce/shopify match for "${q}".`,
-        payload: { query: q },
-        failureReason: "no_matching_product",
-      });
-      return true;
-    }
-    await setConversationState(opts.phone, "wa_order_await_product_choice", {
-      productQuery: q,
-      products,
-      lastUserMessage: q,
+  const products = await searchProductsForWa(q, opts.limit ?? 6);
+  if (!products.length) {
+    const roman = isRomanUrduWa(q);
+    const categoryId = resolveCanonicalCategoryId(q);
+    const catLabel = categoryId ? getCategoryById(categoryId)?.labelEn ?? categoryId : null;
+    const noMatchMsg = catLabel
+      ? roman
+        ? `Ji 😊 abhi catalog mein *${catLabel}* available nahi hai. Team ko inform kar diya — jald add hoga. Is waqt badam, pista, kaju, khajoor dekh sakte hain 😊`
+        : `جی 😊 ابھی catalog میں *${catLabel}* available نہیں۔ جلد add ہوگا۔ اس وقت badam، pista، kaju، khajoor دیکھ سکتے ہیں 😊`
+      : roman
+        ? `Ji 😊 "${q}" ke exact match nahi mile. badam, pista, kaju, akhrot try karein — ya product ka full naam bhej dein 😊`
+        : `جی 😊 "${q}" کا exact match نہیں ملا۔ badam، pista، kaju try کریں یا product کا پورا نام بھیجیں 😊`;
+    await sendWaText(opts.phone, noMatchMsg, opts.waSettings, "product_no_match");
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "product_search_empty",
+      status: "failed",
+      detail: categoryId ? `Strict category ${categoryId} empty for "${q}".` : `No match for "${q}".`,
+      payload: { query: q, categoryId },
+      failureReason: categoryId ? "category_no_products" : "no_matching_product",
     });
-    if (products.length <= 3 && products.some((p) => p.imageUrl?.startsWith("https://"))) {
-      await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
-    } else {
-      const intro = isRomanUrduWa(q) ? "Ji 😊 yeh related products milay:" : "جی 😊 yeh related products ملے:";
-      await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
-      for (let i = 0; i < Math.min(products.length, 4); i++) {
-        await sendWaText(opts.phone, formatProductCard(products[i]!, i), opts.waSettings, "product_card");
-        if (i < products.length - 1) await new Promise((r) => setTimeout(r, 400));
-      }
-    }
     return true;
   }
 
-  const waProducts = commerceToWaCatalogProducts(hits);
   await setConversationState(opts.phone, "wa_order_await_product_choice", {
     productQuery: q,
-    products: waProducts,
-    categoryProducts: hits,
+    products,
     lastUserMessage: q,
   });
-  await logCommerceProductSearch({ phone: opts.phone, userQuery: q, products: hits, matchMethod: "fresh_search_escape" }).catch(() => {});
 
-  if (waProducts.length <= 3) {
-    await sendCommerceProductWaCards({ phone: opts.phone, products: waProducts, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
+  if (products.length <= 3 && products.some((p) => p.imageUrl?.startsWith("https://"))) {
+    await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
   } else {
-    await sendWaText(opts.phone, formatCommerceProductsWhatsAppReply(hits, isRomanUrduWa(q)), opts.waSettings, "product_search_results");
+    const intro = isRomanUrduWa(q) ? "Ji 😊 yeh products milay:" : "جی 😊 yeh products ملے:";
+    await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
+    for (let i = 0; i < Math.min(products.length, 4); i++) {
+      await sendWaText(opts.phone, formatProductCard(products[i]!, i), opts.waSettings, "product_card");
+      if (i < products.length - 1) await new Promise((r) => setTimeout(r, 400));
+    }
   }
   return true;
 }

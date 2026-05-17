@@ -290,9 +290,13 @@ export function productRootTermsFromQuery(query: string): string[] {
     if (key.length >= 3 && q.includes(key)) addRootKey(roots, key);
   }
 
-  for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
-    for (const token of q.split(/\s+/)) {
-      if (token.length >= 3 && key.includes(token)) addRootKey(roots, key);
+  for (const token of q.split(/\s+/).filter(Boolean)) {
+    if (token.length < 4) continue;
+    if (PRODUCT_ROOT_WORDS.has(token)) addRootKey(roots, token);
+    for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
+      if (key.length >= 4 && (key === token || key.startsWith(token) || token.startsWith(key))) {
+        addRootKey(roots, key);
+      }
     }
   }
 

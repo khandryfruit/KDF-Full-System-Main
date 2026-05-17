@@ -185,7 +185,6 @@ async function tryCategoryCatalogReply(opts: {
     const commerceListed = await listCommerceProductsForCustomerQuery(searchQ);
     if (commerceListed.products.length > 0) {
       const catalogProducts = commerceListed.products.map(commerceHitToCatalogProduct);
-      const category = (await import("./waCategoryDefinitions.js")).getCategoryById(categoryId);
       return {
         reply: formatCommerceProductsWhatsAppReply(commerceListed.products, roman),
         product: catalogProducts[0]!,
@@ -200,6 +199,33 @@ async function tryCategoryCatalogReply(opts: {
         hasMore: commerceListed.products.length > 30,
       };
     }
+
+    const listed = await listProductsForCustomerQuery(searchQ);
+    if (listed.category && listed.products.length > 0) {
+      const { toWhatsAppCatalogProducts } = await import("./shopifyProductKnowledge.js");
+      const waProducts = toWhatsAppCatalogProducts(listed.products);
+      return {
+        reply: formatCategoryProductListReply({
+          category: listed.category,
+          products: listed.products,
+          roman,
+          page: 0,
+          totalInCategory: listed.products.length,
+        }),
+        product: listed.products[0]!,
+        products: listed.products,
+        query,
+        matchedRoots: listed.roots,
+        score: 100,
+        mode: listed.products.length === 1 ? "single" : "category",
+        categoryId: listed.categoryId,
+        waProducts,
+        catalogPage: 0,
+        hasMore: listed.products.length > 30,
+      };
+    }
+
+    return null;
   }
 
   const commerceSearch = await searchCommerceProducts(searchQ, 20);
@@ -220,33 +246,7 @@ async function tryCategoryCatalogReply(opts: {
     };
   }
 
-  if (!categoryId || categoryId === "all") return null;
-
-  const listed = await listProductsForCustomerQuery(searchQ);
-  if (!listed.category || !listed.products.length) return null;
-
-  const { toWhatsAppCatalogProducts } = await import("./shopifyProductKnowledge.js");
-  const waProducts = toWhatsAppCatalogProducts(listed.products);
-
-  return {
-    reply: formatCategoryProductListReply({
-      category: listed.category,
-      products: listed.products,
-      roman,
-      page: 0,
-      totalInCategory: listed.products.length,
-    }),
-    product: listed.products[0]!,
-    products: listed.products,
-    query,
-    matchedRoots: listed.roots,
-    score: 100,
-    mode: listed.products.length === 1 ? "single" : "category",
-    categoryId: listed.categoryId,
-    waProducts,
-    catalogPage: 0,
-    hasMore: listed.products.length > 30,
-  };
+  return null;
 }
 
 export async function tryWaProductCatalogReply(opts: {

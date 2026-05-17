@@ -8,9 +8,11 @@ import type { ProductVariant } from "@workspace/db";
 import { WA_PRODUCT_ALIASES, expandWaProductSearchTerms, productRootTermsFromQuery } from "./shopifyProductSearch.js";
 import {
   productBelongsToFamilies,
+  productMatchesCategoryPrimary,
   resolveQueryFamilies,
   expandFamilyTerms,
 } from "./catalogProductMatcher.js";
+import { resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 import { KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 import { logProductSearch } from "./productSearchDebug.js";
 
@@ -140,6 +142,10 @@ function scoreCommerceProduct(
     .map((v: ProductVariant) => `${v.name ?? ""} ${v.value ?? ""} ${v.sku ?? ""}`)
     .join(" ");
 
+  const categoryId = resolveCanonicalCategoryId(query);
+  if (categoryId && !productMatchesCategoryPrimary(name, tags, desc, categoryId)) {
+    return null;
+  }
   if (families.length > 0 && !productBelongsToFamilies(name, tags, desc, families)) {
     return null;
   }
@@ -307,15 +313,18 @@ export async function listCommerceProductsForCustomerQuery(query: string): Promi
   const families = resolveQueryFamilies(q);
   const rows = await getAllActiveProducts();
 
-  if (!families.length) {
+  const categoryId = resolveCanonicalCategoryId(q);
+  if (!families.length && !categoryId) {
     const hits = await searchCommerceProducts(q, 50);
     return { products: hits, roots, familyId: null };
   }
 
   const products: CommerceProductHit[] = [];
+  const catKey = categoryId ?? (families[0] ? resolveCanonicalCategoryId(families[0]) : null);
   for (const row of rows) {
     const tags = Array.isArray(row.tags) ? row.tags.join(" ") : "";
-    if (!productBelongsToFamilies(row.name, tags, row.description, families)) continue;
+    if (catKey && !productMatchesCategoryPrimary(row.name, tags, row.description, catKey)) continue;
+    if (families.length && !productBelongsToFamilies(row.name, tags, row.description, families)) continue;
     products.push(mapRowToHit(row, 100, "family_list"));
   }
   products.sort((a, b) => a.name.localeCompare(b.name));

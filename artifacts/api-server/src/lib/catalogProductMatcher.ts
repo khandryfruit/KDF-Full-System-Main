@@ -60,6 +60,37 @@ export function resolveQueryFamilies(query: string): string[] {
   return productRootTermsFromQuery(query);
 }
 
+/** Must appear in product title/tags — blocks badam-giri / shell-only false walnut hits */
+export const CATEGORY_PRIMARY_TOKENS: Record<string, RegExp> = {
+  almonds: /\b(almond|almonds|badam|بادام|mamra|kagzi|kaghzi|kagazi|gurbandi|girdi)\b/i,
+  pistachio: /\b(pista|pistachio|pistachios|پستہ|پستے)\b/i,
+  cashew: /\b(kaju|cashew|cashews|کاجو)\b/i,
+  walnut: /\b(walnut|walnuts|akhrot|اخروٹ)\b/i,
+  dates: /\b(khajoor|dates|date|کھجور|ajwa|mazafati|sukkari|kalmi|amber)\b/i,
+  raisins: /\b(kishmish|raisin|raisins|munakka|کشمش)\b/i,
+  figs: /\b(anjeer|fig|figs|انجیر)\b/i,
+  peanuts: /\b(peanut|peanuts|mungphali|مونگ)\b/i,
+  hazelnut: /\b(hazelnut|hazelnuts|filbert)\b/i,
+  berries: /\b(goji|cranberry|blueberry|strawberry|berry|berries)\b/i,
+};
+
+export function productMatchesCategoryPrimary(
+  title: string,
+  tags: unknown,
+  description: unknown,
+  categoryId: string,
+): boolean {
+  const primary = CATEGORY_PRIMARY_TOKENS[categoryId];
+  if (!primary) return true;
+  const blob = `${title} ${Array.isArray(tags) ? tags.join(" ") : tags ?? ""} ${description ?? ""}`;
+  if (!primary.test(blob)) return false;
+  const cat = categoryId === "almonds" ? "almonds" : categoryId;
+  const families = categoryId === "almonds"
+    ? ["almond", "almonds", "badam", "بادام"]
+    : productRootTermsFromQuery(categoryId);
+  return productBelongsToFamilies(title, tags, description, families.length ? families : [categoryId]);
+}
+
 /** True if product title/tags belong to the queried product family */
 export function productBelongsToFamilies(
   title: string,

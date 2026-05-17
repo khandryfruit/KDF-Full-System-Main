@@ -8,7 +8,7 @@ import {
   toWhatsAppCatalogProducts,
   type ShopifyCatalogProduct,
 } from "./shopifyProductKnowledge.js";
-import { expandFamilyTerms, resolveQueryFamilies } from "./catalogProductMatcher.js";
+import { expandFamilyTerms, resolveQueryFamilies, productMatchesCategoryPrimary, CATEGORY_PRIMARY_TOKENS } from "./catalogProductMatcher.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 import { listProductsForCustomerQuery, resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 
@@ -64,6 +64,12 @@ function productMatchesCategoryLoose(blob: string, families: string[]): boolean 
 
 export function classifyProductCategory(product: ShopifyCatalogProduct): WaSalesCategory | null {
   const blob = normalizeCatalogBlob(product);
+  for (const cat of WA_SALES_CATEGORIES) {
+    if (cat.id === "mixed") continue;
+    if (CATEGORY_PRIMARY_TOKENS[cat.id] && productMatchesCategoryPrimary(product.name, product.tags, product.description, cat.id)) {
+      return cat;
+    }
+  }
   for (const cat of WA_SALES_CATEGORIES) {
     if (cat.id === "mixed") continue;
     if (productMatchesCategoryLoose(blob, cat.families)) return cat;

@@ -4,7 +4,7 @@
  */
 import type { ShopifyCatalogProduct } from "./shopifyProductKnowledge.js";
 import { loadAllCatalogProducts } from "./shopifyProductKnowledge.js";
-import { productBelongsToFamilies } from "./catalogProductMatcher.js";
+import { productBelongsToFamilies, productMatchesCategoryPrimary } from "./catalogProductMatcher.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 import { WA_SALES_CATEGORIES, getCategoryById, type WaSalesCategory } from "./waCategoryDefinitions.js";
 
@@ -126,20 +126,15 @@ export async function listProductsForCustomerQuery(query: string): Promise<{
   const index = await buildFullCatalogIndex();
   let products = [...(index.grouped.get(categoryId) ?? [])];
 
-  if (category.families.length) {
-    products = products.filter((p) =>
-      productBelongsToFamilies(p.name, p.tags, p.description, category.families),
-    );
-  }
+  products = products.filter((p) =>
+    productMatchesCategoryPrimary(p.name, p.tags, p.description, categoryId),
+  );
 
   if (!products.length) {
     const all = await loadAllCatalogProducts();
-    const terms = category.families;
-    products = all.filter((p) => {
-      const blob = `${p.name} ${p.tags ?? ""} ${p.productType ?? ""} ${p.category ?? ""} ${p.collectionText ?? ""}`.toLowerCase();
-      const hasTerm = terms.some((t) => t.length >= 3 && blob.includes(t));
-      return hasTerm && productBelongsToFamilies(p.name, p.tags, p.description, category.families);
-    });
+    products = all.filter((p) =>
+      productMatchesCategoryPrimary(p.name, p.tags, p.description, categoryId),
+    );
   }
 
   products.sort((a, b) => a.name.localeCompare(b.name));
