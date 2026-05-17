@@ -24,13 +24,14 @@ function splitNameAndWeight(
   weight?: string | null,
   unit?: string | null,
 ): [string, string | null] {
+  const safeName = (name ?? "").trim() || "Product";
   if (weight?.trim()) {
     const u = unit && unit !== "gram" ? ` ${unit}` : "";
-    return [name.trim(), `${weight.trim()}${u}`];
+    return [safeName, `${weight.trim()}${u}`];
   }
-  const m = name.match(/^(.+?)\s+(\d+(?:\.\d+)?\s*(?:kg|KG|g|GM|gm|ml|L))\s*$/i);
+  const m = safeName.match(/^(.+?)\s+(\d+(?:\.\d+)?\s*(?:kg|KG|g|GM|gm|ml|L))\s*$/i);
   if (m) return [m[1].trim(), m[2].toUpperCase()];
-  return [name.trim(), null];
+  return [safeName, null];
 }
 
 export interface KdfStoreProductCardProps {

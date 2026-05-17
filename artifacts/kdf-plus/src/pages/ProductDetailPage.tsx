@@ -14,6 +14,12 @@ import { useCart } from "@/context/CartContext";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 import { asArrayFromApi } from "@/lib/asArrayFromApi";
+import {
+  buildVariantGroups,
+  ensureStringArray,
+  ensureVariantArray,
+  normalizeProductDetail,
+} from "@/lib/normalizeProductDetail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -339,7 +345,7 @@ export default function ProductDetailPage() {
       const r = await fetch(`/api/products/${encodeURIComponent(param)}`);
       if (!r.ok) throw new Error("Product not found");
       const canonicalSlug = r.headers.get("X-Canonical-Slug");
-      const data = await r.json();
+      const data = normalizeProductDetail((await r.json()) as Record<string, unknown>);
       return { ...data, _canonicalSlug: canonicalSlug };
     },
     enabled: !!param,
@@ -393,7 +399,7 @@ export default function ProductDetailPage() {
         price: Number(p.price),
         images: p.images,
         gradient: p.gradient,
-        variants: p.variants,
+        variants: ensureVariantArray(p.variants),
       }));
   }, [engagementPool, productId]);
 
@@ -459,8 +465,9 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (!product) return;
-    if ((product as any).variants && (product as any).variants.length > 0) {
-      const first = (product as any).variants.find((v: any) => v.stock !== 0) ?? (product as any).variants[0];
+    const variants = ensureVariantArray((product as any).variants);
+    if (variants.length > 0) {
+      const first = variants.find((v) => v.stock !== 0) ?? variants[0];
       setSelectedVariant(String(first.id));
     } else {
       setSelectedVariant(undefined);
@@ -494,27 +501,22 @@ export default function ProductDetailPage() {
     );
   }
 
-  const productVariants = (((product as any).variants ?? []) as any[]);
-  const images: string[] = (product.images && product.images.length > 0 ? product.images : [""]) as string[];
-  const activeVariant = productVariants.find((v: any) => String(v.id) === String(selectedVariant ?? ""));
-  const price = activeVariant?.price ? parseFloat(activeVariant.price) : parseFloat(product.price);
-  const originalPrice = product.originalPrice ? parseFloat(product.originalPrice) : null;
+  const productVariants = ensureVariantArray((product as any).variants);
+  const productTags = ensureStringArray((product as any).tags);
+  const images: string[] =
+    product.images && product.images.length > 0 ? (product.images as string[]) : [""];
+  const activeVariant = productVariants.find((v) => String(v.id) === String(selectedVariant ?? ""));
+  const price = activeVariant?.price
+    ? parseFloat(activeVariant.price)
+    : parseFloat(String(product.price ?? "0")) || 0;
+  const originalPrice = product.originalPrice ? parseFloat(String(product.originalPrice)) : null;
   const discount = originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : null;
   const availableStock = activeVariant?.stock != null ? Number(activeVariant.stock) : Number(product.stock);
   const safeQty = Math.max(1, Math.min(qty, Math.max(availableStock, 1)));
   const selectedVariantLabel = activeVariant?.value ?? ((product as any).weight ? `${(product as any).weight} ${(product as any).unit || ""}`.trim() : "Standard");
-  const variantGroups: VariantGroup[] = productVariants.length > 0 ? (() => {
-    const order: string[] = [];
-    const map = new Map<string, any[]>();
-    for (const v of productVariants) {
-      if (!map.has(v.name)) {
-        map.set(v.name, []);
-        order.push(v.name);
-      }
-      map.get(v.name)!.push(v);
-    }
-    return order.map(type => ({ type, items: map.get(type)! }));
-  })() : [];
+  const variantGroups = productVariants.length > 0 ? buildVariantGroups(productVariants) : [];
+  const descriptionText =
+    typeof product.description === "string" ? product.description : "";
 
   const stockStatus = availableStock === 0
     ? { label: "Out of Stock", cls: "text-red-600 bg-red-50 border-red-200" }
@@ -541,8 +543,8 @@ export default function ProductDetailPage() {
   };
 
   const handleQuickAddGallery = (p: GalleryEngagementProduct) => {
-    const vars = p.variants as any[] | undefined;
-    const v = vars?.find((x: any) => x.stock !== 0) ?? vars?.[0];
+    const vars = ensureVariantArray(p.variants);
+    const v = vars.find((x) => x.stock !== 0) ?? vars[0];
     addItem(p as any, 1, v?.id, v?.value ?? "Standard");
     toast({ title: "Added to cart", description: p.name });
   };
@@ -567,9 +569,9 @@ export default function ProductDetailPage() {
     <>
       <Helmet>
         <title>{product.metaTitle || product.name} — KDF Plus</title>
-        <meta name="description" content={product.metaDescription || product.description?.replace(/<[^>]+>/g, " ").slice(0, 160) || `Buy ${product.name} online.`} />
+        <meta name="description" content={product.metaDescription || descriptionText.replace(/<[^>]+>/g, " ").slice(0, 160) || `Buy ${product.name} online.`} />
         <meta property="og:title" content={product.name} />
-        <meta property="og:description" content={product.description?.replace(/<[^>]+>/g, " ").slice(0, 200) || ""} />
+        <meta property="og:description" content={descriptionText.replace(/<[^>]+>/g, " ").slice(0, 200) || ""} />
         <meta property="og:image" content={getProductImageSrc(images[0])} />
         <meta property="og:type" content="product" />
         <meta name="twitter:card" content="summary_large_image" />
@@ -577,7 +579,7 @@ export default function ProductDetailPage() {
         <meta property="og:url" content={`https://kdfplus.pk/products/${(product as any).slug || product.id}`} />
         <meta property="og:site_name" content="KDF Plus" />
         <meta name="twitter:title" content={product.metaTitle || product.name} />
-        <meta name="twitter:description" content={product.metaDescription || product.description?.replace(/<[^>]+>/g, " ").slice(0, 160) || `Buy ${product.name} online.`} />
+        <meta name="twitter:description" content={product.metaDescription || descriptionText.replace(/<[^>]+>/g, " ").slice(0, 160) || `Buy ${product.name} online.`} />
         {getProductImageSrc(images[0]) && <meta name="twitter:image" content={getProductImageSrc(images[0])} />}
         <meta property="product:price:amount" content={String(price)} />
         <meta property="product:price:currency" content="PKR" />
@@ -664,7 +666,7 @@ export default function ProductDetailPage() {
           <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:z-10 lg:self-start lg:gap-5 lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-slate-900/[0.06] lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl xl:p-7">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                {((product as any).tags as string[] | undefined)?.map((tag: string) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
+                {productTags.map((tag) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button onClick={() => setIsWishlisted(w => !w)} className={`p-2 rounded-full transition-all ${isWishlisted ? "text-red-500 bg-red-50" : "text-muted-foreground hover:bg-muted"}`} title="Add to wishlist">
@@ -717,7 +719,7 @@ export default function ProductDetailPage() {
                 {variantGroups.map(({ type, items }) => (
                   <div key={type}>
                     <div className="flex items-center justify-between mb-2.5">
-                      <p className="text-sm font-semibold text-foreground">{type.toLowerCase().includes("weight") ? "Select Weight" : type}</p>
+                      <p className="text-sm font-semibold text-foreground">{(type ?? "Option").toLowerCase().includes("weight") ? "Select Weight" : type}</p>
                       {activeVariant && items.some(v => v.id === activeVariant.id) && activeVariant.price && (<span className="text-sm font-bold text-[#5FA800]">Rs. {parseFloat(activeVariant.price).toLocaleString()}</span>)}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -918,12 +920,12 @@ export default function ProductDetailPage() {
                     <div className="px-5 pb-6 pt-2 border-t border-border/40">
 
                       {key === "description" && (
-                        product.description ? (
+                        descriptionText ? (
                           <>
                             <div
                               className="prose prose-sm max-w-3xl text-foreground leading-relaxed [&_p]:mb-3 [&_ul]:pl-5 [&_ul]:space-y-1 [&_li]:list-disc [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-semibold [&_strong]:font-semibold overflow-hidden"
                               style={!descExpanded ? { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" } : {}}
-                              dangerouslySetInnerHTML={{ __html: product.description }}
+                              dangerouslySetInnerHTML={{ __html: descriptionText }}
                             />
                             <button
                               onClick={e => { e.stopPropagation(); setDescExpanded(v => !v); }}
