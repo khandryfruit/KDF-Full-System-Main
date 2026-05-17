@@ -849,7 +849,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 detail: "Customer sent product/FAQ text — exiting stale order menu state.",
                 payload: { previousState: currentState, text: commerceText, intent: trappedIntent },
               });
-              await setConversationState(phone, "idle", {});
+              await setConversationState(phone, "idle", { cartClearedAt: new Date().toISOString() });
               if (await tryResolveWaCustomerMessage({ phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log })) {
                 continue;
               }
@@ -1262,50 +1262,11 @@ async function handleProductCatalog(opts: {
       payload: { searchTerm, requestedProductQuery, detectedIntent, products: products.map((p) => p.name) },
     });
 
-    /* ── Send each product as a separate message with buttons ── */
-    const intro = `جی 😊 official catalog ke matching options yeh hain:`;
-    await sendWhatsAppMessage({ phone, message: intro, templateName: "catalog_intro" });
-    await new Promise(r => setTimeout(r, 800));
-
-    for (let i = 0; i < products.length; i++) {
-      const p = products[i]!;
-      const msgText =
-        `*${p.name}*\n` +
-        `💰 *Price:* ${p.price}\n` +
-        (p.variants ? `📦 *Official options:*\n${p.variants}\n` : "") +
-        (p.description ? `📝 ${p.description}\n` : "") +
-        `\n🔗 ${p.productUrl}`;
-
-      /* WhatsApp has no native product card in free-form messages.
-         We send product info as text + interactive buttons (View / Buy / More) */
-      await sendInteractiveButtons({
-        phone,
-        text: msgText,
-        buttons: [
-          { id: `catalog_view_${i}`, title: "🔗 View Product" },
-          { id: `catalog_buy_${i}`,  title: "🛒 Buy Now" },
-          { id: "main_menu",         title: "🏠 Main Menu" },
-        ],
-        footer: `KDF NUTS — Pakistan's premium dry fruits`,
-        settings: waSettings,
-        templateName: "catalog_product",
-      });
-
-      if (i < products.length - 1) await new Promise(r => setTimeout(r, 600));
-    }
-
-    /* After product list, offer support */
-    await new Promise(r => setTimeout(r, 800));
-    await sendInteractiveButtons({
+    await sendCommerceProductWaCards({
       phone,
-      text: `آپ کسی بھی product کے بارے میں مزید جاننا چاہتے ہیں؟ 😊\nOr directly order کرنا چاہتے ہیں? 📦`,
-      buttons: [
-        { id: "talk_support", title: "💬 Ask Support" },
-        { id: "shop_products", title: "🛒 Shop Online" },
-        { id: "main_menu",    title: "🏠 Main Menu" },
-      ],
-      settings: waSettings,
-      templateName: "catalog_cta",
+      products,
+      waSettings,
+      roman: isRomanUrduWa(textBody),
     });
 
     /* Log as ai_reply */
@@ -1535,115 +1496,126 @@ function formatShopifyVariants(variants: unknown): { label: string; lines: strin
   };
 }
 
-async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
+type WaCatalogProduct = {
   name: string; price: string; compareAt: string | null;
   description: string | null; imageUrl: string | null;
   productUrl: string; variants: string; inStock: boolean;
   source?: "shopify" | "commerce" | "local"; rawPrice?: number; variantLines?: string[];
   shopifyProductId?: string; commerceProductId?: string; slug?: string;
   variantOptions?: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }>;
-}>> {
+};
+
+async function logWaProductRetrieval(opts: {
+  query: string;
+  engine: string;
+  products: WaCatalogProduct[];
+  categoryId?: string | null;
+  related?: boolean;
+}): Promise<void> {
+  await logWaProcessingStep({
+    step: "product_retrieval",
+    status: opts.products.length ? "sent" : "failed",
+    detail: `${opts.engine}: ${opts.products.length} product(s) for "${opts.query}"${opts.related ? " (related)" : ""}.`,
+    payload: {
+      query: opts.query,
+      engine: opts.engine,
+      categoryId: opts.categoryId ?? null,
+      related: opts.related ?? false,
+      count: opts.products.length,
+      products: opts.products.map((p) => ({
+        name: p.name,
+        price: p.price,
+        source: p.source,
+        url: p.productUrl,
+        image: p.imageUrl,
+        inStock: p.inStock,
+      })),
+    },
+    failureReason: opts.products.length ? null : "no_matching_product",
+  });
+}
+
+/** PRIMARY = Ecommerce admin products; Shopify only when commerce has no match */
+async function searchProductsForWa(query: string, limit = 4): Promise<WaCatalogProduct[]> {
+  const q = String(query ?? "").trim();
+  if (!q) return [];
+
   const {
     searchCommerceProducts,
+    listCommerceProductsForCustomerQuery,
+    searchRelatedCommerceProducts,
     commerceToWaCatalogProducts,
     logCommerceProductSearch,
   } = await import("../lib/commerceProductSearch.js");
+  const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
+  const categoryId = resolveCanonicalCategoryId(q);
 
-  const { resolveCanonicalCategoryId, listProductsForCustomerQuery, getCategoryById } = await import("../lib/waCategoryIndex.js");
-  const { listCommerceProductsForCustomerQuery } = await import("../lib/commerceProductSearch.js");
-  const categoryId = resolveCanonicalCategoryId(query);
+  const finishCommerce = async (
+    hits: Awaited<ReturnType<typeof searchCommerceProducts>>,
+    engine: string,
+    related = false,
+  ): Promise<WaCatalogProduct[]> => {
+    const results = commerceToWaCatalogProducts(hits.slice(0, limit));
+    await logWaProductRetrieval({ query: q, engine, products: results, categoryId, related });
+    await logCommerceProductSearch({ userQuery: q, products: hits, matchMethod: engine }).catch(() => {});
+    return results;
+  };
 
   if (categoryId) {
-    const listed = await listProductsForCustomerQuery(query);
-    if (listed.products.length > 0) {
-      const results = listed.products.slice(0, limit).map((p) => ({
-        name: p.name,
-        price: p.price,
-        compareAt: p.compareAt,
-        description: p.description ?? null,
-        imageUrl: p.imageUrl,
-        productUrl: p.productUrl,
-        variants: p.variants,
-        variantLines: p.variantLines,
-        inStock: p.inStock,
-        source: "shopify" as const,
-        rawPrice: p.rawPrice,
-        shopifyProductId: p.shopifyProductId,
-        variantOptions: p.variantOptions,
-      }));
-      await logWaProcessingStep({
-        step: "shopify_category_lookup",
-        status: "sent",
-        detail: `Strict ${categoryId} catalog: ${results.length} product(s) for "${query}".`,
-        payload: { query, categoryId, products: results.map((p) => p.name) },
-      });
-      return results;
-    }
-    const commerceListed = await listCommerceProductsForCustomerQuery(query);
+    const commerceListed = await listCommerceProductsForCustomerQuery(q);
     if (commerceListed.products.length > 0) {
-      const results = commerceToWaCatalogProducts(commerceListed.products.slice(0, limit));
-      await logWaProcessingStep({
-        step: "commerce_category_lookup",
-        status: "sent",
-        detail: `Strict Commerce ${categoryId}: ${results.length} product(s) for "${query}".`,
-        payload: { query, categoryId, products: results.map((p) => p.name) },
-      });
+      return finishCommerce(commerceListed.products, "commerce_category_primary");
+    }
+    const commerceHits = await searchCommerceProducts(q, limit);
+    if (commerceHits.length > 0) {
+      return finishCommerce(commerceHits, "commerce_category_search");
+    }
+    const related = await searchRelatedCommerceProducts(q, limit);
+    if (related.length > 0) {
+      return finishCommerce(related, "commerce_category_related", true);
+    }
+
+    const { listProductsForCustomerQuery } = await import("../lib/waCategoryIndex.js");
+    const shopifyListed = await listProductsForCustomerQuery(q);
+    if (shopifyListed.products.length > 0) {
+      const { toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
+      const results = toWhatsAppCatalogProducts(shopifyListed.products.slice(0, limit));
+      await logWaProductRetrieval({ query: q, engine: "shopify_category_fallback", products: results, categoryId });
       return results;
     }
-    const catLabel = getCategoryById(categoryId)?.labelEn ?? categoryId;
-    await logWaProcessingStep({
-      step: "category_strict_empty",
-      status: "failed",
-      detail: `No strict ${categoryId} products for "${query}" — blocking loose fallback.`,
-      payload: { query, categoryId, catLabel },
-      failureReason: "category_no_products",
-    });
+    const relatedShopify = await searchRelatedCommerceProducts(q, limit);
+    if (relatedShopify.length > 0) {
+      return finishCommerce(relatedShopify, "commerce_related_before_empty", true);
+    }
+    await logWaProductRetrieval({ query: q, engine: "no_match", products: [], categoryId });
     return [];
   }
 
-  const commerceHits = await searchCommerceProducts(query, limit);
+  const commerceHits = await searchCommerceProducts(q, limit);
   if (commerceHits.length > 0) {
-    const results = commerceToWaCatalogProducts(commerceHits);
-    await logWaProcessingStep({
-      step: "commerce_product_lookup",
-      status: "sent",
-      detail: `Commerce → Products found ${results.length} match(es) for "${query}".`,
-      payload: {
-        query,
-        engine: "commerce_products",
-        count: results.length,
-        matchedIds: commerceHits.map((p) => p.id),
-        products: results.map((p) => ({ name: p.name, price: p.price, url: p.productUrl })),
-      },
-    });
-    await logCommerceProductSearch({
-      userQuery: query,
-      products: commerceHits,
-      matchMethod: "commerce_primary",
-    }).catch(() => {});
-    return results;
+    return finishCommerce(commerceHits, "commerce_primary");
+  }
+
+  const related = await searchRelatedCommerceProducts(q, limit);
+  if (related.length > 0) {
+    return finishCommerce(related, "commerce_related", true);
   }
 
   const { searchShopifyCatalog, toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
-  const catalog = await searchShopifyCatalog(query, limit);
-  const results = toWhatsAppCatalogProducts(catalog);
+  const catalog = await searchShopifyCatalog(q, limit);
+  if (catalog.length > 0) {
+    const results = toWhatsAppCatalogProducts(catalog);
+    await logWaProductRetrieval({ query: q, engine: "shopify_fallback", products: results, categoryId });
+    return results;
+  }
 
-  await logWaProcessingStep({
-    step: "shopify_product_lookup",
-    status: results.length ? "sent" : "failed",
-    detail: results.length
-      ? `Shopify fallback found ${results.length} match(es).`
-      : `No Commerce or Shopify match for "${query}".`,
-    payload: {
-      query,
-      engine: "shopify_fallback",
-      count: results.length,
-      products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })),
-    },
-    failureReason: results.length ? null : "no_matching_product",
-  });
+  const featured = await searchRelatedCommerceProducts("", limit);
+  if (featured.length > 0) {
+    return finishCommerce(featured, "commerce_featured_fallback", true);
+  }
 
-  return results;
+  await logWaProductRetrieval({ query: q, engine: "no_match", products: [], categoryId });
+  return [];
 }
 
 /** Send Commerce product cards: image → details → View Product CTA */
@@ -1662,10 +1634,12 @@ async function sendCommerceProductWaCards(opts: {
       ? p.variantLines.map((line, idx) => `${idx + 1}️⃣ ${line}`).join("\n")
       : p.variants || p.price;
 
-    if (p.imageUrl?.startsWith("https://")) {
+    const { resolveCommerceImageUrl } = await import("../lib/commerceProductSearch.js");
+    const imageUrl = resolveCommerceImageUrl(p.imageUrl) ?? p.imageUrl;
+    if (imageUrl?.startsWith("https://")) {
       await sendWhatsAppImage({
         phone: opts.phone,
-        imageUrl: p.imageUrl,
+        imageUrl,
         caption: `🥜 *${p.name}*\n💰 ${p.price}`,
         settings: opts.waSettings,
         templateName: "commerce_product_image",
@@ -1703,48 +1677,45 @@ async function respondWithFreshProductSearch(opts: {
   const q = String(opts.query ?? "").trim();
   if (q.length < 2) return false;
 
-  const { resolveCanonicalCategoryId, getCategoryById } = await import("../lib/waCategoryIndex.js");
-
   const products = await searchProductsForWa(q, opts.limit ?? 6);
   if (!products.length) {
     const roman = isRomanUrduWa(q);
-    const categoryId = resolveCanonicalCategoryId(q);
-    const catLabel = categoryId ? getCategoryById(categoryId)?.labelEn ?? categoryId : null;
-    const noMatchMsg = catLabel
-      ? roman
-        ? `Ji 😊 abhi catalog mein *${catLabel}* available nahi hai. Team ko inform kar diya — jald add hoga. Is waqt badam, pista, kaju, khajoor dekh sakte hain 😊`
-        : `جی 😊 ابھی catalog میں *${catLabel}* available نہیں۔ جلد add ہوگا۔ اس وقت badam، pista، kaju، khajoor دیکھ سکتے ہیں 😊`
-      : roman
-        ? `Ji 😊 "${q}" ke exact match nahi mile. badam, pista, kaju, akhrot try karein — ya product ka full naam bhej dein 😊`
-        : `جی 😊 "${q}" کا exact match نہیں ملا۔ badam، pista، kaju try کریں یا product کا پورا نام بھیجیں 😊`;
-    await sendWaText(opts.phone, noMatchMsg, opts.waSettings, "product_no_match");
+    await sendWaText(
+      opts.phone,
+      roman
+        ? `Ji 😊 "${q}" ke liye abhi product nahi mila. *badam*, *pista*, *kaju* try karein ya Admin → Products check karein 😊`
+        : `جی 😊 "${q}" کے لیے product نہیں ملا۔ *badam*، *pista* try کریں 😊`,
+      opts.waSettings,
+      "product_no_match",
+    );
     await logWaProcessingStep({
       phone: opts.phone,
       step: "product_search_empty",
       status: "failed",
-      detail: categoryId ? `Strict category ${categoryId} empty for "${q}".` : `No match for "${q}".`,
-      payload: { query: q, categoryId },
-      failureReason: categoryId ? "category_no_products" : "no_matching_product",
+      detail: `No commerce/shopify match for "${q}".`,
+      payload: { query: q },
+      failureReason: "no_matching_product",
     });
     return true;
   }
+
+  const roman = isRomanUrduWa(q);
+  const intro = products[0]?.source === "commerce"
+    ? (roman ? "Ji 😊 Ecommerce catalog se yeh products hain:" : "جی 😊 Ecommerce catalog سے yeh products ہیں:")
+    : (roman ? "Ji 😊 yeh products milay:" : "جی 😊 yeh products ملے:");
+  await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
 
   await setConversationState(opts.phone, "wa_order_await_product_choice", {
     productQuery: q,
     products,
     lastUserMessage: q,
+    cart: [],
+    subtotal: undefined,
+    total: undefined,
+    delivery: undefined,
   });
 
-  if (products.length <= 3 && products.some((p) => p.imageUrl?.startsWith("https://"))) {
-    await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman: isRomanUrduWa(q) });
-  } else {
-    const intro = isRomanUrduWa(q) ? "Ji 😊 yeh products milay:" : "جی 😊 yeh products ملے:";
-    await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
-    for (let i = 0; i < Math.min(products.length, 4); i++) {
-      await sendWaText(opts.phone, formatProductCard(products[i]!, i), opts.waSettings, "product_card");
-      if (i < products.length - 1) await new Promise((r) => setTimeout(r, 400));
-    }
-  }
+  await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman });
   return true;
 }
 
@@ -2042,9 +2013,13 @@ async function trySendProductCatalogReply(opts: {
 
     const waProducts = hit.waProducts ?? (await import("../lib/shopifyProductKnowledge.js")).toWhatsAppCatalogProducts(hit.products);
     const useCategoryFlow = hit.mode === "category" || hit.products.length > 1 || (hit.products.length === 1 && (waProducts[0]?.variantOptions?.length ?? 0) > 1);
-    const useCommerceCards = waProducts.some((p) => (p as { source?: string }).source === "commerce");
+    const hasVisualCards = waProducts.length > 0;
 
-    if (useCommerceCards && waProducts.length <= 4) {
+    if (hasVisualCards) {
+      const intro = isRomanUrduWa(textBody)
+        ? "Ji 😊 yeh products milay (image + price + link):"
+        : "جی 😊 yeh products ملے (image + price + link):";
+      await sendWaText(phone, intro, waSettings, "product_db_intro");
       await sendCommerceProductWaCards({
         phone,
         products: waProducts as Awaited<ReturnType<typeof searchProductsForWa>>,
@@ -2455,25 +2430,29 @@ async function findCommerceProductVariant(productQuery: string, variantHint?: st
 }
 
 function buildCommerceSummary(data: Record<string, any>): string {
-  if (Array.isArray(data.cart) && data.cart.length > 1) {
-    const lines = data.cart.map((item: any) =>
-      `• ${item.quantity} x ${item.productName} (${item.variantTitle}) — ${formatRupees(Number(item.unitPrice ?? 0) * Number(item.quantity ?? 1))}`,
+  const n = normalizeCommerceTotals(data);
+  const discountLine = n.discount > 0 ? `🎁 *Discount:* -${formatRupees(n.discount)}\n` : "";
+  if (Array.isArray(n.cart) && n.cart.length > 1) {
+    const lines = n.cart.map((item: any) =>
+      `• ${item.quantity} x ${item.productName} (${item.variantTitle}) — ${formatRupees(item.unitPrice * item.quantity)}`,
     );
     return `🧾 *Order Summary*\n\n${lines.join("\n")}\n\n` +
-      `💵 *Subtotal:* ${formatRupees(data.subtotal)}\n` +
-      `🚚 *Delivery:* ${data.deliveryLabel ?? "Will confirm by city"}\n` +
+      `💵 *Subtotal:* ${formatRupees(n.subtotal)}\n` +
+      discountLine +
+      `🚚 *Delivery:* ${n.deliveryLabel}\n` +
       `━━━━━━━━━━\n` +
-      `💵 *Final:* ${formatRupees(data.total ?? data.subtotal)}`;
+      `💵 *Final:* ${formatRupees(n.total)}`;
   }
   return `🧾 *Order Summary*\n\n` +
-    `🥜 *Product:* ${data.productName}\n` +
-    `⚖ *Variant:* ${data.variantTitle}\n` +
-    `📦 *Qty:* ${data.quantity}\n` +
-    `💰 *Price:* ${formatRupees(data.unitPrice)}\n` +
-    `💵 *Subtotal:* ${formatRupees(data.subtotal)}\n` +
-    `🚚 *Delivery:* ${data.deliveryLabel ?? "Will confirm by city"}\n` +
+    `🥜 *Product:* ${n.productName}\n` +
+    `⚖ *Variant:* ${n.variantTitle}\n` +
+    `📦 *Qty:* ${n.quantity}\n` +
+    `💰 *Unit price:* ${formatRupees(n.unitPrice)}\n` +
+    `💵 *Subtotal:* ${formatRupees(n.subtotal)}\n` +
+    discountLine +
+    `🚚 *Delivery:* ${n.deliveryLabel}\n` +
     `━━━━━━━━━━\n` +
-    `💵 *Final:* ${formatRupees(data.total ?? data.subtotal)}`;
+    `💵 *Final:* ${formatRupees(n.total)}`;
 }
 
 function normalizeCommerceTotals(stateData: Record<string, any>): Record<string, any> {
@@ -2481,7 +2460,8 @@ function normalizeCommerceTotals(stateData: Record<string, any>): Record<string,
     ? stateData.cart
     : [{
       productName: stateData.productName,
-      shopifyProductId: stateData.shopifyProductId,
+      shopifyProductId: stateData.shopifyProductId ?? stateData.commerceProductId,
+      commerceProductId: stateData.commerceProductId ?? stateData.shopifyProductId,
       variantId: stateData.variantId,
       variantTitle: stateData.variantTitle,
       quantity: stateData.quantity,
@@ -2490,30 +2470,48 @@ function normalizeCommerceTotals(stateData: Record<string, any>): Record<string,
       sku: stateData.sku,
     }];
 
-  const cleanCart = cart.map((item: any) => ({
-    ...item,
-    productName: String(item.productName ?? stateData.productName ?? "Product").trim(),
-    variantTitle: String(item.variantTitle ?? stateData.variantTitle ?? "Standard").trim(),
-    quantity: Math.max(1, Number.parseInt(String(item.quantity ?? 1), 10) || 1),
-    unitPrice: parseCatalogUnitPrice(item.unitPrice),
-  })).filter((item: any) => item.productName && item.unitPrice > 0);
+  const cleanCart = cart.map((item: any) => {
+    let unitPrice = parseCatalogUnitPrice(item.unitPrice);
+    if (unitPrice > 250_000) unitPrice = parseCatalogUnitPrice(unitPrice / 100);
+    return {
+      ...item,
+      productName: String(item.productName ?? stateData.productName ?? "Product").trim(),
+      variantTitle: String(item.variantTitle ?? stateData.variantTitle ?? "Standard").trim(),
+      quantity: Math.max(1, Math.min(99, Number.parseInt(String(item.quantity ?? 1), 10) || 1)),
+      unitPrice,
+    };
+  }).filter((item: any) => item.productName && item.unitPrice > 0 && item.unitPrice <= 250_000);
 
   const subtotal = cleanCart.reduce((sum: number, item: any) => sum + item.unitPrice * item.quantity, 0);
-  const delivery = subtotal >= 10000 ? 0 : parseMoneyValue(stateData.delivery ?? 300) || 300;
-  const deliveryLabel = subtotal >= 10000
-    ? "Rs. 0 (FREE delivery above Rs. 10,000)"
-    : `${formatRupees(delivery)} (Estimated standard delivery)`;
-  const total = Math.max(0, subtotal + delivery);
+  const discount = Math.min(subtotal, parseMoneyValue(stateData.discount ?? 0));
+  const amountAfterDiscount = Math.max(0, subtotal - discount);
+  let delivery = parseMoneyValue(stateData.delivery ?? 300);
+  if (!Number.isFinite(delivery) || delivery < 0 || delivery > 50_000) delivery = 300;
+  let deliveryLabel = String(stateData.deliveryLabel ?? "").trim();
+  if (amountAfterDiscount >= 10000) {
+    delivery = 0;
+    deliveryLabel = "Rs. 0 (FREE delivery above Rs. 10,000)";
+  } else if (!deliveryLabel) {
+    deliveryLabel = `${formatRupees(delivery)} (Estimated standard delivery)`;
+  }
+  const total = Math.max(0, amountAfterDiscount + delivery);
 
   return {
     ...stateData,
     cart: cleanCart,
+    productName: cleanCart[0]?.productName ?? stateData.productName,
+    variantTitle: cleanCart[0]?.variantTitle ?? stateData.variantTitle,
     quantity: cleanCart[0]?.quantity ?? stateData.quantity,
-    unitPrice: cleanCart[0]?.unitPrice ?? stateData.unitPrice,
+    unitPrice: cleanCart[0]?.unitPrice ?? parseCatalogUnitPrice(stateData.unitPrice),
     subtotal,
+    discount,
     delivery,
     deliveryLabel,
     total,
+    subtotalNumeric: subtotal,
+    totalNumeric: total,
+    finalTotalLabel: formatRupees(total),
+    subtotalLabel: formatRupees(subtotal),
   };
 }
 
@@ -2541,10 +2539,11 @@ async function buildCommerceStateDataFromSelection(params: {
     quantity: params.quantity,
     variantTitle: params.variant.title,
   }).catch(() => null);
-  return {
+  const base = {
     cart: [{
       productName: params.product.name,
       shopifyProductId: params.product.shopifyProductId,
+      commerceProductId: params.product.commerceProductId ?? params.product.shopifyProductId,
       variantId: params.variant.id,
       variantTitle: params.variant.title,
       quantity: params.quantity,
@@ -2554,16 +2553,20 @@ async function buildCommerceStateDataFromSelection(params: {
     }],
     productName: params.product.name,
     shopifyProductId: params.product.shopifyProductId,
+    commerceProductId: params.product.commerceProductId ?? params.product.shopifyProductId,
     variantId: params.variant.id,
     variantTitle: params.variant.title,
     quantity: params.quantity,
     unitPrice,
-    subtotal,
+    discount: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).discount) : 0,
     delivery: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).delivery) : 300,
-    deliveryLabel: totalCalc && (totalCalc as any).ok ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})` : "Will confirm by city",
-    total: totalCalc && (totalCalc as any).ok ? parseMoneyValue((totalCalc as any).total) : subtotal + 300,
+    deliveryLabel: totalCalc && (totalCalc as any).ok
+      ? `${(totalCalc as any).delivery} (${(totalCalc as any).deliveryLabel})`
+      : "Estimated standard delivery",
     source: "whatsapp_ai_commerce",
+    catalogSource: params.product.source ?? "commerce",
   };
+  return normalizeCommerceTotals(base);
 }
 
 async function startCommerceOrderFromText(opts: {
@@ -3085,10 +3088,10 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       const existing = cart.find((item: any) => String(item.variantId) === String(nextItem.variantId));
       if (existing) existing.quantity = Number(existing.quantity ?? 1) + nextItem.quantity;
       else cart.push(nextItem);
-      stateData.cart = cart;
-      stateData.subtotal = cart.reduce((sum: number, item: any) => sum + Number(item.unitPrice ?? 0) * Number(item.quantity ?? 1), 0);
-      stateData.total = stateData.subtotal + Number(stateData.delivery ?? 0);
-      await setConversationState(phone, state, stateData);
+      const merged = normalizeCommerceTotals({ ...stateData, cart });
+      await setConversationState(phone, state, merged);
+      stateData.subtotal = merged.subtotal;
+      stateData.total = merged.total;
       await logWaProcessingStep({ phone, step: "commerce_cart_updated", detail: "WhatsApp cart updated from follow-up message.", payload: { added: nextItem, cart } });
       await sendWaText(phone, `Done 😊 item cart mein add kar diya.\n\n${cart.map((item: any) => `• ${item.quantity} x ${item.productName} (${item.variantTitle}) — ${formatRupees(Number(item.unitPrice ?? 0) * Number(item.quantity ?? 1))}`).join("\n")}\n\nSubtotal: ${formatRupees(stateData.subtotal)}\n\nAb ${state === "wa_order_await_name" ? "apna naam" : "next detail"} bhej dein.`, waSettings);
       return;
@@ -3132,12 +3135,13 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       city: stateData.city,
     }).catch(() => null);
     if (calc && (calc as any).ok) {
+      stateData.discount = parseMoneyValue((calc as any).discount);
       stateData.deliveryLabel = `${(calc as any).delivery} (${(calc as any).deliveryLabel})`;
       stateData.delivery = parseMoneyValue((calc as any).delivery);
-      stateData.total = parseMoneyValue((calc as any).total) || stateData.subtotal + stateData.delivery;
     }
-    await setConversationState(phone, "wa_order_await_payment", stateData);
-    await sendWaText(phone, `${buildCommerceSummary(stateData)}\n\nPayment method bhej dein: *COD* ya *Bank Transfer*`, waSettings);
+    const paymentState = normalizeCommerceTotals(stateData);
+    await setConversationState(phone, "wa_order_await_payment", paymentState);
+    await sendWaText(phone, `${buildCommerceSummary(paymentState)}\n\nPayment method bhej dein: *COD* ya *Bank Transfer*`, waSettings);
     return;
   }
   if (state === "wa_order_await_payment") {
@@ -3201,14 +3205,36 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       return;
     }
     try {
-      await logWaProcessingStep({ phone, step: "ecommerce_order_save_started", detail: "Saving WhatsApp order into ecommerce orders tables.", payload: finalState });
+      await logWaProcessingStep({
+        phone,
+        step: "ecommerce_order_save_started",
+        detail: "Saving WhatsApp order into ecommerce orders tables.",
+        payload: {
+          subtotal: finalState.subtotal,
+          discount: finalState.discount,
+          delivery: finalState.delivery,
+          total: finalState.total,
+          cart: finalState.cart,
+          catalogSource: finalState.catalogSource,
+        },
+      });
       const ecommerce = await createEcommerceOrderFromWhatsApp(phone, finalState);
       await logWaProcessingStep({
         phone,
         step: "ecommerce_order_saved",
         status: "sent",
-        detail: `Ecommerce order ${ecommerce.order.orderNumber} saved. Courier booking is pending admin review.`,
-        payload: { orderId: ecommerce.order.id, orderNumber: ecommerce.order.orderNumber, shipmentId: ecommerce.shipment.id, bookingStatus: "manual_pending", total: ecommerce.order.total },
+        detail: `Ecommerce order ${ecommerce.order.orderNumber} saved (total ${ecommerce.order.total}).`,
+        payload: {
+          orderId: ecommerce.order.id,
+          orderNumber: ecommerce.order.orderNumber,
+          shipmentId: ecommerce.shipment.id,
+          bookingStatus: "manual_pending",
+          subtotal: finalState.subtotal,
+          delivery: finalState.delivery,
+          discount: finalState.discount,
+          finalTotal: finalState.total,
+          total: ecommerce.order.total,
+        },
       });
       await setConversationState(phone, "idle", {});
 

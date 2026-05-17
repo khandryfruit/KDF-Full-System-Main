@@ -200,6 +200,25 @@ async function tryCategoryCatalogReply(opts: {
       };
     }
 
+    const { searchRelatedCommerceProducts } = await import("./commerceProductSearch.js");
+    const relatedCommerce = await searchRelatedCommerceProducts(searchQ, 12);
+    if (relatedCommerce.length > 0) {
+      const catalogProducts = relatedCommerce.map(commerceHitToCatalogProduct);
+      return {
+        reply: formatCommerceProductsWhatsAppReply(relatedCommerce, roman),
+        product: catalogProducts[0]!,
+        products: catalogProducts,
+        query,
+        matchedRoots: productRootTermsFromQuery(searchQ),
+        score: 80,
+        mode: "category",
+        categoryId,
+        waProducts: commerceToWaCatalogProducts(relatedCommerce),
+        catalogPage: 0,
+        hasMore: relatedCommerce.length > 30,
+      };
+    }
+
     const listed = await listProductsForCustomerQuery(searchQ);
     if (listed.category && listed.products.length > 0) {
       const { toWhatsAppCatalogProducts } = await import("./shopifyProductKnowledge.js");
@@ -241,6 +260,25 @@ async function tryCategoryCatalogReply(opts: {
       mode: catalogProducts.length === 1 ? "single" : "category",
       categoryId: categoryId ?? null,
       waProducts: commerceToWaCatalogProducts(commerceSearch),
+      catalogPage: 0,
+      hasMore: false,
+    };
+  }
+
+  const { searchRelatedCommerceProducts } = await import("./commerceProductSearch.js");
+  const related = await searchRelatedCommerceProducts(searchQ, 12);
+  if (related.length > 0) {
+    const catalogProducts = related.map(commerceHitToCatalogProduct);
+    return {
+      reply: formatCommerceProductsWhatsAppReply(related, roman),
+      product: catalogProducts[0]!,
+      products: catalogProducts,
+      query,
+      matchedRoots: productRootTermsFromQuery(searchQ),
+      score: 70,
+      mode: "category",
+      categoryId: categoryId ?? null,
+      waProducts: commerceToWaCatalogProducts(related),
       catalogPage: 0,
       hasMore: false,
     };
