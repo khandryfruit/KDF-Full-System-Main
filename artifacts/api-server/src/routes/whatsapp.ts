@@ -721,29 +721,34 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             log?.info({ phone, interactionId, interactionTitle }, "Interactive reply received");
 
             if (interactionId === "wa_chat_order_confirm" || interactionId === "wa_chat_order_cancel") {
-              if (currentState !== "wa_order_await_confirm") {
+              const confirmStates = new Set(["wa_order_await_confirm", "wa_order_await_preconfirm"]);
+              if (!confirmStates.has(currentState)) {
                 await logWaProcessingStep({
                   phone,
                   messageId: msgId,
                   step: "commerce_button_without_active_state",
                   status: "failed",
-                  detail: "Customer clicked WhatsApp commerce confirm/cancel button but no active order confirmation state was found.",
+                  detail: "Confirm/cancel button without active checkout state.",
                   payload: { interactionId, interactionTitle, currentState },
                   failureReason: "no_active_whatsapp_checkout_state",
                 });
                 await sendWaText(
                   phone,
                   interactionId === "wa_chat_order_cancel"
-                    ? "Order cancel request receive ho gayi. Is chat mein koi active checkout pending nahi mila. Naya order start karna ho to product ka naam bhej dein."
-                    : "Order session expire ya complete ho chuka hai. Please naya bill/order banane ke liye product ka naam bhej dein.",
+                    ? "Order cancel ho gaya. Naya order ke liye product naam bhej dein 😊"
+                    : "Order session expire ho chuka. Product naam bhej kar naya order start karein 😊",
                   waSettings,
                 );
                 continue;
               }
               try {
+                const flowText =
+                  currentState === "wa_order_await_preconfirm"
+                    ? (interactionId === "wa_chat_order_confirm" ? "1" : "2")
+                    : (interactionId === "wa_chat_order_confirm" ? "confirm" : "cancel");
                 await handleCommerceOrderFlow(
                   phone,
-                  interactionId === "wa_chat_order_confirm" ? "confirm" : "cancel",
+                  flowText,
                   currentState,
                   waSettings,
                   log,
@@ -836,7 +841,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               currentState = "idle";
             }
           }
-          if (["wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_address", "wa_order_await_city", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
+          if (["wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice", "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity", "wa_order_await_name", "wa_order_await_phone", "wa_order_await_city", "wa_order_await_address", "wa_order_await_delivery_notes", "wa_order_await_payment", "wa_order_await_notes", "wa_order_await_confirm"].includes(currentState) && isTextLike && inboundText) {
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
             const commerceText = inboundText.trim();
             const trappedIntent = detectWaIntent(commerceText);
@@ -1262,11 +1267,10 @@ async function handleProductCatalog(opts: {
       payload: { searchTerm, requestedProductQuery, detectedIntent, products: products.map((p) => p.name) },
     });
 
-    await sendCommerceProductWaCards({
+    await deliverSingleProductOffer({
       phone,
-      products,
+      query: searchTerm,
       waSettings,
-      roman: isRomanUrduWa(textBody),
     });
 
     /* Log as ai_reply */
@@ -1666,24 +1670,103 @@ async function sendCommerceProductWaCards(opts: {
   }
 }
 
-/** Fresh DB search — never trap in "select number" without showing products */
+/** Show ONE best product (+ image). "Show more" reveals numbered list. */
+async function deliverSingleProductOffer(opts: {
+  phone: string;
+  query: string;
+  waSettings: any;
+  showMore?: boolean;
+}): Promise<boolean> {
+  const q = String(opts.query ?? "").trim();
+  if (q.length < 2) return false;
+
+  const { isShowMoreProductsMessage, buildNumberedProductList, buildSingleProductIntro } = await import("../lib/waOrderJourney.js");
+  const { resolveCommerceImageUrl } = await import("../lib/commerceProductSearch.js");
+  const { sendWhatsAppImage } = await import("../lib/whatsapp.js");
+  const roman = isRomanUrduWa(q);
+  const allMatches = await searchProductsForWa(q, 8);
+
+  if (!allMatches.length) return false;
+
+  if (opts.showMore || isShowMoreProductsMessage(q)) {
+    await sendWaText(opts.phone, buildNumberedProductList(allMatches as any, roman), opts.waSettings, "product_list_more");
+    await setConversationState(opts.phone, "wa_order_await_product_choice", {
+      productQuery: q,
+      products: allMatches,
+      lastUserMessage: q,
+      browseMode: "show_more",
+    });
+    return true;
+  }
+
+  const product = allMatches[0]!;
+  const intro = buildSingleProductIntro(product as any, roman);
+  const imageUrl = resolveCommerceImageUrl(product.imageUrl) ?? product.imageUrl;
+
+  if (imageUrl?.startsWith("https://")) {
+    await sendWhatsAppImage({
+      phone: opts.phone,
+      imageUrl,
+      caption: intro.imageCaption,
+      settings: opts.waSettings,
+      templateName: "single_product_image",
+    });
+    await new Promise((r) => setTimeout(r, 500));
+  } else {
+    await sendWaText(opts.phone, intro.imageCaption, opts.waSettings, "single_product_no_image");
+  }
+
+  await sendWaText(opts.phone, intro.detailBody, opts.waSettings, "single_product_detail");
+  await sendWaText(
+    opts.phone,
+    roman
+      ? "Aur options dekhne ke liye *show more* likh dein 😊"
+      : "مزید options کے لیے *show more* لکھیں 😊",
+    opts.waSettings,
+    "single_product_hint",
+  );
+
+  await setConversationState(opts.phone, "wa_order_await_variant", {
+    productQuery: q,
+    product,
+    moreProducts: allMatches.slice(1),
+    lastUserMessage: q,
+    cart: [],
+  });
+
+  await logWaProcessingStep({
+    phone: opts.phone,
+    step: "single_product_offered",
+    status: "sent",
+    detail: `Top match: ${product.name}`,
+    payload: { query: q, product: product.name, source: product.source, alternates: allMatches.length - 1 },
+  });
+  return true;
+}
+
 async function respondWithFreshProductSearch(opts: {
   phone: string;
   query: string;
   waSettings: any;
   log?: { warn?: (e: unknown, msg?: string) => void };
-  limit?: number;
 }): Promise<boolean> {
   const q = String(opts.query ?? "").trim();
   if (q.length < 2) return false;
 
-  const products = await searchProductsForWa(q, opts.limit ?? 6);
-  if (!products.length) {
+  const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
+  const shown = await deliverSingleProductOffer({
+    phone: opts.phone,
+    query: q,
+    waSettings: opts.waSettings,
+    showMore: isShowMoreProductsMessage(q),
+  });
+
+  if (!shown) {
     const roman = isRomanUrduWa(q);
     await sendWaText(
       opts.phone,
       roman
-        ? `Ji 😊 "${q}" ke liye abhi product nahi mila. *badam*, *pista*, *kaju* try karein ya Admin → Products check karein 😊`
+        ? `Ji 😊 "${q}" ke liye abhi product nahi mila. *badam*, *pista*, *kaju* try karein 😊`
         : `جی 😊 "${q}" کے لیے product نہیں ملا۔ *badam*، *pista* try کریں 😊`,
       opts.waSettings,
       "product_no_match",
@@ -1692,30 +1775,11 @@ async function respondWithFreshProductSearch(opts: {
       phone: opts.phone,
       step: "product_search_empty",
       status: "failed",
-      detail: `No commerce/shopify match for "${q}".`,
+      detail: `No match for "${q}".`,
       payload: { query: q },
       failureReason: "no_matching_product",
     });
-    return true;
   }
-
-  const roman = isRomanUrduWa(q);
-  const intro = products[0]?.source === "commerce"
-    ? (roman ? "Ji 😊 Ecommerce catalog se yeh products hain:" : "جی 😊 Ecommerce catalog سے yeh products ہیں:")
-    : (roman ? "Ji 😊 yeh products milay:" : "جی 😊 yeh products ملے:");
-  await sendWaText(opts.phone, intro, opts.waSettings, "product_search_results");
-
-  await setConversationState(opts.phone, "wa_order_await_product_choice", {
-    productQuery: q,
-    products,
-    lastUserMessage: q,
-    cart: [],
-    subtotal: undefined,
-    total: undefined,
-    delivery: undefined,
-  });
-
-  await sendCommerceProductWaCards({ phone: opts.phone, products, waSettings: opts.waSettings, roman });
   return true;
 }
 
@@ -1911,6 +1975,22 @@ async function tryResolveWaCustomerMessage(opts: {
   detectedIntent: ReturnType<typeof detectWaIntent>;
   log?: any;
 }): Promise<boolean> {
+  const { isWaCheckoutCollectionState, isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
+  if (isWaCheckoutCollectionState(opts.currentState)) {
+    return false;
+  }
+  if (opts.currentState === "wa_order_await_variant" && isShowMoreProductsMessage(opts.textBody)) {
+    const conv = await getConversationState(opts.phone);
+    let data: Record<string, any> = {};
+    try { data = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+    await deliverSingleProductOffer({
+      phone: opts.phone,
+      query: data.productQuery ?? opts.textBody,
+      waSettings: opts.waSettings,
+      showMore: true,
+    });
+    return true;
+  }
   if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
     return true;
   }
@@ -2011,30 +2091,8 @@ async function trySendProductCatalogReply(opts: {
       },
     });
 
-    const waProducts = hit.waProducts ?? (await import("../lib/shopifyProductKnowledge.js")).toWhatsAppCatalogProducts(hit.products);
-    const useCategoryFlow = hit.mode === "category" || hit.products.length > 1 || (hit.products.length === 1 && (waProducts[0]?.variantOptions?.length ?? 0) > 1);
-    const hasVisualCards = waProducts.length > 0;
-
-    if (hasVisualCards) {
-      const intro = isRomanUrduWa(textBody)
-        ? "Ji 😊 yeh products milay (image + price + link):"
-        : "جی 😊 yeh products ملے (image + price + link):";
-      await sendWaText(phone, intro, waSettings, "product_db_intro");
-      await sendCommerceProductWaCards({
-        phone,
-        products: waProducts as Awaited<ReturnType<typeof searchProductsForWa>>,
-        waSettings,
-        roman: isRomanUrduWa(textBody),
-      });
-    } else {
-      await sendDeterministicWaReply({
-        phone,
-        textBody,
-        reply: hit.reply,
-        intent: "product_search",
-        send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
-      });
-    }
+    const searchQ = hit.query || extractProductQueryFromMessage(textBody);
+    await deliverSingleProductOffer({ phone, query: searchQ, waSettings, showMore: false });
 
     const mergeState: Record<string, unknown> = {
       selectedProductName: hit.product.name,
@@ -2045,34 +2103,6 @@ async function trySendProductCatalogReply(opts: {
       source: "product_knowledge",
       matchedRoots: hit.matchedRoots,
     };
-
-    if (hit.mode === "catalog_menu") {
-      const { getCategorySummaries } = await import("../lib/waSalesAgent.js");
-      const summaries = await getCategorySummaries();
-      await setConversationState(phone, "wa_catalog_pick_category", {
-        ...mergeState,
-        categorySummaries: summaries,
-      });
-    } else if (hit.categoryId === "all" || (useCategoryFlow && hit.products.length > 0)) {
-      const { buildFullCatalogIndex } = await import("../lib/waSalesAgent.js");
-      const index = await buildFullCatalogIndex();
-      await setConversationState(phone, "wa_order_await_product_choice", {
-        ...mergeState,
-        products: waProducts,
-        categoryProducts: hit.categoryId === "all" ? hit.products : hit.products,
-        browseMode: hit.mode,
-        categoryId: hit.categoryId ?? hit.matchedRoots[0] ?? null,
-        catalogPage: hit.catalogPage ?? 0,
-        totalInCategory: hit.categoryId === "all" ? index.total : hit.products.length,
-      });
-    } else {
-      const waProduct = waProducts[0];
-      mergeState.lastOfferedProduct = waProduct;
-      await setConversationState(phone, "wa_order_await_variant", {
-        ...mergeState,
-        product: waProduct,
-      });
-    }
 
     await persistConversationTurn(phone, {
       intent: "product_search",
@@ -2588,108 +2618,35 @@ async function startCommerceOrderFromText(opts: {
     await sendWaText(opts.phone, "Ji 😊 bill bana deta hoon. Sab se pehle product ka naam bhej dein.\n\nExample: *Badam*, *Kaju*, *Pista*", opts.waSettings);
     return true;
   }
-  const products = await searchProductsForWa(parsed.productQuery, 15);
-  const product = products[0];
-  const { isOfficialCatalogProductSource } = await import("../lib/waFlowEscape.js");
-  if (!product || !isOfficialCatalogProductSource(product.source)) {
-    if (await respondWithFreshProductSearch({ phone: opts.phone, query: parsed.productQuery, waSettings: opts.waSettings })) {
+  if (parsed.variantTitle) {
+    const found = await findCommerceProductVariant(parsed.productQuery, parsed.variantTitle);
+    if (found) {
+      await setConversationState(opts.phone, "wa_order_await_preconfirm", {
+        product: found.product,
+        variant: found.variant,
+        productName: found.product.name,
+        variantTitle: found.variantTitle,
+        unitPrice: found.unitPrice,
+        quantity: parsed.quantity,
+        productQuery: parsed.productQuery,
+      });
+      const { buildPreconfirmMessage } = await import("../lib/waOrderJourney.js");
+      const roman = isRomanUrduWa(opts.textBody);
+      await sendWaText(opts.phone, buildPreconfirmMessage({
+        productName: found.product.name,
+        variantTitle: found.variantTitle,
+        unitPrice: found.unitPrice,
+        quantity: parsed.quantity,
+        roman,
+      }), opts.waSettings);
       return true;
     }
-    await logWaProcessingStep({
-      phone: opts.phone,
-      step: "commerce_order_start_failed",
-      status: "failed",
-      detail: "No official catalog product matched for order start.",
-      payload: parsed,
-      failureReason: "product_not_found",
-    });
-    await sendWaText(opts.phone, "Sorry, is product ka data nahi mila. Please product ka naam bhej dein — jaise badam, pista, kaju.", opts.waSettings);
+  }
+
+  if (await deliverSingleProductOffer({ phone: opts.phone, query: parsed.productQuery, waSettings: opts.waSettings })) {
     return true;
   }
-  const specificProductNamed = /\b(shell|kaghzi|kagzi|with shell|without shell|baghair|bghair|soft|hard|australian|mamra|american|irani|ajwa|mazafati|kalmi|sukkari|kaghazi)\b/i.test(opts.textBody);
-  const needsProductChoice = products.length > 1 || (products.length === 1 && !specificProductNamed);
-  if (needsProductChoice && products.length >= 1) {
-    const { formatCategoryProductListReply, resolveSalesCategoryFromQuery } = await import("../lib/waSalesAgent.js");
-    const category = resolveSalesCategoryFromQuery(parsed.productQuery);
-    const roman = isRomanUrduWa(opts.textBody);
-    await setConversationState(opts.phone, "wa_order_await_product_choice", {
-      productQuery: parsed.productQuery,
-      products,
-      categoryId: category?.id ?? null,
-    });
-    await logWaProcessingStep({
-      phone: opts.phone,
-      step: "commerce_product_choice_requested",
-      status: "received",
-      detail: "Category product list shown from Shopify catalog.",
-      payload: { query: parsed.productQuery, count: products.length, products: products.map((p) => p.name) },
-    });
-    const catalogProducts = products.map((p) => ({
-      name: p.name,
-      rawPrice: p.rawPrice ?? 0,
-      inStock: p.inStock ?? true,
-      variantOptions: p.variantOptions ?? [],
-      price: p.price,
-    })) as any[];
-    await sendWaText(
-      opts.phone,
-      formatCategoryProductListReply({ category, products: catalogProducts, roman }),
-      opts.waSettings,
-    );
-    return true;
-  }
-  if (!parsed.variantTitle && (product.variantOptions?.length ?? 0) > 1) {
-    await setConversationState(opts.phone, "wa_order_await_variant", { productQuery: parsed.productQuery, product });
-    await logWaProcessingStep({
-      phone: opts.phone,
-      step: "commerce_order_variant_requested",
-      status: "received",
-      detail: "Product found; asking customer to select official Shopify variant.",
-      payload: { product: product.name, variants: product.variantLines },
-    });
-    const variantMenu = product.variantOptions?.map((v: any, i: number) =>
-      `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}${v.compareAtPrice && v.compareAtPrice > v.price ? ` (was ${formatRupees(v.compareAtPrice)})` : ""}`,
-    ).join("\n") || product.variants;
-    await sendWaText(opts.phone, `جی 😊 *${product.name}* ke available Shopify variants:\n\n${variantMenu}\n\nNumber reply kar dein, example: 3`, opts.waSettings);
-    return true;
-  }
-  const found = await findCommerceProductVariant(parsed.productQuery, parsed.variantTitle);
-  if (!found) {
-    await logWaProcessingStep({
-      phone: opts.phone,
-      step: "commerce_order_start_failed",
-      status: "failed",
-      detail: "Could not start WhatsApp commerce order because no official Shopify variant matched.",
-      payload: parsed,
-      failureReason: "shopify_variant_not_found",
-    });
-    await sendWaText(opts.phone, "Sorry, is product/variant ka official price nahi mila. Please product ka exact naam ya weight bhej dein.", opts.waSettings);
-    return true;
-  }
-  if (!parsed.quantityExplicit) {
-    await setConversationState(opts.phone, "wa_order_await_quantity", {
-      product: found.product,
-      variant: found.variant,
-      productName: found.product.name,
-      selectedProductName: found.product.name,
-      selectedVariantTitle: found.variantTitle,
-      selectedCategory: parsed.productQuery,
-      variantTitle: found.variantTitle,
-      unitPrice: found.unitPrice,
-    });
-    await sendWaText(opts.phone, `Perfect 😊\n\n*${found.product.name}*\nVariant: *${found.variantTitle}*\nPrice: *${formatRupees(found.unitPrice)}*\n\nQuantity kitni chahiye? (Example: 1, 2, 3)`, opts.waSettings);
-    return true;
-  }
-  const stateData = await buildCommerceStateDataFromSelection({ product: found.product, variant: found.variant, quantity: parsed.quantity });
-  await setConversationState(opts.phone, "wa_order_await_name", stateData);
-  await logWaProcessingStep({
-    phone: opts.phone,
-    step: "commerce_order_started",
-    status: "received",
-    detail: "WhatsApp commerce order started from official Shopify variant.",
-    payload: stateData,
-  });
-  await sendWaText(opts.phone, `${buildCommerceSummary(stateData)}\n\nOrder confirm karne ke liye apna *naam* bhej dein 😊`, opts.waSettings);
+  await sendWaText(opts.phone, "Sorry, is product ka data nahi mila. Please product ka naam bhej dein — jaise badam, pista, kaju.", opts.waSettings);
   return true;
 }
 
@@ -2718,7 +2675,7 @@ async function createEcommerceOrderFromWhatsApp(phone: string, rawStateData: Rec
       status: "confirmed",
       paymentStatus: paymentMethod === "cod" ? "unpaid" : "pending",
       subtotal: Number(stateData.subtotal).toFixed(2),
-      discount: "0.00",
+      discount: Number(stateData.discount ?? 0).toFixed(2),
       deliveryFee: Number(stateData.delivery ?? 0).toFixed(2),
       loyaltyDiscount: "0.00",
       walletDiscount: "0.00",
@@ -2929,55 +2886,44 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         ?? allProducts.find((p: any) => normalizeProductText(String(p.name ?? p.title ?? "")).includes(normalizeProductText(trimmed)));
     }
     if (!selected) {
+      const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
+      if (isShowMoreProductsMessage(trimmed)) {
+        await deliverSingleProductOffer({ phone, query: stateData.productQuery ?? trimmed, waSettings, showMore: true });
+        return;
+      }
       const freshQuery = extractProductQueryFromMessage(trimmed) || trimmed;
-      if (await respondWithFreshProductSearch({ phone, query: freshQuery, waSettings, log })) return;
-      await sendWaText(phone, `Ji 😊 product samajh nahi aaya.\n\nProduct naam bhej dein — jaise *badam*, *pista*, *kaju* — ya list se number (1, 2, 3).`, waSettings);
+      if (productRootsInMessage(freshQuery).length > 0) {
+        await deliverSingleProductOffer({ phone, query: freshQuery, waSettings });
+        return;
+      }
+      await sendWaText(phone, `Ji 😊 option samajh nahi aaya. List se *number* reply karein (1, 2, 3) ya product naam dobara bhej dein.`, waSettings);
       return;
     }
-    const { formatVariantSelectionReply } = await import("../lib/waSalesAgent.js");
-    const roman = !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(trimmed) && /[a-z]/i.test(stateData.lastUserMessage ?? "");
-    if ((selected.variantOptions?.length ?? 0) > 1) {
-      await setConversationState(phone, "wa_order_await_variant", {
-        productQuery: stateData.productQuery,
-        product: selected,
-        categoryId: stateData.categoryId,
-        lastUserMessage: stateData.lastUserMessage,
-      });
-      const catalogProduct = {
-        name: selected.name,
-        variantOptions: selected.variantOptions ?? [],
-        inStock: selected.inStock ?? true,
-        price: selected.price,
-        rawPrice: selected.rawPrice ?? 0,
-      } as any;
-      await sendWaText(phone, formatVariantSelectionReply({ product: catalogProduct, roman }), waSettings);
-      return;
+    const { resolveCommerceImageUrl } = await import("../lib/commerceProductSearch.js");
+    const { sendWhatsAppImage } = await import("../lib/whatsapp.js");
+    const { buildSingleProductIntro, buildPreconfirmMessage } = await import("../lib/waOrderJourney.js");
+    const roman = isRomanUrduWa(stateData.lastUserMessage ?? trimmed);
+    const imageUrl = resolveCommerceImageUrl(selected.imageUrl) ?? selected.imageUrl;
+    if (imageUrl?.startsWith("https://")) {
+      const intro = buildSingleProductIntro(selected, roman);
+      await sendWhatsAppImage({ phone, imageUrl, caption: intro.imageCaption, settings: waSettings, templateName: "product_pick_image" });
+      await new Promise((r) => setTimeout(r, 400));
     }
-    const variant = selected.variantOptions?.[0];
-    if (!variant) {
-      await sendWaText(phone, "Is product ka variant/price available nahi. Please doosra product select kar dein.", waSettings);
-      return;
-    }
-    const unitPrice = parseCatalogUnitPrice(variant.price);
-    const { formatOrderPreviewReply } = await import("../lib/waSalesAgent.js");
-    await setConversationState(phone, "wa_order_await_preconfirm", {
+    await setConversationState(phone, "wa_order_await_variant", {
+      productQuery: stateData.productQuery,
       product: selected,
-      variant,
-      productName: selected.name,
-      selectedProductName: selected.name,
-      selectedVariantTitle: variant.title,
-      productQuery: stateData.productQuery ?? "",
-      variantTitle: variant.title,
-      unitPrice,
-      quantity: 1,
+      categoryId: stateData.categoryId,
+      lastUserMessage: stateData.lastUserMessage,
     });
-    await sendWaText(phone, formatOrderPreviewReply({
-      productName: selected.name,
-      variantTitle: variant.title,
-      unitPrice,
-      quantity: 1,
-      roman,
-    }), waSettings);
+    const catalogProduct = {
+      name: selected.name,
+      variantOptions: selected.variantOptions ?? [],
+      inStock: selected.inStock ?? true,
+      price: selected.price,
+      rawPrice: selected.rawPrice ?? 0,
+    } as any;
+    const { formatVariantSelectionReply } = await import("../lib/waSalesAgent.js");
+    await sendWaText(phone, formatVariantSelectionReply({ product: catalogProduct, roman }), waSettings);
     return;
   }
   if (state === "wa_order_await_preconfirm") {
@@ -3000,8 +2946,8 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       quantity: Number(stateData.quantity ?? 1),
     });
     await setConversationState(phone, "wa_order_await_name", nextState);
-    await logWaProcessingStep({ phone, step: "commerce_preconfirm_accepted", detail: "Customer confirmed order preview.", payload: nextState });
-    await sendWaText(phone, `${buildCommerceSummary(nextState)}\n\nOrder confirm karne ke liye apna *naam* bhej dein 😊`, waSettings);
+    await logWaProcessingStep({ phone, step: "commerce_preconfirm_accepted", detail: "Customer confirmed size — collecting checkout details.", payload: nextState });
+    await sendWaText(phone, "Shukriya 😊 Order complete karne ke liye apna *poora naam* bhej dein:", waSettings);
     return;
   }
   if (state === "wa_order_await_variant") {
@@ -3016,17 +2962,15 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     })
       ?? null;
     if (!product || !selected) {
-      const freshQuery = extractProductQueryFromMessage(trimmed) || trimmed;
-      if (productRootsInMessage(freshQuery).length > 0 || isProductInquiryMessage(freshQuery)) {
-        await setConversationState(phone, "idle", {});
-        if (await respondWithFreshProductSearch({ phone, query: freshQuery, waSettings, log })) return;
+      const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
+      if (isShowMoreProductsMessage(trimmed)) {
+        await deliverSingleProductOffer({ phone, query: stateData.productQuery ?? trimmed, waSettings, showMore: true });
+        return;
       }
       if (options.length) {
-        await sendWaText(phone, `Size/weight ke liye number select karein:\n\n${options.map((v: any, i: number) => `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}`).join("\n")}`, waSettings);
-      } else if (await respondWithFreshProductSearch({ phone, query: freshQuery || stateData.productQuery || "badam", waSettings, log })) {
-        return;
+        await sendWaText(phone, `Size select karein:\n\n${options.map((v: any, i: number) => `${i + 1}️⃣ ${v.title} — ${formatRupees(parseCatalogUnitPrice(v.price))}`).join("\n")}`, waSettings);
       } else {
-        await sendWaText(phone, "Ji 😊 product variant clear nahi. Product naam dobara bhej dein — jaise badam 500g.", waSettings);
+        await sendWaText(phone, "Ji 😊 size clear nahi. *1*, *2*, ya *3* reply karein.", waSettings);
       }
       return;
     }
@@ -3045,14 +2989,25 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       quantity: 1,
       lastUserMessage: stateData.lastUserMessage,
     });
-    await logWaProcessingStep({ phone, step: "commerce_variant_selected", detail: "Customer selected official Shopify variant.", payload: { product: product.name, variant: selected } });
-    await sendWaText(phone, formatOrderPreviewReply({
+    await logWaProcessingStep({ phone, step: "commerce_variant_selected", detail: "Customer selected size/variant.", payload: { product: product.name, variant: selected } });
+    const { buildPreconfirmMessage } = await import("../lib/waOrderJourney.js");
+    await sendWaText(phone, buildPreconfirmMessage({
       productName: product.name,
       variantTitle: selected.title,
       unitPrice,
       quantity: 1,
       roman,
     }), waSettings);
+    await sendInteractiveButtons({
+      phone,
+      text: roman ? "Confirm karein?" : "Confirm کریں؟",
+      buttons: [
+        { id: "wa_chat_order_confirm", title: "1️⃣ Yes" },
+        { id: "wa_chat_order_cancel", title: "2️⃣ Cancel" },
+      ],
+      settings: waSettings,
+      templateName: "wa_preconfirm",
+    });
     return;
   }
   if (state === "wa_order_await_quantity") {
@@ -3099,35 +3054,55 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   }
   if (state === "wa_order_await_name") {
     if (isInvalidCheckoutName(trimmed)) {
-      await logWaProcessingStep({ phone, step: "commerce_validation_failed", status: "failed", detail: "Invalid customer name captured during WhatsApp checkout.", payload: { value: trimmed }, failureReason: "invalid_customer_name" });
-      await sendWaText(phone, "Please apna *proper naam* bhej dein. Sirf Ok/Yes/Confirm naam ke liye accept nahi hoga.", waSettings);
+      await logWaProcessingStep({ phone, step: "commerce_validation_failed", status: "failed", detail: "Invalid customer name during checkout.", payload: { value: trimmed }, failureReason: "invalid_customer_name" });
+      await sendWaText(phone, "Please apna *poora naam* bhej dein (kam az kam 3 letters).", waSettings);
       return;
     }
     stateData.customerName = trimmed;
+    stateData.customerPhone = normalizeCheckoutPhone(phone);
     await setConversationState(phone, "wa_order_await_phone", stateData);
-    await sendWaText(phone, `Shukriya *${stateData.customerName}* 😊\n\nApna phone number confirm kar dein. Current WhatsApp number use karna hai to reply karein: *same*`, waSettings);
+    await sendWaText(
+      phone,
+      `Shukriya *${stateData.customerName}* 😊\n\n📞 Phone: *${stateData.customerPhone}* (WhatsApp)\n\nAgar yeh number theek hai to *same* likh dein, warna correct number bhej dein.`,
+      waSettings,
+    );
     return;
   }
   if (state === "wa_order_await_phone") {
-    const customerPhone = /^same$/i.test(trimmed) ? phone : trimmed;
+    const customerPhone = /^same$/i.test(trimmed) ? normalizeCheckoutPhone(phone) : trimmed;
     if (!isValidCheckoutPhone(customerPhone)) {
-      await logWaProcessingStep({ phone, step: "commerce_validation_failed", status: "failed", detail: "Invalid customer phone captured during WhatsApp checkout.", payload: { value: trimmed }, failureReason: "invalid_customer_phone" });
-      await sendWaText(phone, "Please valid phone number bhej dein, ya current WhatsApp number use karne ke liye *same* reply karein.", waSettings);
+      await sendWaText(phone, "Valid phone number bhej dein ya *same* reply karein.", waSettings);
       return;
     }
     stateData.customerPhone = normalizeCheckoutPhone(customerPhone);
-    await setConversationState(phone, "wa_order_await_address", stateData);
-    await sendWaText(phone, "Delivery ke liye apna complete address bhej dein 🏠", waSettings);
-    return;
-  }
-  if (state === "wa_order_await_address") {
-    stateData.address = trimmed;
     await setConversationState(phone, "wa_order_await_city", stateData);
-    await sendWaText(phone, "City ka naam bhej dein 📍", waSettings);
+    await sendWaText(phone, "🏙 Apni *city* ka naam bhej dein (jaise: Lahore, Karachi):", waSettings);
     return;
   }
   if (state === "wa_order_await_city") {
     stateData.city = trimmed;
+    await setConversationState(phone, "wa_order_await_address", stateData);
+    await sendWaText(
+      phone,
+      "📍 Ab *complete address* bhej dein:\n\nHouse #\nArea / Society\nLandmark (optional)",
+      waSettings,
+    );
+    return;
+  }
+  if (state === "wa_order_await_address") {
+    if (trimmed.length < 8) {
+      await sendWaText(phone, "Please thora detail address bhej dein (kam az kam street + area).", waSettings);
+      return;
+    }
+    stateData.address = trimmed;
+    await setConversationState(phone, "wa_order_await_delivery_notes", stateData);
+    await sendWaText(phone, "📝 Delivery instructions (optional) — warna *no* likh dein:", waSettings);
+    return;
+  }
+  if (state === "wa_order_await_delivery_notes" || state === "wa_order_await_notes") {
+    stateData.deliveryNotes = /^no|none|nahi|nai$/i.test(trimmed) ? "" : trimmed;
+    stateData.notes = stateData.deliveryNotes;
+    stateData.paymentMethod = stateData.paymentMethod ?? "COD";
     const calc = await calculateWhatsAppOrderTotal({
       productQuery: stateData.productName,
       quantity: stateData.quantity,
@@ -3139,31 +3114,26 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
       stateData.deliveryLabel = `${(calc as any).delivery} (${(calc as any).deliveryLabel})`;
       stateData.delivery = parseMoneyValue((calc as any).delivery);
     }
-    const paymentState = normalizeCommerceTotals(stateData);
-    await setConversationState(phone, "wa_order_await_payment", paymentState);
-    await sendWaText(phone, `${buildCommerceSummary(paymentState)}\n\nPayment method bhej dein: *COD* ya *Bank Transfer*`, waSettings);
-    return;
-  }
-  if (state === "wa_order_await_payment") {
-    stateData.paymentMethod = /bank|transfer|online/i.test(trimmed) ? "Bank Transfer" : "COD";
-    await setConversationState(phone, "wa_order_await_notes", stateData);
-    await sendWaText(phone, "Koi optional note ho to bhej dein, warna reply karein *no*.", waSettings);
-    return;
-  }
-  if (state === "wa_order_await_notes") {
-    stateData.notes = /^no|none|nahi|nai$/i.test(trimmed) ? "" : trimmed;
     const finalState = normalizeCommerceTotals(stateData);
+    const { buildFinalOrderSummary } = await import("../lib/waOrderJourney.js");
+    const roman = isRomanUrduWa(stateData.lastUserMessage ?? "");
     await setConversationState(phone, "wa_order_await_confirm", finalState);
     await sendInteractiveButtons({
       phone,
-      text: `${buildCommerceSummary(finalState)}\n\nNaam: ${finalState.customerName}\nPhone: ${finalState.customerPhone}\nAddress: ${finalState.address}, ${finalState.city}\nPayment: ${finalState.paymentMethod}\n\nOrder confirm karein?`,
+      text: buildFinalOrderSummary(finalState, roman),
       buttons: [
-        { id: "wa_chat_order_confirm", title: "✅ Confirm" },
-        { id: "wa_chat_order_cancel", title: "❌ Cancel" },
+        { id: "wa_chat_order_confirm", title: "1️⃣ Confirm Order" },
+        { id: "wa_chat_order_cancel", title: "2️⃣ Cancel" },
       ],
       settings: waSettings,
       templateName: "wa_order_review",
     });
+    return;
+  }
+  if (state === "wa_order_await_payment") {
+    stateData.paymentMethod = /bank|transfer|online/i.test(trimmed) ? "Bank Transfer" : "COD";
+    await setConversationState(phone, "wa_order_await_delivery_notes", stateData);
+    await sendWaText(phone, "📝 Delivery instructions bhej dein (ya *no*):", waSettings);
     return;
   }
   if (state === "wa_order_await_confirm") {
@@ -3264,7 +3234,14 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
           payload: { shopifyOrderId: shopifyCreated.order.id, ecommerceOrderId: ecommerce.order.id },
         });
       }
-      await sendWaText(phone, `جزاک اللہ 😊\n\nآپ کا آرڈر کامیابی سے confirm ہو گیا ہے۔\n\nOrder ID:\n${ecommerce.order.orderNumber}\n\nہماری team order review کر کے courier book کرے گی۔ Booking کے بعد tracking update آپ کو WhatsApp پر مل جائے گا۔`, waSettings);
+      const { buildOrderPlacedConfirmation } = await import("../lib/waOrderJourney.js");
+      const roman = isRomanUrduWa(finalState.lastUserMessage ?? "");
+      await sendWaText(
+        phone,
+        buildOrderPlacedConfirmation(ecommerce.order.orderNumber, finalState.city ?? "", roman),
+        waSettings,
+        "order_placed",
+      );
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       log?.warn(err, "WhatsApp ecommerce order save failed");
