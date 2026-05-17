@@ -9,11 +9,8 @@ import {
   Banknote, BadgeCheck,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useListProducts, useListCategories } from "@workspace/api-client-react";
 import { useCart } from "@/context/CartContext";
 import { getProductImageSrc } from "@/lib/imageUrl";
-import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
-import { asArrayFromApi } from "@/lib/asArrayFromApi";
 import { apiUrl } from "@/lib/fetchJsonApi";
 import {
   buildVariantGroups,
@@ -24,23 +21,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
-import { ProductCard } from "@/components/ProductCard";
-import { KdfProductCarousel } from "@/components/carousel/KdfProductCarousel";
+import { ProductDetailRecommendations } from "@/components/product-detail/ProductDetailRecommendations";
 import { MobilePurchaseSheet, type PurchaseIntent } from "@/components/purchase/MobilePurchaseSheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   ProductConversionRail,
   StickyPurchaseConfidenceLg,
   useCtaInView,
-  type PairProduct,
 } from "@/components/product-detail/ProductConversionRail";
-import {
-  ProductGalleryEngagementZone,
-  type GalleryEngagementProduct,
-  type GalleryCategory,
-} from "@/components/product-detail/ProductGalleryEngagementZone";
 import { ProductDetailErrorBoundary } from "@/components/ProductDetailErrorBoundary";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -284,37 +272,6 @@ function ShippingTab() {
   );
 }
 
-/* ── Related Products ── */
-function RelatedProducts({ currentId }: { currentId: number }) {
-  const { data } = useListProducts(
-    { limit: 12 },
-    { query: { queryKey: ["products", "related-bottom"], staleTime: 60_000 } },
-  );
-  const products = useMemo(
-    () =>
-      normalizeProductsListResponse(data)
-        .items.filter((p: any) => p.id !== currentId)
-        .slice(0, 12),
-    [data, currentId],
-  );
-  if (products.length === 0) return null;
-
-  return (
-    <section className="mt-10 md:mt-14 pb-4">
-      <Separator className="mb-8" />
-      <h2 className="mb-5 text-xl font-black tracking-tight md:text-2xl">You May Also Like</h2>
-      <div className="sm:hidden">
-        <KdfProductCarousel products={products} mode="peek" resumeMs={4000} className="kdf-carousel--rec" compact />
-      </div>
-      <div className="kdf-rec-grid hidden sm:grid">
-        {products.map((p: any) => (
-          <ProductCard key={p.id} product={p} compact />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /* ── Main Page ── */
 function ProductDetailPageView() {
   const params = useParams<{ slug: string }>();
@@ -366,101 +323,6 @@ function ProductDetailPageView() {
   });
 
   const productId: number = (product as any)?.id ?? 0;
-
-  const { data: relatedPool } = useListProducts(
-    { limit: 7 },
-    { query: { queryKey: ["products", "related-pool"], staleTime: 60_000 } },
-  );
-  const pairItems: PairProduct[] = useMemo(() => {
-    if (!productId || !relatedPool) return [];
-    return normalizeProductsListResponse(relatedPool)
-      .items.filter((p: any) => p.id !== productId)
-      .slice(0, 4)
-      .map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: Number(p.price),
-        originalPrice: p.originalPrice,
-        images: p.images,
-        gradient: p.gradient,
-      }));
-  }, [relatedPool, productId]);
-
-  const { data: categoriesRaw } = useListCategories({
-    query: { queryKey: ["categories", "pdp-gallery"], staleTime: 120_000, refetchOnWindowFocus: false },
-  });
-  const galleryCategories: GalleryCategory[] = useMemo(
-    () => asArrayFromApi<GalleryCategory>(categoriesRaw).slice(0, 12),
-    [categoriesRaw],
-  );
-
-  const { data: engagementPool } = useListProducts(
-    { limit: 24, sortBy: "newest" as const },
-    { query: { queryKey: ["products", "pdp-gallery-engagement"], staleTime: 60_000, refetchOnWindowFocus: false } },
-  );
-
-  const { data: recommendationData } = useProductRecommendations({
-    context: "product",
-    productId,
-    limit: 10,
-    enabled: !!productId,
-  });
-
-  const galleryEngagementProducts: GalleryEngagementProduct[] = useMemo(() => {
-    const fromRec = [
-      ...(recommendationData?.recommendedWithThis ?? []),
-      ...(recommendationData?.customersAlsoBought ?? []),
-      ...(recommendationData?.relatedProducts ?? []),
-    ]
-      .filter((p: any) => p?.id && p.id !== productId)
-      .map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: Number(p.price),
-        images: p.images,
-        gradient: p.gradient,
-        variants: ensureVariantArray(p.variants),
-      }));
-    const seen = new Set<number>();
-    const merged: GalleryEngagementProduct[] = [];
-    for (const p of fromRec) {
-      if (seen.has(p.id)) continue;
-      seen.add(p.id);
-      merged.push(p);
-      if (merged.length >= 12) break;
-    }
-    if (merged.length >= 6) return merged;
-    if (!engagementPool) return merged;
-    for (const p of normalizeProductsListResponse(engagementPool).items) {
-      if (!p?.id || p.id === productId || seen.has(p.id)) continue;
-      seen.add(p.id);
-      merged.push({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: Number(p.price),
-        images: p.images,
-        gradient: p.gradient,
-        variants: ensureVariantArray(p.variants),
-      });
-      if (merged.length >= 12) break;
-    }
-    return merged;
-  }, [engagementPool, productId, recommendationData]);
-  const recommendedPairItems: PairProduct[] = useMemo(
-    () => (recommendationData?.frequentlyBoughtTogether ?? []).slice(0, 4).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      price: Number(p.price),
-      originalPrice: p.originalPrice,
-      images: p.images,
-      gradient: p.gradient,
-    })),
-    [recommendationData],
-  );
 
   const { ref: desktopCtaRef, inView: desktopCtaInView } = useCtaInView<HTMLDivElement>();
 
@@ -598,13 +460,6 @@ function ProductDetailPageView() {
     else { await navigator.clipboard.writeText(url); toast({ title: "Link copied!" }); }
   };
 
-  const handleQuickAddGallery = (p: GalleryEngagementProduct) => {
-    const vars = ensureVariantArray(p.variants);
-    const v = vars.find((x) => x.stock !== 0) ?? vars[0];
-    addItem(p as any, 1, v?.id, v?.value ?? "Standard");
-    toast({ title: "Added to cart", description: p.name });
-  };
-
   const structuredData = {
     "@context": "https://schema.org", "@type": "Product",
     "name": product.name, "description": product.description,
@@ -642,7 +497,7 @@ function ProductDetailPageView() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="kdf-page-shell kdf-pdp-main py-3 sm:py-10">
+      <main className="kdf-page-shell kdf-pdp-shell kdf-pdp-main py-3 sm:py-10">
         {/* Breadcrumb */}
         <nav className="mb-8 hidden flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:mb-9 lg:flex">
           <button onClick={() => setLocation("/")} className="hover:text-primary transition-colors" data-testid="breadcrumb-home">Home</button>
@@ -699,20 +554,6 @@ function ProductDetailPageView() {
                 ))}
               </div>
             )}
-            </div>
-            <div className="mt-4 hidden lg:block">
-              <ProductGalleryEngagementZone
-                productId={productId}
-                productName={product.name}
-                discountPercent={discount}
-                stock={product.stock}
-                marqueeProducts={galleryEngagementProducts}
-                apiCategories={galleryCategories}
-                getImageSrc={getProductImageSrc}
-                onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
-                onQuickAdd={handleQuickAddGallery}
-                onPathNavigate={(path) => setLocation(path)}
-              />
             </div>
           </div>
 
@@ -912,43 +753,11 @@ function ProductDetailPageView() {
               </div>
             )}
 
-            <ProductConversionRail
-              productId={productId}
-              stock={product.stock}
-              pairs={recommendedPairItems.length ? recommendedPairItems : pairItems}
-              getImageSrc={getProductImageSrc}
-              onPairClick={(p) => setLocation(`/products/${p.slug || p.id}`)}
-            />
+            <ProductConversionRail productId={productId} stock={product.stock} />
           </div>
         </div>
 
-        <div className="mt-5 lg:hidden">
-          <ProductGalleryEngagementZone
-            productId={productId}
-            productName={product.name}
-            discountPercent={discount}
-            stock={product.stock}
-            marqueeProducts={galleryEngagementProducts}
-            apiCategories={galleryCategories}
-            getImageSrc={getProductImageSrc}
-            onProductNavigate={(p) => setLocation(`/products/${p.slug || p.id}`)}
-            onQuickAdd={handleQuickAddGallery}
-            onPathNavigate={(path) => setLocation(path)}
-          />
-        </div>
-
-        <div className="mt-8 space-y-10">
-          <ProductRecommendationStrip
-            title="Related products"
-            subtitle="Selected by category, tags, stock and sales"
-            products={recommendationData?.relatedProducts ?? []}
-          />
-          <ProductRecommendationStrip
-            title="Best sellers"
-            subtitle="Popular products customers also buy"
-            products={recommendationData?.bestSellers ?? recommendationData?.customersAlsoBought ?? []}
-          />
-        </div>
+        <ProductDetailRecommendations productId={productId} />
 
         {/* ── Accordion: Description / Reviews / Shipping ── */}
         <div className="mt-10 space-y-3">
@@ -1018,8 +827,6 @@ function ProductDetailPageView() {
           })}
         </div>
 
-        {/* Related Products */}
-        <RelatedProducts currentId={productId} />
       </main>
 
       <StickyPurchaseConfidenceLg

@@ -1,5 +1,4 @@
 import { useMemo, useEffect, useState, useRef } from "react";
-import { KdfCarousel } from "@/components/carousel/KdfCarousel";
 import {
   Users,
   ShoppingBag,
@@ -10,17 +9,6 @@ import {
   Package,
   Zap,
 } from "lucide-react";
-import { KdfStoreProductCard } from "@/components/KdfStoreProductCard";
-
-export type PairProduct = {
-  id: number;
-  name: string;
-  slug?: string;
-  price: number;
-  originalPrice?: number | null;
-  images?: string[];
-  gradient?: string;
-};
 
 function seededStats(productId: number, stock: number) {
   const s = Math.abs(productId * 7919 + 104729) % 1000;
@@ -94,47 +82,6 @@ function DeliveryPromiseRow() {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function PairsWellMini({ items }: { items: PairProduct[] }) {
-  if (!items.length) return null;
-  return (
-    <div className="space-y-2.5">
-      <div className="flex items-end justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/80">Pairs well with</p>
-          <p className="text-xs font-semibold text-foreground/90">Customers also loved</p>
-        </div>
-        <BadgeCheck className="h-4 w-4 shrink-0 text-[#5FA800]/50" aria-hidden />
-      </div>
-      <KdfCarousel
-        mode="peek"
-        itemCount={items.length}
-        loopCopies={2}
-        resumeMs={4000}
-        showEdgeFade={false}
-        showArrows={items.length > 2}
-        className="kdf-pdp-pairs-carousel kdf-carousel--rec"
-      >
-        {items.map((p) => (
-          <div key={p.id} className="kdf-carousel-slide--peek">
-            <KdfStoreProductCard
-              compact
-              product={{
-                id: p.id,
-                name: p.name,
-                slug: p.slug,
-                price: p.price,
-                originalPrice: p.originalPrice,
-                images: p.images,
-                gradient: p.gradient,
-              }}
-            />
-          </div>
-        ))}
-      </KdfCarousel>
     </div>
   );
 }
@@ -216,15 +163,9 @@ export function useCtaInView<T extends HTMLElement>() {
 export function ProductConversionRail({
   productId,
   stock,
-  pairs,
-  getImageSrc,
-  onPairClick,
 }: {
   productId: number;
   stock: number;
-  pairs: PairProduct[];
-  getImageSrc: (path: string) => string;
-  onPairClick: (p: PairProduct) => void;
 }) {
   return (
     <div className="kdf-pdp-rail space-y-4 pt-2">
@@ -232,7 +173,6 @@ export function ProductConversionRail({
         <SocialPulseStrip productId={productId} stock={stock} />
       </div>
       <DeliveryPromiseRow />
-      <PairsWellMini items={pairs} />
     </div>
   );
 }

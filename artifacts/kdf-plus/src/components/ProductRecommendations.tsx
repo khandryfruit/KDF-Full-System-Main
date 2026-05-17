@@ -55,13 +55,17 @@ export function ProductRecommendationStrip({
   subtitle,
   products,
   compact = true,
+  carouselOnly = false,
+  maxItems = 12,
 }: {
   title: string;
   subtitle?: string;
   products: Product[];
   compact?: boolean;
+  carouselOnly?: boolean;
+  maxItems?: number;
 }) {
-  const visible = useMemo(() => products.slice(0, 12), [products]);
+  const visible = useMemo(() => products.slice(0, maxItems), [products, maxItems]);
   if (visible.length === 0) return null;
 
   return (
@@ -76,21 +80,21 @@ export function ProductRecommendationStrip({
         </div>
       </div>
 
-      <div className="sm:hidden">
-        <KdfProductCarousel
-          products={visible}
-          mode="peek"
-          resumeMs={4000}
-          className="kdf-carousel--rec"
-          compact={compact}
-        />
-      </div>
+      <KdfProductCarousel
+        products={visible}
+        mode="peek"
+        resumeMs={4500}
+        className={carouselOnly ? "kdf-pdp-rec-carousel kdf-carousel--rec" : "kdf-carousel--rec"}
+        compact={compact}
+      />
 
-      <div className="kdf-rec-grid hidden sm:grid">
-        {visible.map((product) => (
-          <ProductCard key={product.id} product={product} compact={compact} />
-        ))}
-      </div>
+      {!carouselOnly && (
+        <div className="kdf-rec-grid hidden sm:grid">
+          {visible.map((product) => (
+            <ProductCard key={product.id} product={product} compact={compact} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

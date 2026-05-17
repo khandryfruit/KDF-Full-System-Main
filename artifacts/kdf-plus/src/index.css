@@ -1564,7 +1564,7 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 .kdf-store-card--compact .kdf-store-card__media-wrap {
   aspect-ratio: 1 / 1;
-  max-height: 140px;
+  max-height: 11.25rem;
   width: 100%;
   overflow: hidden;
 }
@@ -1719,6 +1719,37 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
     border: none;
     background: rgba(248, 250, 252, 0.9);
     box-shadow: none;
+  }
+}
+
+/* PDP — centered shell (max 1440px), full-width content */
+.kdf-pdp-shell {
+  max-width: min(100%, 90rem);
+  margin-inline: auto;
+}
+
+.kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
+  flex: 0 0 calc(52% - 6px);
+  max-width: calc(52% - 6px);
+}
+@media (min-width: 640px) {
+  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100% - 14px) / 2);
+    max-width: calc((100% - 14px) / 2);
+  }
+}
+@media (min-width: 1024px) {
+  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100% - 42px) / 4);
+    max-width: calc((100% - 42px) / 4);
+  }
+}
+.kdf-pdp-rec-carousel .kdf-store-card--compact .kdf-store-card__media-wrap {
+  max-height: 11.25rem;
+}
+@media (min-width: 1024px) {
+  .kdf-pdp-rec-carousel .kdf-store-card--compact .kdf-store-card__media-wrap {
+    max-height: 11.25rem;
   }
 }
 

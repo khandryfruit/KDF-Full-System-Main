@@ -165,6 +165,56 @@ function dedupeProducts<T extends { id: number }>(items: T[], limit: number): T[
   return out;
 }
 
+const NAME_STOP_WORDS = new Set([
+  "with", "and", "the", "for", "from", "pack", "gift", "premium", "organic", "natural",
+  "fresh", "dried", "roasted", "salted", "unsalted", "raw", "whole", "split", "extra",
+  "super", "best", "grade", "quality", "mixed", "assorted",
+]);
+
+function nameTokens(name: string): string[] {
+  return String(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 4 && !NAME_STOP_WORDS.has(t));
+}
+
+function parseWeightGrams(weight: string | null | undefined, unit?: string | null): number {
+  if (!weight) return 0;
+  const raw = String(weight).trim().toLowerCase();
+  const m = raw.match(/^([\d.]+)\s*(kg|kilogram|kilograms|g|gm|gram|grams|lb|lbs|pound|pounds|oz)?$/);
+  if (m) {
+    const val = parseFloat(m[1]);
+    const u = m[2] ?? String(unit ?? "g").toLowerCase();
+    if (u.startsWith("kg") || u.startsWith("kilo")) return val * 1000;
+    if (u.startsWith("lb") || u.startsWith("pound")) return val * 453.592;
+    if (u.startsWith("oz")) return val * 28.3495;
+    return val;
+  }
+  const u = String(unit ?? "").toLowerCase();
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (u.startsWith("kg") || u.startsWith("kilo")) return n * 1000;
+  return n;
+}
+
+function weightFitScore(seedGrams: number, productGrams: number): number {
+  if (seedGrams <= 0 || productGrams <= 0) return 0;
+  const ratio = productGrams / seedGrams;
+  if (ratio >= 0.55 && ratio <= 1.85) return 12;
+  if (ratio >= 0.4 && ratio <= 2.5) return 6;
+  return 0;
+}
+
+function isProductRelevant(s: {
+  sameCategory: boolean;
+  tagOverlap: number;
+  nameFamily: number;
+  weightFit: number;
+}): boolean {
+  return s.sameCategory || s.tagOverlap > 0 || s.nameFamily > 0 || s.weightFit >= 6;
+}
+
 async function getShopifyTitleSalesScores(): Promise<Map<string, number>> {
   try {
     const rows = await db.execute(sql`
@@ -215,7 +265,10 @@ router.get("/products/recommendations", async (req, res) => {
     const seedProducts = [currentProduct, ...cartProducts].filter(Boolean) as any[];
     const seedCategoryIds = new Set(seedProducts.map((p: any) => p.categoryId).filter(Boolean));
     const seedTags = new Set(seedProducts.flatMap((p: any) => normalizeTags(p.tags)));
-    const seedNames = seedProducts.map((p: any) => String(p.name ?? "").toLowerCase());
+    const seedNameTokens = new Set(seedProducts.flatMap((p: any) => nameTokens(String(p.name ?? ""))));
+    const seedWeightGrams = seedProducts.length
+      ? seedProducts.reduce((sum: number, p: any) => sum + parseWeightGrams(p.weight, p.unit), 0) / seedProducts.length
+      : 0;
     const seedPrice = seedProducts.length
       ? seedProducts.reduce((sum: number, p: any) => sum + Number(p.price ?? 0), 0) / seedProducts.length
       : 0;
@@ -248,29 +301,45 @@ router.get("/products/recommendations", async (req, res) => {
         const sameCategory = p.categoryId != null && seedCategoryIds.has(p.categoryId);
         const flag = p.shopifyProductId ? flags.get(p.shopifyProductId) : undefined;
         const productPrice = Number(p.price ?? 0);
-        const priceFit = seedPrice > 0 && productPrice > 0 ? Math.max(0, 12 - Math.abs(productPrice - seedPrice) / Math.max(seedPrice, 1) * 10) : 0;
-        const nameHit = seedNames.some((name) => name && String(p.name).toLowerCase().includes(name.split(" ")[0] ?? "")) ? 4 : 0;
+        const productGrams = parseWeightGrams(p.weight, p.unit);
+        const weightFit = weightFitScore(seedWeightGrams, productGrams);
+        const nameFamily = nameTokens(String(p.name ?? "")).filter((t) => seedNameTokens.has(t)).length;
+        const priceFit =
+          seedPrice > 0 && productPrice > 0 && (sameCategory || tagOverlap > 0 || nameFamily > 0)
+            ? Math.max(0, 14 - Math.abs(productPrice - seedPrice) / Math.max(seedPrice, 1) * 12)
+            : 0;
         const units = salesScores.get(String(p.name ?? "").toLowerCase()) ?? 0;
+        const relevant = sameCategory || tagOverlap > 0 || nameFamily > 0;
         const score =
-          (sameCategory ? 30 : 0) +
-          tagOverlap * 12 +
-          (p.featured ? 14 : 0) +
-          (flag?.isRecommended ? 18 : 0) +
-          (flag?.isFeatured ? 10 : 0) +
-          Number(flag?.recommendPriority ?? 0) * 2 +
-          Number(p.rating ?? 0) * 4 +
-          Math.min(Number(p.reviewCount ?? 0), 50) * 0.5 +
-          Math.min(units, 80) * 0.8 +
+          (sameCategory ? 38 : 0) +
+          tagOverlap * 14 +
+          nameFamily * 10 +
+          weightFit +
           priceFit +
-          nameHit;
-        return { product: p, score, units, price: productPrice, sameCategory, tagOverlap };
+          (relevant && p.featured ? 8 : 0) +
+          (relevant && flag?.isRecommended ? 12 : 0) +
+          (relevant && flag?.isFeatured ? 6 : 0) +
+          (relevant ? Number(flag?.recommendPriority ?? 0) * 2 : 0) +
+          (relevant ? Number(p.rating ?? 0) * 3 : 0) +
+          (relevant ? Math.min(Number(p.reviewCount ?? 0), 50) * 0.4 : 0) +
+          (relevant ? Math.min(units, 80) * 0.6 : 0);
+        return { product: p, score, units, price: productPrice, sameCategory, tagOverlap, nameFamily, weightFit };
       })
       .sort((a: any, b: any) => b.score - a.score);
 
-    const byScore = scored.map((s: any) => s.product);
-    const bestSellers = dedupeProducts(scored.filter((s: any) => s.units > 0).sort((a: any, b: any) => b.units - a.units).map((s: any) => s.product), limit);
-    const lowQuantityAddOns = dedupeProducts(scored.filter((s: any) => s.price > 0 && s.price <= Math.max(700, seedPrice * 0.65 || 700)).map((s: any) => s.product), 8);
-    const frequentlyBoughtTogether = dedupeProducts(scored.filter((s: any) => s.sameCategory || s.tagOverlap > 0).map((s: any) => s.product), limit);
+    const relevantScored = scored.filter(isProductRelevant);
+    const byScore = relevantScored.map((s: any) => s.product);
+    const bestSellers = dedupeProducts(scored.filter((s: any) => s.units > 0 && isProductRelevant(s)).sort((a: any, b: any) => b.units - a.units).map((s: any) => s.product), limit);
+    const lowQuantityAddOns = dedupeProducts(relevantScored.filter((s: any) => s.price > 0 && s.price <= Math.max(700, seedPrice * 0.65 || 700)).map((s: any) => s.product), 8);
+    const frequentlyBoughtTogether = dedupeProducts(
+      relevantScored
+        .filter((s: any) =>
+          (s.sameCategory && (s.tagOverlap > 0 || s.nameFamily > 0 || s.weightFit >= 6)) ||
+          (s.nameFamily > 0 && s.tagOverlap > 0),
+        )
+        .map((s: any) => s.product),
+      limit,
+    );
     const relatedProducts = dedupeProducts(byScore, limit);
     const customersAlsoBought = dedupeProducts([...bestSellers, ...byScore], limit);
     const recommendedWithThis = dedupeProducts([...frequentlyBoughtTogether, ...byScore], 8);
