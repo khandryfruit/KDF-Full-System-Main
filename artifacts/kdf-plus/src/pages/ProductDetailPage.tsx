@@ -495,8 +495,8 @@ function ProductDetailPageView() {
   if (isLoading) {
     return (
       <main className="kdf-page-shell py-8 sm:py-10">
-        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-x-10 lg:gap-y-8 xl:gap-x-12">
-          <Skeleton className="mx-auto aspect-square w-full max-w-[min(100%,28rem)] rounded-2xl lg:mx-0" />
+        <div className="kdf-pdp-hero">
+          <Skeleton className="mx-auto aspect-square w-full max-w-[min(100%,24rem)] rounded-2xl lg:mx-0 lg:max-w-full" />
           <div className="min-w-0 space-y-4"><Skeleton className="h-8 w-3/4" /><Skeleton className="h-6 w-1/4" /><Skeleton className="h-24 w-full" /><Skeleton className="h-12 w-full" /></div>
         </div>
       </main>
@@ -626,13 +626,12 @@ function ProductDetailPageView() {
         </nav>
 
         {/* 2-column grid — min-w-0 prevents flex/grid overflow at high zoom; gallery width capped for stable aspect-square */}
-        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-x-10 lg:gap-y-8 xl:gap-x-12 2xl:gap-x-14">
-          {/* Left: Images */}
-          <div className="min-w-0">
-            <div className="mx-auto w-full max-w-[min(100%,26rem)] space-y-3 sm:max-w-[min(100%,28rem)] lg:mx-0 lg:max-w-[min(100%,32rem)] xl:max-w-[min(100%,36rem)]">
+        <div className="kdf-pdp-hero">
+          <motion.div className="kdf-pdp-hero__gallery">
+            <div className="mx-auto w-full max-w-[min(100%,24rem)] space-y-3 sm:max-w-[min(100%,26rem)] lg:mx-0 lg:max-w-full">
             <div
               ref={imgRef}
-              className="relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-2xl border border-gray-100/90 bg-muted/20 shadow-md ring-1 ring-black/[0.04] lg:rounded-[1.75rem] lg:shadow-xl"
+              className="kdf-pdp-hero__image cursor-zoom-in rounded-2xl border border-gray-100/90 shadow-md ring-1 ring-black/[0.04] lg:border-0 lg:shadow-none lg:ring-0"
               onMouseEnter={() => setImgZoomed(true)}
               onMouseLeave={() => setImgZoomed(false)}
               onMouseMove={handleMouseMove}
@@ -674,7 +673,7 @@ function ProductDetailPageView() {
               </div>
             )}
             </div>
-            <div className="hidden lg:block">
+            <div className="mt-4 hidden lg:block">
               <ProductGalleryEngagementZone
                 productId={productId}
                 productName={product.name}
@@ -690,27 +689,38 @@ function ProductDetailPageView() {
             </div>
           </div>
 
-          {/* Right: Info — sticky glass buy column (no vh max-height: avoids zoom / OS scaling layout jumps) */}
-          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:z-10 lg:self-start lg:gap-5 lg:rounded-[1.75rem] lg:border lg:border-gray-100/90 lg:bg-white/90 lg:p-6 lg:shadow-xl lg:shadow-slate-900/[0.06] lg:ring-1 lg:ring-black/[0.04] lg:backdrop-blur-xl xl:p-7">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-wrap gap-2">
-                {productTags.map((tag) => (<Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>))}
+          <div className="kdf-pdp-hero__buy">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {productTags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="border-0 bg-gray-100/90 text-[10px] font-semibold text-gray-600">
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button onClick={() => setIsWishlisted(w => !w)} className={`p-2 rounded-full transition-all ${isWishlisted ? "text-red-500 bg-red-50" : "text-muted-foreground hover:bg-muted"}`} title="Add to wishlist">
-                  <Heart className="w-5 h-5" fill={isWishlisted ? "currentColor" : "none"} />
+              <div className="flex shrink-0 items-center gap-1">
+                <button onClick={() => setIsWishlisted(w => !w)} className={`rounded-full p-2 transition-colors ${isWishlisted ? "bg-red-50 text-red-500" : "text-muted-foreground hover:bg-gray-100"}`} title="Add to wishlist">
+                  <Heart className="h-5 w-5" fill={isWishlisted ? "currentColor" : "none"} />
                 </button>
-                <button onClick={handleShare} className="p-2 rounded-full text-muted-foreground hover:bg-muted transition-colors" title="Share"><Share2 className="w-5 h-5" /></button>
+                <button onClick={handleShare} className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-gray-100" title="Share">
+                  <Share2 className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
-            <h1
-              className="font-black leading-[1.15] tracking-tight text-foreground [text-wrap:balance] sm:leading-tight"
-              style={{ fontSize: "clamp(1.375rem, 0.35rem + 2.8vw, 2.25rem)" }}
-              data-testid="text-product-name"
-            >
-              {product.name}
-            </h1>
+            <div className="space-y-1">
+              <h1
+                className="text-[1.35rem] font-bold leading-tight tracking-tight text-foreground [text-wrap:balance] sm:text-2xl lg:text-[1.75rem] xl:text-[2rem]"
+                data-testid="text-product-name"
+              >
+                {product.name}
+              </h1>
+              {(product as any).weight && (
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {(product as any).weight} {(product as any).unit || ""}
+                </p>
+              )}
+            </div>
 
             {product.rating && Number(product.rating) > 0 && (
               <div className="flex items-center gap-2">
