@@ -324,7 +324,7 @@ export async function tryConversationalSalesReply(opts: {
   }
 
   if (isProductEducationMessage(text)) {
-    return { handled: false };
+    return { handled: true, template: "product_education_guide", productQuery: extractProductQueryFromMessage(text) || text };
   }
 
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {

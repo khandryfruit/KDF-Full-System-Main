@@ -2311,20 +2311,23 @@ async function trySendHumanGreetingReply(opts: {
     await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_continue" });
     return true;
   }
-  if (!existing.preferredLanguage && !existing.waLang) {
-    const { buildLanguageWelcomeMessage, WA_AWAIT_LANGUAGE_STATE } = await import("../lib/waPremiumJourney.js");
-    const { sendLanguagePicker } = await import("../lib/waPremiumUi.js");
-    await sendLanguagePicker(opts.phone, buildLanguageWelcomeMessage(), opts.waSettings);
-    await setConversationState(opts.phone, WA_AWAIT_LANGUAGE_STATE, { greetedAt: new Date().toISOString() });
-    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "language_select" });
-    return true;
-  }
   const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
-  const { buildLanguageSavedAck, resolveWaLang } = await import("../lib/waPremiumJourney.js");
+  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+  const { sendPremiumWelcomeWithButtons } = await import("../lib/waConversationFlows.js");
   const lang = resolveWaLang(existing, opts.textBody);
-  await sendWaText(opts.phone, buildLanguageSavedAck(lang), opts.waSettings, "human_greeting");
-  await setConversationState(opts.phone, WA_SALES_CHAT_STATE, { ...existing, greetedAt: new Date().toISOString() });
-  await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting" });
+  await sendPremiumWelcomeWithButtons({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    lang,
+    waSettings: opts.waSettings,
+  });
+  await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
+    ...existing,
+    preferredLanguage: existing.preferredLanguage ?? lang,
+    waLang: existing.waLang ?? lang,
+    greetedAt: new Date().toISOString(),
+  });
+  await persistConversationTurn(opts.phone, { intent: "greeting", topic: "premium_welcome_menu" });
   return true;
 }
 
@@ -2347,8 +2350,13 @@ async function tryResolveWaCustomerMessage(opts: {
         waLang: lang,
         greetedAt: new Date().toISOString(),
       });
-      await sendWaText(opts.phone, buildLanguageSavedAck(lang), opts.waSettings, "language_selected");
-      await persistConversationTurn(opts.phone, { intent: "greeting", topic: "language", mergeStateData: { preferredLanguage: lang } });
+      const { sendPremiumWelcomeWithButtons } = await import("../lib/waConversationFlows.js");
+      await sendPremiumWelcomeWithButtons({
+        phone: opts.phone,
+        lang,
+        waSettings: opts.waSettings,
+      });
+      await persistConversationTurn(opts.phone, { intent: "greeting", topic: "premium_welcome_menu", mergeStateData: { preferredLanguage: lang } });
       return true;
     }
     const { handleLanguageTrapText } = await import("../lib/waSessionRecovery.js");
@@ -2445,9 +2453,28 @@ async function tryResolveWaCustomerMessage(opts: {
       return true;
     }
     if (convReply.template === "delivery_info_buttons") {
-      const { sendDeliveryInfoButtons } = await import("../lib/waSupportFlows.js");
-      await sendDeliveryInfoButtons({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
+      const { sendDeliveryFaqWithButtons } = await import("../lib/waConversationFlows.js");
+      await sendDeliveryFaqWithButtons({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
       await persistConversationTurn(opts.phone, { intent: "delivery", topic: "delivery" });
+      return true;
+    }
+    if (convReply.template === "product_education_guide") {
+      const { sendProductEducationWithButtons } = await import("../lib/waConversationFlows.js");
+      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+      const lang = resolveWaLang(stateData, opts.textBody);
+      const productQ = convReply.productQuery ?? extractProductQueryFromMessage(opts.textBody);
+      await sendProductEducationWithButtons({
+        phone: opts.phone,
+        textBody: opts.textBody,
+        lang,
+        waSettings: opts.waSettings,
+      });
+      await setConversationState(opts.phone, "wa_sales_chat", {
+        ...stateData,
+        pendingEducationQuery: productQ,
+        preferredLanguage: stateData.preferredLanguage ?? stateData.waLang ?? lang,
+      });
+      await persistConversationTurn(opts.phone, { intent: "product_education", topic: "product_education" });
       return true;
     }
     if (convReply.template === "standalone_price_list") {
@@ -3381,6 +3408,122 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
+  if (id === "wa_conv_shop") {
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, "wa_sales_chat", stateData);
+    await sendInteractiveList({
+      phone: opts.phone,
+      body: lang === "en" ? "Which product would you like?" : "Kaun sa product chahiye? 😊",
+      buttonLabel: lang === "en" ? "Shop" : "Products",
+      rows: [
+        { id: "wa_browse_badam", title: "Badam", description: "Almonds" },
+        { id: "wa_browse_pista", title: "Pista", description: "Pistachio" },
+        { id: "wa_browse_kaju", title: "Kaju", description: "Cashew" },
+        { id: "wa_browse_akhrot", title: "Akhrot", description: "Walnut" },
+        { id: "wa_browse_kishmish", title: "Kishmish", description: "Raisins" },
+      ],
+      settings: opts.waSettings,
+      templateName: "conv_shop_products",
+    });
+    return true;
+  }
+
+  if (id === "wa_conv_delivery") {
+    const { sendDeliveryFaqWithButtons } = await import("../lib/waConversationFlows.js");
+    await sendDeliveryFaqWithButtons({
+      phone: opts.phone,
+      textBody: String(stateData.lastUserMessage ?? "delivery"),
+      waSettings: opts.waSettings,
+    });
+    return true;
+  }
+
+  if (id === "wa_conv_track") {
+    await handleTrackOrder(opts.phone, stateData.lastOrderNumber ?? "", opts.waSettings);
+    return true;
+  }
+
+  if (id === "wa_conv_support") {
+    const lang = resolveWaLang(stateData);
+    await sendInteractiveButtons({
+      phone: opts.phone,
+      text: lang === "en"
+        ? "Ji 😊 How can we help?\n\nCall, WhatsApp, or visit our shop."
+        : "Ji 😊 Kaise madad kar sakte hain?\n\nCall, WhatsApp, ya shop address.",
+      buttons: [
+        { id: "wa_support_call", title: "📞 Call Store" },
+        { id: "wa_support_wa", title: "💬 WhatsApp" },
+        { id: "wa_conv_address", title: "📍 Address" },
+      ],
+      settings: opts.waSettings,
+      templateName: "conv_support_menu",
+    });
+    return true;
+  }
+
+  if (id === "wa_conv_address") {
+    const { sendShopAddressCard } = await import("../lib/waSupportFlows.js");
+    await sendShopAddressCard({
+      phone: opts.phone,
+      textBody: String(stateData.lastUserMessage ?? "address"),
+      waSettings: opts.waSettings,
+    });
+    return true;
+  }
+
+  if (id === "wa_edu_price" || id === "wa_edu_quality" || id === "wa_edu_order") {
+    const lang = resolveWaLang(stateData);
+    const productQ = String(stateData.pendingEducationQuery ?? stateData.pendingProductQuery ?? "badam").trim();
+    const { buildProductQualityMessage } = await import("../lib/waConversationFlows.js");
+    const { buildTextOnlyPriceReply } = await import("../lib/waSalesConversation.js");
+    const roman = lang !== "ur";
+
+    if (id === "wa_edu_quality") {
+      await sendWaText(opts.phone, buildProductQualityMessage(productQ, lang), opts.waSettings, "product_quality");
+      await sendInteractiveButtons({
+        phone: opts.phone,
+        text: lang === "en" ? "Next:" : "Agla:",
+        buttons: [
+          { id: "wa_edu_price", title: "💰 Price" },
+          { id: "wa_edu_order", title: "🛒 Order" },
+          { id: "wa_conv_shop", title: "🛒 More" },
+        ],
+        settings: opts.waSettings,
+        templateName: "edu_after_quality",
+      });
+      return true;
+    }
+
+    if (id === "wa_edu_price") {
+      const priceReply = await buildTextOnlyPriceReply(productQ, roman);
+      if (priceReply) {
+        await sendWaText(opts.phone, priceReply, opts.waSettings, "product_price_text");
+      } else {
+        await sendWaText(
+          opts.phone,
+          lang === "en" ? `Ji 😊 Please tell me the weight for *${productQ}* (e.g. 500g).` : `Ji 😊 *${productQ}* ka weight bata dein (jaise 500g) 😊`,
+          opts.waSettings,
+          "product_price_ask",
+        );
+      }
+      await sendInteractiveButtons({
+        phone: opts.phone,
+        text: lang === "en" ? "Next step:" : "Agla step:",
+        buttons: [
+          { id: "wa_edu_order", title: "🛒 Order" },
+          { id: "wa_edu_quality", title: "⭐ Quality" },
+          { id: "wa_conv_shop", title: "🛒 Shop" },
+        ],
+        settings: opts.waSettings,
+        templateName: "edu_after_price",
+      });
+      return true;
+    }
+
+    await deliverSingleProductOffer({ phone: opts.phone, query: productQ, waSettings: opts.waSettings });
+    return true;
+  }
+
   if (id === "wa_support_call") {
     const { KDF_STORE } = await import("../lib/waSupportFlows.js");
     await sendWaText(
@@ -3518,8 +3661,9 @@ async function handlePremiumCommerceButton(opts: {
     stateData.preferredLanguage = lang;
     stateData.waLang = lang;
     await setConversationState(opts.phone, "wa_sales_chat", stateData);
-    await sendWaText(opts.phone, buildLanguageSavedAck(lang), opts.waSettings, "language_selected");
-    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "language", mergeStateData: { preferredLanguage: lang } });
+    const { sendPremiumWelcomeWithButtons } = await import("../lib/waConversationFlows.js");
+    await sendPremiumWelcomeWithButtons({ phone: opts.phone, lang, waSettings: opts.waSettings });
+    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "premium_welcome_menu", mergeStateData: { preferredLanguage: lang } });
     return true;
   }
 

@@ -87,18 +87,8 @@ export async function sendDeliveryInfoButtons(opts: {
   textBody: string;
   waSettings: WaSettings;
 }): Promise<void> {
-  const body = await buildDeliveryReply(opts.textBody);
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: body,
-    buttons: [
-      { id: "wa_delivery_lahore", title: "🚚 Lahore" },
-      { id: "wa_delivery_nation", title: "📦 Nationwide" },
-      { id: "wa_delivery_time", title: "⏱ Time" },
-    ],
-    settings: opts.waSettings,
-    templateName: "delivery_info_buttons",
-  });
+  const { sendDeliveryFaqWithButtons } = await import("./waConversationFlows.js");
+  await sendDeliveryFaqWithButtons(opts);
 }
 
 export async function sendRiskRecovery(opts: {
