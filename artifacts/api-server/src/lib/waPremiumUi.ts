@@ -13,6 +13,17 @@ import {
   buildEasypaisaMessage,
   type WaLang,
 } from "./waPremiumJourney.js";
+import {
+  enrichVariants,
+  buildPremiumProductCaption,
+  buildVariantPickerBody,
+  buildVariantListRows,
+  canUseVariantQuickButtons,
+  buildVariantQuickButtonTitle,
+  formatVariantListTitle,
+  normalizeSizeLabel,
+  type VariantOption,
+} from "./waVariantPresentation.js";
 
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
@@ -21,10 +32,9 @@ function clip(s: string, max: number): string {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
-export function variantRowTitle(title: string, price: number): string {
-  const p = formatRupeesLocal(price).replace("Rs. ", "Rs");
-  const raw = `⚖ ${title} — ${p}`;
-  return clip(raw, 24);
+/** @deprecated Prices belong in list description/body — title is size-only */
+export function variantRowTitle(title: string, _price: number): string {
+  return formatVariantListTitle(normalizeSizeLabel(title));
 }
 
 export async function sendLanguagePicker(phone: string, body: string, waSettings: WaSettings): Promise<void> {
@@ -54,8 +64,8 @@ export async function sendProductIntentPicker(opts: {
     body: buildProductIntentPrompt(opts.productName, opts.lang),
     buttonLabel: opts.lang === "en" ? "Choose" : "Select",
     rows: [
-      { id: "wa_intent_price", title: "💰 Price", description: "See all sizes & rates" },
-      { id: "wa_intent_recommend", title: "⭐ Recommend", description: "Best option for you" },
+      { id: "wa_intent_price", title: "💰 Price", description: "All sizes — full prices" },
+      { id: "wa_intent_recommend", title: "⭐ Recommend", description: "Best value size for you" },
       { id: "wa_intent_order", title: "🛒 Order", description: "Start quick checkout" },
       { id: "wa_intent_delivery", title: "🚚 Delivery", description: "Charges & timing" },
     ],
@@ -67,24 +77,89 @@ export async function sendProductIntentPicker(opts: {
 export async function sendVariantPicker(opts: {
   phone: string;
   productName: string;
-  variantOptions: Array<{ id: string; title: string; price: number }>;
+  variantOptions: VariantOption[];
   lang: WaLang;
   waSettings: WaSettings;
+  productDescription?: string | null;
 }): Promise<void> {
-  const rows = opts.variantOptions.slice(0, 10).map((v, i) => ({
-    id: `wa_v_${i}`,
-    title: variantRowTitle(v.title, v.price),
-    description: clip(v.title, 72),
-  }));
+  const variants = opts.variantOptions.slice(0, 10);
+  if (!variants.length) return;
+
+  const enriched = enrichVariants(variants, opts.lang);
+  const body = buildVariantPickerBody({
+    productName: opts.productName,
+    variants,
+    lang: opts.lang,
+  });
+
+  if (canUseVariantQuickButtons(variants.length)) {
+    await sendInteractiveButtons({
+      phone: opts.phone,
+      text: body,
+      buttons: enriched.map((v) => ({
+        id: `wa_v_${v.index}`,
+        title: buildVariantQuickButtonTitle(v.sizeLabel),
+      })),
+      footer: opts.lang === "en" ? "Full price in message above" : "Price upar message mein hai",
+      settings: opts.waSettings,
+      templateName: "variant_quick_buttons",
+    });
+    return;
+  }
+
   await sendInteractiveList({
     phone: opts.phone,
     header: clip(opts.productName, 60),
-    body: opts.lang === "en" ? "Select size 👇" : "Size select karein 👇",
+    body,
+    footer: opts.lang === "en" ? "Tap Sizes — prices shown above" : "Sizes tap karein",
     buttonLabel: opts.lang === "en" ? "Sizes" : "Sizes",
-    rows,
+    rows: buildVariantListRows(enriched),
     settings: opts.waSettings,
     templateName: "variant_list",
   });
+}
+
+export async function sendPremiumProductOffer(opts: {
+  phone: string;
+  product: {
+    name: string;
+    imageUrl?: string | null;
+    description?: string | null;
+    inStock?: boolean;
+    variantOptions?: VariantOption[];
+  };
+  lang: WaLang;
+  waSettings: WaSettings;
+  sendImage: (p: { phone: string; imageUrl: string; caption: string }) => Promise<void>;
+  sendText: (phone: string, text: string, template?: string) => Promise<void>;
+}): Promise<void> {
+  const variants = opts.product.variantOptions ?? [];
+  const caption = buildPremiumProductCaption({
+    productName: opts.product.name,
+    description: opts.product.description,
+    inStock: opts.product.inStock,
+    variants,
+    lang: opts.lang,
+  });
+
+  const imageUrl = opts.product.imageUrl;
+  if (imageUrl?.startsWith("https://")) {
+    await opts.sendImage({ phone: opts.phone, imageUrl, caption });
+    await new Promise((r) => setTimeout(r, 450));
+  } else {
+    await opts.sendText(opts.phone, caption, "product_card_no_image");
+  }
+
+  if (variants.length) {
+    await sendVariantPicker({
+      phone: opts.phone,
+      productName: opts.product.name,
+      variantOptions: variants,
+      lang: opts.lang,
+      waSettings: opts.waSettings,
+      productDescription: opts.product.description,
+    });
+  }
 }
 
 export async function sendQuantityPicker(opts: {
@@ -94,20 +169,23 @@ export async function sendQuantityPicker(opts: {
   waSettings: WaSettings;
 }): Promise<void> {
   const totalBlock = buildLiveTotalPreview(opts.stateData, opts.lang);
+  const variantLine = opts.stateData.variantTitle
+    ? `\n⚖️ ${opts.stateData.variantTitle} · ${formatRupeesLocal(Number(opts.stateData.unitPrice ?? 0))}`
+    : "";
   await sendInteractiveList({
     phone: opts.phone,
-    body: `${buildQuantityPrompt(opts.lang)}\n\n${totalBlock}`,
+    body: `${buildQuantityPrompt(opts.lang)}${variantLine}\n\n${totalBlock}`,
     buttonLabel: opts.lang === "en" ? "Quantity" : "Qty",
     rows: [
-      { id: "wa_qty_1", title: "📦 1 Pack" },
-      { id: "wa_qty_2", title: "📦 2 Packs" },
-      { id: "wa_qty_3", title: "📦 3 Packs" },
-      { id: "wa_qty_4", title: "📦 4 Packs" },
-      { id: "wa_qty_5", title: "📦 5 Packs" },
-      { id: "wa_qty_6", title: "📦 6 Packs" },
-      { id: "wa_qty_8", title: "📦 8 Packs" },
-      { id: "wa_qty_10", title: "📦 10 Packs" },
-      { id: "wa_qty_custom", title: "✍️ Custom Qty" },
+      { id: "wa_qty_1", title: "📦 1 Pack", description: "Single pack" },
+      { id: "wa_qty_2", title: "📦 2 Packs", description: "2 packs" },
+      { id: "wa_qty_3", title: "📦 3 Packs", description: "3 packs" },
+      { id: "wa_qty_4", title: "📦 4 Packs", description: "4 packs" },
+      { id: "wa_qty_5", title: "📦 5 Packs", description: "5 packs" },
+      { id: "wa_qty_6", title: "📦 6 Packs", description: "6 packs" },
+      { id: "wa_qty_8", title: "📦 8 Packs", description: "8 packs" },
+      { id: "wa_qty_10", title: "📦 10 Packs", description: "10 packs" },
+      { id: "wa_qty_custom", title: "✍️ Custom Qty", description: "Type qty 1–99" },
     ],
     settings: opts.waSettings,
     templateName: "quantity_list",
@@ -253,7 +331,8 @@ export async function sendProductCardWithVariants(opts: {
     name: string;
     imageUrl?: string | null;
     description?: string | null;
-    variantOptions?: Array<{ id: string; title: string; price: number }>;
+    inStock?: boolean;
+    variantOptions?: VariantOption[];
   };
   productQuery: string;
   lang: WaLang;
@@ -261,23 +340,14 @@ export async function sendProductCardWithVariants(opts: {
   sendImage: (p: { phone: string; imageUrl: string; caption: string }) => Promise<void>;
   sendText: (phone: string, text: string, template?: string) => Promise<void>;
 }): Promise<void> {
-  const intro = buildProductIntroLine(opts.product.name, opts.lang);
-  const imageUrl = opts.product.imageUrl;
-  if (imageUrl?.startsWith("https://")) {
-    await opts.sendImage({ phone: opts.phone, imageUrl, caption: intro });
-  } else {
-    await opts.sendText(opts.phone, intro, "product_intro");
-  }
-  const variants = opts.product.variantOptions ?? [];
-  if (variants.length) {
-    await sendVariantPicker({
-      phone: opts.phone,
-      productName: opts.product.name,
-      variantOptions: variants,
-      lang: opts.lang,
-      waSettings: opts.waSettings,
-    });
-  }
+  await sendPremiumProductOffer({
+    phone: opts.phone,
+    product: opts.product,
+    lang: opts.lang,
+    waSettings: opts.waSettings,
+    sendImage: opts.sendImage,
+    sendText: opts.sendText,
+  });
 }
 
 export { buildEasypaisaMessage };

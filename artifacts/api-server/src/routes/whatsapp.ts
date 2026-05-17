@@ -1809,22 +1809,8 @@ async function deliverSingleProductOffer(opts: {
   const product = allMatches[0]!;
   const intro = buildSingleProductIntro(product as any, roman);
   const imageUrl = resolveCommerceImageUrl(product.imageUrl) ?? product.imageUrl;
-
-  if (imageUrl?.startsWith("https://")) {
-    await sendWhatsAppImage({
-      phone: opts.phone,
-      imageUrl,
-      caption: intro.imageCaption,
-      settings: opts.waSettings,
-      templateName: "single_product_image",
-    });
-    await new Promise((r) => setTimeout(r, 500));
-  } else {
-    await sendWaText(opts.phone, intro.imageCaption, opts.waSettings, "single_product_no_image");
-  }
-
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-  const { sendVariantPicker } = await import("../lib/waPremiumUi.js");
+  const { sendPremiumProductOffer } = await import("../lib/waPremiumUi.js");
   const lang = resolveWaLang({ lastUserMessage: q }, q);
 
   await setConversationState(opts.phone, "wa_order_await_variant", {
@@ -1841,16 +1827,44 @@ async function deliverSingleProductOffer(opts: {
     title: String(v.title),
     price: parseCatalogUnitPrice(v.price),
   }));
+
   if (options.length) {
-    await sendVariantPicker({
+    await sendPremiumProductOffer({
       phone: opts.phone,
-      productName: product.name,
-      variantOptions: options,
+      product: {
+        name: product.name,
+        imageUrl: imageUrl?.startsWith("https://") ? imageUrl : null,
+        description: product.description ?? null,
+        inStock: product.inStock ?? true,
+        variantOptions: options,
+      },
       lang,
       waSettings: opts.waSettings,
+      sendImage: async (p) => {
+        await sendWhatsAppImage({
+          phone: p.phone,
+          imageUrl: p.imageUrl,
+          caption: p.caption,
+          settings: opts.waSettings,
+          templateName: "single_product_image",
+        });
+      },
+      sendText: async (phone, text, template) => {
+        await sendWaText(phone, text, opts.waSettings, template);
+      },
     });
   } else {
-    await sendWaText(opts.phone, intro.detailBody, opts.waSettings, "single_product_detail");
+    if (imageUrl?.startsWith("https://")) {
+      await sendWhatsAppImage({
+        phone: opts.phone,
+        imageUrl,
+        caption: intro.imageCaption,
+        settings: opts.waSettings,
+        templateName: "single_product_image",
+      });
+    } else {
+      await sendWaText(opts.phone, intro.detailBody, opts.waSettings, "single_product_detail");
+    }
   }
 
   await logWaProcessingStep({
@@ -3663,29 +3677,40 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     }
     const { resolveCommerceImageUrl } = await import("../lib/commerceProductSearch.js");
     const { sendWhatsAppImage } = await import("../lib/whatsapp.js");
-    const { buildSingleProductIntro, buildPreconfirmMessage } = await import("../lib/waOrderJourney.js");
-    const roman = isRomanUrduWa(stateData.lastUserMessage ?? trimmed);
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const { sendPremiumProductOffer } = await import("../lib/waPremiumUi.js");
+    const lang = resolveWaLang(stateData, stateData.lastUserMessage);
     const imageUrl = resolveCommerceImageUrl(selected.imageUrl) ?? selected.imageUrl;
-    if (imageUrl?.startsWith("https://")) {
-      const intro = buildSingleProductIntro(selected, roman);
-      await sendWhatsAppImage({ phone, imageUrl, caption: intro.imageCaption, settings: waSettings, templateName: "product_pick_image" });
-      await new Promise((r) => setTimeout(r, 400));
-    }
     await setConversationState(phone, "wa_order_await_variant", {
       productQuery: stateData.productQuery,
       product: selected,
       categoryId: stateData.categoryId,
       lastUserMessage: stateData.lastUserMessage,
+      preferredLanguage: lang,
     });
-    const catalogProduct = {
-      name: selected.name,
-      variantOptions: selected.variantOptions ?? [],
-      inStock: selected.inStock ?? true,
-      price: selected.price,
-      rawPrice: selected.rawPrice ?? 0,
-    } as any;
-    const { formatVariantSelectionReply } = await import("../lib/waSalesAgent.js");
-    await sendWaText(phone, formatVariantSelectionReply({ product: catalogProduct, roman }), waSettings);
+    const variantOpts = (selected.variantOptions ?? []).map((v: any) => ({
+      id: String(v.id),
+      title: String(v.title),
+      price: parseCatalogUnitPrice(v.price),
+    }));
+    if (variantOpts.length) {
+      await sendPremiumProductOffer({
+        phone,
+        product: {
+          name: selected.name,
+          imageUrl: imageUrl?.startsWith("https://") ? imageUrl : null,
+          description: selected.description ?? null,
+          inStock: selected.inStock ?? true,
+          variantOptions: variantOpts,
+        },
+        lang,
+        waSettings,
+        sendImage: async (p) => {
+          await sendWhatsAppImage({ phone: p.phone, imageUrl: p.imageUrl, caption: p.caption, settings: waSettings, templateName: "product_pick_image" });
+        },
+        sendText: async (p, text, template) => { await sendWaText(p, text, waSettings, template); },
+      });
+    }
     return;
   }
   if (state === "wa_order_await_preconfirm") {
@@ -3736,6 +3761,7 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
         return;
       }
       if (options.length) {
+        const { sendVariantPicker } = await import("../lib/waPremiumUi.js");
         await sendVariantPicker({
           phone,
           productName: product.name,
@@ -3746,6 +3772,7 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
           })),
           lang,
           waSettings,
+          productDescription: product.description ?? null,
         });
       }
       return;
