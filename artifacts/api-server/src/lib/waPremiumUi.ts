@@ -527,21 +527,19 @@ export async function sendOrderConfirmButtons(
   });
 }
 
+/** @deprecated Use sendPremiumOrderConfirmationSequence from waPostOrderMessage.js */
 export async function sendPostOrderButtons(
   phone: string,
   body: string,
   waSettings: WaSettings,
 ): Promise<void> {
-  await sendInteractiveButtons({
+  const orderMatch = body.match(/#?([A-Z0-9-]+)/i);
+  const { sendPremiumOrderConfirmationSequence } = await import("./waPostOrderMessage.js");
+  await sendPremiumOrderConfirmationSequence({
     phone,
-    text: body,
-    buttons: [
-      { id: "wa_track_order", title: "📦 Track Order" },
-      { id: "wa_order_again", title: "🛍 Order Again" },
-      { id: "main_menu", title: "🏠 Main Menu" },
-    ],
-    settings: waSettings,
-    templateName: "order_placed_actions",
+    orderNumber: orderMatch?.[1] ?? "—",
+    lang: "ur",
+    waSettings,
   });
 }
 

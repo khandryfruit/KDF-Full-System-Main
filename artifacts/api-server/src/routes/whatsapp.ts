@@ -3818,12 +3818,42 @@ async function handlePremiumCommerceButton(opts: {
     return true;
   }
 
-  if (id === "wa_track_order") {
+  if (id === "wa_track_order" || id === "wa_post_track_order") {
     await handleTrackOrder(opts.phone, stateData.lastOrderNumber ?? "", opts.waSettings);
     return true;
   }
 
-  if (id === "wa_order_again") {
+  if (id === "wa_post_visit_website") {
+    const { KHAN_WEBSITE_URL: webUrl } = await import("../lib/waMenuDefaults.js");
+    const lang = resolveWaLang(stateData);
+    await sendCtaUrlMessage({
+      phone: opts.phone,
+      text: lang === "en"
+        ? "🌐 Visit Khan Dry Fruits online 👇"
+        : "🌐 Khan Dry Fruits website 👇",
+      buttonText: "🌐 Visit Website",
+      url: webUrl,
+      settings: opts.waSettings,
+      templateName: "post_order_website",
+    });
+    return true;
+  }
+
+  if (id === "wa_post_install_app") {
+    const { KDF_APP_INSTALL_URL } = await import("../lib/waPostOrderMessage.js");
+    const lang = resolveWaLang(stateData);
+    await sendCtaUrlMessage({
+      phone: opts.phone,
+      text: lang === "en" ? "📲 Install the KDF app 👇" : "📲 App install karein 👇",
+      buttonText: "📲 Install App",
+      url: KDF_APP_INSTALL_URL,
+      settings: opts.waSettings,
+      templateName: "post_order_app",
+    });
+    return true;
+  }
+
+  if (id === "wa_order_again" || id === "wa_post_shop_again") {
     await setConversationState(opts.phone, "wa_sales_chat", stateData);
     await sendInteractiveList({
       phone: opts.phone,
@@ -4647,20 +4677,20 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
           payload: { shopifyOrderId: shopifyCreated.order.id, ecommerceOrderId: ecommerce.order.id },
         });
       }
-      const { buildOrderPlacedPremium, resolveWaLang } = await import("../lib/waPremiumJourney.js");
-      const { sendPostOrderButtons } = await import("../lib/waPremiumUi.js");
+      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+      const { sendPremiumOrderConfirmationSequence } = await import("../lib/waPostOrderMessage.js");
       const lang = resolveWaLang(finalState, finalState.lastUserMessage ?? "");
-      const placedBody = buildOrderPlacedPremium(
-        ecommerce.order.orderNumber,
-        finalState.city ?? "",
-        String(finalState.paymentMethod ?? "COD"),
-        lang,
-      );
       await setConversationState(phone, "idle", {
         lastOrderNumber: ecommerce.order.orderNumber,
         preferredLanguage: finalState.preferredLanguage ?? finalState.waLang,
+        checkoutSaved: null,
       });
-      await sendPostOrderButtons(phone, placedBody, waSettings);
+      await sendPremiumOrderConfirmationSequence({
+        phone,
+        orderNumber: ecommerce.order.orderNumber,
+        lang,
+        waSettings,
+      });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       log?.warn(err, "WhatsApp ecommerce order save failed");

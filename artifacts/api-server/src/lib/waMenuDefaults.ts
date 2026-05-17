@@ -2,6 +2,7 @@
 
 export const KHAN_BRAND_NAME = "Khan Dry Fruits";
 export const KHAN_WEBSITE_URL = "https://www.khandryfruit.com";
+export const KDF_APP_INSTALL_URL = "https://open.khandryfruits.com/";
 export const MENU_CONFIG_ID = "__menu_config__";
 
 export type WaMenuActionType = "default" | "cta" | "text" | "track" | "support" | "buttons";
