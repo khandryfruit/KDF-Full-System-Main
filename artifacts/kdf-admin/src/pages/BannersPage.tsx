@@ -611,6 +611,14 @@ const EMPTY_FORM = {
   relatedKeywords: "",
   relatedProductIds: [] as number[],
   bannerStyle: "premium",
+  showTitle: true,
+  showSubtitle: true,
+  showLabel: true,
+  showCta: true,
+  showExploreCta: false,
+  enableAiText: true,
+  heroAutoplay: true,
+  enableFallbackBanner: true,
 };
 
 /* ── Promo Card Constants ───────────────────────────── */
@@ -773,6 +781,14 @@ export default function BannersPage() {
       relatedKeywords: Array.isArray(banner.relatedKeywords) ? banner.relatedKeywords.join(", ") : "",
       relatedProductIds: Array.isArray(banner.relatedProductIds) ? banner.relatedProductIds.map(Number) : [],
       bannerStyle: banner.bannerStyle ?? "premium",
+      showTitle: banner.showTitle ?? banner.show_title ?? true,
+      showSubtitle: banner.showSubtitle ?? banner.show_subtitle ?? true,
+      showLabel: banner.showLabel ?? banner.show_label ?? true,
+      showCta: banner.showCta ?? banner.show_cta ?? true,
+      showExploreCta: banner.showExploreCta ?? banner.show_explore_cta ?? false,
+      enableAiText: banner.enableAiText ?? banner.enable_ai_text ?? true,
+      heroAutoplay: banner.heroAutoplay ?? banner.hero_autoplay ?? true,
+      enableFallbackBanner: banner.enableFallbackBanner ?? banner.enable_fallback_banner ?? true,
     });
     setHeroEditId(banner.id);
     setHeroOpen(true);
@@ -781,6 +797,10 @@ export default function BannersPage() {
     const { targetLabel: _l, ...rest } = formData;
     return {
       ...rest,
+      title: (rest.title ?? "").trim(),
+      subtitle: (rest.subtitle ?? "").trim() || undefined,
+      label: (rest.label ?? "").trim() || undefined,
+      cta: (rest.cta ?? "").trim() || undefined,
       placement: "hero" as const,
       bgColor: "",
       platform: rest.platform || "both",
