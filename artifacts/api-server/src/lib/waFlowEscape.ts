@@ -16,6 +16,8 @@ import {
   WA_PRODUCT_PICK_STATES,
 } from "./waOrderJourney.js";
 import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
+import { WA_AWAIT_LANGUAGE_STATE } from "./waPremiumJourney.js";
+import { isUiTrapState } from "./waSessionRecovery.js";
 
 export const ORDER_FLOW_TRAP_STATES = new Set([
   "wa_catalog_pick_category",
@@ -56,9 +58,21 @@ export function shouldEscapeOrderFlowForProductSearch(
   if (isCheckoutCancellationMessage(t)) return false;
   if (isShowMoreProductsMessage(t)) return false;
 
-  /* Never restart catalog during checkout data collection (name/phone/address) */
+  /* UI trap states: any real message should exit to sales/product flow */
+  if (isUiTrapState(state) || state === WA_AWAIT_LANGUAGE_STATE) return t.length >= 2;
+
+  /* Awaiting final confirm: allow greeting / new product — not trapped on old summary */
+  if (state === "wa_order_await_confirm") {
+    if (isPureGreetingMessage(t)) return true;
+    if (intent === "greeting" || intent === "conversation" || intent === "general" || intent === "support") return true;
+    if (intent === "product_search" || intent === "order_start" || intent === "pricing") return true;
+    if (isProductInquiryMessage(t) && !/^\d+$/.test(t)) return true;
+    if (productRootsInMessage(t).length > 0 && t.length >= 3 && !/^\d+$/.test(t)) return true;
+    return false;
+  }
+
+  /* Never restart catalog during mid-checkout data collection (name/phone/address) */
   if (isWaCheckoutCollectionState(state)) return false;
-  if (state === WA_AWAIT_PRODUCT_INTENT_STATE) return false;
 
   if (isPureGreetingMessage(t)) return true;
   if (intent === "greeting" || intent === "tracking" || intent === "support" || intent === "complaint") return true;

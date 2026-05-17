@@ -754,22 +754,30 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             if (interactionId === "wa_chat_order_confirm" || interactionId === "wa_chat_order_cancel") {
               const confirmStates = new Set(["wa_order_await_confirm", "wa_order_await_preconfirm"]);
               if (!confirmStates.has(currentState)) {
+                const { sendStaleConfirmRecovery, parseStateData, preservedIdleState, archiveCheckoutSnapshot, trackBotReply } = await import("../lib/waSessionRecovery.js");
+                let sd: Record<string, any> = {};
+                try { sd = parseStateData(convState); } catch { /* ignore */ }
                 await logWaProcessingStep({
                   phone,
                   messageId: msgId,
                   step: "commerce_button_without_active_state",
                   status: "failed",
-                  detail: "Confirm/cancel button without active checkout state.",
+                  detail: "Confirm/cancel button without active checkout state — offering recovery.",
                   payload: { interactionId, interactionTitle, currentState },
                   failureReason: "no_active_whatsapp_checkout_state",
                 });
-                await sendWaText(
-                  phone,
-                  interactionId === "wa_chat_order_cancel"
-                    ? "Order cancel ho gaya. Naya order ke liye product naam bhej dein 😊"
-                    : "Order session expire ho chuka. Product naam bhej kar naya order start karein 😊",
-                  waSettings,
-                );
+                if (interactionId === "wa_chat_order_cancel") {
+                  await setConversationState(phone, "idle", preservedIdleState(sd));
+                  await sendWaText(phone, "Order cancel ho gaya 😊 Naya order ke liye product select karein.", waSettings, "order_cancelled");
+                } else {
+                  const tracked = trackBotReply(sd, "stale_confirm_button");
+                  await setConversationState(phone, "wa_session_recovery", {
+                    ...preservedIdleState(sd),
+                    ...archiveCheckoutSnapshot(sd, "stale_confirm_button"),
+                    ...tracked,
+                  });
+                  await sendStaleConfirmRecovery({ phone, waSettings, stateData: tracked });
+                }
                 continue;
               }
               try {
@@ -856,19 +864,25 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           if (currentState === "wa_order_await_confirm" && isTextLike && inboundText) {
             const confirmStateText = inboundText.trim();
             const confirmStateIntent = detectWaIntent(confirmStateText);
+            const { shouldPrioritizeNewIntent, preservedIdleState, archiveCheckoutSnapshot } = await import("../lib/waSessionRecovery.js");
             if (
-              ["greeting", "conversation", "general", "support"].includes(confirmStateIntent.intent) &&
               !isCommerceConfirmationText(confirmStateText) &&
-              !isCommerceCancellationText(confirmStateText)
+              !isCommerceCancellationText(confirmStateText) &&
+              shouldPrioritizeNewIntent(confirmStateText, confirmStateIntent.intent)
             ) {
+              let sd: Record<string, any> = {};
+              try { sd = JSON.parse((convState as any)?.stateData ?? "{}"); } catch { /* ignore */ }
               await logWaProcessingStep({
                 phone,
                 messageId: msgId,
                 step: "stale_order_state_reset",
-                detail: "Greeting/general message arrived while checkout was waiting for confirm/cancel; reset stale order state and routed to AI.",
+                detail: "New intent while awaiting confirm — reset checkout and route to sales.",
                 payload: { previousState: currentState, text: confirmStateText, intent: confirmStateIntent },
               });
-              await setConversationState(phone, "idle", {});
+              await setConversationState(phone, "idle", {
+                ...preservedIdleState(sd),
+                ...archiveCheckoutSnapshot(sd, "confirm_interrupted"),
+              });
               currentState = "idle";
             }
           }
@@ -906,8 +920,38 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: "simple", log });
             const commerceText = inboundText.trim();
             const trappedIntent = detectWaIntent(commerceText);
+            const { tryRouteStaleCommerceMessage } = await import("../lib/waSessionRecovery.js");
+            const staleRouted = await tryRouteStaleCommerceMessage({
+              phone,
+              text: commerceText,
+              currentState,
+              convState,
+              waSettings,
+              trappedIntent,
+              logStep: async (payload) => {
+                await logWaProcessingStep({
+                  phone,
+                  messageId: msgId,
+                  step: String(payload.step ?? "session_recovery"),
+                  detail: String(payload.step ?? "session_recovery"),
+                  payload: { ...payload, text: commerceText, previousState: currentState },
+                });
+              },
+              tryCustomerMessage: () => tryResolveWaCustomerMessage({
+                phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log,
+              }),
+              freshProductSearch: () => respondWithFreshProductSearch({ phone, query: commerceText, waSettings, log }),
+              aiReply: chatbot?.isEnabled
+                ? () => handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent })
+                : undefined,
+            });
+            if (staleRouted) continue;
+
             const { shouldEscapeOrderFlowForProductSearch } = await import("../lib/waFlowEscape.js");
+            const { preservedIdleState, archiveCheckoutSnapshot } = await import("../lib/waSessionRecovery.js");
             if (shouldEscapeOrderFlowForProductSearch(commerceText, currentState, trappedIntent.intent)) {
+              let sd: Record<string, any> = {};
+              try { sd = JSON.parse((convState as any)?.stateData ?? "{}"); } catch { /* ignore */ }
               await logWaProcessingStep({
                 phone,
                 messageId: msgId,
@@ -915,7 +959,11 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 detail: "Customer sent product/FAQ text — exiting stale order menu state.",
                 payload: { previousState: currentState, text: commerceText, intent: trappedIntent },
               });
-              await setConversationState(phone, "idle", { cartClearedAt: new Date().toISOString() });
+              await setConversationState(phone, "idle", {
+                ...preservedIdleState(sd),
+                ...archiveCheckoutSnapshot(sd, "order_flow_escape"),
+                cartClearedAt: new Date().toISOString(),
+              });
               if (await tryResolveWaCustomerMessage({ phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log })) {
                 continue;
               }
@@ -926,6 +974,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 await handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent });
                 continue;
               }
+              continue;
             }
             if (isDeliveryOnlyMessage(commerceText) || isTrackingOnlyMessage(commerceText)) {
               const midFlowIntent = detectWaIntent(commerceText);
@@ -2074,7 +2123,14 @@ async function tryResolveWaCustomerMessage(opts: {
       await persistConversationTurn(opts.phone, { intent: "greeting", topic: "language", mergeStateData: { preferredLanguage: lang } });
       return true;
     }
-    await sendWaText(opts.phone, "Please *1* (اردو), *2* (English), ya *3* (پښتو) select karein 😊", opts.waSettings);
+    const { handleLanguageTrapText } = await import("../lib/waSessionRecovery.js");
+    await handleLanguageTrapText({
+      phone: opts.phone,
+      text: opts.textBody,
+      waSettings: opts.waSettings,
+      stateData: {},
+      sendText: async (p, m, t) => { await sendWaText(p, m, opts.waSettings, t); },
+    });
     return true;
   }
 
@@ -2984,6 +3040,62 @@ async function handlePremiumCommerceButton(opts: {
   } = premium;
   const { sendCityPicker, sendNamePicker, sendQuantityPicker, sendBankPaymentActions } = ui;
 
+  if (id === "wa_session_resume") {
+    const { buildRestoredCheckoutState } = await import("../lib/waSessionRecovery.js");
+    const restored = buildRestoredCheckoutState(stateData);
+    if (!restored) {
+      await sendWaText(opts.phone, "Pichla order save nahi mila. Naya order start karte hain 😊", opts.waSettings, "resume_missing");
+      await setConversationState(opts.phone, "wa_sales_chat", stateData);
+      return true;
+    }
+    await setConversationState(opts.phone, "wa_order_await_confirm", restored);
+    await proceedToOrderConfirmSummary(opts.phone, restored, opts.waSettings);
+    await logWaProcessingStep({
+      phone: opts.phone,
+      step: "session_resumed",
+      detail: "Customer resumed archived checkout session.",
+      payload: { productName: restored.productName },
+    });
+    return true;
+  }
+
+  if (id === "wa_session_new_order") {
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, "wa_sales_chat", {
+      preferredLanguage: lang,
+      waLang: lang,
+    });
+    await sendInteractiveList({
+      phone: opts.phone,
+      body: lang === "en" ? "Which product would you like?" : "Kaun sa product chahiye?",
+      buttonLabel: lang === "en" ? "Shop" : "Products",
+      rows: [
+        { id: "wa_browse_badam", title: "Badam" },
+        { id: "wa_browse_pista", title: "Pista" },
+        { id: "wa_browse_kaju", title: "Kaju" },
+        { id: "wa_browse_akhrot", title: "Akhrot" },
+      ],
+      settings: opts.waSettings,
+      templateName: "session_new_order",
+    });
+    await logWaProcessingStep({ phone: opts.phone, step: "session_new_order", detail: "Customer started fresh order after recovery." });
+    return true;
+  }
+
+  if (id === "wa_session_general") {
+    await setConversationState(opts.phone, "wa_sales_chat", stateData);
+    const lang = resolveWaLang(stateData);
+    await sendWaText(
+      opts.phone,
+      lang === "en"
+        ? "Sure 😊 Ask about products, prices, delivery, or orders anytime."
+        : "Ji 😊 Products, prices, delivery ya orders — kuch bhi pooch lein.",
+      opts.waSettings,
+      "session_general_chat",
+    );
+    return true;
+  }
+
   if (id === "wa_lang_ur" || id === "wa_lang_en" || id === "wa_lang_ps") {
     const lang = parseLanguageChoice(id)!;
     stateData.preferredLanguage = lang;
@@ -3464,6 +3576,31 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   const convState = await getConversationState(phone);
   const stateData: Record<string, any> = JSON.parse((convState as any)?.stateData ?? "{}");
   const trimmed = text.trim();
+  const { WA_AWAIT_LANGUAGE_STATE } = await import("../lib/waPremiumJourney.js");
+  const { WA_AWAIT_PRODUCT_INTENT_STATE } = await import("../lib/waSalesConversation.js");
+  if (state === WA_AWAIT_LANGUAGE_STATE) {
+    const { handleLanguageTrapText } = await import("../lib/waSessionRecovery.js");
+    await handleLanguageTrapText({
+      phone,
+      text: trimmed,
+      waSettings,
+      stateData,
+      sendText: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+    });
+    return;
+  }
+  if (state === WA_AWAIT_PRODUCT_INTENT_STATE) {
+    const { preservedIdleState } = await import("../lib/waSessionRecovery.js");
+    await setConversationState(phone, "idle", preservedIdleState(stateData));
+    const intent = detectWaIntent(trimmed);
+    if (await tryResolveWaCustomerMessage({ phone, textBody: trimmed, waSettings, currentState: "idle", detectedIntent: intent })) {
+      return;
+    }
+    if (await respondWithFreshProductSearch({ phone, query: trimmed, waSettings })) {
+      return;
+    }
+    return;
+  }
   if (state === "wa_order_await_product") {
     await startCommerceOrderFromText({
       phone,
@@ -3990,15 +4127,42 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     }
     return;
   }
+  const { sendSessionRecoveryButtons, preservedIdleState, archiveCheckoutSnapshot, trackBotReply, shouldPrioritizeNewIntent } = await import("../lib/waSessionRecovery.js");
   await logWaProcessingStep({
     phone,
     step: "commerce_state_unhandled",
     status: "failed",
-    detail: "WhatsApp commerce flow received a message/button for an unsupported or stale state.",
+    detail: "WhatsApp commerce flow unhandled state — recovery offered.",
     payload: { state, text: trimmed },
     failureReason: "unhandled_whatsapp_commerce_state",
   });
-  await sendWaText(phone, "Is order session ka state expire ho gaya hai. Naya order start karne ke liye product ka naam bhej dein.", waSettings);
+  if (shouldPrioritizeNewIntent(trimmed)) {
+    await setConversationState(phone, "idle", preservedIdleState(stateData));
+    if (await tryResolveWaCustomerMessage({
+      phone,
+      textBody: trimmed,
+      waSettings,
+      currentState: "idle",
+      detectedIntent: detectWaIntent(trimmed),
+    })) {
+      return;
+    }
+    if (await respondWithFreshProductSearch({ phone, query: trimmed, waSettings })) {
+      return;
+    }
+  }
+  const tracked = trackBotReply(
+    { ...stateData, ...archiveCheckoutSnapshot(stateData, "unhandled_commerce_state") },
+    "session_recovery",
+  );
+  await setConversationState(phone, "wa_session_recovery", preservedIdleState(tracked));
+  await sendSessionRecoveryButtons({
+    phone,
+    waSettings,
+    stateData: tracked,
+    reason: "unhandled_commerce_state",
+    repeatCount: Number(tracked.lastBotTemplateCount ?? 1),
+  });
 }
 
 /* ─── Helper: WA Order placement flow ───────────────── */

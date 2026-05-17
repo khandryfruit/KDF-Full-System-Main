@@ -600,10 +600,15 @@ export async function getConversationState(phone: string) {
 export async function setConversationState(phone: string, state: string, stateData?: Record<string, unknown>) {
   const normalized = normalizePhone(phone);
   const existing = await getConversationState(phone);
+  let payload = stateData ?? {};
+  try {
+    const { stampSessionData } = await import("./waSessionRecovery.js");
+    payload = stampSessionData(state, payload as Record<string, any>);
+  } catch { /* keep raw payload if helper unavailable */ }
   const values = {
     phone: normalized,
     state,
-    stateData: stateData ? JSON.stringify(stateData) : null,
+    stateData: Object.keys(payload).length ? JSON.stringify(payload) : null,
     updatedAt: new Date(),
   };
   if (existing) {
