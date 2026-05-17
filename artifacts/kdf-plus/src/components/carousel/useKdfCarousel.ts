@@ -27,7 +27,22 @@ export function useKdfCarousel({
   const [hoverPaused, setHoverPaused] = useState(false);
   const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const programmatic = useRef(false);
-  const drag = useRef({ active: false, startX: 0, startScroll: 0, pointerId: -1 });
+  const drag = useRef({
+    pointerId: -1,
+    startX: 0,
+    startScroll: 0,
+    /** True once movement exceeds threshold — avoids eating button/link clicks */
+    dragging: false,
+  });
+
+  const DRAG_THRESHOLD_PX = 8;
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return !!target.closest(
+      "button, a, input, textarea, select, label, [role='button'], [data-carousel-tap]",
+    );
+  };
 
   const canLoop = itemCount > 1;
   const copies = itemCount <= 1 ? 1 : loopCopies;
@@ -40,7 +55,8 @@ export function useKdfCarousel({
   const scheduleResume = useCallback(() => {
     if (pauseTimer.current) clearTimeout(pauseTimer.current);
     pauseTimer.current = setTimeout(() => {
-      drag.current.active = false;
+      drag.current.dragging = false;
+      drag.current.pointerId = -1;
       setPaused(false);
     }, resumeMs);
   }, [resumeMs]);
@@ -82,7 +98,7 @@ export function useKdfCarousel({
 
   useEffect(() => {
     const el = scrollerRef.current;
-    const autoOff = paused || hoverPaused || drag.current.active;
+    const autoOff = paused || hoverPaused || drag.current.dragging;
     if (!el || !autoScroll || !canLoop || autoOff) return;
 
     let raf = 0;
@@ -91,7 +107,7 @@ export function useKdfCarousel({
     const tick = (now: number) => {
       const dt = Math.min(0.032, (now - last) / 1000);
       last = now;
-      if (setWidthRef.current > 0 && !drag.current.active && !paused && !hoverPaused) {
+      if (setWidthRef.current > 0 && !drag.current.dragging && !paused && !hoverPaused) {
         el.scrollLeft += autoSpeed * dt;
         normalizeLoop(el);
       }
@@ -104,43 +120,58 @@ export function useKdfCarousel({
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
+      if (isInteractiveTarget(e.target)) return;
+
       const el = scrollerRef.current;
       if (!el) return;
+
       pause();
       drag.current = {
-        active: true,
+        dragging: false,
         startX: e.clientX,
         startScroll: el.scrollLeft,
         pointerId: e.pointerId,
       };
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
     },
     [pause],
   );
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!drag.current.active || drag.current.pointerId !== e.pointerId) return;
+    if (drag.current.pointerId !== e.pointerId) return;
     const el = scrollerRef.current;
     if (!el) return;
-    e.preventDefault();
+
     const dx = e.clientX - drag.current.startX;
+    if (!drag.current.dragging) {
+      if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
+      drag.current.dragging = true;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    e.preventDefault();
     el.scrollLeft = drag.current.startScroll - dx;
   }, []);
 
   const endPointer = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!drag.current.active || drag.current.pointerId !== e.pointerId) return;
-      drag.current.active = false;
+      if (drag.current.pointerId !== e.pointerId) return;
+
+      const wasDrag = drag.current.dragging;
+      drag.current.pointerId = -1;
+      drag.current.dragging = false;
+
       try {
         scrollerRef.current?.releasePointerCapture(e.pointerId);
       } catch {
         /* ignore */
       }
-      scheduleResume();
+
+      if (wasDrag) scheduleResume();
+      else setPaused(false);
     },
     [scheduleResume],
   );
@@ -201,7 +232,10 @@ export function useKdfCarousel({
       onPointerMove,
       onPointerUp: endPointer,
       onPointerCancel: endPointer,
-      onTouchStart: pause,
+      onTouchStart: (e) => {
+        if (isInteractiveTarget(e.target)) return;
+        pause();
+      },
       onTouchEnd: scheduleResume,
       onWheel,
       style: { touchAction: "pan-x" as const },

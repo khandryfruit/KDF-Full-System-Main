@@ -1128,11 +1128,21 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   border-color: transparent;
 }
 .kdf-carousel-slide--peek {
+  position: relative;
+  z-index: 1;
   flex: 0 0 calc(50% - 6px);
   max-width: calc(50% - 6px);
   min-width: 148px;
   scroll-snap-align: start;
   scroll-snap-stop: normal;
+}
+.kdf-carousel-slide--peek button,
+.kdf-carousel-slide--peek a,
+.kdf-carousel-card a,
+.kdf-carousel-card button {
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
 }
 @media (min-width: 390px) {
   .kdf-carousel-slide--peek {
