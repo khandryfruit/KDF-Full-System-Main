@@ -7,6 +7,7 @@ import {
   Truck,
   Banknote,
   BadgeCheck,
+  Package,
   Zap,
 } from "lucide-react";
 import { KdfStoreProductCard } from "@/components/KdfStoreProductCard";
