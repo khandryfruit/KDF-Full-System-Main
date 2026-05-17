@@ -22,6 +22,7 @@ import {
   isBareProductMention,
   hasExplicitProductShowIntent,
   shouldShowProductCatalogNow,
+  isStandaloneFaqMessage,
 } from "./waSalesConversation.js";
 
 export type WaProductBrainHit = {
@@ -96,13 +97,14 @@ export function isLikelyProductInquiry(text: string, intent?: string): boolean {
 
 export function isProductInquiryMessage(text: string): boolean {
   const t = String(text ?? "").trim();
-  if (!t || isPureGreetingMessage(t) || isVariantMenuSelection(t)) return false;
+  if (!t || isPureGreetingMessage(t) || isVariantMenuSelection(t) || isStandaloneFaqMessage(t)) return false;
+  if (isBareProductMention(t)) return true;
   if (productRootsInMessage(t).length > 0) return true;
   const lower = t.toLowerCase();
   for (const key of Object.keys(WA_PRODUCT_ALIASES)) {
     if (lower.includes(key)) return true;
   }
-  return /\b(almond|almonds|badam|badaam|almod|pista|pistachio|kaju|cashew|akhrot|walnut|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry|price|qeemat|kitna)\b/i.test(t);
+  return /\b(almond|almonds|badam|badaam|almod|pista|pistachio|kaju|cashew|akhrot|walnut|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry)\b/i.test(t);
 }
 
 export function shouldUseProductDatabaseFirst(intent: string, text: string, state = "idle"): boolean {

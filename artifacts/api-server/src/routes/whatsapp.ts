@@ -52,6 +52,7 @@ import {
   isCatalogNextPageMessage,
 } from "../lib/waProductBrain.js";
 import { productRootTermsFromQuery } from "../lib/shopifyProductSearch.js";
+import { isStandaloneFaqMessage } from "../lib/waSalesConversation.js";
 
 const router = Router();
 
@@ -128,6 +129,15 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   const billWords = ["bill", "bil", "invoice", "receipt", "bna", "bana", "banao", "bnao", "bejo", "bhejo", "bhej do", "checkout", "total bna", "total bana"];
   if (has(["cancel order", "order cancel", "cancel kr", "cancel kar", "nahi chahiye"])) return { intent: "cancellation", confidence: 0.94, reason: "cancel keyword" };
   if (isDeliveryOnlyMessage(text)) return { intent: "delivery", confidence: 0.92, reason: "delivery/shipping keyword without product" };
+  if (isStandaloneFaqMessage(text)) {
+    if (/^(price|prices|qeemat|kitna|how much|rate|rates)$/i.test(t)) {
+      return { intent: "support", confidence: 0.88, reason: "standalone price FAQ" };
+    }
+    if (/^(address|location|shop|store|timing|timings|time|hours)$/i.test(t)) {
+      return { intent: "support", confidence: 0.88, reason: "standalone shop FAQ" };
+    }
+    return { intent: "delivery", confidence: 0.85, reason: "standalone delivery FAQ" };
+  }
   if (has(["track", "tracking", "where is my order", "order status", "mera order", "parcel kahan"])) return { intent: "tracking", confidence: 0.9, reason: "tracking/status keyword" };
   if (has(["delivery kahan", "delivery status", "parcel status"])) return { intent: "tracking", confidence: 0.88, reason: "delivery status = tracking" };
   if (has(["complaint", "shikayat", "problem", "issue", "refund", "return", "bad quality", "damage"])) return { intent: "complaint", confidence: 0.9, reason: "complaint keyword" };
@@ -979,8 +989,8 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             continue;
           }
 
-          if (!chatbot?.isEnabled && detected.intent === "greeting" && (chatbot as any)?.menuEnabled && isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords)) {
-            await sendQuickOrderMenu(phone, waSettings);
+          if (detected.intent === "greeting" && (isPureGreetingMessage(textBody) || isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords))) {
+            await trySendHumanGreetingReply({ phone, textBody, waSettings });
             continue;
           }
 
@@ -1737,6 +1747,17 @@ async function deliverSingleProductOffer(opts: {
     cart: [],
   });
 
+  await sendInteractiveButtons({
+    phone: opts.phone,
+    text: roman ? "Agla step:" : "اگلا step:",
+    buttons: [
+      { id: "wa_chat_order_confirm", title: "1️⃣ Order" },
+      { id: "main_menu", title: "2️⃣ More options" },
+    ],
+    settings: opts.waSettings,
+    templateName: "single_product_actions",
+  });
+
   await logWaProcessingStep({
     phone: opts.phone,
     step: "single_product_offered",
@@ -2383,7 +2404,20 @@ async function handleQuickOrderNumber(opts: {
       return true;
     }
     if (opts.currentState === "quick_price_category") {
-      await handleProductCatalog({ phone: opts.phone, textBody: category.key, waSettings: opts.waSettings, detectedIntent: { intent: "product_price", confidence: 0.9, reason: "quick menu category", productQuery: category.key } as any });
+      const roman = true;
+      await sendWaText(
+        opts.phone,
+        roman
+          ? `Ji 😊 *${category.label}* ke liye main best option recommend karta hoon 👇`
+          : `جی 😊 *${category.label}* کے لیے best option 👇`,
+        opts.waSettings,
+        "quick_category_intro",
+      );
+      await deliverSingleProductOffer({
+        phone: opts.phone,
+        query: category.key,
+        waSettings: opts.waSettings,
+      });
       await setConversationState(opts.phone, "idle", {});
       return true;
     }
@@ -3477,6 +3511,12 @@ async function handleAiReply(opts: {
 }): Promise<void> {
   const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
   const intent = detectedIntent ?? detectWaIntent(textBody);
+  const conv = await getConversationState(phone);
+  const currentState = conv?.state ?? "idle";
+
+  if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: intent, log })) {
+    return;
+  }
 
   try {
     await logWaProcessingStep({
@@ -3672,7 +3712,13 @@ async function handleAiReply(opts: {
     }
     let catalogContextBlock = "";
     let preloadedCatalogProducts: Array<{ shopifyProductId: string; name: string; score?: number }> = [];
-    if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
+    const { shouldShowProductCatalogNow } = await import("../lib/waSalesConversation.js");
+    const allowCatalogPreload =
+      shouldShowProductCatalogNow({ text: textBody, intent: intent.intent, state: currentState }) &&
+      shouldSendCatalogForIntent(intent.intent) &&
+      !isGenericCategoryQuery(intent.productQuery);
+
+    if (allowCatalogPreload) {
       const catalogQuery = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
         ? textBody
         : intent.productQuery ?? textBody;

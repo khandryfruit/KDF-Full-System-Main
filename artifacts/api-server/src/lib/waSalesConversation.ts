@@ -13,7 +13,7 @@ import {
 } from "./waProductBrain.js";
 import { resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 import { isShowMoreProductsMessage } from "./waOrderJourney.js";
-import { buildDeliveryReply } from "./waIntentEngine.js";
+import { buildDeliveryReply, isDeliveryOnlyMessage } from "./waIntentEngine.js";
 import { searchCommerceProducts } from "./commerceProductSearch.js";
 
 function formatRupees(value: number): string {
@@ -79,6 +79,18 @@ export function isBareProductMention(text: string): boolean {
   return productRootsInMessage(q).length > 0 || resolveCanonicalCategoryId(q) != null;
 }
 
+/** "price?", "delivery?", "address?" — FAQ, not catalog search */
+export function isStandaloneFaqMessage(text: string): boolean {
+  const t = String(text ?? "").trim().toLowerCase().replace(/[^\w\s\u0600-\u06FF?]/gu, "").trim();
+  if (!t || t.length > 40) return false;
+  if (isDeliveryOnlyMessage(text)) return true;
+  if (/^(price|prices|qeemat|kitna|how much|rate|rates)$/.test(t)) return true;
+  if (/^(delivery|shipping|courier|delivery charges|delivery charge)$/.test(t)) return true;
+  if (/^(address|location|shop|store|shop address|dokan|dukan|kahan|kaha)$/.test(t)) return true;
+  if (/^(timing|timings|time|hours|open|close)$/.test(t)) return true;
+  return false;
+}
+
 export function hasExplicitProductShowIntent(text: string): boolean {
   const t = String(text ?? "").toLowerCase();
   return (
@@ -95,13 +107,23 @@ export function shouldShowProductCatalogNow(opts: {
 }): boolean {
   const { text, intent, state } = opts;
   if (isPureGreetingMessage(text) || intent === "greeting") return false;
+  if (isStandaloneFaqMessage(text)) return false;
+  if (intent === "conversation" || intent === "support" || intent === "general") return false;
+  if (intent === "delivery" || intent === "tracking") return false;
   if (intent === "order_start" || intent === "bulk_order") return true;
   if (hasExplicitProductShowIntent(text)) return true;
   if (isBareProductMention(text)) return false;
   if (intent === "product_search" && isBareProductMention(text)) return false;
-  if (intent === "pricing" && !/\b(dikhao|show|bhejo|send|order)\b/i.test(text)) return false;
+  if (intent === "pricing" && !hasExplicitProductShowIntent(text)) return false;
   if (state === WA_AWAIT_PRODUCT_INTENT_STATE && !hasExplicitProductShowIntent(text)) return false;
   return false;
+}
+
+export function buildStandalonePricePrompt(roman: boolean): string {
+  if (roman) {
+    return `Ji 😊 kis product ki price chahiye?\n\nJaise: *badam*, *pista*, *kaju*, *akhrot*\n\nYa product ka naam + weight bhej dein — jaise *badam 500g* 😊`;
+  }
+  return `جی 😊 کس product کی price چاہیے؟\n\nجیسے: *badam*، *pista*، *kaju*\n\nیا product + weight بھیجیں — جیسے *badam 500g* 😊`;
 }
 
 export function buildWarmWelcomeReply(textBody: string): string {
@@ -246,7 +268,15 @@ export async function tryConversationalSalesReply(opts: {
     return { handled: true, reply: await buildShopAddressReply(text), template: "shop_address" };
   }
 
-  if (opts.detectedIntent === "delivery" || (/\b(delivery|shipping|courier)\b/i.test(lower) && !isBareProductMention(text))) {
+  if (isStandaloneFaqMessage(text) && /^(price|prices|qeemat|kitna|how much|rate)/i.test(lower)) {
+    return {
+      handled: true,
+      reply: buildStandalonePricePrompt(roman),
+      template: "standalone_price_prompt",
+    };
+  }
+
+  if (opts.detectedIntent === "delivery" || isDeliveryOnlyMessage(text) || /^(delivery|shipping)/i.test(lower)) {
     return { handled: true, reply: await buildDeliveryReply(text), template: "delivery_info" };
   }
 
