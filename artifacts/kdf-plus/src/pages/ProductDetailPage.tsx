@@ -14,6 +14,7 @@ import { useCart } from "@/context/CartContext";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { normalizeProductsListResponse } from "@/lib/normalizeProductsList";
 import { asArrayFromApi } from "@/lib/asArrayFromApi";
+import { apiUrl } from "@/lib/fetchJsonApi";
 import {
   buildVariantGroups,
   ensureStringArray,
@@ -40,6 +41,7 @@ import {
   type GalleryEngagementProduct,
   type GalleryCategory,
 } from "@/components/product-detail/ProductGalleryEngagementZone";
+import { ProductDetailErrorBoundary } from "@/components/ProductDetailErrorBoundary";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
@@ -314,7 +316,7 @@ function RelatedProducts({ currentId }: { currentId: number }) {
 }
 
 /* ── Main Page ── */
-export default function ProductDetailPage() {
+function ProductDetailPageView() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
   const param = (params as any).slug ?? "";
@@ -339,13 +341,23 @@ export default function ProductDetailPage() {
   const [purchaseSheetOpen, setPurchaseSheetOpen] = useState(false);
   const [purchaseIntent, setPurchaseIntent] = useState<PurchaseIntent>("cart");
 
-  const { data: product, isLoading } = useQuery({
+  const {
+    data: product,
+    isLoading,
+    isError,
+    error: productError,
+    refetch: refetchProduct,
+  } = useQuery({
     queryKey: ["kdf-plus-product", param],
     queryFn: async () => {
-      const r = await fetch(`/api/products/${encodeURIComponent(param)}`);
-      if (!r.ok) throw new Error("Product not found");
-      const canonicalSlug = r.headers.get("X-Canonical-Slug");
-      const data = normalizeProductDetail((await r.json()) as Record<string, unknown>);
+      const url = apiUrl(`/api/products/${encodeURIComponent(param)}`);
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("Product not found");
+      const canonicalSlug = res.headers.get("X-Canonical-Slug");
+      const raw = (await res.json()) as Record<string, unknown>;
+      if (raw?.error && raw.id == null) throw new Error("Product not found");
+      const data = normalizeProductDetail(raw);
+      if (data.id == null) throw new Error("Product not found");
       return { ...data, _canonicalSlug: canonicalSlug };
     },
     enabled: !!param,
@@ -491,12 +503,28 @@ export default function ProductDetailPage() {
     );
   }
 
-  if (!product) {
+  if (isError || !product) {
     return (
       <main className="kdf-page-shell px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <p className="text-4xl mb-4">🔍</p>
-        <h2 className="text-xl font-semibold mb-2">Product not found</h2>
-        <Button onClick={() => setLocation("/products")} data-testid="button-back-products">Browse Products</Button>
+        <p className="text-4xl mb-4">{isError ? "⚠️" : "🔍"}</p>
+        <h2 className="text-xl font-semibold mb-2">
+          {isError ? "Could not load this product" : "Product not found"}
+        </h2>
+        <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">
+          {isError
+            ? (productError instanceof Error ? productError.message : "Please check your connection and try again.")
+            : "This item may have been removed or the link is incorrect."}
+        </p>
+        <div className="flex flex-wrap justify-center gap-3">
+          {isError && (
+            <Button variant="outline" onClick={() => refetchProduct()} data-testid="button-retry-product">
+              Try again
+            </Button>
+          )}
+          <Button onClick={() => setLocation("/products")} data-testid="button-back-products">
+            Browse Products
+          </Button>
+        </div>
       </main>
     );
   }
@@ -1065,5 +1093,13 @@ export default function ProductDetailPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function ProductDetailPage() {
+  return (
+    <ProductDetailErrorBoundary>
+      <ProductDetailPageView />
+    </ProductDetailErrorBoundary>
   );
 }

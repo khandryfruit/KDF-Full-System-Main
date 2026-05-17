@@ -24,6 +24,10 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   render() {
     if (this.state.hasError) {
       const msg = this.state.error?.message ?? "";
+      const isChunkLoad =
+        /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed/i.test(
+          msg,
+        );
       return (
         <div
           style={{
@@ -46,7 +50,9 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
               Something went wrong
             </p>
             <p style={{ color: "#a4c982", fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
-              Please refresh the page to continue shopping.
+              {isChunkLoad
+                ? "A new version of the store was deployed. Refresh once to load the latest pages."
+                : "Please refresh the page to continue shopping."}
             </p>
             {import.meta.env.DEV && msg ? (
               <p style={{ color: "#6b7280", fontSize: 10, marginBottom: 20, fontFamily: "monospace", wordBreak: "break-word" }}>

@@ -240,7 +240,7 @@ function DualMarqueeRow({
                 {img ? <img src={getImageSrc(img)} alt="" className="h-full w-full object-cover" loading="lazy" /> : <Package className="m-2 h-6 w-6 text-muted" />}
               </span>
               <span className="max-w-[120px] truncate text-left text-[11px] font-semibold">{p.name}</span>
-              <span className="text-[11px] font-bold text-[#5FA800]">Rs.{p.price.toLocaleString()}</span>
+              <span className="text-[11px] font-bold text-[#5FA800]">Rs.{(Number(p.price) || 0).toLocaleString()}</span>
             </button>
           );
         })}
