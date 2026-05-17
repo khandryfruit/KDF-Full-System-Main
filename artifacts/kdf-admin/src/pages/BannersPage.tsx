@@ -1322,7 +1322,7 @@ export default function BannersPage() {
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1.5"><Label>Label</Label><Input value={formData.label} onChange={(e) => setFormData({ ...formData, label: e.target.value })} placeholder="Eid Gifts / Healthy Picks" /></div>
-                  <div className="space-y-1.5"><Label>Title *</Label><Input required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Summer Sale — Premium Nuts" /></div>
+                  <div className="space-y-1.5"><Label>Title (optional)</Label><Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Premium Dry Fruits Delivered Fast" /></div>
                   <div className="space-y-1.5"><Label>Subtitle</Label><Input value={formData.subtitle} onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })} placeholder="Up to 30% off on selected products" /></div>
                   <div className="space-y-1.5"><Label>CTA Button Text</Label><Input value={formData.cta} onChange={(e) => setFormData({ ...formData, cta: e.target.value })} placeholder="Shop Now" /></div>
                   {formData.aiMode && (
