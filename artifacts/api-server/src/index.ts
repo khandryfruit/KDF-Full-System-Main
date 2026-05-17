@@ -99,12 +99,22 @@ warmUpDb()
           const { ensureChatbotDefaults } = await import("./lib/ensureChatbotDefaults.js");
           await ensureChatbotDefaults();
           const { getShopifyCatalogStats } = await import("./lib/shopifyProductKnowledge.js");
-          const { rebuildShopifyProductAliases } = await import("./lib/shopifyProductSearch.js");
+          const { rebuildFullProductKnowledgeIndex } = await import("./lib/hybridProductSearch.js");
           const stats = await getShopifyCatalogStats();
           const minAliases = Math.floor(stats.activeProducts * 5);
-          if (stats.activeProducts > 0 && (stats.aliasRows === 0 || stats.aliasRows < minAliases || stats.indexedProducts < Math.floor(stats.activeProducts * 0.95))) {
-            const result = await rebuildShopifyProductAliases();
-            logger.info({ ...stats, rebuild: result }, "Shopify Product Knowledge index auto-rebuilt on startup");
+          const needsAliasRebuild =
+            stats.activeProducts > 0 &&
+            (stats.aliasRows === 0 ||
+              stats.aliasRows < minAliases ||
+              stats.indexedProducts < Math.floor(stats.activeProducts * 0.95));
+          const needsSearchIndex =
+            stats.activeProducts > 0 &&
+            (stats.searchIndexRows === 0 ||
+              stats.searchIndexRows < Math.floor(stats.activeProducts * 0.95) ||
+              stats.embeddedRows < Math.floor(stats.activeProducts * 0.5));
+          if (needsAliasRebuild || needsSearchIndex) {
+            const result = await rebuildFullProductKnowledgeIndex();
+            logger.info({ ...stats, rebuild: result }, "Product Knowledge + hybrid search index auto-rebuilt on startup");
           }
         } catch (err) {
           logger.warn({ err }, "Shopify Product Knowledge startup rebuild skipped");

@@ -156,6 +156,29 @@ export const shopifyProductAliasesTable = pgTable("shopify_product_aliases", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/** Multilingual search meta + embeddings for hybrid product retrieval */
+export const shopifyProductSearchIndexTable = pgTable("shopify_product_search_index", {
+  shopifyProductId: text("shopify_product_id").primaryKey(),
+  searchMeta: jsonb("search_meta").$type<Record<string, unknown>>().notNull().default({}),
+  searchDocument: text("search_document").notNull().default(""),
+  embedding: jsonb("embedding").$type<number[] | null>(),
+  embeddingModel: text("embedding_model"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/** Debug: user query → matched products → GPT output */
+export const waProductSearchLogsTable = pgTable("wa_product_search_logs", {
+  id: serial("id").primaryKey(),
+  phone: text("phone"),
+  channel: text("channel").notNull().default("whatsapp"),
+  userQuery: text("user_query").notNull(),
+  matchMethod: text("match_method"),
+  matchedProducts: jsonb("matched_products").$type<unknown>(),
+  similarityScores: jsonb("similarity_scores").$type<unknown>(),
+  gptOutput: text("gpt_output"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const shopifyWebhookLogsTable = pgTable("shopify_webhook_logs", {
   id: serial("id").primaryKey(),
   storeId: integer("store_id"),

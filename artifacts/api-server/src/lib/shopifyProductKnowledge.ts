@@ -310,7 +310,7 @@ function mapRowToCatalogProduct(row: any, query: string, families: string[]): Sh
   };
 }
 
-/** Score entire active catalog — alias DB first, strict family gate */
+/** Score entire active catalog — hybrid: exact > synonym > lexical > embedding */
 async function scoreEntireCatalog(query: string): Promise<ShopifyCatalogProduct[]> {
   const q = String(query ?? "").trim();
   if (!q) return [];
@@ -334,10 +334,35 @@ async function scoreEntireCatalog(query: string): Promise<ShopifyCatalogProduct[
 
   const scored = candidates
     .map((row) => mapRowToCatalogProduct(row, q, families))
-    .filter((p): p is ShopifyCatalogProduct => p != null && (p.score ?? 0) >= minScore)
-    .sort((a, b) => b.score - a.score);
+    .filter((p): p is ShopifyCatalogProduct => p != null && (p.score ?? 0) >= minScore);
 
-  return scored;
+  const lexicalMap = new Map<string, number>();
+  for (const p of scored) lexicalMap.set(p.shopifyProductId, p.score ?? 0);
+
+  const { hybridSearchProductIds } = await import("./hybridProductSearch.js");
+  const { ids: hybridHits } = await hybridSearchProductIds(q, lexicalMap);
+
+  const productById = new Map(scored.map((p) => [p.shopifyProductId, p]));
+  const merged: ShopifyCatalogProduct[] = [];
+
+  for (const hit of hybridHits) {
+    if ((hit.score ?? 0) < minScore && !hit.method.includes("exact")) continue;
+    let p = productById.get(hit.shopifyProductId);
+    if (!p) {
+      const row = rowById.get(hit.shopifyProductId);
+      if (!row) continue;
+      p = mapRowToCatalogProduct(row, q, families);
+      if (!p) continue;
+    }
+    merged.push({ ...p, score: hit.score });
+    productById.delete(hit.shopifyProductId);
+  }
+
+  for (const p of productById.values()) {
+    if ((p.score ?? 0) >= minScore) merged.push(p);
+  }
+
+  return merged.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
 /**
@@ -401,7 +426,8 @@ export type CatalogSearchDebug = {
   familyTerms: string[];
   aliasHits: number;
   matchCount: number;
-  topMatches: Array<{ name: string; score: number; shopifyProductId: string }>;
+  topMatches: Array<{ name: string; score: number; shopifyProductId: string; method?: string }>;
+  hybrid?: Record<string, unknown>;
 };
 
 export async function searchShopifyCatalogWithDebug(query: string, limit = 6): Promise<{
@@ -412,6 +438,14 @@ export async function searchShopifyCatalogWithDebug(query: string, limit = 6): P
   const families = resolveQueryFamilies(q);
   const aliasIds = await searchShopifyProductIdsByAlias(q, 80);
   const products = await searchShopifyCatalog(q, limit);
+  const lexicalMap = new Map(products.map((p) => [p.shopifyProductId, p.score ?? 0]));
+  let hybridDebug: Record<string, unknown> | undefined;
+  try {
+    const { hybridSearchProductIds } = await import("./hybridProductSearch.js");
+    const { debug: hd } = await hybridSearchProductIds(q, lexicalMap);
+    hybridDebug = hd as Record<string, unknown>;
+  } catch { /* optional */ }
+
   return {
     products,
     debug: {
@@ -425,6 +459,7 @@ export async function searchShopifyCatalogWithDebug(query: string, limit = 6): P
         score: p.score,
         shopifyProductId: p.shopifyProductId,
       })),
+      hybrid: hybridDebug,
     },
   };
 }
@@ -560,6 +595,9 @@ export async function getShopifyCatalogStats(): Promise<{
   indexedProducts: number;
   indexHealthy: boolean;
   indexCoveragePct: number;
+  searchIndexRows: number;
+  embeddedRows: number;
+  embeddingModel: string | null;
 }> {
   const [prod] = await db
     .select({ count: sql<number>`count(*)` })
@@ -583,7 +621,27 @@ export async function getShopifyCatalogStats(): Promise<{
   const indexCoveragePct = activeProducts > 0 ? Math.round((indexedProducts / activeProducts) * 100) : 0;
   const indexHealthy = activeProducts === 0 || indexedProducts >= Math.floor(activeProducts * 0.95);
 
-  return { activeProducts, aliasRows, indexedProducts, indexHealthy, indexCoveragePct };
+  let searchIndexRows = 0;
+  let embeddedRows = 0;
+  let embeddingModel: string | null = null;
+  try {
+    const { getProductSearchIndexStats } = await import("./hybridProductSearch.js");
+    const si = await getProductSearchIndexStats();
+    searchIndexRows = si.searchIndexRows;
+    embeddedRows = si.embeddedRows;
+    embeddingModel = si.embeddingModel;
+  } catch { /* migration pending */ }
+
+  return {
+    activeProducts,
+    aliasRows,
+    indexedProducts,
+    indexHealthy,
+    indexCoveragePct,
+    searchIndexRows,
+    embeddedRows,
+    embeddingModel,
+  };
 }
 
 export { WA_PRODUCT_ALIASES, rebuildShopifyProductAliases } from "./shopifyProductSearch.js";

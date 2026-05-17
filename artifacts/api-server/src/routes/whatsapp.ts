@@ -1517,9 +1517,39 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
   name: string; price: string; compareAt: string | null;
   description: string | null; imageUrl: string | null;
   productUrl: string; variants: string; inStock: boolean;
-  source?: "shopify" | "local"; rawPrice?: number; variantLines?: string[];
-  shopifyProductId?: string; variantOptions?: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }>;
+  source?: "shopify" | "commerce" | "local"; rawPrice?: number; variantLines?: string[];
+  shopifyProductId?: string; commerceProductId?: string; slug?: string;
+  variantOptions?: Array<{ id: string; title: string; price: number; compareAtPrice?: number | null; sku?: string; inventoryQuantity?: number; inventoryItemId?: string; weight?: number; weightUnit?: string }>;
 }>> {
+  const {
+    searchCommerceProducts,
+    commerceToWaCatalogProducts,
+    logCommerceProductSearch,
+  } = await import("../lib/commerceProductSearch.js");
+
+  const commerceHits = await searchCommerceProducts(query, limit);
+  if (commerceHits.length > 0) {
+    const results = commerceToWaCatalogProducts(commerceHits);
+    await logWaProcessingStep({
+      step: "commerce_product_lookup",
+      status: "sent",
+      detail: `Commerce → Products found ${results.length} match(es) for "${query}".`,
+      payload: {
+        query,
+        engine: "commerce_products",
+        count: results.length,
+        matchedIds: commerceHits.map((p) => p.id),
+        products: results.map((p) => ({ name: p.name, price: p.price, url: p.productUrl })),
+      },
+    });
+    await logCommerceProductSearch({
+      userQuery: query,
+      products: commerceHits,
+      matchMethod: "commerce_primary",
+    }).catch(() => {});
+    return results;
+  }
+
   const { searchShopifyCatalog, toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
   const catalog = await searchShopifyCatalog(query, limit);
   const results = toWhatsAppCatalogProducts(catalog);
@@ -1528,18 +1558,64 @@ async function searchProductsForWa(query: string, limit = 4): Promise<Array<{
     step: "shopify_product_lookup",
     status: results.length ? "sent" : "failed",
     detail: results.length
-      ? `KDF Shopify Product Knowledge found ${results.length} match(es).`
-      : `No Shopify catalog match for "${query}".`,
+      ? `Shopify fallback found ${results.length} match(es).`
+      : `No Commerce or Shopify match for "${query}".`,
     payload: {
       query,
-      engine: "shopifyProductKnowledge",
+      engine: "shopify_fallback",
       count: results.length,
       products: results.map((p) => ({ name: p.name, price: p.price, variants: p.variantLines, source: p.source })),
     },
-    failureReason: results.length ? null : "no_matching_shopify_product",
+    failureReason: results.length ? null : "no_matching_product",
   });
 
   return results;
+}
+
+/** Send Commerce product cards: image → details → View Product CTA */
+async function sendCommerceProductWaCards(opts: {
+  phone: string;
+  products: Awaited<ReturnType<typeof searchProductsForWa>>;
+  waSettings: any;
+  roman?: boolean;
+}): Promise<void> {
+  const { sendWhatsAppImage, sendCtaUrlMessage } = await import("../lib/whatsapp.js");
+  const roman = opts.roman ?? true;
+
+  for (let i = 0; i < opts.products.length; i++) {
+    const p = opts.products[i]!;
+    const variantBlock = p.variantLines?.length
+      ? p.variantLines.map((line, idx) => `${idx + 1}️⃣ ${line}`).join("\n")
+      : p.variants || p.price;
+
+    if (p.imageUrl?.startsWith("https://")) {
+      await sendWhatsAppImage({
+        phone: opts.phone,
+        imageUrl: p.imageUrl,
+        caption: `🥜 *${p.name}*\n💰 ${p.price}`,
+        settings: opts.waSettings,
+        templateName: "commerce_product_image",
+      });
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    const body =
+      `🥜 *${p.name}*\n\n` +
+      `💰 *Price:* ${p.price}\n` +
+      (variantBlock ? `📦 *Variations:*\n${variantBlock}\n` : "") +
+      `${p.inStock ? "✅ In stock" : "❌ Out of stock"}`;
+
+    await sendCtaUrlMessage({
+      phone: opts.phone,
+      text: body,
+      buttonText: roman ? "View Product" : "View Product",
+      url: p.productUrl,
+      settings: opts.waSettings,
+      templateName: "commerce_product_cta",
+    });
+
+    if (i < opts.products.length - 1) await new Promise((r) => setTimeout(r, 600));
+  }
 }
 
 /* ─── Helper: format product card as WA text ────────── */
@@ -1829,14 +1905,24 @@ async function trySendProductCatalogReply(opts: {
 
     const waProducts = hit.waProducts ?? (await import("../lib/shopifyProductKnowledge.js")).toWhatsAppCatalogProducts(hit.products);
     const useCategoryFlow = hit.mode === "category" || hit.products.length > 1 || (hit.products.length === 1 && (waProducts[0]?.variantOptions?.length ?? 0) > 1);
+    const useCommerceCards = waProducts.some((p) => (p as { source?: string }).source === "commerce");
 
-    await sendDeterministicWaReply({
-      phone,
-      textBody,
-      reply: hit.reply,
-      intent: "product_search",
-      send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
-    });
+    if (useCommerceCards && waProducts.length <= 4) {
+      await sendCommerceProductWaCards({
+        phone,
+        products: waProducts as Awaited<ReturnType<typeof searchProductsForWa>>,
+        waSettings,
+        roman: isRomanUrduWa(textBody),
+      });
+    } else {
+      await sendDeterministicWaReply({
+        phone,
+        textBody,
+        reply: hit.reply,
+        intent: "product_search",
+        send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+      });
+    }
 
     const mergeState: Record<string, unknown> = {
       selectedProductName: hit.product.name,
@@ -1881,6 +1967,20 @@ async function trySendProductCatalogReply(opts: {
       topic: "product",
       mergeStateData: mergeState,
     });
+
+    const { logProductSearch } = await import("../lib/productSearchDebug.js");
+    await logProductSearch({
+      phone,
+      userQuery: textBody,
+      matchMethod: hit.mode ?? "product_db",
+      matches: hit.products.slice(0, 12).map((p) => ({
+        shopifyProductId: p.shopifyProductId,
+        name: p.name,
+        score: p.score ?? hit.score,
+        method: hit.mode ?? "catalog",
+      })),
+    }).catch(() => {});
+
     return true;
   } catch (err) {
     log?.warn(err, "Product catalog reply failed");
@@ -3330,20 +3430,41 @@ async function handleAiReply(opts: {
       whatsappInstructions += `\n- CRITICAL: Customer is mid-order or has selected a product. Do NOT send generic greetings. Answer the exact question (delivery, price, variant) using memory context.`;
     }
     let catalogContextBlock = "";
+    let preloadedCatalogProducts: Array<{ shopifyProductId: string; name: string; score?: number }> = [];
     if (shouldSendCatalogForIntent(intent.intent) && !isGenericCategoryQuery(intent.productQuery)) {
       const catalogQuery = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
         ? textBody
         : intent.productQuery ?? textBody;
+      const { searchCommerceProducts, commerceHitToCatalogProduct, formatCommerceProductsWhatsAppReply } = await import("../lib/commerceProductSearch.js");
+      const commercePreload = await searchCommerceProducts(catalogQuery, 8);
       const { listProductsForCustomerQuery } = await import("../lib/waCategoryIndex.js");
       const categoryList = await listProductsForCustomerQuery(catalogQuery);
-      const products = categoryList.products.length > 0
-        ? await searchProductsForWa(catalogQuery, Math.min(12, categoryList.products.length))
-        : await searchProductsForWa(catalogQuery, 4);
-      if (categoryList.products.length > 0) {
+      const products = commercePreload.length > 0
+        ? commercePreload.map(commerceHitToCatalogProduct)
+        : categoryList.products.length > 0
+          ? categoryList.products
+          : await searchProductsForWa(catalogQuery, 4).then((wa) => wa as unknown as typeof categoryList.products);
+      if (commercePreload.length > 0) {
+        catalogContextBlock = `\n\n[OFFICIAL COMMERCE PRODUCTS — Admin → Commerce → Products]\n${formatCommerceProductsWhatsAppReply(commercePreload, true)}\n[END — GPT must ONLY use these products. Do NOT invent.]`;
+        preloadedCatalogProducts = commercePreload.map((p) => ({
+          shopifyProductId: p.id,
+          name: p.name,
+          score: p.score,
+        }));
+      } else if (categoryList.products.length > 0) {
         const { formatCategoryProductListReply } = await import("../lib/waSalesAgent.js");
-        const { toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
+        preloadedCatalogProducts = categoryList.products.slice(0, 12).map((p) => ({
+          shopifyProductId: p.shopifyProductId,
+          name: p.name,
+          score: p.score,
+        }));
         catalogContextBlock = `\n\n[OFFICIAL CATEGORY: ${categoryList.category?.labelEn ?? categoryList.categoryId} — ${categoryList.products.length} products]\n${formatCategoryProductListReply({ category: categoryList.category, products: categoryList.products.slice(0, 12), roman: true, page: 0, totalInCategory: categoryList.products.length })}\n[END — Do NOT list other families. Max 2-4 products in your short reply; full list already sent by system if applicable]`;
       } else if (products.length > 0) {
+        preloadedCatalogProducts = products.map((p) => ({
+          shopifyProductId: p.shopifyProductId,
+          name: p.name,
+          score: p.score,
+        }));
         catalogContextBlock = `\n\n[OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT]\nUse ONLY these products, variants, and prices. Never invent prices.\n${products.map((p, idx) => {
           const variants = p.variantLines?.length ? p.variantLines.map((v) => `    - ${v}`).join("\n") : `    - ${p.price}`;
           return `${idx + 1}. ${p.name}\n${variants}\n    Stock: ${p.inStock ? "In stock" : "Out of stock"}\n    URL: ${p.productUrl}`;
@@ -3470,6 +3591,21 @@ async function handleAiReply(opts: {
 
     const { sendWhatsAppMessage } = await import("../lib/whatsapp.js");
     const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
+    if (preloadedCatalogProducts.length > 0) {
+      const { logProductSearch } = await import("../lib/productSearchDebug.js");
+      await logProductSearch({
+        phone,
+        userQuery: textBody,
+        matchMethod: "gpt_with_catalog_context",
+        matches: preloadedCatalogProducts.map((p) => ({
+          shopifyProductId: p.shopifyProductId,
+          name: p.name,
+          score: p.score ?? 0,
+          method: "hybrid_preload",
+        })),
+        gptOutput: reply,
+      }).catch(() => {});
+    }
     await persistConversationTurn(phone, {
       intent: intent.intent,
       topic: intent.intent,
@@ -4607,8 +4743,10 @@ router.get("/admin/whatsapp/chatbot-stats", adminMiddleware as any, async (req, 
 router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (req, res) => {
   try {
     const { getShopifyCatalogStats } = await import("../lib/shopifyProductKnowledge.js");
+    const { getCommerceProductStats } = await import("../lib/commerceProductSearch.js");
     const { getAutoSyncStatus } = await import("../lib/shopifyAutoSync.js");
     const stats = await getShopifyCatalogStats();
+    const commerceStats = await getCommerceProductStats();
     const sync = getAutoSyncStatus();
     const [store] = await db.select({
       lastProductSync: shopifyStoresTable.lastProductSync,
@@ -4634,10 +4772,16 @@ router.get("/admin/whatsapp/product-knowledge", adminMiddleware as any, async (r
       .where(sql`${shopifyProductsTable.status} != 'active'`)
       .catch(() => [{ count: 0 }]);
 
-    const indexMismatch = stats.activeProducts > 0 && stats.indexedProducts < stats.activeProducts;
+    const indexMismatch =
+      stats.activeProducts > 0 &&
+      (stats.indexedProducts < stats.activeProducts || stats.searchIndexRows < stats.activeProducts);
 
     return res.json({
-      engine: "shopifyProductKnowledge",
+      engine: "commerceProductSearch",
+      primarySource: "Admin → Commerce → Products",
+      searchPipeline: "commerce: exact_name > tags > slug > variations | shopify: embedding fallback",
+      embeddingModel: stats.embeddingModel ?? "text-embedding-3-small",
+      commerceStats,
       stats: {
         ...stats,
         inactiveProducts: Number(inactiveCount?.count ?? 0),
@@ -4794,12 +4938,14 @@ router.get("/admin/whatsapp/product-knowledge/verify", adminMiddleware as any, a
       proof.totalActiveProducts >= 300 &&
       stats.indexedProducts >= Math.floor(proof.totalActiveProducts * 0.95) &&
       stats.aliasRows >= proof.totalActiveProducts * 3 &&
+      stats.searchIndexRows >= Math.floor(proof.totalActiveProducts * 0.95) &&
+      stats.embeddedRows >= Math.floor(proof.totalActiveProducts * 0.5) &&
       proof.almondCategoryCount > 0;
     return res.json({
       healthy,
       message: healthy
-        ? `Index OK: ${proof.totalActiveProducts} products, ${proof.totalVariants} variants, ${stats.aliasRows} aliases`
-        : "Index incomplete — run Rebuild Index in admin",
+        ? `Index OK: ${proof.totalActiveProducts} products, ${stats.aliasRows} aliases, ${stats.embeddedRows} embeddings`
+        : "Index incomplete — run Rebuild Index in admin (aliases + embeddings)",
       stats,
       proof,
     });
@@ -4810,20 +4956,22 @@ router.get("/admin/whatsapp/product-knowledge/verify", adminMiddleware as any, a
 
 router.post("/admin/whatsapp/product-knowledge/rebuild", adminMiddleware as any, async (req, res) => {
   try {
-    const { rebuildShopifyProductAliases } = await import("../lib/shopifyProductSearch.js");
+    const skipEmbeddings = Boolean(req.body?.skipEmbeddings);
+    const { rebuildFullProductKnowledgeIndex } = await import("../lib/hybridProductSearch.js");
     const { getShopifyCatalogStats, invalidateCatalogCache } = await import("../lib/shopifyProductKnowledge.js");
     const { invalidateFullCatalogIndex } = await import("../lib/waSalesAgent.js");
     const { getCatalogIndexProof } = await import("../lib/waCategoryIndex.js");
     invalidateCatalogCache();
     invalidateFullCatalogIndex();
-    const result = await rebuildShopifyProductAliases();
+    const result = await rebuildFullProductKnowledgeIndex({ skipEmbeddings });
     invalidateFullCatalogIndex();
     const stats = await getShopifyCatalogStats();
     const proof = await getCatalogIndexProof();
     return res.json({
       success: true,
-      message: `Product Knowledge index rebuilt: ${result.indexed} products, ${result.aliases} aliases`,
-      ...result,
+      message: `Product index rebuilt: ${result.aliases.indexed} products, ${result.aliases.aliases} aliases, ${result.searchIndex.embedded} embeddings (${result.searchIndex.model})`,
+      ...result.aliases,
+      searchIndex: result.searchIndex,
       stats,
       proof,
     });
@@ -4832,15 +4980,38 @@ router.post("/admin/whatsapp/product-knowledge/rebuild", adminMiddleware as any,
   }
 });
 
+router.get("/admin/whatsapp/product-knowledge/search-logs", adminMiddleware as any, async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "30"), 10) || 30));
+    const phone = String(req.query.phone ?? "").trim();
+    const rows = phone
+      ? await db.execute(sql`
+          SELECT id, phone, channel, user_query, match_method, matched_products, similarity_scores, gpt_output, created_at
+          FROM wa_product_search_logs WHERE phone = ${phone}
+          ORDER BY created_at DESC LIMIT ${limit}
+        `)
+      : await db.execute(sql`
+          SELECT id, phone, channel, user_query, match_method, matched_products, similarity_scores, gpt_output, created_at
+          FROM wa_product_search_logs
+          ORDER BY created_at DESC LIMIT ${limit}
+        `);
+    return res.json({ logs: (rows as any).rows ?? rows ?? [] });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message ?? "Failed to load search logs" });
+  }
+});
+
 router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as any, async (req, res) => {
   try {
     const query = String(req.body?.query ?? "").trim();
     if (!query) return res.status(400).json({ error: "query is required" });
     const limit = Math.min(25, Math.max(1, Number(req.body?.limit ?? 8)));
+    const { searchCommerceProductsWithDebug, toCommerceSearchApiResponse } = await import("../lib/commerceProductSearch.js");
     const { searchShopifyCatalogWithDebug, formatShopifyCatalogForOpenAI, countShopifyCatalogMatches } = await import("../lib/shopifyProductKnowledge.js");
     const { productRootsInMessage, tryWaProductCatalogReply } = await import("../lib/waProductBrain.js");
     const { resolveSalesCategoryFromQuery } = await import("../lib/waSalesAgent.js");
     const { listProductsForCustomerQuery, resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
+    const commerceResult = await searchCommerceProductsWithDebug(query, limit);
     const { products, debug } = await searchShopifyCatalogWithDebug(query, limit);
     const categoryListing = await listProductsForCustomerQuery(query);
     const browseHit = await tryWaProductCatalogReply({ textBody: query, productQuery: query }).catch(() => null);
@@ -4849,9 +5020,23 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
     const roots = productRootsInMessage(query);
     return res.json({
       query,
-      count: products.length,
+      primarySource: "commerce",
+      commerce: {
+        count: commerceResult.products.length,
+        products: toCommerceSearchApiResponse(commerceResult.products),
+        debug: commerceResult.debug,
+      },
+      shopifyFallback: {
+        count: products.length,
+        totalMatches,
+        debug,
+        hybridSearch: debug.hybrid ?? null,
+      },
+      count: commerceResult.products.length || products.length,
       totalMatches,
-      debug,
+      debug: commerceResult.debug,
+      hybridSearch: debug.hybrid ?? null,
+      searchPipeline: "commerce: exact_name > tags > slug > variations | shopify: embedding fallback",
       salesCategory: resolveSalesCategoryFromQuery(query),
       canonicalCategoryId: resolveCanonicalCategoryId(query),
       categoryProductCount: categoryListing.products.length,
@@ -4859,22 +5044,28 @@ router.post("/admin/whatsapp/product-knowledge/test-search", adminMiddleware as 
       browseMode: browseHit?.mode ?? null,
       matchedAliasRoots: roots,
       whatsappReplyPreview: browseHit?.reply ?? null,
-      topMatch: products[0]
-        ? { name: products[0].name, score: products[0].score, shopifyProductId: products[0].shopifyProductId }
-        : null,
-      products: products.map((p) => ({
-        name: p.name,
-        shopifyProductId: p.shopifyProductId,
-        priceFrom: p.rawPrice,
-        inStock: p.inStock,
-        variants: p.variantOptions.map((v) => ({
-          title: v.title,
-          price: v.price,
-          stock: v.inventoryQuantity ?? 0,
-          sku: v.sku,
-        })),
-      })),
-      openAiContextPreview: formatShopifyCatalogForOpenAI(products),
+      topMatch: commerceResult.products[0]
+        ? { name: commerceResult.products[0].name, score: commerceResult.products[0].score, id: commerceResult.products[0].id, source: "commerce" }
+        : products[0]
+          ? { name: products[0].name, score: products[0].score, shopifyProductId: products[0].shopifyProductId, source: "shopify" }
+          : null,
+      products: commerceResult.products.length
+        ? toCommerceSearchApiResponse(commerceResult.products)
+        : products.map((p) => ({
+            name: p.name,
+            shopifyProductId: p.shopifyProductId,
+            priceFrom: p.rawPrice,
+            inStock: p.inStock,
+            variants: p.variantOptions.map((v) => ({
+              title: v.title,
+              price: v.price,
+              stock: v.inventoryQuantity ?? 0,
+              sku: v.sku,
+            })),
+          })),
+      openAiContextPreview: commerceResult.products.length
+        ? commerceResult.products.map((p) => `${p.name} — ${p.price}`).join("\n")
+        : formatShopifyCatalogForOpenAI(products),
     });
   } catch (e: any) {
     return res.status(500).json({ error: e.message ?? "Test search failed" });

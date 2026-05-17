@@ -299,8 +299,10 @@ async function upsertProduct(store: any, p: any) {
   });
 
   try {
+    const { rebuildProductSearchIndex } = await import("./hybridProductSearch.js");
     const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
     await rebuildShopifyProductAliases({ shopifyProductId: String(p.id) });
+    await rebuildProductSearchIndex({ shopifyProductId: String(p.id) });
     const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
     invalidateCatalogCache();
   } catch { /* non-fatal */ }
@@ -440,9 +442,9 @@ async function runIncrementalSync(store: any) {
         .set({ lastProductSync: new Date(), updatedAt: new Date() })
         .where(eq(shopifyStoresTable.id, store.id));
       try {
-        const { rebuildShopifyProductAliases } = await import("./shopifyProductSearch.js");
+        const { rebuildFullProductKnowledgeIndex } = await import("./hybridProductSearch.js");
         const { invalidateCatalogCache } = await import("./shopifyProductKnowledge.js");
-        await rebuildShopifyProductAliases();
+        await rebuildFullProductKnowledgeIndex();
         invalidateCatalogCache();
       } catch { /* non-fatal */ }
     }

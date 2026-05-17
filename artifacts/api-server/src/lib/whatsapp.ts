@@ -428,6 +428,61 @@ export async function sendInteractiveButtons(opts: {
   }
 }
 
+/* ─── Send image with optional caption (public HTTPS URL required) ─── */
+export async function sendWhatsAppImage(opts: {
+  phone: string;
+  imageUrl: string;
+  caption?: string;
+  settings?: Awaited<ReturnType<typeof getSettings>>;
+  templateName?: string;
+}): Promise<boolean> {
+  try {
+    const settings = opts.settings ?? (await getSettings());
+    if (!settings?.isActive || !settings.accessToken || !settings.phoneNumberId) return false;
+    const url = String(opts.imageUrl ?? "").trim();
+    if (!url.startsWith("https://")) return false;
+
+    const normalizedPhone = normalizePhone(opts.phone);
+    const body: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: normalizedPhone,
+      type: "image",
+      image: { link: url, ...(opts.caption ? { caption: opts.caption.slice(0, 1024) } : {}) },
+    };
+
+    const res = await fetch(`${graphBase(settings.apiVersion)}/${settings.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { messages?: Array<{ id?: string }> };
+    const messageId = data?.messages?.[0]?.id;
+    await log({
+      phone: opts.phone,
+      templateName: opts.templateName ?? "wa_image",
+      message: opts.caption?.slice(0, 200) ?? url.slice(0, 120),
+      status: res.ok && messageId ? "sent" : "failed",
+      response: JSON.stringify(data),
+      messageId,
+    });
+    if (res.ok && messageId && opts.caption) {
+      mirrorOutboundToInbox({
+        phone: opts.phone,
+        content: opts.caption.slice(0, 500),
+        waMessageId: messageId,
+        isBot: true,
+        type: "image",
+        templateName: opts.templateName ?? "wa_image",
+      });
+    }
+    return !!(res.ok && messageId);
+  } catch (err) {
+    logger.error(err, "sendWhatsAppImage error");
+    return false;
+  }
+}
+
 /* ─── Send CTA URL button ─────────────────────────────── */
 export async function sendCtaUrlMessage(opts: {
   phone: string;

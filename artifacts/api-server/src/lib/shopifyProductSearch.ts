@@ -27,7 +27,6 @@ export const WA_PRODUCT_ALIASES: Record<string, string[]> = {
   walnut: ["akhrot", "walnuts", "اخروٹ"],
   walnuts: ["akhrot", "walnut", "اخروٹ"],
   اخروٹ: ["akhrot", "walnut", "walnuts"],
-  kaghzi: ["kaghazi", "paper shell", "soft shell"],
   kaghazi: ["kaghzi", "paper shell", "soft shell"],
   khajoor: ["dates", "date", "کھجور"],
   dates: ["khajoor", "کھجور"],

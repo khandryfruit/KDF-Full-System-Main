@@ -420,6 +420,35 @@ async function backfillSlugsHandler(req: any, res: any) {
  * If the param is an unclean slug, the product is found via its cleaned form
  * and the response includes X-Canonical-Slug so the frontend can redirect.
  */
+/**
+ * GET /api/products/search?q=badam
+ * Commerce → Products — primary search for WhatsApp AI (exact name → tags → slug → variations).
+ */
+router.get("/products/search", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(25, Math.max(1, parseInt(String(req.query.limit ?? "8"), 10) || 8));
+    if (!q) {
+      return res.json({ products: [], query: "", source: "commerce" });
+    }
+    const { searchCommerceProductsWithDebug, toCommerceSearchApiResponse } = await import(
+      "../lib/commerceProductSearch.js"
+    );
+    const { products, debug } = await searchCommerceProductsWithDebug(q, limit);
+    return res.json({
+      products: toCommerceSearchApiResponse(products),
+      query: q,
+      count: products.length,
+      source: "commerce",
+      engine: "Commerce → Products",
+      debug,
+    });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Search failed" });
+  }
+});
+
 router.get("/products/:id", async (req, res) => {
   try {
     const param = req.params.id;
@@ -510,6 +539,13 @@ router.get("/products/:id", async (req, res) => {
   }
 });
 
+async function invalidateCommerceSearchCache() {
+  try {
+    const { invalidateCommerceProductCache } = await import("../lib/commerceProductSearch.js");
+    invalidateCommerceProductCache();
+  } catch { /* ok */ }
+}
+
 router.post("/products", adminMiddleware as any, async (req, res) => {
   try {
     const { name, price, stock, slug: rawSlug, ...rest } = req.body;
@@ -527,6 +563,7 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
       );
     }
     const [product] = await db.insert(productsTable).values({ name, price, stock: stock ?? 0, slug, ...rest }).returning();
+    await invalidateCommerceSearchCache();
     res.status(201).json(product);
     // Auto-index after response sent
     import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
@@ -573,6 +610,7 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
 
     const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, id)).returning();
     if (!product) { res.status(404).json({ error: "Not found" }); return; }
+    await invalidateCommerceSearchCache();
     res.json(product);
     // Auto-index after response sent
     const slugForIndex = finalSlug ?? product.slug;
@@ -590,6 +628,7 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
 router.delete("/products/:id", adminMiddleware as any, async (req, res) => {
   try {
     await db.delete(productsTable).where(eq(productsTable.id, parseInt(req.params.id)));
+    await invalidateCommerceSearchCache();
     res.json({ success: true, message: "Product deleted" });
   } catch (err) {
     req.log.error(err);
