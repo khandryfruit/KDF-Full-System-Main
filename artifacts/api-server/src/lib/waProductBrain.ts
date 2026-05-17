@@ -96,7 +96,10 @@ export function isPureGreetingMessage(text: string): boolean {
     "السلام علیکم", "سلام", "جی", "hello ji",
   ]);
   if (exact.has(n)) return true;
-  if (n.split(/\s+/).length <= 4 && /^(hi|hello|hey|salam|salaam|assalam|aoa|salamualaikum)\b/.test(n)) return true;
+  if (/\b(bat|baat|kr|kre|karo|bol|talk|speak|call)\b/i.test(n)) return false;
+  if (n.split(/\s+/).length <= 4 && /^(hi|hello|hey|salam|salaam|assalam|aoa|salamualaikum|assalam|good morning|good evening)\b/.test(n)) {
+    return true;
+  }
   return false;
 }
 

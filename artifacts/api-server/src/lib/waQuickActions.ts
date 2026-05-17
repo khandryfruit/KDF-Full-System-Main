@@ -84,7 +84,7 @@ export function resolveQuickActionContext(opts: {
   }
 
   if (intent === "greeting") return "greeting";
-  if (intent === "support") return "support";
+  if (intent === "support" || intent === "complaint") return "support";
 
   return "greeting";
 }
@@ -95,6 +95,8 @@ export function buildQuickActions(context: QuickActionContext, lang: WaLang): Qu
     case "greeting":
       return [
         { id: QA.order, title: "🛒 Order" },
+        { id: QA.payment, title: "💳 Payment" },
+        { id: QA.track, title: "📦 Track Order" },
         { id: QA.support, title: "📞 Support" },
       ];
     case "mixed_greeting_product":

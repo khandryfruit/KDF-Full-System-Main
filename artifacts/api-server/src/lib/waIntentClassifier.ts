@@ -135,6 +135,10 @@ export function classifyWaMessage(text: string, ctx: IntentContext = {}): Classi
     };
   }
 
+  if (/\b(bat|baat)\b/.test(t) && /\b(kr|kre|karo|karni|krna|karna)\b/.test(t)) {
+    return { intent: "conversation", topic: "support", confidence: 0.9, reason: "talk to human phrase", blockProductCatalog: true };
+  }
+
   if (isPureGreetingMessage(raw)) {
     return { intent: "greeting", topic: "greeting", confidence: 0.92, reason: "pure greeting", blockProductCatalog: true };
   }

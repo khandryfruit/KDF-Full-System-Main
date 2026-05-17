@@ -13,6 +13,7 @@ import {
 import { isActiveCheckoutState, sendCheckoutBlockedMenuReply } from "./waCheckoutFlow.js";
 import { sendStandalonePaymentMenu } from "./waPaymentInChat.js";
 import { resolveWaLang } from "./waPremiumJourney.js";
+import { attachQuickActions } from "./waQuickActions.js";
 
 type Settings = { isActive?: boolean; accessToken?: string; phoneNumberId?: string };
 
@@ -90,11 +91,20 @@ export async function handleMenuItemTap(opts: {
     action === "track";
   const isSupport = interactionId === "talk_support" || action === "support";
 
-  /* Payment methods — always in-chat, never external link */
+  /* Payment methods — human text first, then payment template */
   if (interactionId === "payment_methods") {
     let stateData: Record<string, unknown> = {};
     try { stateData = JSON.parse(String(conv?.stateData ?? "{}")); } catch { /* ignore */ }
     const lang = resolveWaLang(stateData);
+    const intro =
+      lang === "en"
+        ? "Ji 😊 Here are our payment options:"
+        : "Ji 😊 Payment options neeche hain 👇";
+    await sendWhatsAppMessage({
+      phone,
+      message: intro,
+      templateName: "menu_payment_intro",
+    });
     await sendStandalonePaymentMenu({ phone, lang, waSettings });
     return true;
   }
@@ -115,18 +125,29 @@ export async function handleMenuItemTap(opts: {
 
   switch (interactionId) {
     case "shop_products": {
+      let stateData: Record<string, unknown> = {};
+      try { stateData = JSON.parse(String(conv?.stateData ?? "{}")); } catch { /* ignore */ }
+      const lang = resolveWaLang(stateData);
       const text =
         item?.replyMessage ??
-        "🛒 *Khan Dry Fruits*\n\nBrowse premium dry fruits, nuts & grocery.\n\nTap below to shop 👇";
-      await sendCtaUrlMessage({
+        (lang === "en"
+          ? "Ji 😊 Which product would you like?\n\nExample: *badam*, *pista*, *kaju*"
+          : "Ji 😊 Kaun sa product chahiye?\n\nJaise: *badam*, *pista*, *kaju*");
+      await sendWhatsAppMessage({
         phone,
-        text,
-        buttonText: "Shop Now",
-        url: item?.url || websiteUrl,
-        settings: waSettings,
-        templateName: "menu_shop",
+        message: text,
+        templateName: "menu_shop_intro",
       });
-      await setConversationState(phone, "idle");
+      await attachQuickActions({
+        phone,
+        waSettings,
+        context: "greeting",
+        stateData,
+      });
+      await setConversationState(phone, "wa_sales_chat", {
+        ...stateData,
+        checkoutIntent: "order",
+      });
       return true;
     }
 

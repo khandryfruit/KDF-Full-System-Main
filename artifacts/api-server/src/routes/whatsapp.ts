@@ -890,9 +890,11 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
           if (msgType === "interactive" && interactionId) {
             log?.info({ phone, interactionId, interactionTitle }, "Interactive reply received");
 
+            const { resolveQuickActionId } = await import("../lib/waIntentSwitch.js");
+            const resolvedInteractionId = resolveQuickActionId(interactionId);
             const premiumHandled = await handlePremiumCommerceButton({
               phone,
-              interactionId,
+              interactionId: resolvedInteractionId,
               currentState,
               waSettings,
               log,
@@ -997,6 +999,17 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                   } catch {
                     await sendQuickOrderMenu(phone, waSettings);
                   }
+                } else if (
+                  interactionId.startsWith("wa_qa_") ||
+                  interactionId.startsWith("wa_conv_") ||
+                  interactionId.startsWith("wa_edu_")
+                ) {
+                  await sendWaText(
+                    phone,
+                    "Ji 😊 Option refresh kar dein — apna sawal likh dein ya *menu* bhejein.",
+                    waSettings,
+                    "button_retry",
+                  );
                 } else {
                   /* Truly unknown — show menu */
                   await handleSendMenu(phone, waSettings, chatbot);
@@ -1239,10 +1252,16 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
              ═══════════════════════════════════════════════ */
           if (!isTextLike || !inboundText) continue;
           const textBody = inboundText.trim();
+          const { isConversationOpenerNotCatalog } = await import("../lib/waIntentSwitch.js");
+          const greetingOpener = isConversationOpenerNotCatalog(textBody);
           await showHumanPresenceBeforeReply({
             inboundMessageId: msgId,
             text: textBody,
-            mode: /product|price|rate|almond|badam|pista|kaju|akhrot|kg|bulk|buy|order|catalog|sari|tamam/i.test(textBody) ? "product" : "simple",
+            mode: greetingOpener
+              ? "checkout"
+              : /product|price|rate|almond|badam|pista|kaju|akhrot|kg|bulk|buy|order|catalog|sari|tamam/i.test(textBody)
+                ? "product"
+                : "simple",
             log,
           });
 
@@ -1268,6 +1287,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             detail: `Detected intent: ${detected.intent} (${detected.reason})`,
             payload: { textBody, ...detected, route: "ai_chat", roots: productRootsInMessage(textBody) },
           });
+            const { isConversationOpenerNotCatalog: openerAiChat } = await import("../lib/waIntentSwitch.js");
+            if (openerAiChat(textBody) && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
+              continue;
+            }
             if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
               continue;
             }
@@ -1293,16 +1316,15 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             payload: { textBody, ...detected, classified: detected.classified },
           });
 
+          if (greetingOpener && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
+            continue;
+          }
+
           if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
             continue;
           }
 
           if (await handleQuickOrderNumber({ phone, textBody, currentState, waSettings, detectedIntent: detected })) {
-            continue;
-          }
-
-          if (detected.intent === "greeting" && (isPureGreetingMessage(textBody) || isGreeting(textBody, (chatbot as any)?.menuGreetingKeywords))) {
-            await trySendHumanGreetingReply({ phone, textBody, waSettings });
             continue;
           }
 
@@ -2184,6 +2206,10 @@ async function tryHandleCatalogBrowseReply(opts: {
   waSettings: any;
   log?: any;
 }): Promise<boolean> {
+  const { isConversationOpenerNotCatalog } = await import("../lib/waIntentSwitch.js");
+  if (isConversationOpenerNotCatalog(opts.textBody) || isPureGreetingMessage(opts.textBody)) {
+    return false;
+  }
   const conv = await getConversationState(opts.phone);
   const state = conv?.state ?? "idle";
   let stateData: Record<string, any> = {};
@@ -2343,35 +2369,56 @@ async function trySendHumanGreetingReply(opts: {
   waSettings: any;
 }): Promise<boolean> {
   const { isMixedGreetingProductMessage } = await import("../lib/waProductBrain.js");
+  const { resetSalesContextForGreeting } = await import("../lib/waIntentSwitch.js");
+  const conv = await getConversationState(opts.phone);
+  let existing: Record<string, unknown> = {};
+  try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+
   if (isMixedGreetingProductMessage(opts.textBody)) {
     const { buildMixedGreetingProductReply } = await import("../lib/waConversationFlows.js");
     const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
     const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
-    const conv = await getConversationState(opts.phone);
-    let existing: Record<string, unknown> = {};
-    try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
     const lang = resolveWaLang(existing, opts.textBody);
     const productQ = extractProductQueryFromMessage(opts.textBody);
+    const resetData = await resetSalesContextForGreeting({
+      phone: opts.phone,
+      preserve: {
+        preferredLanguage: existing.preferredLanguage ?? lang,
+        waLang: existing.waLang ?? lang,
+        pendingProductQuery: productQ,
+        pendingEducationQuery: productQ,
+      },
+    });
     await sendWaReplyWithActions(opts.phone, buildMixedGreetingProductReply(opts.textBody, lang), opts.waSettings, {
       templateName: "mixed_greeting_product",
       actionContext: "mixed_greeting_product",
       textBody: opts.textBody,
-      stateData: { ...existing, pendingProductQuery: productQ, pendingEducationQuery: productQ },
+      stateData: resetData,
     });
     await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
-      ...existing,
+      ...resetData,
       pendingProductQuery: productQ,
-      greetedAt: new Date().toISOString(),
+      pendingEducationQuery: productQ,
     });
     await persistConversationTurn(opts.phone, { intent: "product_search", topic: "mixed_greeting" });
     return true;
   }
 
+  const { isTalkToHumanPhrase } = await import("../lib/waIntentSwitch.js");
+  if (isTalkToHumanPhrase(opts.textBody)) return false;
   if (!isPureGreetingMessage(opts.textBody) && !isGreeting(opts.textBody)) return false;
-  const conv = await getConversationState(opts.phone);
-  let existing: Record<string, unknown> = {};
-  try { existing = JSON.parse((conv as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+
   const { hasConversationStarted, buildGreetingContinueReply } = await import("../lib/waAiSalesGuards.js");
+  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+  const lang = resolveWaLang(existing, opts.textBody);
+  const resetData = await resetSalesContextForGreeting({
+    phone: opts.phone,
+    preserve: {
+      preferredLanguage: existing.preferredLanguage ?? lang,
+      waLang: existing.waLang ?? lang,
+    },
+  });
+
   const mem = await loadConversationMemory(opts.phone).catch(() => null);
   const repeatCustomer = Boolean(mem?.lastIntent && mem.lastIntent !== "greeting");
   if (await hasConversationStarted(opts.phone)) {
@@ -2379,26 +2426,23 @@ async function trySendHumanGreetingReply(opts: {
       templateName: "greeting_continue",
       actionContext: "greeting",
       textBody: opts.textBody,
-      stateData: existing,
+      stateData: resetData,
     });
     await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_continue" });
     return true;
   }
   const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
-  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
-  const lang = resolveWaLang(existing, opts.textBody);
   await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang, repeatCustomer), opts.waSettings, {
     templateName: "human_greeting",
     actionContext: "greeting",
     textBody: opts.textBody,
-    stateData: existing,
+    stateData: resetData,
   });
   await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
-    ...existing,
-    preferredLanguage: existing.preferredLanguage ?? lang,
-    waLang: existing.waLang ?? lang,
-    greetedAt: new Date().toISOString(),
+    ...resetData,
+    preferredLanguage: resetData.preferredLanguage ?? lang,
+    waLang: resetData.waLang ?? lang,
   });
   await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_text" });
   return true;
@@ -2463,6 +2507,10 @@ async function tryResolveWaCustomerMessage(opts: {
     ? opts.detectedIntent
     : detectWaIntent(opts.textBody, intentCtx);
 
+  if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
+    return true;
+  }
+
   if (await routeUnifiedCustomerSupport({
     phone: opts.phone,
     textBody: opts.textBody,
@@ -2484,9 +2532,6 @@ async function tryResolveWaCustomerMessage(opts: {
       waSettings: opts.waSettings,
       showMore: true,
     });
-    return true;
-  }
-  if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
     return true;
   }
 
@@ -2671,7 +2716,11 @@ async function tryResolveWaCustomerMessage(opts: {
     }
   }
 
-  if (await tryHandleCatalogBrowseReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
+  const { isConversationOpenerNotCatalog } = await import("../lib/waIntentSwitch.js");
+  if (
+    !isConversationOpenerNotCatalog(opts.textBody) &&
+    (await tryHandleCatalogBrowseReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log }))
+  ) {
     return true;
   }
   if (await tryHandleVariantSelectionReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
@@ -2698,6 +2747,7 @@ async function tryResolveWaCustomerMessage(opts: {
     return true;
   }
   if (
+    !isConversationOpenerNotCatalog(opts.textBody) &&
     !shouldBlockProductCatalog(classified) &&
     shouldShowProductCatalogNow({
       text: opts.textBody,
@@ -3694,6 +3744,14 @@ async function handlePremiumCommerceButton(opts: {
       });
       return true;
     }
+
+    await sendWaReplyWithActions(
+      opts.phone,
+      lang === "en" ? "Ji 😊 How may I help you today?" : "Ji 😊 Aaj kis cheez mein madad kar sakta hoon?",
+      opts.waSettings,
+      { templateName: "qa_fallback", actionContext: "greeting" },
+    );
+    return true;
   }
 
   if (id === "wa_conv_shop") {
@@ -5287,6 +5345,11 @@ async function handleAiReply(opts: {
     lastIntent: memIntent?.lastIntent,
     currentState,
   });
+
+  const { isConversationOpenerNotCatalog } = await import("../lib/waIntentSwitch.js");
+  if (isConversationOpenerNotCatalog(textBody) && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
+    return;
+  }
 
   if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: intent, log })) {
     return;

@@ -5,6 +5,8 @@ import {
   isPaymentIssueMessage,
   shouldBlockProductCatalog,
 } from "./waIntentClassifier.js";
+import { isPureGreetingMessage } from "./waProductBrain.js";
+import { isGreetingLikeMessage } from "./waIntentSwitch.js";
 
 describe("waIntentClassifier", () => {
   it("classifies payment link failure as payment_issue", () => {
@@ -30,5 +32,27 @@ describe("waIntentClassifier", () => {
     const c = classifyWaMessage("Shop address?");
     assert.equal(c.intent, "address_faq");
     assert.equal(shouldBlockProductCatalog(c), true);
+  });
+
+  it("classifies pure greetings without catalog", () => {
+    for (const msg of ["Hi", "Hello", "Assalam o Alaikum", "AOA"]) {
+      const c = classifyWaMessage(msg);
+      assert.equal(c.intent, "greeting", msg);
+      assert.equal(shouldBlockProductCatalog(c), true, msg);
+      assert.equal(isGreetingLikeMessage(msg), true, msg);
+    }
+  });
+
+  it("does not treat talk phrases as pure greeting", () => {
+    assert.equal(isPureGreetingMessage("Hello bat kre"), false);
+    const c = classifyWaMessage("Hello bat kre");
+    assert.equal(c.intent, "conversation");
+    assert.equal(shouldBlockProductCatalog(c), true);
+  });
+
+  it("classifies mixed greeting + product without catalog dump intent", () => {
+    const c = classifyWaMessage("Hello almonds chahiye");
+    assert.equal(c.blockProductCatalog, true);
+    assert.notEqual(c.intent, "greeting");
   });
 });
