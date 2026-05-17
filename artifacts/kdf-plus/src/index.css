@@ -1136,10 +1136,11 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   scroll-snap-align: start;
   scroll-snap-stop: normal;
 }
-.kdf-carousel-slide--peek button,
-.kdf-carousel-slide--peek a,
-.kdf-carousel-card a,
-.kdf-carousel-card button {
+/* Direct slide children only — do not override .kdf-store-card FAB positioning */
+.kdf-carousel-slide--peek > button,
+.kdf-carousel-slide--peek > a,
+.kdf-carousel-card > a,
+.kdf-carousel-card > button {
   position: relative;
   z-index: 2;
   cursor: pointer;
@@ -1219,13 +1220,30 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 
 .kdf-carousel-slide--peek .kdf-store-card {
-  height: 100%;
+  height: auto;
+  align-self: flex-start;
 }
 
-/* PDP sidebar “Pairs well with” */
+.kdf-store-card .kdf-store-card__wish {
+  position: absolute !important;
+  right: 0.5rem;
+  top: 0.5rem;
+  z-index: 20;
+}
+
+.kdf-store-card .kdf-store-card__cart {
+  flex-shrink: 0;
+}
+
+/* PDP sidebar “Pairs well with” — same 2-up spacing as related products */
 .kdf-pdp-pairs-carousel .kdf-carousel-slide--peek {
+  flex: 0 0 calc(50% - 5px);
+  max-width: calc(50% - 5px);
   min-width: 0;
-  max-width: none;
+}
+.kdf-pdp-pairs-carousel .kdf-carousel-track {
+  gap: 10px;
+  padding: 4px 4px 8px 2px;
 }
 @container kdf-carousel (min-width: 480px) {
   .kdf-pdp-pairs-carousel .kdf-carousel-slide--peek {
@@ -1503,14 +1521,21 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 
 /* Related-products mobile carousel — always 2 cards visible */
-.kdf-carousel--rec .kdf-carousel-slide--peek {
+.kdf-carousel--rec .kdf-carousel-slide--peek,
+.kdf-pdp-ai-carousel .kdf-carousel-slide--peek {
   flex: 0 0 calc(50% - 5px);
   max-width: calc(50% - 5px);
   min-width: 0;
 }
-.kdf-carousel--rec .kdf-carousel-track {
+.kdf-carousel--rec .kdf-carousel-track,
+.kdf-pdp-ai-carousel .kdf-carousel-track {
   gap: 10px;
-  padding: 4px 4px 12px 2px;
+  padding: 4px 4px 8px 2px;
+}
+.kdf-carousel--rec .kdf-carousel-slide--peek .kdf-store-card,
+.kdf-pdp-ai-carousel .kdf-carousel-slide--peek .kdf-store-card,
+.kdf-pdp-pairs-carousel .kdf-carousel-slide--peek .kdf-store-card {
+  width: 100%;
 }
 .kdf-carousel--rec .kdf-carousel-card {
   border-radius: 16px;

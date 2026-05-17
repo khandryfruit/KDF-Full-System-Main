@@ -116,7 +116,7 @@ function PairsWellMini({ items }: { items: PairProduct[] }) {
         resumeMs={4000}
         showEdgeFade={false}
         showArrows={items.length > 2}
-        className="kdf-pdp-pairs-carousel"
+        className="kdf-pdp-pairs-carousel kdf-carousel--rec"
       >
         {items.map((p) => (
           <div key={p.id} className="kdf-carousel-slide--peek">

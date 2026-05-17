@@ -112,7 +112,7 @@ function KdfStoreProductCardInner({
             <span
               className={`absolute left-2 top-2 z-[8] rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ${
                 topBadge ? "bg-gray-900/75 backdrop-blur-sm" : "bg-[#F58300]"
-              } ${hotDealBadge && !topBadge ? "kdf-discount-badge kdf-discount-badge-hot !static" : ""}`}
+              } ${hotDealBadge && !topBadge ? "kdf-discount-badge kdf-discount-badge-hot" : ""}`}
             >
               {badgeText}
             </span>
@@ -146,14 +146,19 @@ function KdfStoreProductCardInner({
           )}
         </div>
 
-        <div className="flex flex-col px-2.5 pb-2.5 pt-2 pr-11">
+        <div className="flex flex-col px-2.5 pt-2">
           <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-gray-900 sm:text-[15px] md:text-[17px]">
             {displayName}
           </h3>
           {weightLine && (
             <p className="mt-0.5 text-[11px] font-medium text-gray-400">{weightLine}</p>
           )}
-          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+        </div>
+      </Link>
+
+      <div className="flex items-end justify-between gap-2 px-2.5 pb-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-0.5">
             <span className="text-[15px] font-bold leading-none text-gray-900 sm:text-base">
               Rs. {price.toLocaleString("en-PK")}
             </span>
@@ -164,12 +169,28 @@ function KdfStoreProductCardInner({
             )}
           </div>
         </div>
-      </Link>
+
+        <button
+          type="button"
+          onClick={handleCart}
+          disabled={outOfStock}
+          className="kdf-store-card__cart flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-lg shadow-[#5FA800]/25 transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ backgroundColor: "#5FA800" }}
+          aria-label={`Add ${displayName} to cart`}
+          data-testid={`button-add-cart-${product.id}`}
+        >
+          {cartIcon === "cart" ? (
+            <ShoppingCart className="h-4 w-4" strokeWidth={2.25} />
+          ) : (
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
+          )}
+        </button>
+      </div>
 
       <button
         type="button"
         onClick={handleWish}
-        className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm transition-transform hover:scale-105"
+        className="kdf-store-card__wish flex h-8 w-8 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm transition-transform hover:scale-105"
         aria-label="Add to wishlist"
         data-testid={`button-wish-${product.id}`}
       >
@@ -177,22 +198,6 @@ function KdfStoreProductCardInner({
           className={`h-3.5 w-3.5 ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`}
           strokeWidth={2}
         />
-      </button>
-
-      <button
-        type="button"
-        onClick={handleCart}
-        disabled={outOfStock}
-        className="absolute bottom-2.5 right-2.5 z-20 flex h-9 w-9 items-center justify-center rounded-full text-white shadow-lg shadow-[#5FA800]/25 transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        style={{ backgroundColor: "#5FA800" }}
-        aria-label={`Add ${displayName} to cart`}
-        data-testid={`button-add-cart-${product.id}`}
-      >
-        {cartIcon === "cart" ? (
-          <ShoppingCart className="h-4 w-4" strokeWidth={2.25} />
-        ) : (
-          <Plus className="h-4 w-4" strokeWidth={2.5} />
-        )}
       </button>
     </div>
   );
