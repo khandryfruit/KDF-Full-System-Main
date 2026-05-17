@@ -35,9 +35,14 @@ export async function resetSalesContextForGreeting(opts: {
   const next: Record<string, unknown> = {
     preferredLanguage: preserve.preferredLanguage ?? preserve.waLang,
     waLang: preserve.waLang ?? preserve.preferredLanguage,
+    waContactName: preserve.waContactName,
+    lastOrderNumber: preserve.lastOrderNumber,
     greetedAt: new Date().toISOString(),
     topicResetAt: new Date().toISOString(),
+    sessionResetReason: "greeting",
   };
+  if (preserve.pendingProductQuery) next.pendingProductQuery = preserve.pendingProductQuery;
+  if (preserve.pendingEducationQuery) next.pendingEducationQuery = preserve.pendingEducationQuery;
   await setConversationState(opts.phone, "wa_sales_chat", next);
   return next;
 }

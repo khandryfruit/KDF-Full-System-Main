@@ -35,7 +35,7 @@ describe("waIntentClassifier", () => {
   });
 
   it("classifies pure greetings without catalog", () => {
-    for (const msg of ["Hi", "Hello", "Assalam o Alaikum", "AOA"]) {
+    for (const msg of ["Hi", "Hello", "Assalam o Alaikum", "AOA", "Hello g", "Hy", "السلام علیکم", "سلام"]) {
       const c = classifyWaMessage(msg);
       assert.equal(c.intent, "greeting", msg);
       assert.equal(shouldBlockProductCatalog(c), true, msg);

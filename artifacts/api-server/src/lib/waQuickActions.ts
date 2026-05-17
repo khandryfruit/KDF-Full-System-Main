@@ -3,7 +3,8 @@
  */
 import { sendInteractiveButtons, sendInteractiveList } from "./whatsapp.js";
 import { resolveWaLang, type WaLang } from "./waPremiumJourney.js";
-import { extractProductQueryFromMessage, isRomanUrduWa, isMixedGreetingProductMessage } from "./waProductBrain.js";
+import { extractProductQueryFromMessage, isRomanUrduWa, isMixedGreetingProductMessage, isPureGreetingMessage } from "./waProductBrain.js";
+import { isGreetingLikeMessage } from "./waIntentSwitch.js";
 import type { ClassifiedMessage } from "./waIntentClassifier.js";
 import { isPaymentIssueMessage } from "./waIntentClassifier.js";
 import { isProductEducationMessage } from "./waSalesConversation.js";
@@ -58,6 +59,7 @@ export function resolveQuickActionContext(opts: {
   const topic = opts.classified?.topic ?? "";
 
   if (isMixedGreetingProductMessage(text)) return "mixed_greeting_product";
+  if (intent === "greeting" || isPureGreetingMessage(text) || isGreetingLikeMessage(text)) return "greeting";
 
   if (intent === "payment_issue" || isPaymentIssueMessage(text)) return "payment_issue";
   if (intent === "payment_info" || topic === "payment") return "payment";
@@ -70,20 +72,16 @@ export function resolveQuickActionContext(opts: {
     return "education";
   }
 
-  const productQ =
-    String(opts.stateData?.pendingEducationQuery ?? opts.stateData?.pendingProductQuery ?? "").trim() ||
-    extractProductQueryFromMessage(text);
+  const pendingQ = String(opts.stateData?.pendingEducationQuery ?? opts.stateData?.pendingProductQuery ?? "").trim();
+  const productQ = pendingQ || extractProductQueryFromMessage(text);
   if (
-    productQ.length >= 2 ||
-    intent === "product_search" ||
-    intent === "pricing" ||
-    intent === "recommendation" ||
-    /\b(badam|almond|pista|kaju|akhrot|dry fruit|nuts|chahiye|chahie)\b/i.test(text)
+    pendingQ.length >= 2 ||
+    (productQ.length >= 2 && (intent === "product_search" || intent === "pricing" || intent === "recommendation")) ||
+    (intent === "product_search" && /\b(badam|almond|pista|kaju|akhrot|dry fruit|nuts|chahiye|chahie)\b/i.test(text))
   ) {
     return "product";
   }
 
-  if (intent === "greeting") return "greeting";
   if (intent === "support" || intent === "complaint") return "support";
 
   return "greeting";
@@ -100,6 +98,11 @@ export function buildQuickActions(context: QuickActionContext, lang: WaLang): Qu
         { id: QA.support, title: "📞 Support" },
       ];
     case "mixed_greeting_product":
+      return [
+        { id: QA.prices, title: "💰 Price" },
+        { id: QA.quality, title: "⭐ Quality" },
+        { id: QA.buy, title: "🛒 Order" },
+      ];
     case "product":
     case "education":
       return [

@@ -5,6 +5,7 @@
 import { sendInteractiveButtons } from "./whatsapp.js";
 import { resolveWaLang, parseLanguageChoice, buildLanguageWelcomeMessage, WA_AWAIT_LANGUAGE_STATE } from "./waPremiumJourney.js";
 import { isPureGreetingMessage, isProductInquiryMessage, productRootsInMessage } from "./waProductBrain.js";
+import { isConversationOpenerNotCatalog } from "./waIntentSwitch.js";
 import { isPaymentIssueMessage, isAddressFaqMessage, isPaymentInfoMessage } from "./waIntentClassifier.js";
 import { isWaCheckoutCollectionState } from "./waOrderJourney.js";
 import { resolveCityInput } from "./waPakistanCities.js";
@@ -257,19 +258,82 @@ export async function handleLanguageTrapText(opts: {
     return true;
   }
   if (isPureGreetingMessage(opts.text) || shouldPrioritizeNewIntent(opts.text, "greeting")) {
-    const { sendLanguagePicker } = await import("./waPremiumUi.js");
-    const { setConversationState } = await import("./whatsapp.js");
-    await sendLanguagePicker(opts.phone, buildLanguageWelcomeMessage(), opts.waSettings);
-    await setConversationState(opts.phone, WA_AWAIT_LANGUAGE_STATE, stampSessionData(WA_AWAIT_LANGUAGE_STATE, {
-      greetedAt: new Date().toISOString(),
-      preferredLanguage: opts.stateData.preferredLanguage,
-    }));
+    const { resetSalesContextForGreeting } = await import("./waIntentSwitch.js");
+    const { buildHumanWelcomeText } = await import("./waConversationFlows.js");
+    const { resolveWaLang } = await import("./waPremiumJourney.js");
+    const { sendWhatsAppMessage } = await import("./whatsapp.js");
+    const { attachQuickActions } = await import("./waQuickActions.js");
+    const lang = resolveWaLang(opts.stateData, opts.text);
+    await resetSalesContextForGreeting({ phone: opts.phone, preserve: opts.stateData });
+    await sendWhatsAppMessage({
+      phone: opts.phone,
+      message: buildHumanWelcomeText(opts.text, lang),
+      templateName: "human_greeting",
+    });
+    await attachQuickActions({
+      phone: opts.phone,
+      waSettings: opts.waSettings,
+      textBody: opts.text,
+      context: "greeting",
+    });
     return true;
   }
   const { sendLanguagePicker } = await import("./waPremiumUi.js");
   const { setConversationState } = await import("./whatsapp.js");
   await sendLanguagePicker(opts.phone, buildLanguageWelcomeMessage(), opts.waSettings);
   await setConversationState(opts.phone, WA_AWAIT_LANGUAGE_STATE, opts.stateData);
+  return true;
+}
+
+/** Guaranteed reply when session reset routing finds no handler — bot must never stay silent. */
+export async function sendWaSessionResetFallback(opts: {
+  phone: string;
+  text: string;
+  waSettings: WaSettings;
+  stateData?: Record<string, any>;
+}): Promise<void> {
+  const { buildHumanWelcomeText, buildUniversalFallbackText } = await import("./waConversationFlows.js");
+  const { resolveWaLang } = await import("./waPremiumJourney.js");
+  const { sendWhatsAppMessage } = await import("./whatsapp.js");
+  const { attachQuickActions } = await import("./waQuickActions.js");
+  const lang = resolveWaLang(opts.stateData ?? {}, opts.text);
+  const message = isConversationOpenerNotCatalog(opts.text)
+    ? buildHumanWelcomeText(opts.text, lang)
+    : buildUniversalFallbackText(lang);
+  await sendWhatsAppMessage({
+    phone: opts.phone,
+    message,
+    templateName: isConversationOpenerNotCatalog(opts.text) ? "human_greeting" : "conversation_fallback",
+  });
+  await attachQuickActions({
+    phone: opts.phone,
+    waSettings: opts.waSettings,
+    textBody: opts.text,
+    context: "greeting",
+  });
+}
+
+async function routeAfterSessionReset(opts: {
+  phone: string;
+  text: string;
+  waSettings: WaSettings;
+  stateData: Record<string, any>;
+  tryCustomerMessage: () => Promise<boolean>;
+  freshProductSearch: () => Promise<boolean>;
+  aiReply?: () => Promise<void>;
+}): Promise<boolean> {
+  if (await opts.tryCustomerMessage()) return true;
+  if (await opts.freshProductSearch()) return true;
+  if (opts.aiReply) {
+    await opts.aiReply();
+    return true;
+  }
+  await sendWaSessionResetFallback({
+    phone: opts.phone,
+    text: opts.text,
+    waSettings: opts.waSettings,
+    stateData: opts.stateData,
+  });
   return true;
 }
 
@@ -309,11 +373,17 @@ export async function tryRouteStaleCommerceMessage(opts: {
     }
     const { setConversationState } = await import("./whatsapp.js");
     const archived = archiveCheckoutSnapshot(stateData, "ui_trap_reset");
-    await setConversationState(opts.phone, "idle", preservedIdleState({ ...stateData, ...archived }));
-    if (await opts.tryCustomerMessage()) return true;
-    if (await opts.freshProductSearch()) return true;
-    if (opts.aiReply) { await opts.aiReply(); return true; }
-    return true;
+    const idleData = preservedIdleState({ ...stateData, ...archived });
+    await setConversationState(opts.phone, "idle", idleData);
+    return routeAfterSessionReset({
+      phone: opts.phone,
+      text,
+      waSettings: opts.waSettings,
+      stateData: idleData,
+      tryCustomerMessage: opts.tryCustomerMessage,
+      freshProductSearch: opts.freshProductSearch,
+      aiReply: opts.aiReply,
+    });
   }
 
   const expired = isWaSessionExpired(opts.convState, state);
@@ -346,11 +416,17 @@ export async function tryRouteStaleCommerceMessage(opts: {
     await opts.logStep({ step: "checkout_reset_new_intent", previousState: state, text, intent });
     const archived = archiveCheckoutSnapshot(stateData, "new_intent_override");
     const { setConversationState } = await import("./whatsapp.js");
-    await setConversationState(opts.phone, "idle", preservedIdleState({ ...stateData, ...archived }));
-    if (await opts.tryCustomerMessage()) return true;
-    if (await opts.freshProductSearch()) return true;
-    if (opts.aiReply) { await opts.aiReply(); return true; }
-    return true;
+    const idleData = preservedIdleState({ ...stateData, ...archived });
+    await setConversationState(opts.phone, "idle", idleData);
+    return routeAfterSessionReset({
+      phone: opts.phone,
+      text,
+      waSettings: opts.waSettings,
+      stateData: idleData,
+      tryCustomerMessage: opts.tryCustomerMessage,
+      freshProductSearch: opts.freshProductSearch,
+      aiReply: opts.aiReply,
+    });
   }
 
   return false;

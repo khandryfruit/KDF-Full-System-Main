@@ -83,23 +83,32 @@ export function isMixedGreetingProductMessage(text: string): boolean {
 export function isPureGreetingMessage(text: string): boolean {
   const raw = String(text ?? "").trim();
   if (isMixedGreetingProductMessage(raw)) return false;
-  if (!raw || raw.length > 80) return false;
+  if (!raw || raw.length > 120) return false;
   const n = raw
     .toLowerCase()
     .replace(/[^\w\s\u0600-\u06FF]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   const exact = new Set([
-    "hi", "hello", "hey", "hy", "hii", "helo",
-    "salam", "salaam", "assalam", "assalam o alaikum", "assalamualaikum", "aoa", "aslam",
-    "koi hai", "kia hal hai", "kaise ho", "good morning", "good evening",
-    "السلام علیکم", "سلام", "جی", "hello ji",
+    "hi", "hello", "hey", "hy", "hii", "helo", "hello g", "hello ji", "hy g",
+    "salam", "salaam", "assalam", "assalam o alaikum", "assalamualaikum", "assalamu alaikum",
+    "aoa", "aslam", "asalam o alaikum", "walaikum assalam", "wa alaikum assalam",
+    "koi hai", "kia hal hai", "kaise ho", "good morning", "good afternoon", "good evening",
+    "السلام علیکم", "سلام", "وعلیکم السلام", "جی",
   ]);
   if (exact.has(n)) return true;
   if (/\b(bat|baat|kr|kre|karo|bol|talk|speak|call)\b/i.test(n)) return false;
-  if (n.split(/\s+/).length <= 4 && /^(hi|hello|hey|salam|salaam|assalam|aoa|salamualaikum|assalam|good morning|good evening)\b/.test(n)) {
+  if (
+    /^(assalam|salam|salaam|aoa|aslam|assalamu|assalam o|asalam o)\b/.test(n) &&
+    /\b(alaikum|alikum|alekum|walaikum|walikum)\b/.test(n) &&
+    n.split(/\s+/).length <= 6
+  ) {
     return true;
   }
+  if (n.split(/\s+/).length <= 5 && /^(hi|hello|hey|hy|hii|helo|salam|salaam|assalam|aoa|aslam|good morning|good afternoon|good evening)\b/.test(n)) {
+    return true;
+  }
+  if (n.split(/\s+/).length <= 3 && /^(السلام|سلام|وعلیکم)/.test(raw.trim())) return true;
   return false;
 }
 

@@ -275,6 +275,11 @@ export async function tryConversationalSalesReply(opts: {
   const text = String(opts.textBody ?? "").trim();
   const roman = isRomanUrduWa(text);
   const lower = text.toLowerCase();
+  const { isGreetingLikeMessage } = await import("./waIntentSwitch.js");
+  const { isPureGreetingMessage } = await import("./waProductBrain.js");
+  if (isPureGreetingMessage(text) || isGreetingLikeMessage(text)) {
+    return { handled: false, clearIntentState: true };
+  }
   const pendingQ = String(opts.stateData?.pendingProductQuery ?? opts.productQuery ?? "").trim();
   const pendingEdu = String(opts.stateData?.pendingEducationQuery ?? "").trim();
 

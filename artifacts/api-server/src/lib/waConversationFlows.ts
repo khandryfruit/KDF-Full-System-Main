@@ -42,6 +42,14 @@ function displayProductName(query: string): string {
   return map[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
 }
 
+/** Universal fallback when routing fails — bot must never stay silent. */
+export function buildUniversalFallbackText(lang: WaLang = "ur"): string {
+  if (lang === "en") {
+    return "Assalam o Alaikum 😊\n\nWelcome to *KDF MART*.\n\nPlease tell me how I can help you today?";
+  }
+  return "السلام علیکم 😊\n\n*KDF MART* میں خوش آمدید۔\n\nبراہ کرم بتائیں کس چیز میں مدد چاہیے؟";
+}
+
 /** Human welcome text — pure greeting (buttons: Order + Support only). */
 export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang, repeatCustomer = false): string {
   const t = String(textBody ?? "").trim().toLowerCase();

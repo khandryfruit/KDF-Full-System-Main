@@ -621,10 +621,15 @@ export async function setConversationState(phone: string, state: string, stateDa
 
 /* ─── Greeting keyword detector ──────────────────────── */
 export function isGreeting(text: string, keywords?: string | null): boolean {
-  const kws = (keywords ?? "hi,hello,hey,salam,salaam,asslam,start,menu,help,shop,helo,hii,assalamu,kia,hy")
+  const kws = (keywords ?? "hi,hello,hey,salam,salaam,asslam,assalam,aoa,aslam,start,menu,help,shop,helo,hii,assalamu,kia,hy,hye,hello g,good morning,good evening,good afternoon,aoa,assalam o alaikum")
     .split(",").map(k => k.trim().toLowerCase()).filter(Boolean);
-  const normalized = text.trim().toLowerCase().replace(/[^\w\s]/g, "").trim();
-  return kws.some(k => normalized === k || normalized.startsWith(k + " ") || normalized.endsWith(" " + k));
+  const normalized = text.trim().toLowerCase().replace(/[^\w\s\u0600-\u06FF]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  if (kws.some(k => normalized === k || normalized.startsWith(k + " ") || normalized.endsWith(" " + k))) return true;
+  if (normalized.split(/\s+/).length <= 5 && /^(hi|hello|hey|hy|salam|salaam|assalam|aoa|aslam|good morning|good afternoon|good evening)\b/.test(normalized)) {
+    return true;
+  }
+  return false;
 }
 
 /* ─── Order Confirmation ──────────────────────────────── */

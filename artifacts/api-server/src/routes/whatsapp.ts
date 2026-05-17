@@ -307,6 +307,21 @@ async function routeUnifiedCustomerSupport(opts: {
     return true;
   }
 
+  if (classified.intent === "greeting") {
+    const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const { resetSalesContextForGreeting } = await import("../lib/waIntentSwitch.js");
+    const lang = resolveWaLang({}, opts.textBody);
+    await resetSalesContextForGreeting({ phone: opts.phone });
+    await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang), opts.waSettings, {
+      templateName: "human_greeting",
+      actionContext: "greeting",
+      textBody: opts.textBody,
+    });
+    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_text" });
+    return true;
+  }
+
   if (shouldBlockProductCatalog(classified)) {
     const { sendIntentClarification } = await import("../lib/waSupportFlows.js");
     await sendIntentClarification({
@@ -1130,6 +1145,10 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             const presenceMode = isFastCheckoutState(currentState) ? "checkout" as const : "simple";
             await showHumanPresenceBeforeReply({ inboundMessageId: msgId, text: inboundText.trim(), mode: presenceMode, log });
             const commerceText = inboundText.trim();
+            const { isConversationOpenerNotCatalog: commerceGreetingOpener } = await import("../lib/waIntentSwitch.js");
+            if (commerceGreetingOpener(commerceText) && (await trySendHumanGreetingReply({ phone, textBody: commerceText, waSettings }))) {
+              continue;
+            }
             const trappedIntent = detectWaIntent(commerceText);
             const { tryRouteStaleCommerceMessage } = await import("../lib/waSessionRecovery.js");
             const staleRouted = await tryRouteStaleCommerceMessage({
@@ -1185,6 +1204,8 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 await handleAiReply({ phone, textBody: commerceText, chatbot, waSettings, log, detectedIntent: trappedIntent });
                 continue;
               }
+              const { sendWaSessionResetFallback } = await import("../lib/waSessionRecovery.js");
+              await sendWaSessionResetFallback({ phone, text: commerceText, waSettings });
               continue;
             }
             if (isDeliveryOnlyMessage(commerceText) || isTrackingOnlyMessage(commerceText)) {
@@ -1344,7 +1365,11 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               detail: "AI chatbot is disabled or missing in admin settings.",
               payload: { hasChatbotSettings: Boolean(chatbot), chatbotEnabled: chatbot?.isEnabled ?? false },
             });
-            await sendWaText(phone, "Ji 😊 bot currently limited mode mein hai. Aap product, price, order status ya delivery ka sawal bhej dein, team/AI assist karega.", waSettings);
+            if (greetingOpener && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
+              continue;
+            }
+            const { sendWaSessionResetFallback } = await import("../lib/waSessionRecovery.js");
+            await sendWaSessionResetFallback({ phone, text: textBody, waSettings });
           }
         }
       }
@@ -2404,11 +2429,10 @@ async function trySendHumanGreetingReply(opts: {
     return true;
   }
 
-  const { isTalkToHumanPhrase } = await import("../lib/waIntentSwitch.js");
+  const { isTalkToHumanPhrase, isGreetingLikeMessage } = await import("../lib/waIntentSwitch.js");
   if (isTalkToHumanPhrase(opts.textBody)) return false;
-  if (!isPureGreetingMessage(opts.textBody) && !isGreeting(opts.textBody)) return false;
+  if (!isGreetingLikeMessage(opts.textBody)) return false;
 
-  const { hasConversationStarted, buildGreetingContinueReply } = await import("../lib/waAiSalesGuards.js");
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const lang = resolveWaLang(existing, opts.textBody);
   const resetData = await resetSalesContextForGreeting({
@@ -2421,16 +2445,6 @@ async function trySendHumanGreetingReply(opts: {
 
   const mem = await loadConversationMemory(opts.phone).catch(() => null);
   const repeatCustomer = Boolean(mem?.lastIntent && mem.lastIntent !== "greeting");
-  if (await hasConversationStarted(opts.phone)) {
-    await sendWaReplyWithActions(opts.phone, buildGreetingContinueReply(opts.textBody), opts.waSettings, {
-      templateName: "greeting_continue",
-      actionContext: "greeting",
-      textBody: opts.textBody,
-      stateData: resetData,
-    });
-    await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_continue" });
-    return true;
-  }
   const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
   const { buildHumanWelcomeText } = await import("../lib/waConversationFlows.js");
   await sendWaReplyWithActions(opts.phone, buildHumanWelcomeText(opts.textBody, lang, repeatCustomer), opts.waSettings, {
@@ -5360,6 +5374,9 @@ async function handleAiReply(opts: {
     lastIntent: memIntent?.lastIntent,
     currentState,
   });
+  if (classified.intent === "greeting" && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
+    return;
+  }
   if (shouldBlockProductCatalog(classified)) {
     await routeUnifiedCustomerSupport({
       phone,

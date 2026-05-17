@@ -8,6 +8,7 @@ import {
   productRootsInMessage,
   extractProductQueryFromMessage,
 } from "./waProductBrain.js";
+import { isGreetingLikeMessage } from "./waIntentSwitch.js";
 import {
   isBareProductMention,
   isStandaloneFaqMessage,
@@ -139,7 +140,7 @@ export function classifyWaMessage(text: string, ctx: IntentContext = {}): Classi
     return { intent: "conversation", topic: "support", confidence: 0.9, reason: "talk to human phrase", blockProductCatalog: true };
   }
 
-  if (isPureGreetingMessage(raw)) {
+  if (isPureGreetingMessage(raw) || isGreetingLikeMessage(raw)) {
     return { intent: "greeting", topic: "greeting", confidence: 0.92, reason: "pure greeting", blockProductCatalog: true };
   }
 
@@ -288,7 +289,7 @@ export function classifyWaMessage(text: string, ctx: IntentContext = {}): Classi
     return { intent: "support", topic: "support", confidence: 0.75, reason: "support keyword", blockProductCatalog: true };
   }
 
-  if (hasProductWord && !isPaymentIssueMessage(raw)) {
+  if (hasProductWord && !isPaymentIssueMessage(raw) && !isGreetingLikeMessage(raw)) {
     return {
       intent: "product_search",
       topic: "product",
