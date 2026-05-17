@@ -1,4 +1,5 @@
 import { db, aiSettingsTable, chatbotSettingsTable } from "@workspace/db";
+import { KDF_WHATSAPP_SALES_MASTER_PROMPT } from "./kdfWhatsappSalesPrompt.js";
 
 export type AiBrainChannel =
   | "whatsapp"
@@ -67,7 +68,9 @@ export function buildAiBrainSystemPrompt(
 - Never repeat the exact same reply twice in a row. If confused, rephrase — do not restart the conversation.`;
 
   const fallbackAdminPrompt =
-    "Be friendly, concise, helpful, accurate, and human-like. Ask natural follow-up questions and never invent business data.";
+    opts.channel === "whatsapp"
+      ? KDF_WHATSAPP_SALES_MASTER_PROMPT
+      : "Be friendly, concise, helpful, accurate, and human-like. Ask natural follow-up questions and never invent business data.";
 
   const promptSource: AiBrainPromptResult["promptSource"] =
     globalPrompt && channelPrompt ? "Global + Channel Settings"

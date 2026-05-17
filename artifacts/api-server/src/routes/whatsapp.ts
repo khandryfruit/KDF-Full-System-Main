@@ -120,9 +120,9 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   const has = (words: string[]) => words.some((w) => t.includes(w));
   const exact = (words: string[]) => words.includes(t);
   const productWords = [
-    "almond", "almonds", "badam", "pista", "pistay", "pisty", "piste", "pistah", "pieta", "pietas", "peta", "pistachio", "pistachios", "kaju", "cashew", "cashews",
-    "akhrot", "walnut", "walnuts", "khajoor", "dates", "anjeer", "fig", "figs", "kishmish", "raisin",
-    "raisins", "munakka", "makhana", "dry fruit", "dry fruits", "nuts", "peanut", "peanuts", "chilgoza",
+    "almond", "almonds", "badam", "بادام", "pista", "پستہ", "pistay", "pisty", "piste", "pistah", "pieta", "pietas", "peta", "pistachio", "pistachios",
+    "kaju", "کاجو", "cashew", "cashews", "akhrot", "اخروٹ", "walnut", "walnuts", "khajoor", "کھجور", "dates", "anjeer", "fig", "figs",
+    "kishmish", "کشمش", "raisin", "raisins", "munakka", "makhana", "dry fruit", "dry fruits", "nuts", "peanut", "peanuts", "chilgoza",
   ];
   const productActionWords = ["price", "rate", "qeemat", "kitna", "how much", "chahiye", "chaye", "chahye", "chaiye", "chahe", "need", "show", "available", "recommend", "suggest", "best"];
   const billWords = ["bill", "bil", "invoice", "receipt", "bna", "bana", "banao", "bnao", "bejo", "bhejo", "bhej do", "checkout", "total bna", "total bana"];
@@ -1796,7 +1796,23 @@ async function trySendProductCatalogReply(opts: {
       textBody,
       productQuery: detectedIntent.productQuery ?? extractProductQueryFromMessage(textBody),
     });
-    if (!hit) return false;
+    if (!hit) {
+      const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
+      const catId = resolveCanonicalCategoryId(textBody);
+      if (catId || isProductInquiryMessage(textBody)) {
+        const roman = isRomanUrduWa(textBody);
+        await sendWaText(
+          phone,
+          roman
+            ? "Ji 😊 ek lamha — main catalog sync check kar raha hoon. Admin mein *Rebuild Index* zaroor chalayein. Phir dubara badam / pista try karein 😊"
+            : "جی 😊 ایک لمحہ — catalog sync check کر رہا ہوں۔ Admin میں *Rebuild Index* ضرور چلائیں۔ پھر dubara badam / pista try کریں 😊",
+          waSettings,
+          "catalog_sync_hint",
+        );
+        return true;
+      }
+      return false;
+    }
 
     await logWaProcessingStep({
       phone,
@@ -3318,8 +3334,16 @@ async function handleAiReply(opts: {
       const catalogQuery = intent.productQuery && /\b\d+(?:\.\d+)?\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i.test(textBody)
         ? textBody
         : intent.productQuery ?? textBody;
-      const products = await searchProductsForWa(catalogQuery, 4);
-      if (products.length > 0) {
+      const { listProductsForCustomerQuery } = await import("../lib/waCategoryIndex.js");
+      const categoryList = await listProductsForCustomerQuery(catalogQuery);
+      const products = categoryList.products.length > 0
+        ? await searchProductsForWa(catalogQuery, Math.min(12, categoryList.products.length))
+        : await searchProductsForWa(catalogQuery, 4);
+      if (categoryList.products.length > 0) {
+        const { formatCategoryProductListReply } = await import("../lib/waSalesAgent.js");
+        const { toWhatsAppCatalogProducts } = await import("../lib/shopifyProductKnowledge.js");
+        catalogContextBlock = `\n\n[OFFICIAL CATEGORY: ${categoryList.category?.labelEn ?? categoryList.categoryId} — ${categoryList.products.length} products]\n${formatCategoryProductListReply({ category: categoryList.category, products: categoryList.products.slice(0, 12), roman: true, page: 0, totalInCategory: categoryList.products.length })}\n[END — Do NOT list other families. Max 2-4 products in your short reply; full list already sent by system if applicable]`;
+      } else if (products.length > 0) {
         catalogContextBlock = `\n\n[OFFICIAL SHOPIFY/LIVE CATALOG CONTEXT]\nUse ONLY these products, variants, and prices. Never invent prices.\n${products.map((p, idx) => {
           const variants = p.variantLines?.length ? p.variantLines.map((v) => `    - ${v}`).join("\n") : `    - ${p.price}`;
           return `${idx + 1}. ${p.name}\n${variants}\n    Stock: ${p.inStock ? "In stock" : "Out of stock"}\n    URL: ${p.productUrl}`;

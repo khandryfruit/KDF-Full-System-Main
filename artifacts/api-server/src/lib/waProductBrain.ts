@@ -10,12 +10,14 @@ import {
   buildCatalogBrowseReply,
   buildFullCatalogMenuReply,
   buildCategoryBrowseFromMenuPick,
+  formatCategoryProductListReply,
   isCatalogNextPageMessage,
   isFullCatalogBrowseMessage,
   getCategorySummaries,
   resolveCategoryFromMenuNumber,
   type WaCatalogBrowseResult,
 } from "./waSalesAgent.js";
+import { listProductsForCustomerQuery, resolveCanonicalCategoryId } from "./waCategoryIndex.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -156,6 +158,48 @@ export async function tryWaFullCatalogMenuReply(textBody: string): Promise<WaPro
   };
 }
 
+/** Primary path: canonical category → ALL indexed products (strict family filter) */
+async function tryCategoryCatalogReply(opts: {
+  textBody: string;
+  productQuery?: string;
+}): Promise<WaProductBrainHit | null> {
+  const raw = String(opts.textBody ?? "").trim();
+  const query = extractProductQueryFromMessage(
+    buildWaProductSearchQuery(raw, opts.productQuery),
+  );
+  if (!query || query.length < 1) return null;
+
+  const categoryId = resolveCanonicalCategoryId(query) ?? resolveCanonicalCategoryId(raw);
+  if (!categoryId || categoryId === "all") return null;
+
+  const listed = await listProductsForCustomerQuery(query.length >= 2 ? query : raw);
+  if (!listed.category || !listed.products.length) return null;
+
+  const roman = isRomanUrduWa(raw);
+  const { toWhatsAppCatalogProducts } = await import("./shopifyProductKnowledge.js");
+  const waProducts = toWhatsAppCatalogProducts(listed.products);
+
+  return {
+    reply: formatCategoryProductListReply({
+      category: listed.category,
+      products: listed.products,
+      roman,
+      page: 0,
+      totalInCategory: listed.products.length,
+    }),
+    product: listed.products[0]!,
+    products: listed.products,
+    query,
+    matchedRoots: listed.roots,
+    score: 100,
+    mode: listed.products.length === 1 ? "single" : "category",
+    categoryId: listed.categoryId,
+    waProducts,
+    catalogPage: 0,
+    hasMore: listed.products.length > 30,
+  };
+}
+
 export async function tryWaProductCatalogReply(opts: {
   textBody: string;
   productQuery?: string;
@@ -163,17 +207,20 @@ export async function tryWaProductCatalogReply(opts: {
   const query = extractProductQueryFromMessage(
     buildWaProductSearchQuery(opts.textBody, opts.productQuery),
   );
-  if (!query || query.length < 2) return null;
+  if (!query || query.length < 1) return null;
 
   if (isFullCatalogBrowseMessage(query) || isFullCatalogBrowseMessage(opts.textBody)) {
     return tryWaFullCatalogMenuReply(opts.textBody);
   }
 
+  const categoryHit = await tryCategoryCatalogReply(opts);
+  if (categoryHit) return categoryHit;
+
   const browse = await buildCatalogBrowseReply({ query, textBody: opts.textBody });
   if (!browse) return null;
 
   const top = browse.products[0]!;
-  if ((top.score ?? 0) < MIN_PRODUCT_SCORE && browse.roots.length > 0) return null;
+  if (!browse.category && browse.roots.length > 0 && (top.score ?? 0) < MIN_PRODUCT_SCORE) return null;
 
   return {
     reply: browse.reply,

@@ -96,6 +96,8 @@ warmUpDb()
       startShopifyAutoSync(3); /* incremental Shopify product/order sync every few minutes */
       setImmediate(async () => {
         try {
+          const { ensureChatbotDefaults } = await import("./lib/ensureChatbotDefaults.js");
+          await ensureChatbotDefaults();
           const { getShopifyCatalogStats } = await import("./lib/shopifyProductKnowledge.js");
           const { rebuildShopifyProductAliases } = await import("./lib/shopifyProductSearch.js");
           const stats = await getShopifyCatalogStats();
