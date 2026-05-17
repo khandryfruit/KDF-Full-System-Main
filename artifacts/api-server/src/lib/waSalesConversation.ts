@@ -276,6 +276,36 @@ export async function tryConversationalSalesReply(opts: {
   const roman = isRomanUrduWa(text);
   const lower = text.toLowerCase();
   const pendingQ = String(opts.stateData?.pendingProductQuery ?? opts.productQuery ?? "").trim();
+  const pendingEdu = String(opts.stateData?.pendingEducationQuery ?? "").trim();
+
+  if (pendingEdu) {
+    if (/\b(price|rate|qeemat|kitna)\b/i.test(lower)) {
+      const priceReply = await buildTextOnlyPriceReply(pendingEdu, roman);
+      if (priceReply) {
+        return {
+          handled: true,
+          reply: priceReply,
+          template: "product_price_text",
+          triggerProduct: true,
+          productQuery: pendingEdu,
+        };
+      }
+      return { handled: true, template: "product_price_then_card", productQuery: pendingEdu };
+    }
+    if (/\b(quality|qual)\b/i.test(lower)) {
+      const { buildProductQualityMessage } = await import("./waConversationFlows.js");
+      const { resolveWaLang } = await import("./waPremiumJourney.js");
+      const lang = resolveWaLang(opts.stateData ?? {}, text);
+      return {
+        handled: true,
+        reply: buildProductQualityMessage(pendingEdu, lang),
+        template: "product_quality_text",
+      };
+    }
+    if (/\b(order|buy|lena|mangwana)\b/i.test(lower)) {
+      return { handled: true, template: "product_price_then_card", productQuery: pendingEdu };
+    }
+  }
 
   if (/\b(address|location|shop|store|dokan|dukan|kahan hai|kaha hai|where)\b/i.test(text) && !/\b(deliver|delivery)\b/i.test(text)) {
     return { handled: true, template: "shop_address_card" };
@@ -288,19 +318,26 @@ export async function tryConversationalSalesReply(opts: {
   if (isStandaloneFaqMessage(text) && /^(price|prices|qeemat|kitna|how much|rate)/i.test(lower)) {
     return {
       handled: true,
-      template: "standalone_price_list",
+      template: "standalone_price_text",
+      reply: buildStandalonePricePrompt(roman),
     };
   }
 
   if (opts.detectedIntent === "delivery" || isDeliveryOnlyMessage(text) || /^(delivery|shipping)/i.test(lower)) {
-    return { handled: true, template: "delivery_info_buttons" };
+    return { handled: true, template: "delivery_conversation" };
   }
 
   if (opts.currentState === WA_AWAIT_PRODUCT_INTENT_STATE && pendingQ) {
     if (/\b(price|rate|qeemat|kitna)\b/i.test(lower) || lower === "1") {
       const priceReply = await buildTextOnlyPriceReply(pendingQ, roman);
       if (priceReply) {
-        return { handled: true, reply: priceReply, template: "product_price_text" };
+        return {
+          handled: true,
+          reply: priceReply,
+          template: "product_price_text",
+          triggerProduct: true,
+          productQuery: pendingQ,
+        };
       }
     }
     if (/\b(recommend|suggest|2)\b/i.test(lower)) {
@@ -324,15 +361,21 @@ export async function tryConversationalSalesReply(opts: {
   }
 
   if (isProductEducationMessage(text)) {
-    return { handled: true, template: "product_education_guide", productQuery: extractProductQueryFromMessage(text) || text };
+    const productQ = extractProductQueryFromMessage(text) || text;
+    return {
+      handled: true,
+      template: "product_education_text",
+      productQuery: productQ,
+    };
   }
 
   if (isBareProductMention(text) && !hasExplicitProductShowIntent(text)) {
     const productQ = extractProductQueryFromMessage(text);
     return {
       handled: true,
-      template: "product_interest_clarify",
+      template: "product_interest_text",
       productQuery: productQ || text,
+      reply: buildProductInterestClarification(productQ || text, roman),
     };
   }
 
@@ -343,8 +386,15 @@ export async function tryConversationalSalesReply(opts: {
         handled: true,
         reply: priceReply,
         template: "product_price_text",
+        triggerProduct: true,
+        productQuery: opts.productQuery,
       };
     }
+    return {
+      handled: true,
+      template: "product_price_then_card",
+      productQuery: opts.productQuery,
+    };
   }
 
   return { handled: false };

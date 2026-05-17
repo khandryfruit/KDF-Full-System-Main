@@ -28,7 +28,8 @@ export function shouldSkipAiCatalogPreload(opts: {
   const { text, intent, state } = opts;
   if (isProductEducationMessage(text)) return true;
   if (intent === "conversation" || intent === "support" || intent === "complaint" || intent === "greeting") return true;
-  if (intent === "delivery" || intent === "tracking") return true;
+  if (intent === "delivery" || intent === "tracking" || intent === "address_faq") return true;
+  if (intent === "payment_info" || intent === "pricing") return true;
   if (/^(delivery|shipping|address|location|payment|help|madad)\b/i.test(text.trim())) return true;
   if (!isOrderReadyMessage(text) && !hasExplicitProductShowIntent(text)) {
     if (intent === "product_search" && isProductEducationMessage(text)) return true;

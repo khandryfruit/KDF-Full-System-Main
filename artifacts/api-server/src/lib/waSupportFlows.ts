@@ -52,33 +52,22 @@ export async function sendShopAddressCard(opts: {
   phone: string;
   textBody: string;
   waSettings: WaSettings;
+  sendText?: (phone: string, text: string, template: string) => Promise<void>;
 }): Promise<void> {
-  const roman = isRomanUrduWa(opts.textBody);
   const lang = resolveWaLang({}, opts.textBody);
-  const addr = KDF_STORE.addressLines.join("\n");
-  const body = roman
-    ? `Ji 😊\n\n*Our address:*\n\n📍 ${addr}\n\n📞 ${KDF_STORE.phone}\n📱 WhatsApp: ${KDF_STORE.whatsapp}`
-    : `Ji 😊\n\n*Hamara address:*\n\n📍 ${addr}\n\n📞 ${KDF_STORE.phone}\n📱 WhatsApp: ${KDF_STORE.whatsapp}`;
-
-  await sendCtaUrlMessage({
+  const { sendAddressWithLocationCta } = await import("./waConversationFlows.js");
+  const sendText =
+    opts.sendText ??
+    (async (phone: string, text: string) => {
+      const { sendWhatsAppMessage } = await import("./whatsapp.js");
+      await sendWhatsAppMessage({ phone, text, settings: opts.waSettings });
+    });
+  await sendAddressWithLocationCta({
     phone: opts.phone,
-    text: body,
-    buttonText: "📍 Open Location",
-    url: buildMapsUrl(),
-    settings: opts.waSettings,
-    templateName: "shop_address_map",
-  });
-
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: lang === "en" ? "Quick actions:" : "Agla step:",
-    buttons: [
-      { id: "wa_support_call", title: "📞 Call Store" },
-      { id: "wa_support_wa", title: "💬 WhatsApp" },
-      { id: "main_menu", title: "🏠 Main Menu" },
-    ],
-    settings: opts.waSettings,
-    templateName: "shop_address_actions",
+    textBody: opts.textBody,
+    lang,
+    waSettings: opts.waSettings,
+    sendText,
   });
 }
 
@@ -86,9 +75,11 @@ export async function sendDeliveryInfoButtons(opts: {
   phone: string;
   textBody: string;
   waSettings: WaSettings;
+  sendText: (phone: string, text: string, template: string) => Promise<void>;
 }): Promise<void> {
-  const { sendDeliveryFaqWithButtons } = await import("./waConversationFlows.js");
-  await sendDeliveryFaqWithButtons(opts);
+  const { buildDeliveryConversationText } = await import("./waConversationFlows.js");
+  const lang = resolveWaLang({}, opts.textBody);
+  await opts.sendText(opts.phone, buildDeliveryConversationText(opts.textBody, lang), "delivery_conversation");
 }
 
 export async function sendRiskRecovery(opts: {
@@ -96,41 +87,30 @@ export async function sendRiskRecovery(opts: {
   lang: WaLang;
   waSettings: WaSettings;
   reason?: string;
+  sendText?: (phone: string, text: string, template: string) => Promise<void>;
 }): Promise<void> {
   const body = opts.lang === "en"
-    ? `Ji 😊\n\nLooks like something went wrong. I'm here to help.`
-    : `Ji 😊\n\nLagta hai issue aa gaya hai. Main madad karta hoon.`;
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: body,
-    buttons: [
-      { id: "wa_session_resume", title: "🔄 Retry Order" },
-      { id: "wa_support_wa", title: "💬 Support" },
-      { id: "wa_support_call", title: "📞 Call Now" },
-    ],
-    settings: opts.waSettings,
-    templateName: "risk_recovery",
-  });
+    ? `Ji 😊 Sorry for the trouble — I am here to help.\n\nTell me what happened, or call *${KDF_STORE.phone}* / WhatsApp *${KDF_STORE.whatsapp}*.`
+    : `Ji 😊 Maafi — main madad ke liye hoon.\n\nMasla likh dein, ya call *${KDF_STORE.phone}* / WhatsApp *${KDF_STORE.whatsapp}*.`;
+  const sendText =
+    opts.sendText ??
+    (async (phone: string, text: string) => {
+      const { sendWhatsAppMessage } = await import("./whatsapp.js");
+      await sendWhatsAppMessage({ phone, text, settings: opts.waSettings });
+    });
+  await sendText(opts.phone, body, "risk_recovery_text");
 }
 
 export async function sendIntentClarification(opts: {
   phone: string;
   lang: WaLang;
   waSettings: WaSettings;
+  sendText: (phone: string, text: string, template: string) => Promise<void>;
 }): Promise<void> {
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: opts.lang === "en"
-      ? "Ji 😊 Are you asking about a *payment issue* or *ordering a product*?"
-      : "Ji 😊 Kya aap *payment issue* ki baat kar rahe hain ya *product order*?",
-    buttons: [
-      { id: "wa_info_pay_cod", title: "💳 Payment" },
-      { id: "wa_browse_badam", title: "🛒 Products" },
-      { id: "wa_support_wa", title: "💬 Support" },
-    ],
-    settings: opts.waSettings,
-    templateName: "intent_clarify",
-  });
+  const body = opts.lang === "en"
+    ? "Ji 😊 I am here to help 😊\n\nYou can ask about *products*, *prices*, *delivery*, *payment*, or *orders* — just type your question."
+    : "Ji 😊 Main madad ke liye hoon 😊\n\n*Product*, *price*, *delivery*, *payment*, ya *order* — jo poochna ho likh dein.";
+  await opts.sendText(opts.phone, body, "support_conversation");
 }
 
 export async function tryHandleClassifiedSupport(opts: {
@@ -139,6 +119,7 @@ export async function tryHandleClassifiedSupport(opts: {
   waSettings: WaSettings;
   classified: ClassifiedMessage;
   logStep?: (detail: Record<string, unknown>) => Promise<void>;
+  sendText?: (phone: string, text: string, template: string) => Promise<void>;
 }): Promise<boolean> {
   const lang = resolveWaLang({}, opts.textBody);
   const { intent, topic } = opts.classified;
@@ -164,37 +145,48 @@ export async function tryHandleClassifiedSupport(opts: {
     await sendShopAddressCard({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
     return true;
   }
+  const sendText =
+    opts.sendText ??
+    (async (phone: string, text: string, _template: string) => {
+      const { sendWhatsAppMessage } = await import("./whatsapp.js");
+      await sendWhatsAppMessage({ phone, text, settings: opts.waSettings });
+    });
+
   if (intent === "delivery") {
-    await sendDeliveryInfoButtons({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings });
+    await sendDeliveryInfoButtons({
+      phone: opts.phone,
+      textBody: opts.textBody,
+      waSettings: opts.waSettings,
+      sendText: async (p, t, tmpl) => { await sendText(p, t); await opts.logStep?.({ step: tmpl }); },
+    });
     return true;
   }
   if (intent === "tracking") {
     const roman = isRomanUrduWa(opts.textBody);
-    await sendInteractiveButtons({
+    await sendText(
+      opts.phone,
+      roman
+        ? "Ji 😊 Please send your *order number* or the *phone* used for the order — I will check status for you 😊"
+        : "Ji 😊 *Order number* ya order wala *phone* bhej dein — status check kar leta hoon 😊",
+    );
+    return true;
+  }
+  if (intent === "clarify" || intent === "support") {
+    await sendIntentClarification({
       phone: opts.phone,
-      text: roman
-        ? "Ji 😊 Send your *order number* or phone to track."
-        : "Ji 😊 Order track karne ke liye *order number* ya phone bhej dein.",
-      buttons: [
-        { id: "track_again", title: "📦 Track Order" },
-        { id: "wa_support_wa", title: "💬 Support" },
-        { id: "main_menu", title: "🏠 Menu" },
-      ],
-      settings: opts.waSettings,
-      templateName: "tracking_prompt",
+      lang,
+      waSettings: opts.waSettings,
+      sendText: async (p, t) => { await sendText(p, t); },
     });
     return true;
   }
-  if (intent === "clarify") {
-    await sendIntentClarification({ phone: opts.phone, lang, waSettings: opts.waSettings });
-    return true;
-  }
-  if (intent === "complaint" || (intent === "support" && /\b(problem|issue|masla|help)\b/i.test(opts.textBody))) {
-    await sendRiskRecovery({ phone: opts.phone, lang, waSettings: opts.waSettings });
-    return true;
-  }
-  if (intent === "support") {
-    await sendIntentClarification({ phone: opts.phone, lang, waSettings: opts.waSettings });
+  if (intent === "complaint" || (intent === "support" && /\b(problem|issue|masla)\b/i.test(opts.textBody))) {
+    await sendRiskRecovery({
+      phone: opts.phone,
+      lang,
+      waSettings: opts.waSettings,
+      sendText: async (p, t, tmpl) => { await sendText(p, t, tmpl); },
+    });
     return true;
   }
   return false;

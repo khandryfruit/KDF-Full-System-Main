@@ -1,11 +1,11 @@
 /**
- * Deterministic human-like conversation flows — welcome, education, delivery (with buttons).
+ * Human conversation-first flows — text replies by default; buttons only in context.
  */
-import { sendInteractiveButtons, sendInteractiveList } from "./whatsapp.js";
+import { sendCtaUrlMessage } from "./whatsapp.js";
 import type { WaLang } from "./waPremiumJourney.js";
 import { extractProductQueryFromMessage, isRomanUrduWa } from "./waProductBrain.js";
-import { buildDeliveryReply } from "./waIntentEngine.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
+import { KDF_STORE, buildMapsUrl } from "./waSupportFlows.js";
 
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
@@ -42,20 +42,42 @@ function displayProductName(query: string): string {
   return map[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
 }
 
-export function buildProductQualityMessage(textBody: string, lang: WaLang): string {
-  const query = extractProductQueryFromMessage(textBody);
-  const name = displayProductName(query || textBody);
+/** Pure text welcome — no buttons (Hey / Hello / Salam). */
+export function buildHumanWelcomeText(textBody: string | undefined, lang: WaLang): string {
+  const roman = textBody ? isRomanUrduWa(textBody) : lang !== "ur";
+  if (lang === "en") {
+    return `Assalam o Alaikum 😊\n\nWelcome to *Khan Dry Fruits*.\n\nHope you are well 🌟\n\nHow can I help you today?`;
+  }
+  if (roman) {
+    return `Assalam o Alaikum 😊\n\n*Khan Dry Fruits* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge 🌟\n\nAaj kis cheez mein madad kar sakta hoon?`;
+  }
+  return `السلام علیکم 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے 🌟\n\nآج کس چیز میں مدد کر سکتا ہوں؟`;
+}
+
+/** Delivery charges — natural text + ask city. No menus. */
+export function buildDeliveryConversationText(textBody: string, lang: WaLang): string {
+  const roman = isRomanUrduWa(textBody);
   if (lang === "en") {
     return (
-      `Ji 😊\n\n*${name}* at Khan Dry Fruits:\n\n` +
-      `✓ Hand-selected premium grade\n✓ Fresh stock rotation\n✓ Sealed hygienic packing\n✓ Trusted by Lahore customers\n\n` +
-      `Would you like *price* or to *order*? 😊`
+      `Ji 😊\n\nIn *Lahore*, delivery is usually around *Rs.300* (same-day often available).\n\n` +
+      `For *other cities*, it is typically *Rs.300–500* depending on city and weight.\n\n` +
+      `Orders *Rs.10,000+* may qualify for *free delivery* when the offer is active.\n\n` +
+      `Which city are you asking for? 😊`
+    );
+  }
+  if (roman) {
+    return (
+      `Ji 😊\n\n*Lahore* mein aksar *Rs.300* hoti hai (same-day bhi ho sakti hai).\n\n` +
+      `*Doosre shehron* mein taqreeban *Rs.300–500* (city/weight ke hisaab se).\n\n` +
+      `*Rs.10,000+* par kabhi kabhi *free delivery* bhi hoti hai.\n\n` +
+      `Aap kis shehar ke liye pooch rahe hain? 😊`
     );
   }
   return (
-    `جی 😊\n\n*${name}* — Khan Dry Fruits:\n\n` +
-    `✓ Premium hand-selected\n✓ Fresh stock\n✓ Hygienic packing\n✓ Lahore customers ki pasand\n\n` +
-    `*Price* دیکھیں یا *order* کریں؟ 😊`
+    `جی 😊\n\n*Lahore* میں اکثر *Rs.300* ہوتی ہے (same-day بھی دستیاب ہو سکتی ہے)۔\n\n` +
+    `*دیگر شہروں* میں تقریباً *Rs.300–500* (شہر/وزن کے حساب سے)۔\n\n` +
+    `*Rs.10,000+* پر کبھی کبھی *free delivery* بھی ہوتی ہے۔\n\n` +
+    `آپ کس شہر کے لیے پوچھ رہے ہیں؟ 😊`
   );
 }
 
@@ -70,85 +92,72 @@ export function buildProductEducationMessage(textBody: string, lang: WaLang): st
   if (lang === "en") {
     return (
       `Ji 😊\n\n*${name}* is quite popular.\n\nUsually:\n\n${lines}\n\n` +
-      `Would you like to see *price*, know more about *quality*, or *order*? 😊`
+      `If you want, I can share *price*, *quality* details, or help you *order* — just tell me 😊`
+    );
+  }
+  const roman = isRomanUrduWa(textBody);
+  if (roman) {
+    return (
+      `Ji 😊\n\n*${name}* kaafi pasand kiye jate hain.\n\nAam tor par:\n\n${lines}\n\n` +
+      `Agar chahain to *price*, *quality*, ya *order* — bas bata dein 😊`
     );
   }
   return (
     `جی 😊\n\n*${name}* کافی پسند کیے جاتے ہیں۔\n\nعام طور پر:\n\n${lines}\n\n` +
-    `کیا آپ *price* بھی دیکھنا چاہیں گے یا *quality* کے بارے میں جاننا چاہتے ہیں؟ 😊`
+    `اگر چاہیں تو *price*، *quality*، یا *order* — بتا دیں 😊`
   );
 }
 
-export async function sendPremiumWelcomeWithButtons(opts: {
-  phone: string;
-  textBody?: string;
-  lang: WaLang;
-  waSettings: WaSettings;
-}): Promise<void> {
-  const roman = opts.textBody ? isRomanUrduWa(opts.textBody) : opts.lang !== "ur";
-  const body = opts.lang === "en"
-    ? `Assalam o Alaikum 😊\n\nWelcome to *Khan Dry Fruits*.\n\nHow can I help you today? 🌟`
-    : roman
-      ? `Assalam o Alaikum 😊\n\n*Khan Dry Fruits* mein khush aamdeed.\n\nUmeed hai aap khairyat se honge 🌟\n\nAaj kis cheez mein madad kar sakta hoon?`
-      : `السلام علیکم 😊\n\n*Khan Dry Fruits* میں خوش آمدید۔\n\nامید ہے آپ خیریت سے ہوں گے 🌟\n\nآج کس چیز میں مدد کر سکتا ہوں؟`;
-
-  await sendInteractiveList({
-    phone: opts.phone,
-    body,
-    buttonLabel: opts.lang === "en" ? "Options" : "Menu",
-    rows: [
-      { id: "wa_conv_shop", title: "🛒 Shop Products", description: "Browse dry fruits" },
-      { id: "wa_conv_delivery", title: "🚚 Delivery", description: "Charges & timing" },
-      { id: "wa_conv_track", title: "📦 Track Order", description: "Order status" },
-      { id: "wa_conv_support", title: "💬 Support", description: "Talk to us" },
-    ],
-    settings: opts.waSettings,
-    templateName: "premium_welcome_menu",
-  });
-}
-
-export async function sendProductEducationWithButtons(opts: {
-  phone: string;
-  textBody: string;
-  lang: WaLang;
-  waSettings: WaSettings;
-}): Promise<void> {
-  const body = buildProductEducationMessage(opts.textBody, opts.lang);
-  await sendInteractiveButtons({
-    phone: opts.phone,
-    text: body,
-    buttons: [
-      { id: "wa_edu_price", title: "💰 Price" },
-      { id: "wa_edu_quality", title: "⭐ Quality" },
-      { id: "wa_edu_order", title: "🛒 Order" },
-    ],
-    settings: opts.waSettings,
-    templateName: "product_education_guide",
-  });
-}
-
-export async function sendDeliveryFaqWithButtons(opts: {
-  phone: string;
-  textBody: string;
-  waSettings: WaSettings;
-}): Promise<void> {
-  const roman = isRomanUrduWa(opts.textBody);
-  let body = await buildDeliveryReply(opts.textBody);
-  if (roman && !body.includes("Same day")) {
-    body = `Ji 😊\n\n*Lahore:*\nSame day available\nDelivery: Rs.300\n\n*Other cities:*\nRs.300–500\n\n*Orders 10,000+:*\nFREE delivery 🌟`;
-  } else if (!roman && !body.includes("same day")) {
-    body = `جی 😊\n\n*Lahore:*\nSame day available\nDelivery: Rs.300\n\n*Other cities:*\nRs.300–500\n\n*10,000+ orders:*\nFREE delivery 🌟`;
+export function buildProductQualityMessage(textBody: string, lang: WaLang): string {
+  const query = extractProductQueryFromMessage(textBody);
+  const name = displayProductName(query || textBody);
+  if (lang === "en") {
+    return (
+      `Ji 😊\n\n*${name}* at Khan Dry Fruits:\n\n` +
+      `✓ Hand-selected premium grade\n✓ Fresh stock rotation\n✓ Sealed hygienic packing\n✓ Trusted by Lahore customers\n\n` +
+      `Tell me if you want *price* or to *order* 😊`
+    );
   }
+  return (
+    `جی 😊\n\n*${name}* — Khan Dry Fruits:\n\n` +
+    `✓ Premium hand-selected\n✓ Fresh stock\n✓ Hygienic packing\n✓ Lahore customers ki pasand\n\n` +
+    `*Price* یا *order* — بتا دیں 😊`
+  );
+}
 
-  await sendInteractiveButtons({
+export function buildShopAddressText(textBody: string, lang: WaLang): string {
+  const roman = isRomanUrduWa(textBody);
+  const addr = KDF_STORE.addressLines.join("\n");
+  if (lang === "en") {
+    return `Ji 😊\n\n*Our shop:*\n\n📍 ${addr}\n\n📞 ${KDF_STORE.phone}\n📱 WhatsApp: ${KDF_STORE.whatsapp}\n\nI can send the map location if you like 😊`;
+  }
+  if (roman) {
+    return `Ji 😊\n\n*Hamari shop:*\n\n📍 ${addr}\n\n📞 ${KDF_STORE.phone}\n📱 WhatsApp: ${KDF_STORE.whatsapp}\n\nChahain to location bhej sakta hoon 😊`;
+  }
+  return `جی 😊\n\n*ہماری shop:*\n\n📍 ${addr}\n\n📞 ${KDF_STORE.phone}\n📱 WhatsApp: ${KDF_STORE.whatsapp}\n\nاگر چاہیں location بھیج سکتا ہوں 😊`;
+}
+
+/** Address FAQ: text first, then ONLY map CTA when relevant. */
+export async function sendAddressWithLocationCta(opts: {
+  phone: string;
+  textBody: string;
+  lang: WaLang;
+  waSettings: WaSettings;
+  sendText: (phone: string, text: string, template: string) => Promise<void>;
+}): Promise<void> {
+  await opts.sendText(opts.phone, buildShopAddressText(opts.textBody, opts.lang), "shop_address_text");
+  await sendCtaUrlMessage({
     phone: opts.phone,
-    text: body,
-    buttons: [
-      { id: "wa_conv_track", title: "📦 Track Order" },
-      { id: "wa_conv_address", title: "📍 Address" },
-      { id: "wa_conv_support", title: "💬 Support" },
-    ],
+    text: opts.lang === "en" ? "Tap to open our location on Google Maps 👇" : "📍 Location map 👇",
+    buttonText: "📍 Open Location",
+    url: buildMapsUrl(),
     settings: opts.waSettings,
-    templateName: "delivery_faq_buttons",
+    templateName: "shop_address_map_cta",
   });
+}
+
+export function buildProductPriceIntro(productQuery: string, lang: WaLang): string {
+  const name = displayProductName(productQuery);
+  if (lang === "en") return `Ji 😊 One moment — checking *${name}* for you 👇`;
+  return `جی 😊 ایک لمحہ — *${name}* check کرتا ہوں 👇`;
 }
