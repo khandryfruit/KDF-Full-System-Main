@@ -5,6 +5,7 @@ import { db, manualPaymentsTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 import { isRomanUrduWa } from "./waProductBrain.js";
 import { formatRupeesLocal, estimateDeliveryReply } from "./waOrderJourney.js";
+import { parseCityButtonId } from "./waPakistanCities.js";
 
 export type WaLang = "ur" | "en" | "ps";
 
@@ -13,6 +14,8 @@ export const WA_ORDER_AWAIT_BANK_SCREENSHOT = "wa_order_await_bank_screenshot";
 export const WA_ORDER_AWAIT_EASYPAISA_SCREENSHOT = "wa_order_await_easypaisa_screenshot";
 export const WA_ORDER_AWAIT_ADDRESS_DETAIL = "wa_order_await_address_detail";
 export const WA_ORDER_AWAIT_ADDRESS_EXTRAS = "wa_order_await_address_extras";
+
+export { WA_ORDER_AWAIT_CITY_SEARCH, WA_ORDER_AWAIT_AREA, WA_ORDER_AWAIT_LANDMARK, WA_ORDER_AWAIT_COD_CONFIRM } from "./waCheckoutFlow.js";
 
 /** Default bank details (user-provided); DB manual_payments overrides when configured */
 export const KDF_DEFAULT_BANK = {
@@ -393,15 +396,7 @@ export function parseVariantListId(id: string): number | null {
 }
 
 export function parseCityChoice(id: string): string | null {
-  const map: Record<string, string> = {
-    wa_city_lahore: "Lahore",
-    wa_city_karachi: "Karachi",
-    wa_city_islamabad: "Islamabad",
-    wa_city_rawalpindi: "Rawalpindi",
-    wa_city_faisalabad: "Faisalabad",
-    wa_city_multan: "Multan",
-    wa_city_peshawar: "Peshawar",
-    wa_city_other: "__other__",
-  };
-  return map[String(id ?? "").toLowerCase()] ?? null;
+  const parsed = parseCityButtonId(id);
+  if (parsed === "__search__" || parsed === "__page__" || parsed === "__other__") return parsed;
+  return parsed;
 }

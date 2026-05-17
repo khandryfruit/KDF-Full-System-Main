@@ -3,12 +3,16 @@ import {
   sendInteractiveButtons,
   sendCtaUrlMessage,
   setConversationState,
+  getConversationState,
 } from "./whatsapp.js";
 import {
   findMenuItem,
   KHAN_WEBSITE_URL,
   type WaMenuItem,
 } from "./waMenuDefaults.js";
+import { isActiveCheckoutState, sendCheckoutBlockedMenuReply } from "./waCheckoutFlow.js";
+import { sendStandalonePaymentMenu } from "./waPaymentInChat.js";
+import { resolveWaLang } from "./waPremiumJourney.js";
 
 type Settings = { isActive?: boolean; accessToken?: string; phoneNumberId?: string };
 
@@ -29,7 +33,8 @@ function resolveMenuReplyText(
     visit_website: "🌐 *Khan Dry Fruits*\n\nShop our full collection online 🚚",
     delivery_info:
       "🚚 *Delivery — Khan Dry Fruits*\n\nLahore same-day · nationwide shipping · charges at checkout.",
-    payment_methods: "💳 *Payment:* COD & bank transfer available.",
+    payment_methods:
+      "💳 *Payment methods* — COD, bank transfer & Easypaisa. All handled in this chat.",
   };
   return defaults[interactionId] ?? `*Khan Dry Fruits*\n\nTap below for more information 👇`;
 }
@@ -45,6 +50,17 @@ function defaultCtaButton(interactionId: string, item?: WaMenuItem): string {
   return labels[interactionId] ?? "Open Link";
 }
 
+const MENU_IDS_BLOCKED_IN_CHECKOUT = new Set([
+  "shop_products",
+  "hot_deals",
+  "get_discount",
+  "visit_website",
+  "delivery_info",
+  "payment_methods",
+  "talk_support",
+  "main_menu",
+]);
+
 export async function handleMenuItemTap(opts: {
   phone: string;
   interactionId: string;
@@ -52,6 +68,17 @@ export async function handleMenuItemTap(opts: {
   waSettings: Settings;
 }): Promise<boolean> {
   const { phone, interactionId, chatbot, waSettings } = opts;
+  const conv = await getConversationState(phone);
+  const currentState = String(conv?.state ?? "idle");
+
+  if (isActiveCheckoutState(currentState) && MENU_IDS_BLOCKED_IN_CHECKOUT.has(interactionId)) {
+    let stateData: Record<string, unknown> = {};
+    try { stateData = JSON.parse(String(conv?.stateData ?? "{}")); } catch { /* ignore */ }
+    const lang = resolveWaLang(stateData);
+    await sendCheckoutBlockedMenuReply({ phone, lang, waSettings, stepHint: undefined });
+    return true;
+  }
+
   const menuItems = (chatbot?.menuItems as WaMenuItem[] | null) ?? null;
   const item = findMenuItem(menuItems, interactionId);
   const websiteUrl = (chatbot?.websiteUrl as string) || KHAN_WEBSITE_URL;
@@ -63,8 +90,17 @@ export async function handleMenuItemTap(opts: {
     action === "track";
   const isSupport = interactionId === "talk_support" || action === "support";
 
-  /* Admin-set link on any item (except track / support flows) */
-  if (customUrl && !isTrack && !isSupport) {
+  /* Payment methods — always in-chat, never external link */
+  if (interactionId === "payment_methods") {
+    let stateData: Record<string, unknown> = {};
+    try { stateData = JSON.parse(String(conv?.stateData ?? "{}")); } catch { /* ignore */ }
+    const lang = resolveWaLang(stateData);
+    await sendStandalonePaymentMenu({ phone, lang, waSettings });
+    return true;
+  }
+
+  /* Admin-set link on any item (except track / support / payment) */
+  if (customUrl && !isTrack && !isSupport && interactionId !== "payment_methods") {
     await sendCtaUrlMessage({
       phone,
       text: resolveMenuReplyText(interactionId, item, chatbot),
@@ -159,24 +195,22 @@ export async function handleMenuItemTap(opts: {
       return true;
     }
 
-    case "delivery_info":
-    case "payment_methods": {
-      const msg = item?.replyMessage;
-      if (msg) {
-        await sendInteractiveButtons({
-          phone,
-          text: msg,
-          buttons: [
-            { id: "shop_products", title: "🛒 Shop Now" },
-            { id: "main_menu", title: "🏠 Main Menu" },
-          ],
-          settings: waSettings,
-          templateName: `menu_${interactionId}`,
-        });
-        await setConversationState(phone, "idle");
-        return true;
-      }
-      return false;
+    case "delivery_info": {
+      const msg =
+        item?.replyMessage ??
+        "🚚 *Delivery — Khan Dry Fruits*\n\n• *Lahore:* Same-day delivery available\n• *Nationwide:* Reliable shipping across Pakistan\n• *Charges:* Calculated at checkout by city\n\nShare your city for exact delivery details. 📍";
+      await sendInteractiveButtons({
+        phone,
+        text: msg,
+        buttons: [
+          { id: "shop_products", title: "🛒 Shop Now" },
+          { id: "main_menu", title: "🏠 Main Menu" },
+        ],
+        settings: waSettings,
+        templateName: "menu_delivery_info",
+      });
+      await setConversationState(phone, "idle");
+      return true;
     }
 
     case "visit_website": {
@@ -211,7 +245,7 @@ export async function handleMenuItemTap(opts: {
 
   /* Custom menu items (admin-added) */
   if (item?.replyMessage) {
-    if (action === "cta") {
+    if (action === "cta" && interactionId !== "payment_methods") {
       await sendCtaUrlMessage({
         phone,
         text: item.replyMessage,

@@ -807,9 +807,21 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               continue;
             }
 
-            /* "Main Menu" button — show the menu again */
+            /* "Main Menu" button — block during active checkout */
             if (interactionId === "main_menu") {
-              await sendQuickOrderMenu(phone, waSettings);
+              const { isActiveCheckoutState, sendCheckoutBlockedMenuReply } = await import("../lib/waCheckoutFlow.js");
+              if (isActiveCheckoutState(currentState)) {
+                let sd: Record<string, any> = {};
+                try { sd = JSON.parse((convState as any)?.stateData ?? "{}"); } catch { /* ignore */ }
+                const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+                await sendCheckoutBlockedMenuReply({
+                  phone,
+                  lang: resolveWaLang(sd),
+                  waSettings,
+                });
+              } else {
+                await sendQuickOrderMenu(phone, waSettings);
+              }
               continue;
             }
 
@@ -907,12 +919,18 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             WA_ORDER_AWAIT_ADDRESS_DETAIL: waAddrDetail,
             WA_ORDER_AWAIT_ADDRESS_EXTRAS: waAddrExtras,
           } = await import("../lib/waPremiumJourney.js");
+          const {
+            WA_ORDER_AWAIT_CITY_SEARCH: waCitySearch,
+            WA_ORDER_AWAIT_AREA: waArea,
+            WA_ORDER_AWAIT_LANDMARK: waLandmark,
+            WA_ORDER_AWAIT_COD_CONFIRM: waCodConfirm,
+          } = await import("../lib/waCheckoutFlow.js");
           const commerceTextStates = [
             "wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice",
             "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity",
-            "wa_order_await_name", "wa_order_await_phone", "wa_order_await_city",
-            "wa_order_await_address", waAddrDetail, waAddrExtras,
-            "wa_order_await_delivery_notes", "wa_order_await_payment",
+            "wa_order_await_name", "wa_order_await_phone", "wa_order_await_city", waCitySearch,
+            waArea, waLandmark, "wa_order_await_address", waAddrDetail, waAddrExtras,
+            "wa_order_await_delivery_notes", "wa_order_await_payment", waCodConfirm,
             "wa_order_await_bank_screenshot", waBankShot, waEasyShot,
             "wa_order_await_notes", "wa_order_await_confirm", "wa_await_language", "wa_await_product_intent",
           ];
@@ -3052,7 +3070,89 @@ async function handlePremiumCommerceButton(opts: {
     parseVariantListId,
     parseCityChoice,
   } = premium;
-  const { sendCityPicker, sendNamePicker, sendQuantityPicker, sendBankPaymentActions } = ui;
+  const {
+    sendCityPicker,
+    sendNamePicker,
+    sendQuantityPicker,
+    sendCitySearchPrompt,
+    sendCitySearchResults,
+    sendCityPage,
+    sendAreaPrompt,
+    sendAddressDetailPrompt,
+    sendLandmarkPrompt,
+  } = ui;
+  const {
+    WA_ORDER_AWAIT_CITY_SEARCH,
+    WA_ORDER_AWAIT_AREA,
+    WA_ORDER_AWAIT_LANDMARK,
+    WA_ORDER_AWAIT_COD_CONFIRM,
+    getCheckoutBackState,
+    resumeCheckoutStepUi,
+    isActiveCheckoutState,
+  } = await import("../lib/waCheckoutFlow.js");
+  const paymentChat = await import("../lib/waPaymentInChat.js");
+
+  async function goToAreaStep(city: string) {
+    stateData.city = city;
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, WA_ORDER_AWAIT_AREA, stateData);
+    await sendAreaPrompt(opts.phone, lang, opts.waSettings, city);
+  }
+
+  if (id === "wa_checkout_back" || id === "wa_checkout_continue") {
+    if (!isActiveCheckoutState(opts.currentState) && id === "wa_checkout_back") return false;
+    const lang = resolveWaLang(stateData);
+    if (id === "wa_checkout_continue") {
+      await resumeCheckoutStepUi({
+        phone: opts.phone,
+        state: opts.currentState,
+        stateData,
+        lang,
+        waSettings: opts.waSettings,
+        sendPaymentMethodButtons,
+      });
+      return true;
+    }
+    const prev = getCheckoutBackState(opts.currentState);
+    if (!prev) return false;
+    await setConversationState(opts.phone, prev, stateData);
+    await resumeCheckoutStepUi({
+      phone: opts.phone,
+      state: prev,
+      stateData,
+      lang,
+      waSettings: opts.waSettings,
+      sendPaymentMethodButtons,
+    });
+    return true;
+  }
+
+  if (id === "wa_checkout_cancel") {
+    await setConversationState(opts.phone, "idle", { preferredLanguage: stateData.preferredLanguage ?? stateData.waLang });
+    await sendWaText(opts.phone, "Order cancel ho gaya 😊", opts.waSettings, "order_cancelled");
+    return true;
+  }
+
+  if (id === "wa_info_pay_cod" || id === "wa_info_pay_bank" || id === "wa_info_pay_easy") {
+    const lang = resolveWaLang(stateData);
+    if (id === "wa_info_pay_cod") await paymentChat.sendCodInfoOnly({ phone: opts.phone, lang, waSettings: opts.waSettings });
+    else if (id === "wa_info_pay_bank") await paymentChat.sendBankDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: false });
+    else await paymentChat.sendEasypaisaDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: false });
+    return true;
+  }
+
+  if (id === "wa_cod_continue" && opts.currentState === WA_ORDER_AWAIT_COD_CONFIRM) {
+    await proceedToOrderConfirmSummary(opts.phone, stateData, opts.waSettings);
+    return true;
+  }
+
+  if (id === "wa_payment_upload") {
+    const payStates = new Set([WA_ORDER_AWAIT_BANK_SCREENSHOT, WA_ORDER_AWAIT_EASYPAISA_SCREENSHOT]);
+    if (!payStates.has(opts.currentState)) return false;
+    const lang = resolveWaLang(stateData);
+    await paymentChat.sendPaymentUploadPrompt({ phone: opts.phone, lang, waSettings: opts.waSettings });
+    return true;
+  }
 
   if (id === "wa_session_resume") {
     const { buildRestoredCheckoutState } = await import("../lib/waSessionRecovery.js");
@@ -3259,46 +3359,47 @@ async function handlePremiumCommerceButton(opts: {
     }
     stateData.customerPhone = normalizeCheckoutPhone(opts.phone);
     await setConversationState(opts.phone, "wa_order_await_city", stateData);
-    await sendCityPicker(opts.phone, lang, opts.waSettings);
-    return true;
-  }
-
-  const city = parseCityChoice(id);
-  if (city && opts.currentState === "wa_order_await_city") {
-    const lang = resolveWaLang(stateData);
-    if (city === "__other__") {
-      stateData.awaitingCustomCity = true;
-      await setConversationState(opts.phone, "wa_order_await_city", stateData);
-      await sendInteractiveList({
-        phone: opts.phone,
-        body: "City name agle message mein likh dein:",
-        buttonLabel: "City",
-        rows: [{ id: "wa_city_lahore", title: "Lahore" }],
-        settings: opts.waSettings,
-        templateName: "city_other",
-      });
-      return true;
-    }
-    stateData.city = city;
-    await setConversationState(opts.phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, stateData);
-    const { buildAddressPrompt } = premium;
-    await sendInteractiveList({
+    const { suggestCityFromPhone } = await import("../lib/waPakistanCities.js");
+    await sendCityPicker({
       phone: opts.phone,
-      body: buildAddressPrompt(lang),
-      buttonLabel: "Address",
-      rows: [
-        { id: "wa_addr_done", title: "✅ Address Typed" },
-        { id: "wa_landmark_skip", title: "⏭ Skip Landmark" },
-      ],
-      settings: opts.waSettings,
-      templateName: "address_prompt",
+      lang,
+      waSettings: opts.waSettings,
+      suggestedCity: suggestCityFromPhone(stateData.customerPhone),
     });
     return true;
   }
 
-  if ((id === "wa_addr_done" || id === "wa_landmark_skip" || id === "wa_postal_skip") && opts.currentState === WA_ORDER_AWAIT_ADDRESS_EXTRAS) {
-    if (id === "wa_landmark_skip") stateData.landmark = "";
-    if (id === "wa_postal_skip") stateData.postalCode = "";
+  if (id === "wa_city_search") {
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, WA_ORDER_AWAIT_CITY_SEARCH, stateData);
+    await sendCitySearchPrompt(opts.phone, lang, opts.waSettings);
+    return true;
+  }
+
+  if (id === "wa_city_all" || id.startsWith("wa_city_page_")) {
+    const lang = resolveWaLang(stateData);
+    const page = id.startsWith("wa_city_page_")
+      ? Number.parseInt(id.replace("wa_city_page_", ""), 10) || 0
+      : 0;
+    await sendCityPage({ phone: opts.phone, page, lang, waSettings: opts.waSettings });
+    return true;
+  }
+
+  const city = parseCityChoice(id);
+  if (
+    city &&
+    typeof city === "string" &&
+    city !== "__search__" &&
+    city !== "__page__" &&
+    city !== "__other__" &&
+    (opts.currentState === "wa_order_await_city" || opts.currentState === WA_ORDER_AWAIT_CITY_SEARCH)
+  ) {
+    await goToAreaStep(city);
+    return true;
+  }
+
+  if (id === "wa_landmark_skip" && opts.currentState === WA_ORDER_AWAIT_LANDMARK) {
+    stateData.landmark = "";
     await sendPaymentMethodButtons(opts.phone, stateData, opts.waSettings);
     return true;
   }
@@ -3308,21 +3409,19 @@ async function handlePremiumCommerceButton(opts: {
     const lang = resolveWaLang(stateData);
     if (id === "wa_pay_cod") {
       stateData.paymentMethod = "COD";
-      await sendWaText(opts.phone, buildCodSelectedMessage(lang), opts.waSettings);
-      await proceedToOrderConfirmSummary(opts.phone, stateData, opts.waSettings);
+      await setConversationState(opts.phone, WA_ORDER_AWAIT_COD_CONFIRM, stateData);
+      await paymentChat.sendCodCheckoutConfirm({ phone: opts.phone, lang, waSettings: opts.waSettings });
       return true;
     }
     if (id === "wa_pay_easypaisa") {
       stateData.paymentMethod = "Easypaisa";
-      await sendWaText(opts.phone, await buildEasypaisaMessage(lang), opts.waSettings);
       await setConversationState(opts.phone, WA_ORDER_AWAIT_EASYPAISA_SCREENSHOT, stateData);
-      await sendBankPaymentActions(opts.phone, lang, opts.waSettings);
+      await paymentChat.sendEasypaisaDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: true });
       return true;
     }
     stateData.paymentMethod = "Bank Transfer";
-    await sendWaText(opts.phone, await buildBankTransferMessage(lang), opts.waSettings, "bank_transfer_details");
     await setConversationState(opts.phone, WA_ORDER_AWAIT_BANK_SCREENSHOT, stateData);
-    await sendBankPaymentActions(opts.phone, lang, opts.waSettings);
+    await paymentChat.sendBankDetailsInChat({ phone: opts.phone, lang, waSettings: opts.waSettings, checkoutMode: true });
     return true;
   }
 
@@ -3331,16 +3430,7 @@ async function handlePremiumCommerceButton(opts: {
     if (!payStates.has(opts.currentState)) return false;
     const lang = resolveWaLang(stateData);
     if (!stateData.paymentScreenshotMediaId) {
-      await sendInteractiveButtons({
-        phone: opts.phone,
-        text: lang === "en" ? "Please send payment screenshot 📸" : "Payment screenshot bhej dein 📸",
-        buttons: [
-          { id: "wa_payment_done", title: "✅ Done" },
-          { id: "wa_payment_help", title: "❓ Help" },
-        ],
-        settings: opts.waSettings,
-        templateName: "screenshot_reminder",
-      });
+      await paymentChat.sendPaymentUploadPrompt({ phone: opts.phone, lang, waSettings: opts.waSettings });
       return true;
     }
     stateData.paymentVerified = true;
@@ -3936,52 +4026,94 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     stateData.customerPhone = normalizeCheckoutPhone(customerPhone);
     stateData.awaitingCustomPhone = false;
     await setConversationState(phone, "wa_order_await_city", stateData);
-    await sendCityPicker(phone, lang, waSettings);
+    const { suggestCityFromPhone } = await import("../lib/waPakistanCities.js");
+    const { sendCityPicker: pickCity } = await import("../lib/waPremiumUi.js");
+    await pickCity({
+      phone,
+      lang,
+      waSettings,
+      suggestedCity: suggestCityFromPhone(stateData.customerPhone),
+    });
+    return;
+  }
+  const {
+    WA_ORDER_AWAIT_CITY_SEARCH: waCitySearchSt,
+    WA_ORDER_AWAIT_AREA: waAreaSt,
+    WA_ORDER_AWAIT_LANDMARK: waLandmarkSt,
+  } = await import("../lib/waCheckoutFlow.js");
+  if (state === waCitySearchSt) {
+    const { searchCities } = await import("../lib/waPakistanCities.js");
+    const { sendCitySearchResults, sendCitySearchPrompt } = await import("../lib/waPremiumUi.js");
+    const lang = resolveWaLangJ(stateData);
+    const hits = searchCities(trimmed, 1);
+    if (hits.length === 1 && hits[0]!.toLowerCase() === trimmed.toLowerCase()) {
+      stateData.city = hits[0]!;
+      await setConversationState(phone, waAreaSt, stateData);
+      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
+      await sendAreaPrompt(phone, lang, waSettings, hits[0]!);
+      return;
+    }
+    if (hits.length) {
+      await sendCitySearchResults({ phone, query: trimmed, lang, waSettings });
+      return;
+    }
+    await sendCitySearchPrompt(phone, lang, waSettings);
     return;
   }
   if (state === "wa_order_await_city") {
-    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-    const { sendCityPicker } = await import("../lib/waPremiumUi.js");
-    const lang = resolveWaLang(stateData);
-    if (!stateData.awaitingCustomCity) {
-      await sendCityPicker(phone, lang, waSettings);
+    const { searchCities } = await import("../lib/waPakistanCities.js");
+    const { sendCityPicker: pickCity, sendCitySearchResults } = await import("../lib/waPremiumUi.js");
+    const lang = resolveWaLangJ(stateData);
+    const hits = searchCities(trimmed, 5);
+    if (hits.length === 1) {
+      stateData.city = hits[0]!;
+      await setConversationState(phone, waAreaSt, stateData);
+      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
+      await sendAreaPrompt(phone, lang, waSettings, hits[0]!);
       return;
     }
+    if (hits.length > 1) {
+      await sendCitySearchResults({ phone, query: trimmed, lang, waSettings });
+      return;
+    }
+    const { suggestCityFromPhone } = await import("../lib/waPakistanCities.js");
+    await pickCity({ phone, lang, waSettings, suggestedCity: suggestCityFromPhone(stateData.customerPhone) });
+    return;
+  }
+  if (state === waAreaSt) {
+    const lang = resolveWaLangJ(stateData);
     if (trimmed.length < 2) {
-      await sendCityPicker(phone, lang, waSettings);
+      const { sendAreaPrompt } = await import("../lib/waPremiumUi.js");
+      await sendAreaPrompt(phone, lang, waSettings, String(stateData.city ?? ""));
       return;
     }
-    stateData.city = trimmed;
-    stateData.awaitingCustomCity = false;
+    stateData.area = trimmed;
     await setConversationState(phone, WA_ORDER_AWAIT_ADDRESS_DETAIL, stateData);
-    await sendInteractiveList({
-      phone,
-      body: buildAddressPrompt(lang),
-      buttonLabel: "Address",
-      rows: [
-        { id: "wa_landmark_skip", title: "⏭ Skip Landmark" },
-        { id: "wa_postal_skip", title: "⏭ No Postal Code" },
-      ],
-      settings: waSettings,
-      templateName: "address_prompt",
-    });
+    const { sendAddressDetailPrompt } = await import("../lib/waPremiumUi.js");
+    await sendAddressDetailPrompt(phone, lang, waSettings);
     return;
   }
   if (state === WA_ORDER_AWAIT_ADDRESS_DETAIL) {
     const lang = resolveWaLangJ(stateData);
-    if (trimmed.length < 8) {
-      await sendInteractiveList({
-        phone,
-        body: buildAddressPrompt(lang),
-        buttonLabel: "Address",
-        rows: [{ id: "wa_landmark_skip", title: "⏭ Skip Landmark" }],
-        settings: waSettings,
-        templateName: "address_retry",
-      });
+    if (trimmed.length < 6) {
+      const { sendAddressDetailPrompt } = await import("../lib/waPremiumUi.js");
+      await sendAddressDetailPrompt(phone, lang, waSettings);
       return;
     }
     stateData.address = trimmed;
-    stateData.landmark = stateData.landmark ?? "";
+    stateData.streetAddress = trimmed;
+    await setConversationState(phone, waLandmarkSt, stateData);
+    const { sendLandmarkPrompt } = await import("../lib/waPremiumUi.js");
+    await sendLandmarkPrompt(phone, lang, waSettings);
+    return;
+  }
+  if (state === waLandmarkSt) {
+    if (!/^skip|no|nahi$/i.test(trimmed) && trimmed.length >= 2) {
+      stateData.landmark = trimmed;
+    }
+    const fullParts = [stateData.streetAddress ?? stateData.address, stateData.area, stateData.landmark, stateData.city]
+      .filter(Boolean);
+    stateData.address = fullParts.join(", ");
     await sendPaymentMethodButtons(phone, stateData, waSettings);
     return;
   }

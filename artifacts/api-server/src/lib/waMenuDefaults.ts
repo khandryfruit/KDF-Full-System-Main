@@ -114,7 +114,7 @@ export const DEFAULT_MENU_ITEMS: WaMenuItem[] = [
     sortOrder: 6,
     actionType: "text",
     replyMessage:
-      "💳 *Payment Methods*\n\n• Cash on Delivery (COD)\n• Bank transfer / online payment\n\nPlace your order on our website or reply here — we'll share payment details if needed.",
+      "💳 *Payment Methods*\n\n• 💵 Cash on Delivery (COD)\n• 🏦 Bank Transfer\n• 📱 Easypaisa\n\nTap below — all details in this chat, no website needed.",
   },
   {
     id: "visit_website",

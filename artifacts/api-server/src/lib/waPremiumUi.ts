@@ -225,23 +225,168 @@ export async function sendNamePicker(opts: {
   });
 }
 
-export async function sendCityPicker(phone: string, lang: WaLang, waSettings: WaSettings): Promise<void> {
+export async function sendCityPicker(opts: {
+  phone: string;
+  lang: WaLang;
+  waSettings: WaSettings;
+  suggestedCity?: string | null;
+}): Promise<void> {
+  const { POPULAR_CITIES, cityListRow, cityToSlug } = await import("./waPakistanCities.js");
+  const body = opts.lang === "en"
+    ? "🏙 *Step: City*\n\nSelect your city or search 👇"
+    : "🏙 *Step: City*\n\nApni city select karein 👇";
+
+  if (opts.suggestedCity) {
+    await sendInteractiveButtons({
+      phone: opts.phone,
+      text: opts.lang === "en"
+        ? `📍 Are you in *${opts.suggestedCity}*?`
+        : `📍 Kya aap *${opts.suggestedCity}* mein hain?`,
+      buttons: [
+        { id: `wa_city_s_${cityToSlug(opts.suggestedCity)}`, title: "✅ Yes" },
+        { id: "wa_city_search", title: "🔍 Search City" },
+        { id: "wa_checkout_back", title: "⬅️ Back" },
+      ],
+      settings: opts.waSettings,
+      templateName: "city_suggest",
+    });
+    return;
+  }
+
+  const rows = [
+    ...POPULAR_CITIES.slice(0, 7).map((c) => cityListRow(c, true)),
+    { id: "wa_city_search", title: "🔍 Search City", description: "Type city name to find" },
+    { id: "wa_city_all", title: "📋 All Cities", description: "Browse full list" },
+  ];
+
   await sendInteractiveList({
+    phone: opts.phone,
+    body,
+    buttonLabel: opts.lang === "en" ? "Cities" : "City",
+    rows,
+    settings: opts.waSettings,
+    templateName: "city_list",
+  });
+}
+
+export async function sendCitySearchPrompt(phone: string, lang: WaLang, waSettings: WaSettings): Promise<void> {
+  await sendInteractiveButtons({
     phone,
-    body: lang === "en" ? "🏙 Select your city:" : "🏙 City select karein:",
-    buttonLabel: lang === "en" ? "Cities" : "City",
-    rows: [
-      { id: "wa_city_lahore", title: "Lahore" },
-      { id: "wa_city_karachi", title: "Karachi" },
-      { id: "wa_city_islamabad", title: "Islamabad" },
-      { id: "wa_city_rawalpindi", title: "Rawalpindi" },
-      { id: "wa_city_faisalabad", title: "Faisalabad" },
-      { id: "wa_city_multan", title: "Multan" },
-      { id: "wa_city_peshawar", title: "Peshawar" },
-      { id: "wa_city_other", title: "Other City" },
+    text: lang === "en"
+      ? "🔍 *Search city*\n\nType your city name in the next message (e.g. *Multan*, *Sialkot*)."
+      : "🔍 *City search*\n\nAgla message mein city ka naam likhein (jaise *Multan*).",
+    buttons: [
+      { id: "wa_checkout_back", title: "⬅️ Back" },
+      { id: "wa_city_all", title: "📋 All Cities" },
     ],
     settings: waSettings,
-    templateName: "city_list",
+    templateName: "city_search_prompt",
+  });
+}
+
+export async function sendCitySearchResults(opts: {
+  phone: string;
+  query: string;
+  lang: WaLang;
+  waSettings: WaSettings;
+}): Promise<void> {
+  const { searchCities, cityListRow } = await import("./waPakistanCities.js");
+  const hits = searchCities(opts.query, 10);
+  if (!hits.length) {
+    await sendInteractiveButtons({
+      phone: opts.phone,
+      text: opts.lang === "en"
+        ? `No city found for "*${opts.query}*". Try another spelling or pick from list.`
+        : `"*${opts.query}*" ki city nahi mili. Dobara likhein ya list se select karein.`,
+      buttons: [
+        { id: "wa_city_search", title: "🔍 Search Again" },
+        { id: "wa_city_all", title: "📋 All Cities" },
+        { id: "wa_checkout_back", title: "⬅️ Back" },
+      ],
+      settings: opts.waSettings,
+      templateName: "city_search_empty",
+    });
+    return;
+  }
+  await sendInteractiveList({
+    phone: opts.phone,
+    body: opts.lang === "en" ? `Results for *${opts.query}*:` : `*${opts.query}* ke results:`,
+    buttonLabel: "City",
+    rows: hits.map((c) => cityListRow(c)),
+    settings: opts.waSettings,
+    templateName: "city_search_results",
+  });
+}
+
+export async function sendCityPage(opts: {
+  phone: string;
+  page: number;
+  lang: WaLang;
+  waSettings: WaSettings;
+}): Promise<void> {
+  const { getCityPage, cityListRow } = await import("./waPakistanCities.js");
+  const { cities, page, totalPages } = getCityPage(opts.page, 9);
+  const rows = [
+    ...cities.map((c) => cityListRow(c)),
+    ...(page + 1 < totalPages
+      ? [{ id: `wa_city_page_${page + 1}`, title: "➡️ Next Page", description: `Page ${page + 2}/${totalPages}` }]
+      : []),
+    ...(page > 0
+      ? [{ id: `wa_city_page_${page - 1}`, title: "⬅️ Prev Page", description: `Page ${page}/${totalPages}` }]
+      : []),
+  ].slice(0, 10);
+  await sendInteractiveList({
+    phone: opts.phone,
+    body: opts.lang === "en"
+      ? `📋 *All cities* (${page + 1}/${totalPages})`
+      : `📋 *Tamam cities* (${page + 1}/${totalPages})`,
+    buttonLabel: "City",
+    rows,
+    settings: opts.waSettings,
+    templateName: "city_page",
+  });
+}
+
+export async function sendAreaPrompt(phone: string, lang: WaLang, waSettings: WaSettings, city: string): Promise<void> {
+  await sendInteractiveButtons({
+    phone,
+    text: lang === "en"
+      ? `🏙 City: *${city}*\n\n📍 *Step: Area*\n\nType your area / society / sector in the next message.`
+      : `🏙 City: *${city}*\n\n📍 *Area*\n\nAgla message mein apna area / society likhein.`,
+    buttons: [
+      { id: "wa_checkout_back", title: "⬅️ Back" },
+    ],
+    settings: waSettings,
+    templateName: "area_prompt",
+  });
+}
+
+export async function sendAddressDetailPrompt(phone: string, lang: WaLang, waSettings: WaSettings): Promise<void> {
+  await sendInteractiveButtons({
+    phone,
+    text: lang === "en"
+      ? "📍 *Step: Full address*\n\nHouse #, street, block — type in next message."
+      : "📍 *Poora address*\n\nHouse #, street — agla message mein likhein.",
+    buttons: [
+      { id: "wa_checkout_back", title: "⬅️ Back" },
+    ],
+    settings: waSettings,
+    templateName: "address_detail_prompt",
+  });
+}
+
+export async function sendLandmarkPrompt(phone: string, lang: WaLang, waSettings: WaSettings): Promise<void> {
+  await sendInteractiveButtons({
+    phone,
+    text: lang === "en"
+      ? "📍 *Landmark* (optional)\n\nNearby masjid, shop, or landmark — or tap Skip."
+      : "📍 *Landmark* (optional)\n\nQareeb ki nishani likhein ya Skip karein.",
+    buttons: [
+      { id: "wa_landmark_skip", title: "⏭ Skip" },
+      { id: "wa_checkout_back", title: "⬅️ Back" },
+    ],
+    settings: waSettings,
+    templateName: "landmark_prompt",
   });
 }
 
@@ -275,18 +420,10 @@ export async function sendPaymentPicker(phone: string, stateData: Record<string,
   });
 }
 
+/** @deprecated Use waPaymentInChat.sendBankDetailsInChat */
 export async function sendBankPaymentActions(phone: string, lang: WaLang, waSettings: WaSettings): Promise<void> {
-  await sendInteractiveButtons({
-    phone,
-    text: lang === "en" ? "After payment:" : "Payment ke baad:",
-    buttons: [
-      { id: "wa_payment_done", title: "✅ Payment Done" },
-      { id: "wa_payment_help", title: "❓ Need Help" },
-      { id: "wa_chat_order_cancel", title: "❌ Cancel" },
-    ],
-    settings: waSettings,
-    templateName: "wa_bank_actions",
-  });
+  const { sendBankDetailsInChat } = await import("./waPaymentInChat.js");
+  await sendBankDetailsInChat({ phone, lang, waSettings, checkoutMode: true });
 }
 
 export async function sendOrderConfirmButtons(
