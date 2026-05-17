@@ -52,7 +52,7 @@ function isRomanUrdu(text: string): boolean {
   return /[a-z]/i.test(text) && !/[اآبپتٹثجچحخدڈذرڑزژسشصضطظعغفقکگلمنوہھیے]/.test(text);
 }
 
-async function buildDeliveryReply(textBody: string): Promise<string> {
+export async function buildDeliveryReply(textBody: string): Promise<string> {
   const roman = isRomanUrdu(textBody);
   const rules = await db
     .select()

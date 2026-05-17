@@ -18,6 +18,11 @@ import {
   type WaCatalogBrowseResult,
 } from "./waSalesAgent.js";
 import { listProductsForCustomerQuery, resolveCanonicalCategoryId } from "./waCategoryIndex.js";
+import {
+  isBareProductMention,
+  hasExplicitProductShowIntent,
+  shouldShowProductCatalogNow,
+} from "./waSalesConversation.js";
 
 export type WaProductBrainHit = {
   reply: string;
@@ -100,11 +105,15 @@ export function isProductInquiryMessage(text: string): boolean {
   return /\b(almond|almonds|badam|badaam|almod|pista|pistachio|kaju|cashew|akhrot|walnut|khajoor|anjeer|kishmish|dry fruit|nuts|berry|goji|cranberry|price|qeemat|kitna)\b/i.test(t);
 }
 
-export function shouldUseProductDatabaseFirst(intent: string, text: string): boolean {
+export function shouldUseProductDatabaseFirst(intent: string, text: string, state = "idle"): boolean {
   if (isPureGreetingMessage(text) || isVariantMenuSelection(text)) return false;
   if (intent === "greeting") return false;
-  if (isProductInquiryMessage(text)) return true;
-  if (["product_search", "pricing", "recommendation", "bulk_order"].includes(intent)) return true;
+  if (!shouldShowProductCatalogNow({ text, intent, state })) return false;
+  if (intent === "order_start" || intent === "bulk_order") return true;
+  if (hasExplicitProductShowIntent(text)) return true;
+  if (isBareProductMention(text)) return false;
+  if (intent === "pricing" && !hasExplicitProductShowIntent(text)) return false;
+  if (["product_search", "recommendation"].includes(intent) && hasExplicitProductShowIntent(text)) return true;
   if (intent === "order_start" && productRootsInMessage(text).length > 0) return true;
   return false;
 }
@@ -336,19 +345,7 @@ export function buildWaProductSearchQuery(textBody: string, productQuery?: strin
   return hint.length >= 3 ? `${hint} ${full}`.trim() : full;
 }
 
-export function buildHumanWelcomeReply(textBody: string): string {
-  const roman = isRomanUrduWa(textBody);
-  if (roman) {
-    return `Assalam o Alaikum 😊
-Welcome to Khan Dry Fruits.
-
-I can help you with products, prices, orders, or delivery.`;
-  }
-  return `اسلام علیکم 😊
-خوش آمدید Khan Dry Fruits میں۔
-
-میں پروڈکٹس، قیمت، آرڈر، یا ڈیلیوری کے بارے میں مدد کر سکتا ہوں۔`;
-}
+export { buildWarmWelcomeReply as buildHumanWelcomeReply } from "./waSalesConversation.js";
 
 /** Never send the old robotic fallback */
 export function buildHelpfulPromptReply(textBody: string, hadProductContext: boolean): string {

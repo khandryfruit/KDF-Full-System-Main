@@ -15,6 +15,7 @@ import {
   isCheckoutCancellationMessage,
   WA_PRODUCT_PICK_STATES,
 } from "./waOrderJourney.js";
+import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
 
 export const ORDER_FLOW_TRAP_STATES = new Set([
   "wa_catalog_pick_category",
@@ -51,6 +52,7 @@ export function shouldEscapeOrderFlowForProductSearch(
 
   /* Never restart catalog during checkout data collection (name/phone/address) */
   if (isWaCheckoutCollectionState(state)) return false;
+  if (state === WA_AWAIT_PRODUCT_INTENT_STATE) return false;
 
   if (isPureGreetingMessage(t)) return true;
   if (intent === "greeting" || intent === "tracking" || intent === "support" || intent === "complaint") return true;

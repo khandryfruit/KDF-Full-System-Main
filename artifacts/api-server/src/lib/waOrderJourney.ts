@@ -159,17 +159,21 @@ export function buildOrderPlacedConfirmation(orderNumber: string, city: string, 
   const delivery = estimateDeliveryReply(city, roman);
   if (roman) {
     return (
-      `✅ *Order placed successfully!*\n\n` +
+      `Shukriya 😊\n\n` +
+      `Aapka order successfully place ho gaya.\n\n` +
       `🧾 *Order ID:* #${orderNumber}\n\n` +
       `${delivery}\n\n` +
-      `Team order process kar rahi hai. Tracking ke liye *track order* likh dein 😊`
+      `Hum jald update dein ge. Tracking ke liye *track order* likh dein.\n\n` +
+      `JazakAllah — Khan Dry Fruits 🌟`
     );
   }
   return (
-    `✅ *Order confirm ho gaya!*\n\n` +
+    `شکریہ 😊\n\n` +
+    `آپ کا order place ہو گیا۔\n\n` +
     `🧾 *Order ID:* #${orderNumber}\n\n` +
     `${delivery}\n\n` +
-    `Tracking ke liye *track order* likh dein 😊`
+    `جلد update ملے گا۔ *track order* لکھیں۔\n\n` +
+    `جزاک اللہ — Khan Dry Fruits 🌟`
   );
 }
 

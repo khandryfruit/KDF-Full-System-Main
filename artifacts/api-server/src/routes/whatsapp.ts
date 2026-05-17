@@ -152,9 +152,12 @@ function detectWaIntent(text: string): { intent: WaIntent; confidence: number; r
   }
   if (catalogRoots.length > 0 && !has(["cancel order", "complaint", "refund"]) && t.split(" ").length <= 12) {
     if (has(["price", "rate", "qeemat", "kitna", "how much"])) {
-      return { intent: "pricing", confidence: 0.85, reason: `catalog root + price: ${catalogRoots[0]}`, productQuery: text.trim() };
+      return { intent: "pricing", confidence: 0.85, reason: `catalog root + price: ${catalogRoots[0]}`, productQuery: extractProductQueryFromMessage(text) };
     }
-    return { intent: "product_search", confidence: 0.78, reason: `catalog alias root: ${catalogRoots[0]}`, productQuery: text.trim() };
+    if (t.split(/\s+/).length <= 2 && !has(productActionWords) && !has(["order", "buy", "dikhao", "show", "bhejo"])) {
+      return { intent: "conversation", confidence: 0.82, reason: `bare product interest: ${catalogRoots[0]}`, productQuery: extractProductQueryFromMessage(text) };
+    }
+    return { intent: "product_search", confidence: 0.78, reason: `catalog alias root: ${catalogRoots[0]}`, productQuery: extractProductQueryFromMessage(text) };
   }
   if (isPureGreetingMessage(text)) return { intent: "greeting", confidence: 0.92, reason: "pure greeting" };
   if (/^[1-9]$/.test(t)) return { intent: "variant_selection", confidence: 0.9, reason: "numbered menu choice" };
@@ -1720,10 +1723,10 @@ async function deliverSingleProductOffer(opts: {
   await sendWaText(
     opts.phone,
     roman
-      ? "Aur options dekhne ke liye *show more* likh dein 😊"
-      : "مزید options کے لیے *show more* لکھیں 😊",
+      ? "Kya aap iska *order* karna chahenge? Reply *order*\nAur options ke liye *show more* likh dein 😊"
+      : "کیا *order* کرنا چاہیں گے؟ *order* reply کریں\nمزید options: *show more* 😊",
     opts.waSettings,
-    "single_product_hint",
+    "single_product_cta",
   );
 
   await setConversationState(opts.phone, "wa_order_await_variant", {
@@ -1961,8 +1964,9 @@ async function trySendHumanGreetingReply(opts: {
   waSettings: any;
 }): Promise<boolean> {
   if (!isPureGreetingMessage(opts.textBody) && !isGreeting(opts.textBody)) return false;
+  const { WA_SALES_CHAT_STATE } = await import("../lib/waSalesConversation.js");
   await sendWaText(opts.phone, buildHumanWelcomeReply(opts.textBody), opts.waSettings, "human_greeting");
-  await setConversationState(opts.phone, "ai_chat", { greetedAt: new Date().toISOString() });
+  await setConversationState(opts.phone, WA_SALES_CHAT_STATE, { greetedAt: new Date().toISOString() });
   await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting" });
   return true;
 }
@@ -1994,6 +1998,78 @@ async function tryResolveWaCustomerMessage(opts: {
   if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
     return true;
   }
+
+  let stateData: Record<string, unknown> = {};
+  try {
+    const conv = await getConversationState(opts.phone);
+    stateData = JSON.parse((conv as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+
+  const {
+    tryConversationalSalesReply,
+    WA_AWAIT_PRODUCT_INTENT_STATE,
+    shouldShowProductCatalogNow,
+  } = await import("../lib/waSalesConversation.js");
+
+  const convReply = await tryConversationalSalesReply({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    currentState: opts.currentState,
+    stateData,
+    detectedIntent: opts.detectedIntent.intent,
+    productQuery: opts.detectedIntent.productQuery,
+  });
+
+  if (convReply.handled && convReply.reply) {
+    if (convReply.template === "product_interest_clarify") {
+      const productQ = extractProductQueryFromMessage(opts.textBody);
+      await setConversationState(opts.phone, WA_AWAIT_PRODUCT_INTENT_STATE, {
+        pendingProductQuery: productQ,
+        lastUserMessage: opts.textBody.slice(0, 300),
+      });
+    }
+    await sendWaText(opts.phone, convReply.reply, opts.waSettings, convReply.template ?? "conversational_sales");
+    await persistConversationTurn(opts.phone, {
+      intent: opts.detectedIntent.intent,
+      topic: convReply.template ?? "conversation",
+      assistantReply: convReply.reply,
+    });
+    return true;
+  }
+
+  if (convReply.triggerProduct && convReply.productQuery) {
+    if (convReply.reply) {
+      await sendWaText(opts.phone, convReply.reply, opts.waSettings, convReply.template ?? "product_recommend_intro");
+    }
+    await setConversationState(opts.phone, "idle", {});
+    await deliverSingleProductOffer({
+      phone: opts.phone,
+      query: convReply.productQuery,
+      waSettings: opts.waSettings,
+      showMore: false,
+    });
+    return true;
+  }
+
+  if (
+    opts.currentState === "wa_order_await_variant" &&
+    /\b(order|buy|lena)\b/i.test(opts.textBody.trim()) &&
+    stateData.product
+  ) {
+    const product = stateData.product as Record<string, any>;
+    const variant = product.variantOptions?.[0];
+    if (variant) {
+      await handleCommerceOrderFlow(
+        opts.phone,
+        "1",
+        "wa_order_await_variant",
+        opts.waSettings,
+        opts.log,
+      );
+      return true;
+    }
+  }
+
   if (await tryHandleCatalogBrowseReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings, log: opts.log })) {
     return true;
   }
@@ -2021,9 +2097,14 @@ async function tryResolveWaCustomerMessage(opts: {
     return true;
   }
   if (
-    isProductInquiryMessage(opts.textBody) ||
-    shouldUseProductDatabaseFirst(opts.detectedIntent.intent, opts.textBody) ||
-    isLikelyProductInquiry(opts.textBody, opts.detectedIntent.intent)
+    shouldShowProductCatalogNow({
+      text: opts.textBody,
+      intent: opts.detectedIntent.intent,
+      state: opts.currentState,
+    }) &&
+    (isProductInquiryMessage(opts.textBody) ||
+      shouldUseProductDatabaseFirst(opts.detectedIntent.intent, opts.textBody, opts.currentState) ||
+      isLikelyProductInquiry(opts.textBody, opts.detectedIntent.intent))
   ) {
     if (await trySendProductCatalogReply({
       phone: opts.phone,
@@ -2046,10 +2127,16 @@ async function trySendProductCatalogReply(opts: {
   log?: any;
 }): Promise<boolean> {
   const { phone, textBody, waSettings, detectedIntent, log } = opts;
+  const conv = await getConversationState(phone);
+  const currentState = conv?.state ?? "idle";
+  const { shouldShowProductCatalogNow } = await import("../lib/waSalesConversation.js");
   if (isPureGreetingMessage(textBody) || detectedIntent.intent === "greeting") return false;
+  if (!shouldShowProductCatalogNow({ text: textBody, intent: detectedIntent.intent, state: currentState })) {
+    return false;
+  }
   if (
     !isProductInquiryMessage(textBody) &&
-    !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody) &&
+    !shouldUseProductDatabaseFirst(detectedIntent.intent, textBody, currentState) &&
     !isFullCatalogBrowseMessage(textBody)
   ) {
     return false;
@@ -3391,10 +3478,6 @@ async function handleAiReply(opts: {
   const { phone, textBody, chatbot, waSettings, log, detectedIntent } = opts;
   const intent = detectedIntent ?? detectWaIntent(textBody);
 
-  if (await trySendProductCatalogReply({ phone, textBody, waSettings, detectedIntent: intent, log })) {
-    return;
-  }
-
   try {
     await logWaProcessingStep({
       phone,
@@ -3646,11 +3729,13 @@ async function handleAiReply(opts: {
       }
     }
     const [globalAiSettings] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
+    const { loadBusinessKnowledgeBlock } = await import("../lib/waSalesConversation.js");
+    const businessKnowledge = await loadBusinessKnowledgeBlock();
     const brainPrompt = buildAiBrainSystemPrompt(chatbot, {
       channel: "whatsapp",
       detectedIntent: `${intent.intent} (${intent.reason}). Confidence: ${intent.confidence}`,
-      extraInstructions: whatsappInstructions,
-      contextBlocks: [orderContextBlock, catalogContextBlock],
+      extraInstructions: `${whatsappInstructions}\n\nCONVERSATION-FIRST: Greet warmly. On bare product names (e.g. "badam") ask if they want price, recommendation, or order — do NOT dump products. Only describe catalog after intent is clear. Use BUSINESS KNOWLEDGE for address, delivery, timings — never invent.`,
+      contextBlocks: [businessKnowledge, orderContextBlock, catalogContextBlock],
       globalAiSettings,
       memorySummary,
     });
