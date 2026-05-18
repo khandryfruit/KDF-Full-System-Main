@@ -48,14 +48,7 @@ export function CheckoutOption({
         {selected ? <span className="kdf-checkout-option__radio-dot" /> : null}
       </span>
       {leading ? <span className="kdf-checkout-option__leading">{leading}</span> : null}
-      <span
-        className={[
-          "kdf-checkout-option__body",
-          variant === "shipping" ? "kdf-checkout-option__body--inline" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
+      <span className="kdf-checkout-option__body">
         <span className="kdf-checkout-option__title">{title}</span>
         {hint ? <span className="kdf-checkout-option__hint">{hint}</span> : null}
       </span>

@@ -69,6 +69,15 @@ const FALLBACK_GATEWAYS = [
   { type: "wallet", displayName: "KDF Wallet", description: "Pay using your wallet balance" },
 ];
 
+const PAYMENT_ICONS: Record<string, string> = {
+  cod: "💵",
+  wallet: "👛",
+  card: "💳",
+  bank_transfer: "🏦",
+  jazzcash: "📱",
+  easypaisa: "📱",
+};
+
 async function fetchPaymentOptions() {
   const res = await fetch("/api/payment-gateways/active");
   if (!res.ok) return { gateways: [], manualPayments: [] };
@@ -622,6 +631,7 @@ export default function CheckoutPage() {
                           <CheckoutOption
                             key={gw.type}
                             variant="plain"
+                            leading={PAYMENT_ICONS[gw.type] ?? "💳"}
                             testId={`radio-${gw.type}`}
                             selected={field.value === gw.type}
                             onClick={() => {
