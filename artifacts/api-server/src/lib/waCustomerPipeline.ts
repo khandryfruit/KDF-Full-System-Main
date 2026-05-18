@@ -20,9 +20,9 @@ export type WaPipelineStep =
 /** AI Command Center (ai_settings) OR legacy chatbot toggle — both must work in production. */
 export async function isWaAutoReplyEnabled(): Promise<boolean> {
   const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1).catch(() => []);
-  if (chatbot?.isEnabled) return true;
   const [ai] = await db.select().from(aiSettingsTable).limit(1).catch(() => []);
-  if (!ai?.aiEnabled) return false;
+  const wantsAi = chatbot?.isEnabled === true || ai?.aiEnabled === true;
+  if (!wantsAi) return false;
   try {
     await resolveOpenAIClient();
     return true;

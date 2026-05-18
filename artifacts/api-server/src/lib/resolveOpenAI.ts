@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { db, aiSettingsTable } from "@workspace/db";
+import { db, aiSettingsTable, chatbotSettingsTable } from "@workspace/db";
 
 export type ResolveOpenAIResult = {
   client: OpenAI;
@@ -22,6 +22,8 @@ export type ResolveOpenAIResult = {
  */
 export async function resolveOpenAIClient(): Promise<ResolveOpenAIResult> {
   const [s] = await db.select().from(aiSettingsTable).limit(1);
+  const [chatbot] = await db.select().from(chatbotSettingsTable).limit(1).catch(() => []);
+  const whatsappChatbotOn = chatbot?.isEnabled === true;
 
   const dbKey = (s?.openaiApiKey ?? "").trim();
   const envKey = (process.env.OPENAI_API_KEY ?? "").trim();
@@ -38,11 +40,18 @@ export async function resolveOpenAIClient(): Promise<ResolveOpenAIResult> {
   }
 
   const noRow = s === undefined;
+  const aiContentOn = s?.aiEnabled === true;
   const explicitlyDisabled = s !== undefined && s.aiEnabled === false;
-  /** AI allowed when: fresh DB + env key, or admin enabled AI in DB (key may live in env only). */
-  const aiAllowed = (noRow && !!envKey) || s?.aiEnabled === true;
+  /**
+   * Allow OpenAI when:
+   * - AI Content enabled, OR
+   * - fresh DB + env key, OR
+   * - WhatsApp chatbot enabled + key (common Railway: key in env, AI Content toggle forgotten)
+   */
+  const aiAllowed =
+    (noRow && !!envKey) || aiContentOn || (whatsappChatbotOn && !!apiKey);
 
-  if (explicitlyDisabled) {
+  if (explicitlyDisabled && !whatsappChatbotOn) {
     throw Object.assign(
       new Error("AI is turned off in Admin → AI Content. Enable AI and save, then try again."),
       { status: 503, code: "AI_DISABLED" }
@@ -51,7 +60,9 @@ export async function resolveOpenAIClient(): Promise<ResolveOpenAIResult> {
 
   if (!aiAllowed) {
     throw Object.assign(
-      new Error("AI is not enabled. Open Admin → AI Content, enable AI, and save your API key."),
+      new Error(
+        "AI is not enabled. Open Admin → AI Content (enable AI) OR WhatsApp chatbot settings (enable bot), and set OPENAI_API_KEY.",
+      ),
       { status: 503, code: "AI_NOT_CONFIGURED" }
     );
   }
