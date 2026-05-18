@@ -158,11 +158,15 @@ export async function tryHandleClassifiedSupport(opts: {
     });
 
   if (intent === "delivery") {
-    await sendDeliveryInfoButtons({
+    const { answerDeliveryAndShippingFaq } = await import("./waIntentEngine.js");
+    await answerDeliveryAndShippingFaq({
       phone: opts.phone,
       textBody: opts.textBody,
       waSettings: opts.waSettings,
-      sendText: async (p, t, tmpl) => { await sendText(p, t); await opts.logStep?.({ step: tmpl }); },
+      send: async (p, m, t) => {
+        await sendText(p, m, t);
+        await opts.logStep?.({ step: "delivery_faq_sent", template: t });
+      },
     });
     return true;
   }

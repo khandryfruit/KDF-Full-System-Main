@@ -1261,6 +1261,26 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
                 });
                 continue;
               }
+              if (isDeliveryOnlyMessage(commerceText)) {
+                const { answerDeliveryAndShippingFaq } = await import("../lib/waIntentEngine.js");
+                if (
+                  await answerDeliveryAndShippingFaq({
+                    phone,
+                    textBody: commerceText,
+                    waSettings,
+                    send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+                  })
+                ) {
+                  await logWaProcessingStep({
+                    phone,
+                    messageId: msgId,
+                    step: "delivery_faq_sent",
+                    detail: "Delivery FAQ answered inside commerce state (fallback path).",
+                    payload: { state: currentState, text: commerceText.slice(0, 200) },
+                  });
+                  continue;
+                }
+              }
             }
             if (currentState === "wa_catalog_pick_category") {
               const catalogHandled = await tryHandleCatalogBrowseReply({
@@ -1377,6 +1397,27 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
 
           if (greetingOpener && (await trySendHumanGreetingReply({ phone, textBody, waSettings }))) {
             continue;
+          }
+
+          if (isDeliveryOnlyMessage(textBody)) {
+            const { answerDeliveryAndShippingFaq } = await import("../lib/waIntentEngine.js");
+            if (
+              await answerDeliveryAndShippingFaq({
+                phone,
+                textBody,
+                waSettings,
+                send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+              })
+            ) {
+              await logWaProcessingStep({
+                phone,
+                messageId: msgId,
+                step: "delivery_faq_sent",
+                detail: "Delivery FAQ answered before general routing.",
+                payload: { textBody: textBody.slice(0, 200), state: currentState },
+              });
+              continue;
+            }
           }
 
           if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: detected, log })) {
@@ -2901,17 +2942,20 @@ async function tryResolveWaCustomerMessage(opts: {
       await persistConversationTurn(opts.phone, { intent: "pricing", topic: "price_faq" });
       return true;
     }
-    if (convReply.template === "delivery_conversation") {
-      const { buildDeliveryConversationText } = await import("../lib/waConversationFlows.js");
-      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-      const lang = resolveWaLang(stateData, opts.textBody);
-      await sendWaReplyWithActions(opts.phone, buildDeliveryConversationText(opts.textBody, lang), opts.waSettings, {
-        templateName: "delivery_conversation",
-        actionContext: "delivery",
+    if (convReply.template === "delivery_conversation" || convReply.template === "delivery_faq_live") {
+      const { answerDeliveryAndShippingFaq } = await import("../lib/waIntentEngine.js");
+      await answerDeliveryAndShippingFaq({
+        phone: opts.phone,
         textBody: opts.textBody,
-        stateData,
+        waSettings: opts.waSettings,
+        send: async (p, m, t) => { await sendWaText(p, m, opts.waSettings, t); },
       });
-      await persistConversationTurn(opts.phone, { intent: "delivery", topic: "delivery" });
+      await logWaProcessingStep({
+        phone: opts.phone,
+        step: "delivery_faq_sent",
+        detail: "Live delivery charges + time from shipping rules DB.",
+        payload: { textBody: opts.textBody.slice(0, 200) },
+      });
       return true;
     }
     if (convReply.template === "product_education_text") {
@@ -4932,6 +4976,44 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   const { WA_AWAIT_LANGUAGE_STATE } = await import("../lib/waPremiumJourney.js");
   const { WA_AWAIT_PRODUCT_INTENT_STATE } = await import("../lib/waSalesConversation.js");
 
+  if (isDeliveryOnlyMessage(trimmed)) {
+    const { answerDeliveryAndShippingFaq } = await import("../lib/waIntentEngine.js");
+    if (
+      await answerDeliveryAndShippingFaq({
+        phone,
+        textBody: trimmed,
+        waSettings,
+        send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+      })
+    ) {
+      await logWaProcessingStep({
+        phone,
+        step: "delivery_faq_sent",
+        detail: `Delivery FAQ during commerce state ${state}.`,
+        payload: { text: trimmed.slice(0, 200) },
+      });
+      return;
+    }
+  }
+  if (isTrackingOnlyMessage(trimmed)) {
+    const midReply = await tryDeterministicWaReply({
+      phone,
+      textBody: trimmed,
+      currentState: state,
+      detectedIntent: "tracking",
+    });
+    if (midReply) {
+      await sendDeterministicWaReply({
+        phone,
+        textBody: trimmed,
+        reply: midReply,
+        intent: "tracking",
+        send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+      });
+      return;
+    }
+  }
+
   if (state === "wa_shopping_cart") {
     const intent = detectWaIntent(trimmed);
     if (await tryResolveWaCustomerMessage({ phone, textBody: trimmed, waSettings, currentState: state, detectedIntent: intent, log })) {
@@ -6321,6 +6403,19 @@ async function handleAiReply(opts: {
       failureReason: aiErr instanceof Error ? aiErr.message : String(aiErr),
     });
     log?.warn(aiErr, "AI auto-reply error");
+    if (isDeliveryOnlyMessage(textBody)) {
+      const { answerDeliveryAndShippingFaq } = await import("../lib/waIntentEngine.js");
+      if (
+        await answerDeliveryAndShippingFaq({
+          phone,
+          textBody,
+          waSettings,
+          send: async (p, m, t) => { await sendWaText(p, m, waSettings, t); },
+        })
+      ) {
+        return;
+      }
+    }
     try {
       const { sendWhatsAppMessage: sendWa } = await import("../lib/whatsapp.js");
       const fallback = await buildEmergencyAiFallback({ textBody, intent, phone });

@@ -332,7 +332,7 @@ export async function tryConversationalSalesReply(opts: {
   }
 
   if (opts.detectedIntent === "delivery" || isDeliveryOnlyMessage(text) || /^(delivery|shipping)/i.test(lower)) {
-    return { handled: true, template: "delivery_conversation" };
+    return { handled: true, template: "delivery_faq_live", reply: undefined };
   }
 
   if (opts.currentState === WA_AWAIT_PRODUCT_INTENT_STATE && pendingQ) {

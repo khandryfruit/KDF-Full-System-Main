@@ -7,6 +7,7 @@ import { resolveWaLang, parseLanguageChoice, buildLanguageWelcomeMessage, WA_AWA
 import { isPureGreetingMessage, isProductInquiryMessage, productRootsInMessage } from "./waProductBrain.js";
 import { isConversationOpenerNotCatalog } from "./waIntentSwitch.js";
 import { isPaymentIssueMessage, isAddressFaqMessage, isPaymentInfoMessage } from "./waIntentClassifier.js";
+import { isDeliveryOnlyMessage, isTrackingOnlyMessage } from "./waIntentEngine.js";
 import { isWaCheckoutCollectionState } from "./waOrderJourney.js";
 import { resolveCityInput } from "./waPakistanCities.js";
 import { WA_AWAIT_PRODUCT_INTENT_STATE } from "./waSalesConversation.js";
@@ -106,7 +107,9 @@ export function shouldPrioritizeNewIntent(text: string, intent?: string): boolea
   if (roots.length > 0 && t.length >= 3) return true;
   if (isProductInquiryMessage(t) && !/^\d+$/.test(t)) return true;
   if (intent === "greeting" || intent === "conversation" || intent === "general" || intent === "support") return true;
+  if (intent === "delivery" || intent === "tracking") return true;
   if (intent === "product_search" || intent === "order_start" || intent === "pricing") return true;
+  if (isDeliveryOnlyMessage(t) || isTrackingOnlyMessage(t)) return true;
   if (/\b(track|delivery|price|rate|order)\b/i.test(t) && t.length >= 4) return true;
   return false;
 }

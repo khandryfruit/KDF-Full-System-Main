@@ -91,6 +91,15 @@ export async function buildDeliveryReply(textBody: string): Promise<string> {
     }
   } catch { /* optional */ }
 
+  const asksTime = /\b(time|days|when|kitne din|delivery time|how long|kab tak|کب)\b/i.test(textBody);
+  const timeBlock = asksTime
+    ? roman
+      ? `\n\n📦 *Delivery time:*\n• Lahore: often *same day* (order before cutoff)\n• Other cities: usually *2–5 working days*`
+      : `\n\n📦 *Delivery time:*\n• Lahore: aksar *same day*\n• Doosre shehar: *2–5 working days*`
+    : roman
+      ? `\n\n📦 Usually *2–5 working days* nationwide (Lahore same-day often available).`
+      : `\n\n📦 Aam tor par *2–5 working days* (Lahore same-day aksar).`;
+
   if (roman) {
     return `Ji 😊
 
@@ -98,7 +107,7 @@ Delivery charges:
 
 Lahore: Rs.${lahorePrice}
 Other cities: Rs.${otherMin}–${otherMax}
-Orders above Rs.${freeThreshold.toLocaleString("en-PK")}: FREE delivery 👍${sameDayLine}
+Orders above Rs.${freeThreshold.toLocaleString("en-PK")}: FREE delivery 👍${sameDayLine}${timeBlock}
 
 Aap city bata dein to exact estimate bhi de sakta hoon.`;
   }
@@ -109,9 +118,36 @@ Delivery charges:
 
 لاہور: Rs.${lahorePrice}
 دیگر شہروں میں: Rs.${otherMin}–${otherMax}
-Rs.${freeThreshold.toLocaleString("en-PK")}+ پر free delivery 👍${sameDayLine}
+Rs.${freeThreshold.toLocaleString("en-PK")}+ پر free delivery 👍${sameDayLine}${timeBlock}
 
 آپ city بتا دیں تو exact estimate بھی دے سکتا ہوں۔`;
+}
+
+/** Guaranteed delivery FAQ — live shipping rules from DB. Never stay silent. */
+export async function answerDeliveryAndShippingFaq(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
+  send?: (phone: string, message: string, templateName: string) => Promise<unknown>;
+}): Promise<boolean> {
+  if (!isDeliveryOnlyMessage(opts.textBody) && !/\b(delivery|shipping|courier)\b/i.test(opts.textBody)) {
+    return false;
+  }
+  const reply = await buildDeliveryReply(opts.textBody);
+  const send =
+    opts.send ??
+    (async (p: string, m: string, t: string) => {
+      const { sendWhatsAppMessage } = await import("./whatsapp.js");
+      return sendWhatsAppMessage({ phone: p, message: m, templateName: t });
+    });
+  await sendDeterministicWaReply({
+    phone: opts.phone,
+    textBody: opts.textBody,
+    reply,
+    intent: "delivery",
+    send: send as (phone: string, message: string, templateName: string) => Promise<unknown>,
+  });
+  return true;
 }
 
 async function buildContextualPriceReply(phone: string, textBody: string): Promise<string | null> {
