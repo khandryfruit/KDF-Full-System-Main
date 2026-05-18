@@ -177,7 +177,7 @@ function ProductCardInner({ product, hotDealBadge, compact }: ProductCardProps) 
               <p className="text-[10px] font-medium text-gray-400 sm:text-[11px]">{product.weight ?? product.unit}</p>
             )}
             <h3
-              className={`kdf-product-card__title line-clamp-2 min-h-[2.6em] font-semibold leading-snug text-gray-900 ${compact ? "text-[11px]" : "text-[13px] sm:text-sm md:text-base md:font-bold"}`}
+              className={`kdf-product-card__title line-clamp-2 font-semibold leading-snug text-gray-900 ${compact ? "text-[11px]" : "text-[13px] sm:text-sm md:text-base"}`}
               data-testid={`text-product-name-${product.id}`}
             >
               {product.name}
@@ -234,13 +234,12 @@ function ProductCardInner({ product, hotDealBadge, compact }: ProductCardProps) 
                 <button
                   onClick={handleAddToCart}
                   disabled={outOfStock}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-full text-white shadow-[0_6px_16px_rgba(95,168,0,0.32)] transition-[transform,box-shadow] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 md:h-11 md:min-w-[2.75rem] md:px-3 md:hover:scale-105 md:hover:shadow-[0_8px_20px_rgba(95,168,0,0.4)]"
-                  style={{ background: "linear-gradient(135deg, #6bb80a 0%, #5FA800 48%, #4a8600 100%)" }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white shadow-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 md:hover:scale-105"
+                  style={{ backgroundColor: "#5FA800" }}
                   data-testid={`button-add-cart-${product.id}`}
                   aria-label={`Add ${product.name} to cart`}
                 >
-                  <Plus className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} aria-hidden />
-                  <span className="hidden font-bold md:inline text-xs">Add</span>
+                  <Plus className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
                 </button>
               )}
             </div>
