@@ -7,6 +7,7 @@ import { loadAllCatalogProducts } from "./shopifyProductKnowledge.js";
 import { productBelongsToFamilies, productMatchesCategoryPrimary } from "./catalogProductMatcher.js";
 import { productRootTermsFromQuery } from "./shopifyProductSearch.js";
 import { WA_SALES_CATEGORIES, getCategoryById, type WaSalesCategory } from "./waCategoryDefinitions.js";
+import { matchStorefrontCategory } from "./waStorefrontCategories.js";
 
 async function buildFullCatalogIndex() {
   const { buildFullCatalogIndex: build } = await import("./waSalesAgent.js");
@@ -58,6 +59,12 @@ export const QUERY_TO_CATEGORY_ID: Record<string, string> = {
   anjeer: "figs",
   fig: "figs",
   figs: "figs",
+  "dried fig": "figs",
+  "dried figs": "figs",
+  "dried berry": "berries",
+  "dried berries": "berries",
+  "dried fruit": "dried_fruits",
+  "dried fruits": "dried_fruits",
   kishmish: "raisins",
   raisin: "raisins",
   raisins: "raisins",
@@ -80,6 +87,9 @@ export const QUERY_TO_CATEGORY_ID: Record<string, string> = {
 };
 
 export function resolveCanonicalCategoryId(query: string): string | null {
+  const storefront = matchStorefrontCategory(query);
+  if (storefront) return storefront.canonicalId;
+
   const q = normalizeQuery(query);
   if (!q) return null;
 

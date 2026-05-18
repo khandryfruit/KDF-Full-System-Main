@@ -13,6 +13,7 @@ import { toWhatsAppCatalogProducts } from "./shopifyProductKnowledge.js";
 import { setConversationState } from "./whatsapp.js";
 import { KDF_APP_INSTALL_URL } from "./waPostOrderMessage.js";
 import { loadAllCatalogProducts } from "./shopifyProductKnowledge.js";
+import { STOREFRONT_SHOP_CATEGORIES } from "./waStorefrontCategories.js";
 
 type WaSettings = Awaited<ReturnType<typeof import("./whatsapp.js").getSettings>>;
 
@@ -31,22 +32,18 @@ export const QA = {
 
 export const CAT_PREFIX = "wa_cat_";
 
-/** Curated category rows for product picker (max 8 for one list section). */
+/** Storefront homepage categories (khanbabadryfruits.com) */
 export const PRODUCT_CATEGORY_MENU: Array<{
   id: string;
   title: string;
   description: string;
   categoryId: string;
-}> = [
-  { id: `${CAT_PREFIX}almonds`, title: "🥜 Almonds", description: "Premium badam", categoryId: "almonds" },
-  { id: `${CAT_PREFIX}pistachio`, title: "🌰 Pistachios", description: "Irani & roasted pista", categoryId: "pistachio" },
-  { id: `${CAT_PREFIX}cashew`, title: "🥜 Cashews", description: "Kaju — W180 & more", categoryId: "cashew" },
-  { id: `${CAT_PREFIX}honey`, title: "🍯 Honey", description: "Pure shahad", categoryId: "honey" },
-  { id: `${CAT_PREFIX}dried`, title: "🥭 Dried Fruits", description: "Khajoor, anjeer, kishmish", categoryId: "dates" },
-  { id: `${CAT_PREFIX}bestsellers`, title: "⭐ Best Sellers", description: "Customer favourites", categoryId: "bestsellers" },
-  { id: `${CAT_PREFIX}hotdeals`, title: "🔥 Hot Deals", description: "Offers & savings", categoryId: "hotdeals" },
-  { id: `${CAT_PREFIX}all`, title: "📋 All Products", description: "Full catalog browse", categoryId: "all" },
-];
+}> = STOREFRONT_SHOP_CATEGORIES.map((sf) => ({
+  id: `${CAT_PREFIX}${sf.canonicalId}`,
+  title: sf.menuTitle,
+  description: sf.menuDescription,
+  categoryId: sf.canonicalId,
+}));
 
 export function buildPremiumWelcomeText(textBody: string | undefined, lang: WaLang, repeatCustomer = false): string {
   const roman = textBody ? isRomanUrduWa(textBody) : lang !== "ur";

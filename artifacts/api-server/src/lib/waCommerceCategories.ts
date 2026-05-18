@@ -5,6 +5,13 @@ import { db, categoriesTable, productsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { WaSalesCategory } from "./waCategoryDefinitions.js";
 import { WA_SALES_CATEGORIES, getCategoryById } from "./waCategoryDefinitions.js";
+import {
+  STOREFRONT_SHOP_CATEGORIES,
+  matchStorefrontCategory,
+  type StorefrontShopCategory,
+} from "./waStorefrontCategories.js";
+
+export { STOREFRONT_SHOP_CATEGORIES, matchStorefrontCategory } from "./waStorefrontCategories.js";
 
 const CACHE_MS = 60_000;
 let cache: { at: number; dbCategories: Array<{ id: number; name: string; slug: string }> } | null = null;
@@ -32,8 +39,12 @@ const SLUG_TO_CANONICAL: Record<string, string> = {
   berries: "berries",
   berry: "berries",
   "dried-berry": "berries",
-  "dried-fruits": "mixed",
-  "dried-fruits-nuts": "mixed",
+  "dried-berries": "berries",
+  "dried-fig": "figs",
+  "dried-figs": "figs",
+  "dried-fruits": "dried_fruits",
+  "dried-fruit": "dried_fruits",
+  "dried-fruits-nuts": "dried_fruits",
   raisins: "raisins",
   kishmish: "raisins",
   peanuts: "peanuts",
@@ -62,6 +73,8 @@ export async function loadActiveDbCategories(): Promise<Array<{ id: number; name
 }
 
 export function mapDbCategoryToCanonical(slug: string, name: string): string | null {
+  const storefront = matchStorefrontCategory(`${name} ${slug}`);
+  if (storefront) return storefront.canonicalId;
   const s = norm(slug);
   const n = norm(name).replace(/-/g, " ");
   if (SLUG_TO_CANONICAL[s]) return SLUG_TO_CANONICAL[s];
@@ -87,6 +100,16 @@ export async function resolveCanonicalCategoryFromDb(query: string): Promise<{
     };
   }
 
+  const storefront = matchStorefrontCategory(query);
+  if (storefront) {
+    const { dbCategoryId, dbCategoryName } = await resolveStorefrontDbCategory(storefront);
+    return {
+      canonicalId: storefront.canonicalId,
+      dbCategoryId,
+      dbCategoryName,
+    };
+  }
+
   const q = norm(query).replace(/-/g, " ");
   const rows = await loadActiveDbCategories();
   for (const row of rows) {
@@ -106,29 +129,50 @@ export async function resolveCanonicalCategoryFromDb(query: string): Promise<{
   return { canonicalId: null, dbCategoryId: null, dbCategoryName: null };
 }
 
-/** Merged menu categories: live DB names + static family rules */
+/** Website "Shop by Category" order — DB names when available */
 export async function listWaMenuCategories(): Promise<WaSalesCategory[]> {
   const dbRows = await loadActiveDbCategories();
-  const seen = new Set<string>();
-  const out: WaSalesCategory[] = [];
-
-  for (const row of dbRows) {
-    const canonicalId = mapDbCategoryToCanonical(row.slug, row.name);
-    if (!canonicalId || seen.has(canonicalId)) continue;
-    const base = getCategoryById(canonicalId);
-    if (!base) continue;
-    seen.add(canonicalId);
-    out.push({
-      ...base,
-      labelEn: row.name,
-      labelUr: row.name,
+  return STOREFRONT_SHOP_CATEGORIES.map((sf) => {
+    const dbRow = dbRows.find((r) => {
+      const rn = norm(r.name);
+      const rs = norm(r.slug);
+      return sf.dbNameAliases.some((a) => {
+        const an = norm(a);
+        return rn === an || rn.includes(an) || rs.includes(an.replace(/\s+/g, "-"));
+      });
     });
-  }
+    const base = getCategoryById(sf.canonicalId);
+    return {
+      ...(base ?? { id: sf.canonicalId, emoji: sf.emoji, labelEn: sf.labelEn, labelUr: sf.labelEn, families: [] }),
+      labelEn: dbRow?.name ?? sf.labelEn,
+      labelUr: dbRow?.name ?? sf.labelEn,
+    };
+  });
+}
 
-  for (const cat of WA_SALES_CATEGORIES) {
-    if (!seen.has(cat.id)) out.push(cat);
-  }
-  return out;
+/** WhatsApp interactive list rows — max 8, matches storefront */
+export async function getStorefrontCategoryMenuRows(): Promise<
+  Array<{ id: string; title: string; description: string; categoryId: string }>
+> {
+  const prefix = "wa_cat_";
+  return STOREFRONT_SHOP_CATEGORIES.map((sf) => ({
+    id: `${prefix}${sf.canonicalId}`,
+    title: sf.menuTitle.slice(0, 24),
+    description: sf.menuDescription.slice(0, 72),
+    categoryId: sf.canonicalId,
+  }));
+}
+
+export async function resolveStorefrontDbCategory(sf: StorefrontShopCategory): Promise<{
+  dbCategoryId: number | null;
+  dbCategoryName: string;
+}> {
+  const rows = await loadActiveDbCategories();
+  const dbRow = rows.find((r) => {
+    const rn = norm(r.name);
+    return sf.dbNameAliases.some((a) => rn === norm(a) || rn.includes(norm(a)));
+  });
+  return { dbCategoryId: dbRow?.id ?? null, dbCategoryName: dbRow?.name ?? sf.labelEn };
 }
 
 export async function getProductIdsForDbCategory(dbCategoryId: number): Promise<number[]> {

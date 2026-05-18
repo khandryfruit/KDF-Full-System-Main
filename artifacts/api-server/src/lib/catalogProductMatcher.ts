@@ -68,7 +68,8 @@ export const CATEGORY_PRIMARY_TOKENS: Record<string, RegExp> = {
   walnut: /\b(walnut|walnuts|akhrot|اخروٹ)\b/i,
   dates: /\b(khajoor|dates|date|کھجور|ajwa|mazafati|sukkari|kalmi|amber)\b/i,
   raisins: /\b(kishmish|raisin|raisins|munakka|کشمش)\b/i,
-  figs: /\b(anjeer|fig|figs|انجیر)\b/i,
+  figs: /\b(anjeer|fig|figs|dried fig|انجیر)\b/i,
+  dried_fruits: /\b(dried fruit|dried fruits|kiwi|pineapple|papaya|mango slice|fruit slice|tropical mix|honeydew|cantaloupe)\b/i,
   peanuts: /\b(peanut|peanuts|mungphali|مونگ)\b/i,
   hazelnut: /\b(hazelnut|hazelnuts|filbert)\b/i,
   berries: /\b(goji|cranberry|blueberry|strawberry|berry|berries)\b/i,

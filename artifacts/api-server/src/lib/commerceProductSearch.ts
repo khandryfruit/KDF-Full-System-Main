@@ -23,6 +23,7 @@ import {
   isGenericBerryBrowse,
   resolveSpecificProductKey,
 } from "./waProductEntity.js";
+import { matchStorefrontCategory } from "./waStorefrontCategories.js";
 
 const STORE_BASE = (process.env.STOREFRONT_URL ?? process.env.PUBLIC_STORE_URL ?? KHAN_WEBSITE_URL).replace(/\/$/, "");
 const API_PUBLIC_BASE = (process.env.API_PUBLIC_URL ?? process.env.PUBLIC_API_URL ?? "").replace(/\/$/, "");
@@ -200,11 +201,18 @@ const SPECIFIC_KEY_TO_CATEGORY: Record<string, string> = {
 /** True when customer wants a category listing (Pistachios, Dates) not one weighted SKU */
 export function isCategoryBrowseQuery(query: string): boolean {
   const raw = String(query ?? "").trim();
+  if (matchStorefrontCategory(raw)) return true;
   const q = normalizeText(raw);
   if (!q) return false;
   if (/\b\d+(?:\.\d+)?\s*(kg|kgs|g|gm|gram|grams)\b/i.test(raw)) return false;
   if (/\b(all|sari|tamam|catalog|menu|list|dikhao|show)\b/i.test(q)) return true;
-  if (/\b(pistachios|almonds|walnuts|cashews|dates|figs|raisins|berries)\b/i.test(q)) return true;
+  if (
+    /\b(pistachios?|almonds?|walnuts?|cashews?|dates?|figs?|raisins?|berries?|dried figs?|dried berries?|dried fruits?)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
   const catId = resolveCanonicalCategoryId(query);
   if (!catId) return false;
   const words = q.split(/\s+/).filter(Boolean);
@@ -538,8 +546,9 @@ export async function listCommerceProductsInCategory(
   categoryId: string,
   limit = 8,
 ): Promise<CommerceProductHit[]> {
+  const storefront = matchStorefrontCategory(categoryId);
   const dbResolved = await resolveCanonicalCategoryFromDb(categoryId);
-  const canonicalId = dbResolved.canonicalId ?? categoryId;
+  const canonicalId = storefront?.canonicalId ?? dbResolved.canonicalId ?? categoryId;
   const rows = await getAllActiveProducts();
   const products: CommerceProductHit[] = [];
 
