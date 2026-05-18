@@ -160,7 +160,7 @@ export function MobilePurchaseSheet({
           <div className="kdf-purchase-sheet__product">
             <div className="kdf-purchase-sheet__thumb">
               {image ? (
-                <img src={image} alt="" className="h-full w-full object-contain" draggable={false} />
+                <img src={image} alt="" className="kdf-purchase-sheet__thumb-img" draggable={false} />
               ) : null}
             </div>
             <div className="kdf-purchase-sheet__info">

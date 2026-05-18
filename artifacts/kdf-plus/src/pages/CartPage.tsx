@@ -3,6 +3,8 @@ import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { Trash2, Plus, Minus, ShoppingBag, Tag, ArrowRight, ArrowLeft, ShieldCheck, Truck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useProductRecommendations } from "@/components/ProductRecommendations";
+import { ModalRecommendationRow } from "@/components/purchase/ModalRecommendationRow";
 import { useValidateCoupon } from "@workspace/api-client-react";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,13 @@ const FREE_DELIVERY_THRESHOLD = 1500;
 export default function CartPage() {
   const [, setLocation] = useLocation();
   const { items, updateQty, removeItem, clearCart, totalPrice } = useCart();
+  const cartProductIds = items.map((item) => item.product.id);
+  const { data: cartRecs } = useProductRecommendations({
+    context: "cart",
+    cartProductIds,
+    limit: 8,
+    enabled: items.length > 0,
+  });
   const { toast } = useToast();
 
   const [couponCode, setCouponCode] = useState("");
@@ -192,10 +201,16 @@ export default function CartPage() {
                 </div>
               );
             })}
+            {cartRecs?.cartUpsells?.length ? (
+              <ModalRecommendationRow
+                title="Popular add-ons before checkout"
+                products={cartRecs.cartUpsells.slice(0, 8)}
+              />
+            ) : null}
           </div>
 
           {/* Order Summary */}
-          <div className="space-y-4 lg:sticky lg:top-24 lg:self-start lg:space-y-5">
+          <div className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:space-y-5">
             {/* Coupon */}
             <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-5">
               <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">

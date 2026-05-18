@@ -10,7 +10,8 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/context/LocationContext";
 import { useCreateOrder, useGetWalletBalance } from "@workspace/api-client-react";
-import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
+import { useProductRecommendations } from "@/components/ProductRecommendations";
+import { CheckoutUpsellRow } from "@/components/checkout/CheckoutUpsellRow";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
@@ -97,7 +98,7 @@ export default function CheckoutPage() {
   const { data: checkoutRecs } = useProductRecommendations({
     context: "checkout",
     cartProductIds,
-    limit: 8,
+    limit: 2,
     enabled: items.length > 0,
   });
 
@@ -773,15 +774,18 @@ export default function CheckoutPage() {
               </div>
 
               {/* Right: Order Summary */}
-              <div className="lg:sticky lg:top-24 lg:self-start">
-                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
-                  <h2 className="mb-1 text-base font-bold md:text-lg">Order Summary</h2>
-                  <p className="mb-4 text-xs text-muted-foreground">Items in your bag</p>
+              <div className="lg:sticky lg:top-20 lg:self-start">
+                <div className="kdf-checkout-summary rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-5">
+                  <h2 className="text-base font-bold md:text-lg">Order Summary</h2>
                   <div className="mb-4 max-h-52 space-y-3 overflow-y-auto pr-1 md:max-h-64">
                     {items.map((item) => (
                       <div key={`${item.product.id}-${item.variantId}`} className="group flex items-center gap-3 rounded-xl border border-transparent px-1 py-1 transition-colors hover:border-[#5FA800]/15 hover:bg-[#5FA800]/[0.04]">
-                        <img src={getProductImageSrc(item.product.images?.[0])} alt={item.product.name} loading="lazy"
-                          className="h-12 w-12 flex-shrink-0 rounded-lg bg-muted/20 object-cover ring-1 ring-black/[0.04] transition-transform duration-300 group-hover:scale-105 md:h-14 md:w-14 md:rounded-xl" />
+                        <img
+                          src={getProductImageSrc(item.product.images?.[0])}
+                          alt=""
+                          loading="lazy"
+                          className="kdf-checkout-summary__thumb"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium line-clamp-1">{item.product.name}</p>
                           <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
@@ -790,16 +794,6 @@ export default function CheckoutPage() {
                       </div>
                     ))}
                   </div>
-                  {checkoutRecs?.cartUpsells?.length ? (
-                    <div className="mb-4 rounded-2xl border border-[#5FA800]/10 bg-[#5FA800]/[0.03] p-3">
-                      <ProductRecommendationStrip
-                        title="Add before checkout"
-                        subtitle="Small add-ons customers often include"
-                        products={checkoutRecs.cartUpsells}
-                        compact
-                      />
-                    </div>
-                  ) : null}
                   <Separator className="my-3" />
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>Rs. {totalPrice.toLocaleString()}</span></div>
@@ -809,20 +803,27 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                   <Separator className="my-3" />
-                  <div className="flex justify-between font-bold">
+                  <div className="flex justify-between text-base font-bold">
                     <span>Total</span>
                     <span data-testid="text-checkout-total">Rs. {grandTotal.toLocaleString()}</span>
                   </div>
+                  {checkoutRecs?.cartUpsells?.length ? (
+                    <CheckoutUpsellRow products={checkoutRecs.cartUpsells} />
+                  ) : null}
                   <Button
                     type="submit"
                     size="lg"
-                    className="mt-4 w-full rounded-xl font-semibold shadow-lg shadow-[#5FA800]/20 transition-[transform,box-shadow] duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:hover:scale-100"
+                    className="kdf-checkout-summary__cta mt-4 h-14 w-full rounded-xl text-base font-bold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-200 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:hover:scale-100"
                     style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
                     disabled={createOrder.isPending}
                     data-testid="button-place-order"
                   >
                     {createOrder.isPending ? "Placing Order..." : "Place Order"}
                   </Button>
+                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                    <Lock className="mr-1 inline h-3 w-3" />
+                    Secure checkout · Cash on delivery available
+                  </p>
                 </div>
               </div>
             </div>

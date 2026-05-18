@@ -15,6 +15,7 @@ import {
   expandFamilyTerms,
 } from "./catalogProductMatcher.js";
 import { resolveCanonicalCategoryId } from "./waCategoryIndex.js";
+import { resolveCanonicalCategoryFromDb, getProductIdsForDbCategory } from "./waCommerceCategories.js";
 import { KHAN_WEBSITE_URL } from "./waMenuDefaults.js";
 import { logProductSearch } from "./productSearchDebug.js";
 import {
@@ -169,6 +170,7 @@ async function loadActiveCommerceRows() {
   return db
     .select({
       id: productsTable.id,
+      categoryId: productsTable.categoryId,
       name: productsTable.name,
       slug: productsTable.slug,
       description: productsTable.description,
@@ -183,6 +185,30 @@ async function loadActiveCommerceRows() {
     .from(productsTable)
     .where(eq(productsTable.active, true))
     .catch(() => []);
+}
+
+const SPECIFIC_KEY_TO_CATEGORY: Record<string, string> = {
+  pista: "pistachio",
+  badam: "almonds",
+  kaju: "cashew",
+  akhrot: "walnut",
+  khajoor: "dates",
+  anjeer: "figs",
+  kishmish: "raisins",
+};
+
+/** True when customer wants a category listing (Pistachios, Dates) not one weighted SKU */
+export function isCategoryBrowseQuery(query: string): boolean {
+  const raw = String(query ?? "").trim();
+  const q = normalizeText(raw);
+  if (!q) return false;
+  if (/\b\d+(?:\.\d+)?\s*(kg|kgs|g|gm|gram|grams)\b/i.test(raw)) return false;
+  if (/\b(all|sari|tamam|catalog|menu|list|dikhao|show)\b/i.test(q)) return true;
+  if (/\b(pistachios|almonds|walnuts|cashews|dates|figs|raisins|berries)\b/i.test(q)) return true;
+  const catId = resolveCanonicalCategoryId(query);
+  if (!catId) return false;
+  const words = q.split(/\s+/).filter(Boolean);
+  return words.length <= 2;
 }
 
 async function getAllActiveProducts() {
@@ -216,6 +242,8 @@ function scoreCommerceProduct(
   if (specificKey) {
     if (!productMatchesSpecificKey(name, tags, desc, specificKey)) return null;
     if (productExcludedForSpecificQuery(name, tags, desc, specificKey)) return null;
+    const catForKey = SPECIFIC_KEY_TO_CATEGORY[specificKey];
+    if (catForKey && !productMatchesCategoryPrimary(name, tags, desc, catForKey)) return null;
   } else {
     const categoryId = resolveCanonicalCategoryId(query);
     if (categoryId && categoryId !== "berries" && !productMatchesCategoryPrimary(name, tags, desc, categoryId)) {
@@ -333,11 +361,18 @@ function mapRowToHit(
     sku: v.sku,
   }));
 
+  const orig = parsePrice(row.originalPrice);
+  const hasDiscount = orig > basePrice && orig > 0;
+
   return {
     id: String(row.id),
     name: row.name,
     slug: row.slug,
-    price: variations.length ? `From ${formatRupees(basePrice)}` : formatRupees(basePrice),
+    price: hasDiscount
+      ? `${formatRupees(basePrice)} ~~${formatRupees(orig)}~~`
+      : variations.length
+        ? `From ${formatRupees(basePrice)}`
+        : formatRupees(basePrice),
     stock: row.stock ?? 0,
     image: resolveCommerceImageUrl(imgs[0] ?? null),
     variations,
@@ -389,6 +424,42 @@ export async function searchCommerceProductsRanked(
   const q = String(query ?? "").trim();
   const { entity, specificKey } = extractWaProductEntity(q);
   const searchQ = entity || q;
+
+  if (isCategoryBrowseQuery(q)) {
+    const catId =
+      resolveCanonicalCategoryId(q) ??
+      (specificKey ? SPECIFIC_KEY_TO_CATEGORY[specificKey] ?? null : null);
+    if (catId) {
+      const products = await listCommerceProductsInCategory(catId, limit);
+      return {
+        products,
+        entity: searchQ,
+        specificKey,
+        confidence: products.length ? 95 : 0,
+        ambiguous: products.length > 1,
+        debug: {
+          query: q,
+          entity: searchQ,
+          specificKey,
+          terms: expandCommerceTerms(searchQ, specificKey),
+          families: [catId],
+          matchCount: products.length,
+          confidence: products.length ? 95 : 0,
+          topScore: 150,
+          secondScore: 0,
+          ambiguous: products.length > 1,
+          methods: { category_list: products.length },
+          topHits: products.slice(0, 6).map((p) => ({
+            id: p.id,
+            name: p.name,
+            score: p.score,
+            method: p.matchMethod,
+          })),
+        },
+      };
+    }
+  }
+
   const scored = await scoreAllCommerceProducts(q);
   const filtered = filterByConfidence(scored);
   const topScore = scored[0]?.score ?? 0;
@@ -462,6 +533,36 @@ export async function searchRelatedCommerceProducts(
   return getCommerceFeaturedProducts(limit);
 }
 
+/** All active commerce products in a canonical category (strict primary-token match) */
+export async function listCommerceProductsInCategory(
+  categoryId: string,
+  limit = 8,
+): Promise<CommerceProductHit[]> {
+  const dbResolved = await resolveCanonicalCategoryFromDb(categoryId);
+  const canonicalId = dbResolved.canonicalId ?? categoryId;
+  const rows = await getAllActiveProducts();
+  const products: CommerceProductHit[] = [];
+
+  let allowedIds: Set<number> | null = null;
+  if (dbResolved.dbCategoryId) {
+    const ids = await getProductIdsForDbCategory(dbResolved.dbCategoryId);
+    if (ids.length) allowedIds = new Set(ids);
+  }
+
+  for (const row of rows) {
+    if (allowedIds && row.categoryId != null && !allowedIds.has(row.categoryId)) continue;
+    const tags = Array.isArray(row.tags) ? row.tags.join(" ") : "";
+    if (!productMatchesCategoryPrimary(row.name, tags, row.description, canonicalId)) continue;
+    products.push(mapRowToHit(row, 150, allowedIds ? "db_category" : "category_list"));
+  }
+
+  products.sort((a, b) => {
+    if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return products.slice(0, limit);
+}
+
 export async function getCommerceFeaturedProducts(limit = 4): Promise<CommerceProductHit[]> {
   const rows = await getAllActiveProducts();
   const featured = rows.filter((r) => r.featured && (r.stock ?? 0) > 0);
@@ -487,9 +588,18 @@ export async function listCommerceProductsForCustomerQuery(query: string): Promi
   const roots = productRootTermsFromQuery(q);
   const specificKey = resolveSpecificProductKey(q);
 
-  /* Specific product (goji, pista) — never dump whole category */
-  if (specificKey) {
-    const ranked = await searchCommerceProductsRanked(q, 12);
+  if (isCategoryBrowseQuery(q)) {
+    const catId =
+      resolveCanonicalCategoryId(q) ??
+      (specificKey ? SPECIFIC_KEY_TO_CATEGORY[specificKey] ?? null : null);
+    if (catId) {
+      const listed = await listCommerceProductsInCategory(catId, 12);
+      if (listed.length) return { products: listed, roots, familyId: catId };
+    }
+  }
+
+  if (specificKey && !isCategoryBrowseQuery(q)) {
+    const ranked = await searchCommerceProductsRanked(q, 8);
     return { products: ranked.products, roots, familyId: specificKey };
   }
 

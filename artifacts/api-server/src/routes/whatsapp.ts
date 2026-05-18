@@ -649,7 +649,9 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
         }
         for (const msg of (value.messages ?? [])) {
           const phoneRaw = msg.from ?? "unknown";
-          const phone = phoneRaw === "unknown" ? phoneRaw : normalizePhone(phoneRaw);
+          const { normalizeWaContactKey, isWaGroupId } = await import("../lib/waPhone.js");
+          const isGroupChat = isWaGroupId(phoneRaw);
+          const phone = phoneRaw === "unknown" ? phoneRaw : normalizeWaContactKey(phoneRaw);
           const msgId = msg.id as string | undefined;
 
           /* Extract text — works for plain text AND interactive replies */
@@ -772,8 +774,20 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               messageId: msgId,
               step: "inbox_persist",
               detail: "Inbound message saved to admin inbox.",
-              payload: { conversationId: waConvId },
+              payload: { conversationId: waConvId, isGroup: isGroupChat },
             });
+          }
+
+          /* Group chats: sync to admin inbox only — no 1:1 bot commerce/AI (Meta group policy) */
+          if (isGroupChat) {
+            await logWaProcessingStep({
+              phone,
+              messageId: msgId,
+              step: "group_message_logged",
+              detail: "WhatsApp group message stored in inbox; auto-reply skipped.",
+              payload: { phoneRaw, preview: rawText.slice(0, 120) },
+            });
+            continue;
           }
 
           /* ── Intent detection + save in conversation ── */
@@ -2120,11 +2134,79 @@ async function deliverSingleProductOffer(opts: {
   const q = extractProductSearchQuery(rawQ) || rawQ;
 
   const { isShowMoreProductsMessage } = await import("../lib/waOrderJourney.js");
-  const { searchCommerceProductsRanked, commerceToWaCatalogProducts } = await import("../lib/commerceProductSearch.js");
+  const {
+    searchCommerceProductsRanked,
+    commerceToWaCatalogProducts,
+    isCategoryBrowseQuery,
+    listCommerceProductsInCategory,
+  } = await import("../lib/commerceProductSearch.js");
+  const { resolveCanonicalCategoryId } = await import("../lib/waCategoryIndex.js");
   const { sendCommerceProductCard, catalogProductToCard } = await import("../lib/waCommerceProductCard.js");
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
   const roman = isRomanUrduWa(rawQ);
   const lang = resolveWaLang({ lastUserMessage: rawQ }, rawQ);
+
+  const convBefore = await getConversationState(opts.phone);
+  let priorData: Record<string, unknown> = {};
+  try {
+    priorData = JSON.parse((convBefore as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+  const existingCart = Array.isArray(priorData.cart) ? priorData.cart : [];
+
+  if (isCategoryBrowseQuery(q) && !opts.showMore) {
+    const catId = resolveCanonicalCategoryId(q);
+    if (catId) {
+      const categoryHits = await listCommerceProductsInCategory(catId, 4);
+      if (categoryHits.length) {
+        const allMatches = commerceToWaCatalogProducts(categoryHits);
+        const catLabel = catId === "pistachio" ? "Pistachio / Pista" : catId;
+        await sendWaText(
+          opts.phone,
+          roman
+            ? `😊 *${catLabel}* — ${allMatches.length} options available 👇`
+            : `😊 *${catLabel}* — ${allMatches.length} options 👇`,
+          opts.waSettings,
+          "category_product_list",
+        );
+        for (let i = 0; i < allMatches.length; i++) {
+          const p = allMatches[i]!;
+          await sendCommerceProductCard({
+            phone: opts.phone,
+            product: catalogProductToCard({
+              name: p.name,
+              price: p.price,
+              rawPrice: p.rawPrice,
+              imageUrl: p.imageUrl,
+              productUrl: p.productUrl,
+              description: p.description,
+              inStock: p.inStock,
+              variantOptions: (p.variantOptions ?? []).map((v: any) => ({
+                id: String(v.id),
+                title: String(v.title),
+                price: parseCatalogUnitPrice(v.price),
+              })),
+              slug: p.slug,
+              commerceProductId: p.commerceProductId ?? p.shopifyProductId,
+            }),
+            lang,
+            waSettings: opts.waSettings,
+          });
+          if (i < allMatches.length - 1) await new Promise((r) => setTimeout(r, 750));
+        }
+        await setConversationState(opts.phone, "wa_order_await_product_choice", {
+          ...priorData,
+          productQuery: q,
+          products: allMatches,
+          lastUserMessage: rawQ,
+          browseMode: "category",
+          cart: existingCart,
+          categoryId: catId,
+        });
+        return true;
+      }
+    }
+  }
+
   const ranked = await searchCommerceProductsRanked(q, 12);
   const allMatches = ranked.products.length
     ? commerceToWaCatalogProducts(ranked.products)
@@ -2134,7 +2216,7 @@ async function deliverSingleProductOffer(opts: {
 
   const opener = roman ? "😊 Ji bilkul — yeh available hai:" : "😊 جی بالکل — یہ available ہے:";
 
-  if (ranked.ambiguous && allMatches.length >= 2 && !opts.showMore) {
+  if ((ranked.ambiguous || allMatches.length >= 2) && allMatches.length >= 2 && !opts.showMore) {
     await sendWaText(
       opts.phone,
       roman ? "Dono options mil gaye — pehle dekhein, phir size select karein 👇" : "دونوں options ملے — نیچے دیکھیں 👇",
@@ -2220,13 +2302,6 @@ async function deliverSingleProductOffer(opts: {
     title: String(v.title),
     price: parseCatalogUnitPrice(v.price),
   }));
-
-  const convBefore = await getConversationState(opts.phone);
-  let priorData: Record<string, unknown> = {};
-  try {
-    priorData = JSON.parse((convBefore as any)?.stateData ?? "{}");
-  } catch { /* ignore */ }
-  const existingCart = Array.isArray(priorData.cart) ? priorData.cart : [];
 
   await setConversationState(opts.phone, "wa_order_await_variant", {
     ...priorData,

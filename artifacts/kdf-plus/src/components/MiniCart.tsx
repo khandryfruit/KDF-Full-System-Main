@@ -2,7 +2,8 @@
 import { useLocation } from "wouter";
 import { X, ShoppingCart, Plus, Minus, Trash2, ArrowRight, ShoppingBag, Package } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import { ProductRecommendationStrip, useProductRecommendations } from "@/components/ProductRecommendations";
+import { useProductRecommendations } from "@/components/ProductRecommendations";
+import { ModalRecommendationRow } from "@/components/purchase/ModalRecommendationRow";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
 
@@ -38,7 +39,7 @@ export function MiniCart() {
       */}
       <div
         className="
-          fixed z-[600] bg-white shadow-2xl flex flex-col
+          kdf-minicart-panel fixed z-[600] bg-white shadow-2xl flex flex-col
           bottom-0 left-0 right-0 rounded-t-2xl
           md:bottom-auto md:top-0 md:left-auto md:right-0 md:h-full md:w-[400px] md:rounded-none md:rounded-l-2xl
           animate-in slide-in-from-bottom-4 md:slide-in-from-right-0 duration-300
@@ -102,8 +103,14 @@ export function MiniCart() {
                   key={`${item.product.id}-${item.variantId ?? ""}-${idx}`}
                   className="flex gap-2.5 bg-gray-50 rounded-xl p-2.5"
                 >
-                  <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
-                    <img src={imageUrl} alt={item.product.name} className="w-full h-full object-cover" />
+                  <div className="kdf-minicart-panel__thumb">
+                    <img
+                      src={imageUrl}
+                      alt={item.product.name}
+                      className="kdf-minicart-panel__thumb-img"
+                      loading="lazy"
+                      decoding="async"
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-900 line-clamp-1">{item.product.name}</p>
@@ -141,14 +148,10 @@ export function MiniCart() {
             })
           )}
           {items.length > 0 && recs?.cartUpsells?.length ? (
-            <div className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-gray-100">
-              <ProductRecommendationStrip
-                title="Complete your cart"
-                subtitle="Popular add-ons customers buy together"
-                products={recs.cartUpsells}
-                compact
-              />
-            </div>
+            <ModalRecommendationRow
+              title="Complete your cart"
+              products={recs.cartUpsells.slice(0, 8)}
+            />
           ) : null}
         </div>
 

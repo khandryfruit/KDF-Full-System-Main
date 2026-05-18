@@ -29,7 +29,13 @@ export const WA_SALES_CATEGORIES: WaSalesCategory[] = [
       "california", "premium almond", "raw almond", "roasted almond", "salted almond",
     ],
   },
-  { id: "pistachio", emoji: "🌰", labelEn: "Pistachio / Pista", labelUr: "پستہ / Pista", families: ["pista", "pistachio", "pistachios", "پستہ", "پستے", "irani", "iranian", "roasted", "salted"] },
+  {
+    id: "pistachio",
+    emoji: "🌰",
+    labelEn: "Pistachio / Pista",
+    labelUr: "پستہ / Pista",
+    families: ["pista", "pistachio", "pistachios", "پستہ", "پستے", "irani pista", "iranian pista", "roasted pista", "salted pista"],
+  },
   { id: "cashew", emoji: "🌰", labelEn: "Cashew / Kaju", labelUr: "کاجو / Cashew", families: ["kaju", "cashew", "cashews", "کاجو", "w180", "w240", "w320"] },
   {
     id: "walnut",

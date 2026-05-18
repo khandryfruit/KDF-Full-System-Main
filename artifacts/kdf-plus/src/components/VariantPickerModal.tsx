@@ -190,7 +190,7 @@ export function VariantPickerModal({ product, onClose }: VariantPickerModalProps
                 <div className="kdf-purchase-sheet__product">
                   <div className="kdf-purchase-sheet__thumb">
                     {imageUrl ? (
-                      <img src={imageUrl} alt="" className="h-full w-full object-contain" draggable={false} />
+                      <img src={imageUrl} alt="" className="kdf-purchase-sheet__thumb-img" draggable={false} />
                     ) : (
                       <span className="text-2xl font-black text-[#5FA800]/30">{product.name?.[0]}</span>
                     )}

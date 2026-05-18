@@ -35,6 +35,7 @@ export const QUERY_TO_CATEGORY_ID: Record<string, string> = {
   pista: "pistachio",
   pistachio: "pistachio",
   pistachios: "pistachio",
+  pistachioes: "pistachio",
   pistay: "pistachio",
   پستہ: "pistachio",
   پستے: "pistachio",

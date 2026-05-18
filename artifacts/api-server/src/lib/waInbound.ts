@@ -1,6 +1,6 @@
 import { db, waConversationsTable, waMessagesTable, whatsappSettingsTable } from "@workspace/db";
 import { eq, or, sql } from "drizzle-orm";
-import { normalizePhone } from "./waPhone";
+import { normalizePhone, normalizeWaContactKey, isWaGroupId } from "./waPhone";
 import { broadcastSSE } from "./sse";
 import { logger } from "./logger";
 
@@ -71,7 +71,8 @@ export async function persistInboundWaMessage(
     return { conversationId: null, phone: phoneRaw };
   }
 
-  const phone = normalizePhone(phoneRaw);
+  const phone = normalizeWaContactKey(phoneRaw);
+  const isGroup = isWaGroupId(phoneRaw);
   await verifyWebhookPhoneNumberId(payload.metadata);
 
   const preview = (payload.rawText || `[${payload.msgType}]`).slice(0, 120);
@@ -135,6 +136,7 @@ export async function persistInboundWaMessage(
       reaction: payload.reactionEmoji ?? null,
       status: "received",
       isBot: false,
+      metadata: isGroup ? { isGroup: true, groupId: phoneRaw } : undefined,
     });
 
     broadcastSSE("wa_message", {

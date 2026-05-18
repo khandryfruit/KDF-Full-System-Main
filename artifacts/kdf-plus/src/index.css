@@ -539,9 +539,10 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   margin-bottom: 14px;
 }
 .kdf-purchase-sheet__thumb {
-  flex: 0 0 76px;
-  width: 76px;
-  height: 76px;
+  flex: 0 0 auto;
+  width: 100px;
+  height: clamp(110px, 24vw, 140px);
+  max-height: 140px;
   border-radius: 16px;
   background: #fff;
   border: 1px solid #f1f5f9;
@@ -549,6 +550,22 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.kdf-purchase-sheet__thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+@media (min-width: 640px) {
+  .kdf-purchase-sheet__thumb {
+    width: 120px;
+    height: clamp(140px, 12vw, 180px);
+    max-height: 180px;
+  }
 }
 .kdf-purchase-sheet__info {
   flex: 1;
@@ -802,6 +819,127 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   box-shadow: 0 4px 14px rgba(95, 168, 0, 0.28);
 }
 
+/* Checkout — compact summary + max 2 upsells (conversion-focused) */
+.kdf-checkout-summary__thumb {
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  object-fit: contain;
+  object-position: center;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+.kdf-checkout-upsell {
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid #f1f5f9;
+}
+.kdf-checkout-upsell__label {
+  margin-bottom: 0.5rem;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.kdf-checkout-upsell__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+@media (min-width: 400px) {
+  .kdf-checkout-upsell__row {
+    flex-direction: row;
+  }
+}
+.kdf-checkout-upsell__card {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.kdf-checkout-upsell__thumb {
+  flex: 0 0 auto;
+  display: flex;
+  height: 4.5rem;
+  width: 4.5rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fff;
+}
+@media (min-width: 640px) {
+  .kdf-checkout-upsell__thumb {
+    height: 5.5rem;
+    width: 5.5rem;
+  }
+}
+.kdf-checkout-upsell__thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+.kdf-checkout-upsell__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f172a;
+  text-decoration: none;
+}
+.kdf-checkout-upsell__name:hover {
+  color: #5fa800;
+}
+.kdf-checkout-upsell__weight {
+  margin-top: 0.125rem;
+  font-size: 10px;
+  color: #94a3b8;
+}
+.kdf-checkout-upsell__price {
+  margin-top: 0.125rem;
+  font-size: 11px;
+  font-weight: 800;
+  color: #5fa800;
+}
+.kdf-checkout-upsell__btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.625rem;
+  border: none;
+  border-radius: 9999px;
+  background: #5fa800;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(95, 168, 0, 0.28);
+}
+.kdf-checkout-upsell__btn--link {
+  background: #fff;
+  border: 1px solid #5fa800;
+  color: #5fa800;
+  box-shadow: none;
+  text-decoration: none;
+}
+
 /* Modal recommendation row (compact, no product-card badges) */
 .kdf-modal-rec {
   margin: 4px 0 8px;
@@ -834,14 +972,14 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   width: max-content;
   padding: 2px 4px 6px;
 }
-.kdf-modal-rec__carousel .kdf-carousel-slide--peek,
-.kdf-modal-rec__card {
+.kdf-modal-rec__carousel .kdf-modal-rec__card,
+.kdf-carousel--drawer .kdf-modal-rec__card {
   flex: 0 0 42%;
-  max-width: 42%;
-  min-width: 128px;
+  max-width: min(42%, 168px);
+  min-width: 118px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   padding: 8px;
   border-radius: 14px;
   border: 1px solid #f1f5f9;
@@ -855,13 +993,69 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   transform: scale(0.98);
 }
 .kdf-modal-rec__img {
-  aspect-ratio: 1;
+  flex: 0 0 auto;
+  width: 100%;
+  height: clamp(110px, 26vw, 140px);
+  max-height: 140px;
   border-radius: 10px;
   background: #f8fafc;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+.kdf-modal-rec__img-el {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+@media (min-width: 640px) {
+  .kdf-modal-rec__img {
+    height: clamp(140px, 11vw, 180px);
+    max-height: 180px;
+  }
+}
+/* Drawer carousels — never inherit PDP/home rec card image sizing */
+.kdf-carousel--drawer.kdf-carousel--responsive .kdf-modal-rec__card {
+  flex: 0 0 42% !important;
+  max-width: min(42%, 168px) !important;
+}
+.kdf-carousel--drawer .kdf-carousel-slide--peek {
+  flex: 0 0 42%;
+  max-width: min(42%, 168px);
+  min-width: 118px;
+}
+.kdf-purchase-sheet .kdf-store-card,
+.kdf-purchase-sheet .kdf-product-card,
+.kdf-minicart-panel .kdf-store-card,
+.kdf-minicart-panel .kdf-product-card,
+.kdf-modal-rec .kdf-store-card,
+.kdf-modal-rec .kdf-product-card {
+  max-height: none;
+}
+.kdf-minicart-panel__thumb {
+  flex: 0 0 auto;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kdf-minicart-panel__thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 .kdf-modal-rec__name {
   font-size: 11px;
@@ -880,10 +1074,11 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 
 @media (max-width: 359px) {
-  .kdf-modal-rec__card {
+  .kdf-modal-rec__carousel .kdf-modal-rec__card,
+  .kdf-carousel--drawer .kdf-modal-rec__card {
     flex: 0 0 44%;
     max-width: 44%;
-    min-width: 118px;
+    min-width: 110px;
   }
   .kdf-variant-seg__btn {
     flex: 1 1 calc(50% - 8px);

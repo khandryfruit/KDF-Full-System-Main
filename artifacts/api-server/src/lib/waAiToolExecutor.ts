@@ -20,7 +20,16 @@ export async function executeWaAiTool(
     case "search_products": {
       const query = String(args.query ?? "").trim();
       if (!query) return "No search query provided.";
-      const limit = Math.min(5, Math.max(1, Number(args.limit ?? 3) || 3));
+      const limit = Math.min(6, Math.max(1, Number(args.limit ?? 4) || 4));
+      const { isCategoryBrowseQuery, listCommerceProductsInCategory } = await import("./commerceProductSearch.js");
+      const { resolveCanonicalCategoryId } = await import("./waCategoryIndex.js");
+      if (isCategoryBrowseQuery(query)) {
+        const catId = resolveCanonicalCategoryId(query);
+        if (catId) {
+          const listed = await listCommerceProductsInCategory(catId, limit);
+          if (listed.length) return formatCommerceProductsWhatsAppReply(listed, true);
+        }
+      }
       const ranked = await searchCommerceProductsRanked(query, limit);
       if (ranked.products.length) {
         return formatCommerceProductsWhatsAppReply(ranked.products, true);

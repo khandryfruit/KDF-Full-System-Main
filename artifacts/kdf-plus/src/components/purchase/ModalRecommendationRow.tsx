@@ -3,20 +3,28 @@ import type { Product } from "@workspace/api-client-react";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { KdfCarousel } from "@/components/carousel/KdfCarousel";
 
-export function ModalRecommendationRow({ products }: { products: Product[] }) {
+export function ModalRecommendationRow({
+  products,
+  title = "You may also like",
+}: {
+  products: Product[];
+  title?: string;
+}) {
   if (products.length === 0) return null;
 
   return (
     <div className="kdf-modal-rec">
-      <p className="kdf-modal-rec__label">You may also like</p>
+      <p className="kdf-modal-rec__label">{title}</p>
       <KdfCarousel
         mode="peek"
         itemCount={products.length}
-        loopCopies={2}
+        loopCopies={1}
+        autoScroll={false}
+        forceNativeScroll
         resumeMs={4000}
         fadeColor="#fff"
         showArrows={products.length > 2}
-        className="kdf-modal-rec__carousel"
+        className="kdf-modal-rec__carousel kdf-carousel--drawer"
       >
         {products.map((product, i) => {
           const price = parseFloat(product.price);
@@ -28,15 +36,16 @@ export function ModalRecommendationRow({ products }: { products: Product[] }) {
             <Link
               key={`${product.id}-${i}`}
               href={`/products/${slug}`}
-              className="kdf-modal-rec__card kdf-carousel-slide--peek"
+              className="kdf-modal-rec__card"
             >
               <div className="kdf-modal-rec__img">
                 {img ? (
                   <img
                     src={img}
                     alt=""
-                    className="h-full w-full object-contain"
+                    className="kdf-modal-rec__img-el"
                     loading="lazy"
+                    decoding="async"
                     draggable={false}
                   />
                 ) : (
