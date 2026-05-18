@@ -646,6 +646,13 @@ export default function CheckoutPage() {
                                   ? "Pay when delivered"
                                   : gw.description || undefined
                             }
+                            trailing={
+                              gw.type === "wallet" ? (
+                                <span>Top up wallet</span>
+                              ) : gw.type === "cod" ? (
+                                <span>Rs0 Fee</span>
+                              ) : null
+                            }
                           />
                         ))}
                       </div>
