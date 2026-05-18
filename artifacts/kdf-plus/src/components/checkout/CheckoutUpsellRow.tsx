@@ -12,15 +12,14 @@ export function CheckoutUpsellRow({ products }: { products: Product[] }) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="kdf-checkout-upsell">
-      <p className="kdf-checkout-upsell__label">Add one more item before checkout</p>
+    <details className="kdf-checkout-upsell kdf-checkout-upsell--secondary">
+      <summary className="kdf-checkout-upsell__summary">Add item (optional)</summary>
       <div className="kdf-checkout-upsell__row">
         {visible.map((product) => {
           const price = parseFloat(product.price);
-          const img = product.images?.[0] ? getProductImageSrc(product.images[0], { maxWidth: 120 }) : null;
+          const img = product.images?.[0] ? getProductImageSrc(product.images[0], { maxWidth: 80 }) : null;
           const slug = (product as { slug?: string }).slug || String(product.id);
           const hasVariants = (product.variants?.length ?? 0) > 0;
-          const weight = product.weight?.trim();
 
           return (
             <div key={product.id} className="kdf-checkout-upsell__card">
@@ -34,14 +33,13 @@ export function CheckoutUpsellRow({ products }: { products: Product[] }) {
                     decoding="async"
                   />
                 ) : (
-                  <span className="text-sm font-bold text-[#5FA800]/30">{product.name?.[0]}</span>
+                  <span className="text-[10px] font-bold text-[#5FA800]/30">{product.name?.[0]}</span>
                 )}
               </Link>
               <div className="kdf-checkout-upsell__meta min-w-0 flex-1">
                 <Link href={`/products/${slug}`} className="kdf-checkout-upsell__name">
                   {product.name}
                 </Link>
-                {weight && <p className="kdf-checkout-upsell__weight">{weight}</p>}
                 <p className="kdf-checkout-upsell__price">Rs. {price.toLocaleString()}</p>
               </div>
               {hasVariants ? (
@@ -49,7 +47,7 @@ export function CheckoutUpsellRow({ products }: { products: Product[] }) {
                   href={`/products/${slug}`}
                   className="kdf-checkout-upsell__btn kdf-checkout-upsell__btn--link"
                 >
-                  Choose
+                  Pick
                 </Link>
               ) : (
                 <button
@@ -58,14 +56,13 @@ export function CheckoutUpsellRow({ products }: { products: Product[] }) {
                   onClick={() => addItem(product, 1)}
                   aria-label={`Add ${product.name} to cart`}
                 >
-                  <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                  Add
+                  <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
                 </button>
               )}
             </div>
           );
         })}
       </div>
-    </div>
+    </details>
   );
 }

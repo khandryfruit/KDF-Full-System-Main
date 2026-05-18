@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 type Accent = "green" | "orange";
+type Variant = "default" | "plain" | "shipping";
 
 export function CheckoutOption({
   selected,
@@ -9,7 +10,9 @@ export function CheckoutOption({
   title,
   hint,
   trailing,
+  leading,
   accent = "green",
+  variant = "default",
   className = "",
   testId,
 }: {
@@ -19,7 +22,9 @@ export function CheckoutOption({
   title: string;
   hint?: string;
   trailing?: ReactNode;
+  leading?: ReactNode;
   accent?: Accent;
+  variant?: Variant;
   className?: string;
   testId?: string;
 }) {
@@ -31,6 +36,7 @@ export function CheckoutOption({
       data-testid={testId}
       className={[
         "kdf-checkout-option",
+        `kdf-checkout-option--${variant}`,
         selected ? "is-selected" : "",
         accent === "orange" ? "is-orange" : "",
         className,
@@ -41,8 +47,18 @@ export function CheckoutOption({
       <span className="kdf-checkout-option__radio" aria-hidden>
         {selected ? <span className="kdf-checkout-option__radio-dot" /> : null}
       </span>
-      <span className="kdf-checkout-option__title">{title}</span>
-      {hint ? <span className="kdf-checkout-option__hint">{hint}</span> : null}
+      {leading ? <span className="kdf-checkout-option__leading">{leading}</span> : null}
+      <span
+        className={[
+          "kdf-checkout-option__body",
+          variant === "shipping" ? "kdf-checkout-option__body--inline" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <span className="kdf-checkout-option__title">{title}</span>
+        {hint ? <span className="kdf-checkout-option__hint">{hint}</span> : null}
+      </span>
       {trailing ? <span className="kdf-checkout-option__trailing">{trailing}</span> : null}
     </button>
   );

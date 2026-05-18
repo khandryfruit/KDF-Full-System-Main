@@ -18,8 +18,6 @@ import { getProductImageSrc } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { CreditCard, Package, Building2, MapPin, Navigation, Truck, Loader2, Sparkles, ShieldCheck, Lock } from "lucide-react";
@@ -351,11 +349,11 @@ export default function CheckoutPage() {
         <title>Checkout — KDF Plus</title>
       </Helmet>
 
-      <main className="kdf-page-shell kdf-checkout-page px-4 py-5 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-6">
-        <div className="mb-4 flex flex-col gap-3 md:mb-5 lg:flex-row lg:items-end lg:justify-between">
+      <main className="kdf-page-shell kdf-checkout-page px-4 py-4 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-5">
+        <div className="mb-3 flex flex-col gap-2 md:mb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-2xl font-black tracking-tight md:text-3xl">Checkout</h1>
-            <p className="mt-1 hidden text-sm text-muted-foreground md:block">Secure checkout — your details are encrypted in transit.</p>
+            <h1 className="text-xl font-black tracking-tight md:text-2xl">Checkout</h1>
+            <p className="mt-0.5 hidden text-xs text-muted-foreground md:block">Secure checkout</p>
           </div>
           <div className="hidden flex-wrap items-center gap-2 md:flex lg:justify-end">
             {[
@@ -376,16 +374,15 @@ export default function CheckoutPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
               {/* Left: Delivery → Shipping → Payment */}
-              <div className="kdf-checkout-left lg:col-span-2">
+              <div className="kdf-checkout-left order-2 lg:order-1 lg:col-span-2">
                 {/* Delivery Address */}
                 <section className="kdf-checkout-panel kdf-checkout-panel--address [&_input]:h-10 [&_input]:text-sm [&_textarea]:text-sm md:[&_input]:h-10">
                   <h2 className="kdf-checkout-panel__title">
                     <Package /> Delivery Address
                   </h2>
-                  <p className="kdf-checkout-panel__sub">Delivery updates and order confirmation.</p>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Your full name" data-testid="input-name" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -591,20 +588,24 @@ export default function CheckoutPage() {
                   <h2 className="kdf-checkout-panel__title">
                     <Truck /> Shipping Method
                   </h2>
-                  <div className="kdf-checkout-options">
+                  <div className="kdf-checkout-options kdf-checkout-options--shipping">
                     <CheckoutOption
+                      variant="shipping"
+                      leading="🚚"
                       selected={deliveryType === "standard"}
                       onClick={() => setDeliveryType("standard")}
                       title={standardMethodName}
                       hint={standardDeliveryTime}
                       trailing={
                         <span className={standardFee === 0 ? "is-free" : ""}>
-                          {standardFee === 0 ? "FREE" : `Rs. ${standardFee}`}
+                          {standardFee === 0 ? "FREE" : `Rs${standardFee}`}
                         </span>
                       }
                     />
                     {showSameDay && (
                       <CheckoutOption
+                        variant="shipping"
+                        leading="⚡"
                         selected={deliveryType === "same_day"}
                         disabled={!beforeCutoff}
                         accent="orange"
@@ -612,15 +613,10 @@ export default function CheckoutPage() {
                         title="Same-Day Delivery"
                         hint={
                           beforeCutoff
-                            ? `Before ${fmt12h(sdCutoff)} · delivered today`
+                            ? `Before ${fmt12h(sdCutoff)} · today`
                             : `Cutoff passed (${fmt12h(sdCutoff)})`
                         }
-                        trailing={
-                          <>
-                            <span className="kdf-checkout-option__badge">Express</span>
-                            <span>Rs. {sdPrice}</span>
-                          </>
-                        }
+                        trailing={<span>Rs{sdPrice}</span>}
                       />
                     )}
                   </div>
@@ -633,10 +629,11 @@ export default function CheckoutPage() {
                   </h2>
                   <FormField control={form.control} name="paymentMethod" render={({ field }) => (
                     <FormItem className="space-y-0">
-                      <div className="kdf-checkout-options" data-testid="radio-payment">
+                      <div className="kdf-checkout-options kdf-checkout-options--payment" data-testid="radio-payment">
                         {gateways.map((gw: { type: string; displayName: string; description?: string }) => (
                           <CheckoutOption
                             key={gw.type}
+                            variant="plain"
                             testId={`radio-${gw.type}`}
                             selected={field.value === gw.type}
                             onClick={() => {
@@ -646,36 +643,17 @@ export default function CheckoutPage() {
                             title={gw.displayName}
                             hint={
                               gw.type === "wallet"
-                                ? "Pay using your wallet balance"
+                                ? `Balance: Rs. ${walletBalance.toLocaleString()}`
                                 : gw.type === "cod"
-                                  ? "Pay when your order arrives"
+                                  ? "Pay when delivered"
                                   : gw.description || undefined
-                            }
-                            trailing={
-                              gw.type === "wallet" ? (
-                                <span
-                                  className={
-                                    walletBalance >= grandTotal ? "is-balance-ok" : "is-balance-low"
-                                  }
-                                >
-                                  Rs. {walletBalance.toLocaleString()}
-                                </span>
-                              ) : gw.type === "cod" ? (
-                                <span>Rs. 0</span>
-                              ) : undefined
                             }
                           />
                         ))}
                       </div>
-                      <FormMessage className="mt-2" />
+                      <FormMessage className="mt-1.5" />
                     </FormItem>
                   )} />
-
-                  {selectedPayment === "cod" && (
-                    <p className="kdf-checkout-hint kdf-checkout-hint--success">
-                      Pay in cash when your order is delivered — no advance payment required.
-                    </p>
-                  )}
 
                   {selectedPayment === "wallet" && walletBalance < grandTotal && (
                     <p className="kdf-checkout-hint kdf-checkout-hint--warn">
@@ -717,56 +695,67 @@ export default function CheckoutPage() {
                 </section>
               </div>
 
-              {/* Right: Order Summary */}
-              <div className="lg:sticky lg:top-20 lg:self-start">
-                <div className="kdf-checkout-summary rounded-2xl border border-gray-100/90 bg-white/90 p-4 shadow-xl shadow-slate-900/[0.06] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-5">
-                  <h2 className="text-base font-bold md:text-lg">Order Summary</h2>
-                  <div className="mb-4 max-h-52 space-y-3 overflow-y-auto pr-1 md:max-h-64">
-                    {items.map((item) => (
-                      <div key={`${item.product.id}-${item.variantId}`} className="group flex items-center gap-3 rounded-xl border border-transparent px-1 py-1 transition-colors hover:border-[#5FA800]/15 hover:bg-[#5FA800]/[0.04]">
-                        <img
-                          src={getProductImageSrc(item.product.images?.[0])}
-                          alt=""
-                          loading="lazy"
-                          className="kdf-checkout-summary__thumb"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium line-clamp-1">{item.product.name}</p>
-                          <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
-                        </div>
-                        <p className="text-xs font-bold flex-shrink-0">Rs. {(getCartItemUnitPrice(item) * item.quantity).toLocaleString()}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <Separator className="my-3" />
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>Rs. {totalPrice.toLocaleString()}</span></div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Delivery</span>
-                      <span>{deliveryFee === 0 ? <span className="text-green-600 font-medium">FREE</span> : `Rs. ${deliveryFee}`}</span>
+              {/* Right: Order Summary — Total + Place Order first */}
+              <div className="order-1 lg:order-2 lg:sticky lg:top-20 lg:self-start">
+                <div className="kdf-checkout-summary">
+                  <h2 className="kdf-checkout-summary__heading">Order Summary</h2>
+
+                  <div className="kdf-checkout-summary__hero">
+                    <div className="kdf-checkout-summary__total">
+                      <span>Total</span>
+                      <span data-testid="text-checkout-total">Rs {grandTotal.toLocaleString()}</span>
                     </div>
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="kdf-checkout-summary__cta"
+                      style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
+                      disabled={createOrder.isPending}
+                      data-testid="button-place-order"
+                    >
+                      {createOrder.isPending ? "Placing Order…" : "Place Order"}
+                    </Button>
                   </div>
-                  <Separator className="my-3" />
-                  <div className="flex justify-between text-base font-bold">
-                    <span>Total</span>
-                    <span data-testid="text-checkout-total">Rs. {grandTotal.toLocaleString()}</span>
-                  </div>
+
+                  <details className="kdf-checkout-summary__breakdown">
+                    <summary>
+                      {items.length} item{items.length !== 1 ? "s" : ""} · Rs {totalPrice.toLocaleString()}
+                      {deliveryFee > 0 ? ` + Rs ${deliveryFee} delivery` : " · Free delivery"}
+                    </summary>
+                    <div className="kdf-checkout-summary__items">
+                      {items.map((item) => (
+                        <div key={`${item.product.id}-${item.variantId}`} className="kdf-checkout-summary__line">
+                          <img
+                            src={getProductImageSrc(item.product.images?.[0])}
+                            alt=""
+                            loading="lazy"
+                            className="kdf-checkout-summary__thumb"
+                          />
+                          <div className="kdf-checkout-summary__line-meta min-w-0 flex-1">
+                            <p className="kdf-checkout-summary__line-name">{item.product.name}</p>
+                            <p className="kdf-checkout-summary__line-qty">Qty {item.quantity}</p>
+                          </div>
+                          <p className="kdf-checkout-summary__line-price">
+                            Rs {(getCartItemUnitPrice(item) * item.quantity).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="kdf-checkout-summary__lines">
+                      <div className="flex justify-between"><span>Subtotal</span><span>Rs {totalPrice.toLocaleString()}</span></div>
+                      <div className="flex justify-between">
+                        <span>Delivery</span>
+                        <span>{deliveryFee === 0 ? <span className="text-green-600 font-medium">FREE</span> : `Rs ${deliveryFee}`}</span>
+                      </div>
+                    </div>
+                  </details>
+
                   {checkoutRecs?.cartUpsells?.length ? (
                     <CheckoutUpsellRow products={checkoutRecs.cartUpsells} />
                   ) : null}
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="kdf-checkout-summary__cta mt-4 h-14 w-full rounded-xl text-base font-bold shadow-lg shadow-[#5FA800]/25 transition-[transform,box-shadow] duration-200 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:hover:scale-100"
-                    style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
-                    disabled={createOrder.isPending}
-                    data-testid="button-place-order"
-                  >
-                    {createOrder.isPending ? "Placing Order..." : "Place Order"}
-                  </Button>
-                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                  <p className="kdf-checkout-summary__secure">
                     <Lock className="mr-1 inline h-3 w-3" />
-                    Secure checkout · Cash on delivery available
+                    Secure checkout
                   </p>
                 </div>
               </div>
