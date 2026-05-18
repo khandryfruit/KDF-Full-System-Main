@@ -148,8 +148,12 @@ router.post(
       res.status(201).json(post);
       // Auto-index published posts
       if ((status ?? "draft") === "published" && slug) {
-        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
-          getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/blog/${slug}`, "blog"); }).catch(() => {});
+        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
+          getSafeSettings().then((s) => {
+            if (!s.siteUrl || !s["autoIndexEnabled"]) return;
+            const url = buildIndexingPathUrl(s.siteUrl, "blog", slug);
+            if (url) autoIndex(url, "blog");
+          }).catch(() => {});
         }).catch(() => {});
       }
     } catch (err: any) {
@@ -207,8 +211,12 @@ router.put(
       res.json(post);
       // Auto-index when published
       if (post.status === "published" && post.slug) {
-        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
-          getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/blog/${post.slug}`, "blog"); }).catch(() => {});
+        import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
+          getSafeSettings().then((s) => {
+            if (!s.siteUrl || !s["autoIndexEnabled"]) return;
+            const url = buildIndexingPathUrl(s.siteUrl, "blog", post.slug);
+            if (url) autoIndex(url, "blog");
+          }).catch(() => {});
         }).catch(() => {});
       }
     } catch (err: any) {

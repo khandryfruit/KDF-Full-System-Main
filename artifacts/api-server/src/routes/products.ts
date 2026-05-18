@@ -653,8 +653,12 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
     await invalidateCommerceSearchCache();
     res.status(201).json(product);
     // Auto-index after response sent
-    import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
-      getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/products/${slug}`, "product"); }).catch(() => {});
+    import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
+      getSafeSettings().then((s) => {
+        if (!s.siteUrl || !s["autoIndexEnabled"]) return;
+        const url = buildIndexingPathUrl(s.siteUrl, "products", slug);
+        if (url) autoIndex(url, "product");
+      }).catch(() => {});
     }).catch(() => {});
   } catch (err) {
     req.log.error(err);
@@ -702,8 +706,12 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
     // Auto-index after response sent
     const slugForIndex = finalSlug ?? product.slug;
     if (slugForIndex) {
-      import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings }) => {
-        getSafeSettings().then(s => { if (s.siteUrl && s.autoIndexEnabled) autoIndex(`${s.siteUrl.replace(/\/$/, "")}/products/${slugForIndex}`, "product"); }).catch(() => {});
+      import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
+        getSafeSettings().then((s) => {
+          if (!s.siteUrl || !s["autoIndexEnabled"]) return;
+          const url = buildIndexingPathUrl(s.siteUrl, "products", slugForIndex);
+          if (url) autoIndex(url, "product");
+        }).catch(() => {});
       }).catch(() => {});
     }
   } catch (err) {

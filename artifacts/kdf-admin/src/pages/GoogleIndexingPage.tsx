@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -26,7 +26,7 @@ import {
   Zap, Settings, FileText, BookOpen, RefreshCw, Trash2, Upload, CheckCircle2,
   XCircle, Clock, AlertTriangle, Send, Globe, Package, Tag, BarChart2,
   ChevronDown, ChevronUp, Copy, ExternalLink, Info, Shield, Key, Database,
-  Layers, Activity, TrendingUp, Wifi, WifiOff, FolderOpen,
+  Layers, Activity, TrendingUp, Wifi, WifiOff, FolderOpen, RotateCcw, Wrench, Link2,
 } from "lucide-react";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -58,10 +58,36 @@ interface Stats {
   failed: number;
   pending: number;
   rateLimited: number;
+  successRate: number;
+  failedRate: number;
   dailyQuotaUsed: number;
   dailyQuotaLimit: number;
   quotaResetDate?: string;
   queueLength: number;
+}
+
+const DEFAULT_SITE = "https://khanbabadryfruits.com";
+
+/** Display / open link — ensures https:// for browser and Google. */
+function displayHttpsUrl(url: string, siteBase = DEFAULT_SITE): string {
+  const u = url.trim();
+  if (!u) return siteBase;
+  if (/^https:\/\//i.test(u)) return u;
+  if (u.startsWith("//")) return `https:${u}`;
+  if (u.startsWith("/")) return `${siteBase.replace(/\/$/, "")}${u}`;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/i.test(u.split("/")[0] ?? "")) return `https://${u.replace(/^\/+/, "")}`;
+  return `${siteBase.replace(/\/$/, "")}/${u.replace(/^\/+/, "")}`;
+}
+
+function previewNormalizeUrl(input: string, siteBase?: string): string | null {
+  const base = (siteBase || DEFAULT_SITE).replace(/\/$/, "");
+  const raw = input.trim();
+  if (!raw) return null;
+  try {
+    return displayHttpsUrl(raw, base);
+  } catch {
+    return null;
+  }
 }
 
 /* ─── Status helpers ─────────────────────────────────── */
@@ -118,10 +144,15 @@ export default function GoogleIndexingPage() {
     refetchInterval: 8000,
   });
 
+  const [logStatusFilter, setLogStatusFilter] = useState("all");
+
   const { data: logsData, isLoading: logsLoading } = useQuery<{ logs: IndexingLog[]; total: number }>({
-    queryKey: ["/api/admin/seo/indexing/logs"],
-    queryFn: () => apiFetch("/api/admin/seo/indexing/logs?limit=100"),
-    refetchInterval: 10000,
+    queryKey: ["/api/admin/seo/indexing/logs", logStatusFilter],
+    queryFn: () => {
+      const q = logStatusFilter === "all" ? "" : `&status=${logStatusFilter}`;
+      return apiFetch(`/api/admin/seo/indexing/logs?limit=100${q}`);
+    },
+    refetchInterval: 8000,
   });
 
   const refreshAll = () => {
@@ -183,7 +214,17 @@ export default function GoogleIndexingPage() {
       {activeTab === "dashboard" && <DashboardTab stats={stats} settings={settings} />}
       {activeTab === "settings"  && <SettingsTab settings={settings} onSaved={refreshAll} />}
       {activeTab === "submit"    && <SubmitTab settings={settings} onDone={refreshAll} />}
-      {activeTab === "logs"      && <LogsTab logs={logsData?.logs ?? []} total={logsData?.total ?? 0} loading={logsLoading} onClear={refreshAll} />}
+      {activeTab === "logs"      && (
+        <LogsTab
+          logs={logsData?.logs ?? []}
+          total={logsData?.total ?? 0}
+          loading={logsLoading}
+          filter={logStatusFilter}
+          onFilterChange={setLogStatusFilter}
+          siteUrl={settings?.siteUrl}
+          onRefresh={refreshAll}
+        />
+      )}
       {activeTab === "docs"      && <DocsTab />}
     </div>
   );
@@ -220,6 +261,21 @@ function DashboardTab({ stats, settings }: { stats?: Stats; settings?: IndexingS
           </div>
         ))}
       </div>
+
+      {(stats?.total ?? 0) > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <p className="text-xs text-green-700 font-medium mb-1">Success rate</p>
+            <p className="text-2xl font-bold text-green-800">{stats?.successRate ?? 0}%</p>
+            <p className="text-[10px] text-green-600 mt-1">{stats?.success ?? 0} of {stats?.total ?? 0} submissions</p>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-xs text-red-700 font-medium mb-1">Failed rate</p>
+            <p className="text-2xl font-bold text-red-800">{stats?.failedRate ?? 0}%</p>
+            <p className="text-[10px] text-red-600 mt-1">{stats?.failed ?? 0} failed — repair in Logs tab</p>
+          </div>
+        </div>
+      )}
 
       {/* Daily quota */}
       <div className="bg-card border rounded-xl p-4 space-y-3">
@@ -279,8 +335,12 @@ function SettingsTab({ settings, onSaved }: { settings?: IndexingSettings; onSav
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // Sync when settings load
-  useState(() => { if (settings) { setSiteUrl(settings.siteUrl ?? ""); setAutoIndex(settings.autoIndexEnabled); } });
+  useEffect(() => {
+    if (settings) {
+      setSiteUrl(settings.siteUrl ?? "");
+      setAutoIndex(settings.autoIndexEnabled);
+    }
+  }, [settings?.siteUrl, settings?.autoIndexEnabled]);
 
   /* ── read JSON file helper ── */
   const loadFile = (file: File) => {
@@ -488,13 +548,16 @@ function SettingsTab({ settings, onSaved }: { settings?: IndexingSettings; onSav
           <div className="space-y-1.5">
             <Label className="text-xs">Site URL</Label>
             <Input
-              placeholder="https://kdfnuts.com"
+              placeholder="https://khanbabadryfruits.com"
               value={siteUrl}
               onChange={e => setSiteUrl(e.target.value)}
               className="text-sm font-mono"
             />
             <p className="text-[10px] text-muted-foreground">
-              Products: <code className="bg-muted px-1 rounded">{siteUrl || "https://yourstore.com"}/products/slug</code>
+              Always use <strong>https://</strong> — bare domains are auto-corrected on save.
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Products: <code className="bg-muted px-1 rounded">{displayHttpsUrl("", siteUrl || DEFAULT_SITE)}/products/slug</code>
               {" · "}Blog: <code className="bg-muted px-1 rounded">{siteUrl || "https://yourstore.com"}/blog/slug</code>
             </p>
           </div>
@@ -538,13 +601,21 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
   const [contentType, setContentType] = useState("page");
   const [action, setAction] = useState("URL_UPDATED");
   const { toast } = useToast();
+  const normalizedPreview = previewNormalizeUrl(url, settings?.siteUrl);
 
   const submitMutation = useMutation({
     mutationFn: () => apiFetch("/api/admin/seo/indexing/submit", {
       method: "POST",
-      body: JSON.stringify({ url, contentType, action }),
+      body: JSON.stringify({ url: normalizedPreview ?? url, contentType, action }),
     }),
-    onSuccess: () => { onDone(); setUrl(""); toast({ title: "✅ URL queued for indexing" }); },
+    onSuccess: (d: { url?: string; normalized?: boolean }) => {
+      onDone();
+      setUrl("");
+      toast({
+        title: "✅ URL queued for indexing",
+        description: d.normalized ? "URL was normalized to https://" : undefined,
+      });
+    },
     onError: (e: any) => toast({ variant: "destructive", title: e.message ?? "Submit failed" }),
   });
 
@@ -568,11 +639,21 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
           <div className="space-y-1.5">
             <Label className="text-xs">Full URL</Label>
             <Input
-              placeholder="https://yourstore.com/products/kdf-premium-almonds"
+              placeholder="https://khanbabadryfruits.com/products/product-slug"
               value={url}
               onChange={e => setUrl(e.target.value)}
               className="text-sm font-mono"
             />
+            {url.trim() && (
+              <div className={`flex items-start gap-2 text-[10px] rounded-lg border p-2 ${normalizedPreview ? "bg-green-50 border-green-200 text-green-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+                <Link2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {normalizedPreview ? (
+                  <span>Will submit: <span className="font-mono font-semibold break-all">{normalizedPreview}</span></span>
+                ) : (
+                  <span>Could not normalize URL — include domain or full https:// path</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -602,7 +683,7 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
           </div>
           <Button
             onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending || !url || !settings?.hasCredentials}
+            disabled={submitMutation.isPending || !normalizedPreview || !settings?.hasCredentials}
             className="gap-2"
           >
             {submitMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -652,18 +733,61 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
 }
 
 /* ═══ Logs Tab ═══════════════════════════════════════════ */
-function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total: number; loading: boolean; onClear: () => void }) {
-  const [filter, setFilter] = useState("all");
+function LogsTab({
+  logs,
+  total,
+  loading,
+  filter,
+  onFilterChange,
+  siteUrl,
+  onRefresh,
+}: {
+  logs: IndexingLog[];
+  total: number;
+  loading: boolean;
+  filter: string;
+  onFilterChange: (s: string) => void;
+  siteUrl?: string;
+  onRefresh: () => void;
+}) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const { toast } = useToast();
+  const base = siteUrl || DEFAULT_SITE;
 
   const clearMutation = useMutation({
     mutationFn: () => apiFetch("/api/admin/seo/indexing/logs", { method: "DELETE" }),
-    onSuccess: () => { onClear(); toast({ title: "Logs cleared" }); },
-    onError: (e: any) => toast({ variant: "destructive", title: e.message }),
+    onSuccess: () => { onRefresh(); toast({ title: "Logs cleared" }); },
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message }),
   });
 
-  const filtered = filter === "all" ? logs : logs.filter(l => l.status === filter);
+  const repairMutation = useMutation({
+    mutationFn: () => apiFetch("/api/admin/seo/indexing/repair-urls", {
+      method: "POST",
+      body: JSON.stringify({ requeueFailed: true }),
+    }),
+    onSuccess: (d: { message?: string }) => {
+      onRefresh();
+      toast({ title: "URLs repaired", description: d.message });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message }),
+  });
+
+  const retryAllMutation = useMutation({
+    mutationFn: () => apiFetch("/api/admin/seo/indexing/retry-failed", { method: "POST", body: "{}" }),
+    onSuccess: (d: { message?: string }) => {
+      onRefresh();
+      toast({ title: "Retry queued", description: d.message });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message }),
+  });
+
+  const retryOneMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/seo/indexing/retry/${id}`, { method: "POST" }),
+    onSuccess: () => { onRefresh(); toast({ title: "URL re-queued" }); },
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message }),
+  });
+
+  const failedCount = logs.filter(l => l.status === "failed").length;
 
   return (
     <div className="space-y-4">
@@ -673,7 +797,7 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
           {["all", "success", "failed", "pending", "rate_limited"].map(s => (
             <button
               key={s}
-              onClick={() => setFilter(s)}
+              onClick={() => onFilterChange(s)}
               className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
                 filter === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
               }`}
@@ -684,6 +808,9 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{total} total</span>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => repairMutation.mutate()} disabled={repairMutation.isPending}>
+            <Wrench className="w-3 h-3" /> Fix URLs
+          </Button>
           <Button
             variant="outline" size="sm"
             className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 border-red-200"
@@ -695,15 +822,32 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
         </div>
       </div>
 
+      {failedCount > 0 && filter !== "success" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <p className="font-semibold text-amber-900 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Failed URLs — use Repair to add https:// and re-queue</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => repairMutation.mutate()} disabled={repairMutation.isPending}>
+              <Wrench className="w-3 h-3" /> Repair &amp; Re-queue
+            </Button>
+            <Button size="sm" className="h-8 text-xs gap-1" onClick={() => retryAllMutation.mutate()} disabled={retryAllMutation.isPending}>
+              <RotateCcw className="w-3 h-3" /> Retry All Failed
+            </Button>
+          </div>
+        </div>
+      )}
+
       {loading && <div className="text-center py-10 text-muted-foreground text-sm">Loading logs…</div>}
 
-      {!loading && filtered.length === 0 && (
+      {!loading && logs.length === 0 && (
         <div className="text-center py-10 text-muted-foreground text-sm">No logs found.</div>
       )}
 
       {/* Logs list */}
       <div className="space-y-1.5">
-        {filtered.map(log => (
+        {logs.map(log => {
+          const href = displayHttpsUrl(log.url, base);
+          const missingHttps = !/^https:\/\//i.test(log.url.trim());
+          return (
           <div key={log.id} className="border rounded-xl bg-card overflow-hidden">
             <div
               className="flex items-center gap-2 p-3 cursor-pointer hover:bg-muted/30"
@@ -711,8 +855,11 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
             >
               <div className="shrink-0">{TYPE_ICON[log.contentType] ?? <Globe className="w-3 h-3 text-slate-400" />}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-mono text-foreground truncate">{log.url}</p>
-                <div className="flex items-center gap-2 mt-0.5">
+                <p className={`text-xs font-mono truncate ${missingHttps ? "text-amber-700" : "text-foreground"}`}>
+                  {log.url}
+                  {missingHttps && <span className="ml-1.5 text-[9px] font-bold text-amber-600 bg-amber-100 px-1 py-0.5 rounded">needs https://</span>}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <StatusBadge status={log.status} />
                   <span className="text-[10px] text-muted-foreground capitalize">{log.contentType}</span>
                   <span className="text-[10px] text-muted-foreground">•</span>
@@ -720,16 +867,20 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
                   <span className="text-[10px] text-muted-foreground">•</span>
                   <span className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</span>
                 </div>
+                {log.status === "failed" && log.errorMessage && expandedId !== log.id && (
+                  <p className="text-[10px] text-red-600 mt-1 truncate">{log.errorMessage}</p>
+                )}
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(log.url); }}
-                  className="p-1 text-muted-foreground hover:text-foreground"
-                  title="Copy URL"
-                >
+                {log.status === "failed" && (
+                  <button onClick={e => { e.stopPropagation(); retryOneMutation.mutate(log.id); }} className="p-1 text-muted-foreground hover:text-primary" title="Retry" disabled={retryOneMutation.isPending}>
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
+                <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(href); toast({ title: "Copied" }); }} className="p-1 text-muted-foreground hover:text-foreground" title="Copy canonical URL">
                   <Copy className="w-3 h-3" />
                 </button>
-                <a href={log.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-1 text-muted-foreground hover:text-blue-600" title="Open URL">
+                <a href={href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-1 text-muted-foreground hover:text-blue-600" title="Open URL">
                   <ExternalLink className="w-3 h-3" />
                 </a>
                 {expandedId === log.id ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -737,6 +888,10 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
             </div>
             {expandedId === log.id && (
               <div className="border-t bg-muted/20 p-3 space-y-2 text-xs">
+                <div className="bg-blue-50 border border-blue-100 rounded p-2">
+                  <p className="text-[10px] font-semibold text-blue-800">Canonical URL</p>
+                  <p className="font-mono text-blue-900 break-all mt-0.5">{href}</p>
+                </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
                   <span className="font-semibold">Action:</span><span className="font-mono">{log.action}</span>
                   <span className="font-semibold">Type:</span><span className="capitalize">{log.contentType}</span>
@@ -754,10 +909,16 @@ function LogsTab({ logs, total, loading, onClear }: { logs: IndexingLog[]; total
                 {log.errorMessage && (
                   <div className="bg-red-50 border border-red-100 rounded p-2 text-red-700">{log.errorMessage}</div>
                 )}
+                {log.status === "failed" && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => retryOneMutation.mutate(log.id)} disabled={retryOneMutation.isPending}>
+                    <RotateCcw className="w-3 h-3" /> Retry with corrected URL
+                  </Button>
+                )}
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
