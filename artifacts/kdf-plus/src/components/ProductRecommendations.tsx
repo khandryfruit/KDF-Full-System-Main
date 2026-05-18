@@ -95,6 +95,7 @@ export function ProductRecommendationStrip({
         mode="peek"
         loopCopies={1}
         autoScroll={false}
+        nativeScroll
         resumeMs={5000}
         className={carouselOnly ? "kdf-pdp-rec-carousel kdf-carousel--rec" : "kdf-carousel--rec"}
         compact={compact}

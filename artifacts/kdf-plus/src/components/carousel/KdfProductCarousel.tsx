@@ -16,6 +16,8 @@ export interface KdfProductCarouselProps {
   autoScroll?: boolean;
   /** Denser cards for recommendation strips */
   compact?: boolean;
+  /** Browser-native horizontal scroll (recommended for PDP related products) */
+  nativeScroll?: boolean;
 }
 
 export function KdfProductCarousel({
@@ -28,6 +30,7 @@ export function KdfProductCarousel({
   resumeMs = 4000,
   autoScroll = true,
   compact = false,
+  nativeScroll,
 }: KdfProductCarouselProps) {
   const [centerMod, setCenterMod] = useState(0);
 
@@ -40,11 +43,16 @@ export function KdfProductCarousel({
     return Array.from({ length: n }, () => products).flat();
   }, [products, effectiveCopies]);
 
+  const useNativeScroll =
+    nativeScroll ?? (effectiveCopies === 1 && !autoScroll);
+
   const { scrollerRef, scrollerClassName, scrollerProps, scrollBy, rootProps } = useKdfCarousel({
     itemCount: products.length,
     loopCopies: effectiveCopies === 1 ? 1 : (effectiveCopies as 2 | 3),
     resumeMs,
     autoScroll: autoScroll && effectiveCopies > 1,
+    forceNativeScroll: useNativeScroll,
+    pauseOnHover: !useNativeScroll,
   });
 
   const updateCenter = useCallback(() => {
@@ -96,7 +104,7 @@ export function KdfProductCarousel({
   return (
     <div
       {...rootProps}
-      className={`kdf-carousel kdf-carousel--${mode} kdf-carousel--responsive ${className}`}
+      className={`kdf-carousel kdf-carousel--${mode} kdf-carousel--responsive${useNativeScroll ? " kdf-carousel--native" : ""} ${className}`}
       style={{ ["--kdf-carousel-fade" as string]: fadeColor }}
     >
 

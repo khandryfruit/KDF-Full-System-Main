@@ -900,8 +900,14 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 
 @media (max-width: 639px) {
+  html {
+    touch-action: pan-y pinch-zoom;
+    overflow-x: hidden;
+  }
+
   body {
-    touch-action: pan-y;
+    touch-action: pan-y pinch-zoom;
+    overflow-x: hidden;
   }
 
   :root {
@@ -1098,22 +1104,30 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
   scrollbar-width: none;
-  overscroll-behavior: contain;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   cursor: grab;
   scroll-padding-inline: 4px;
   border-radius: 4px;
 }
-/* PDP related / FBT — native momentum scroll; never block vertical page scroll */
+/* PDP related / FBT — native momentum; vertical page scroll must never freeze */
 .kdf-carousel-scroller.is-native-scroll {
-  touch-action: manipulation;
+  overflow-x: scroll;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   cursor: default;
-  scroll-snap-type: x mandatory;
+}
+.kdf-carousel--rec,
+.kdf-pdp-rec-carousel {
+  touch-action: auto;
+  overscroll-behavior-x: contain;
 }
 .kdf-carousel--rec .kdf-carousel-scroller,
 .kdf-pdp-rec-carousel .kdf-carousel-scroller {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 .kdf-carousel-scroller:active:not(.is-native-scroll) {
   cursor: grabbing;
@@ -1624,7 +1638,6 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
-  overscroll-behavior-x: contain;
 }
 .kdf-pdp-rec-lazy,
 .kdf-pdp-rec-section {
@@ -1632,11 +1645,7 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
-  overscroll-behavior-x: contain;
-}
-.kdf-pdp-rec-section {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
+  touch-action: auto;
 }
 
 /* Recommendation / related product grids */
@@ -1983,7 +1992,8 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 /* PDP safe zone above bottom nav (no duplicate sticky product bar) */
 .kdf-pdp-main {
   overflow-x: hidden;
-  overscroll-behavior-x: contain;
+  overscroll-behavior-x: none;
+  touch-action: auto;
   padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 1.25rem);
 }
 @media (min-width: 640px) {

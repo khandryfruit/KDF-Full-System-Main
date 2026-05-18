@@ -31,12 +31,18 @@ export function ProductDetailRecommendations({ productId }: { productId: number 
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) {
+        if (!entry?.isIntersecting) return;
+        const run = () => {
           setLoad(true);
           obs.disconnect();
+        };
+        if (typeof requestIdleCallback !== "undefined") {
+          requestIdleCallback(run, { timeout: 400 });
+        } else {
+          run();
         }
       },
-      { rootMargin: "200px 0px", threshold: 0.01 },
+      { rootMargin: "160px 0px", threshold: 0 },
     );
     obs.observe(el);
     return () => obs.disconnect();

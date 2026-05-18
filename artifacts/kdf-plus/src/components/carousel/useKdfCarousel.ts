@@ -11,6 +11,8 @@ export interface UseKdfCarouselOptions {
   loopCopies?: 1 | 2 | 3;
   /** Pause auto-scroll while pointer is over the carousel */
   pauseOnHover?: boolean;
+  /** PDP related products: browser-native horizontal scroll only (never block vertical page scroll) */
+  forceNativeScroll?: boolean;
 }
 
 export function useKdfCarousel({
@@ -20,6 +22,7 @@ export function useKdfCarousel({
   resumeMs = 4000,
   loopCopies = 3,
   pauseOnHover = true,
+  forceNativeScroll = false,
 }: UseKdfCarouselOptions) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const setWidthRef = useRef(0);
@@ -47,8 +50,8 @@ export function useKdfCarousel({
 
   const copies = itemCount <= 1 ? 1 : loopCopies;
   const canLoop = itemCount > 1 && copies > 1;
-  /** PDP related/FBT strips: native momentum scroll — avoids freezing vertical page scroll */
-  const nativeScrollOnly = !canLoop && !autoScroll;
+  /** Native momentum scroll — no pointer/touch hijacking (PDP related / FBT strips) */
+  const nativeScrollOnly = forceNativeScroll || (!canLoop && !autoScroll);
 
   const pause = useCallback(() => {
     setPaused(true);
@@ -174,6 +177,7 @@ export function useKdfCarousel({
 
   const endPointer = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (nativeScrollOnly) return;
       if (drag.current.pointerId !== e.pointerId) return;
 
       const wasDrag = drag.current.dragging;
@@ -189,7 +193,7 @@ export function useKdfCarousel({
       if (wasDrag) scheduleResume();
       else setPaused(false);
     },
-    [scheduleResume],
+    [nativeScrollOnly, scheduleResume],
   );
 
   const onWheel = useCallback(
