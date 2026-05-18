@@ -119,6 +119,29 @@ export async function sendVariantPicker(opts: {
   });
 }
 
+export async function sendPostVariantCartChoice(opts: {
+  phone: string;
+  productName: string;
+  lang: WaLang;
+  waSettings: WaSettings;
+}): Promise<void> {
+  const body =
+    opts.lang === "en"
+      ? `✅ *${opts.productName}* added to cart.\n\nContinue shopping or checkout?`
+      : `✅ *${opts.productName}* cart mein add ho gaya.\n\nAur products ya checkout?`;
+  await sendInteractiveButtons({
+    phone: opts.phone,
+    text: body,
+    buttons: [
+      { id: "wa_cart_add_more", title: "➕ Add More" },
+      { id: "wa_cart_checkout", title: "🛒 Checkout" },
+      { id: "wa_cart_view", title: "👁 View Cart" },
+    ],
+    settings: opts.waSettings,
+    templateName: "post_variant_cart_choice",
+  });
+}
+
 export async function sendPremiumProductOffer(opts: {
   phone: string;
   product: {

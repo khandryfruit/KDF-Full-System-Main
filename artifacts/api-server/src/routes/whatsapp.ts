@@ -2550,10 +2550,11 @@ async function trySendHumanGreetingReply(opts: {
     textBody: opts.textBody,
     stateData: resetData,
   });
-  await setConversationState(opts.phone, WA_SALES_CHAT_STATE, {
+  await setConversationState(opts.phone, "ai_chat", {
     ...resetData,
     preferredLanguage: resetData.preferredLanguage ?? lang,
     waLang: resetData.waLang ?? lang,
+    greetedAt: new Date().toISOString(),
   });
   await persistConversationTurn(opts.phone, { intent: "greeting", topic: "greeting_text" });
   return true;
@@ -2603,6 +2604,12 @@ async function tryResolveWaCustomerMessage(opts: {
     return false;
   }
 
+  let stateData: Record<string, unknown> = {};
+  try {
+    const convEarly = await getConversationState(opts.phone);
+    stateData = JSON.parse((convEarly as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+
   let memForIntent: Awaited<ReturnType<typeof loadConversationMemory>> | null = null;
   try {
     memForIntent = await loadConversationMemory(opts.phone);
@@ -2620,6 +2627,43 @@ async function tryResolveWaCustomerMessage(opts: {
 
   if (await trySendHumanGreetingReply({ phone: opts.phone, textBody: opts.textBody, waSettings: opts.waSettings })) {
     return true;
+  }
+
+  const classifiedEarly =
+    opts.detectedIntent.classified ??
+    classifyWaMessage(opts.textBody, intentCtx);
+  const { shouldDeferToOpenAI: deferGptEarly } = await import("../lib/waCustomerPipeline.js");
+  if (deferGptEarly(opts.textBody, classifiedEarly)) {
+    return false;
+  }
+
+  const { tryBuildMultiProductCart, sendWaCartActions, isMultiProductOrderMessage } = await import("../lib/waMultiProductCart.js");
+  if (isMultiProductOrderMessage(opts.textBody)) {
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const lang = resolveWaLang(stateData, opts.textBody);
+    const built = await tryBuildMultiProductCart({
+      phone: opts.phone,
+      textBody: opts.textBody,
+      waSettings: opts.waSettings,
+      existingCart: Array.isArray(stateData.cart) ? stateData.cart : [],
+    });
+    if (built) {
+      const merged = normalizeCommerceTotals({ ...stateData, cart: built.cart });
+      await setConversationState(opts.phone, "wa_shopping_cart", merged);
+      const intro =
+        built.failed.length > 0
+          ? `Ji 😊 ${built.added.length} products add ho gaye. Ye match nahi mile: ${built.failed.join(", ")}`
+          : `Ji bilkul 😊 ${built.added.length} products cart mein add ho gaye:`;
+      await sendWaCartActions({
+        phone: opts.phone,
+        cart: built.cart,
+        lang,
+        waSettings: opts.waSettings,
+        intro,
+      });
+      await persistConversationTurn(opts.phone, { intent: "order_start", topic: "multi_product_cart" });
+      return true;
+    }
   }
 
   if (await routeUnifiedCustomerSupport({
@@ -2645,12 +2689,6 @@ async function tryResolveWaCustomerMessage(opts: {
     });
     return true;
   }
-
-  let stateData: Record<string, unknown> = {};
-  try {
-    const conv = await getConversationState(opts.phone);
-    stateData = JSON.parse((conv as any)?.stateData ?? "{}");
-  } catch { /* ignore */ }
 
   const {
     tryConversationalSalesReply,
@@ -2721,23 +2759,7 @@ async function tryResolveWaCustomerMessage(opts: {
       return true;
     }
     if (convReply.template === "product_education_text") {
-      const { buildProductEducationMessage } = await import("../lib/waConversationFlows.js");
-      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-      const lang = resolveWaLang(stateData, opts.textBody);
-      const productQ = convReply.productQuery ?? extractProductQueryFromMessage(opts.textBody);
-      await sendWaReplyWithActions(opts.phone, buildProductEducationMessage(opts.textBody, lang), opts.waSettings, {
-        templateName: "product_education_text",
-        actionContext: "education",
-        textBody: opts.textBody,
-        stateData: { ...stateData, pendingEducationQuery: productQ },
-      });
-      await setConversationState(opts.phone, "wa_sales_chat", {
-        ...stateData,
-        pendingEducationQuery: productQ,
-        preferredLanguage: stateData.preferredLanguage ?? stateData.waLang ?? lang,
-      });
-      await persistConversationTurn(opts.phone, { intent: "product_education", topic: "product_education" });
-      return true;
+      return false;
     }
     if (convReply.template === "product_interest_text" && convReply.reply) {
       const productQ = convReply.productQuery ?? extractProductQueryFromMessage(opts.textBody);
@@ -3513,6 +3535,19 @@ async function proceedToOrderConfirmSummary(
   await sendOrderConfirmButtons(phone, buildPremiumOrderSummary(finalState, lang), waSettings);
 }
 
+async function startCheckoutFromCart(phone: string, stateData: Record<string, any>, waSettings: any): Promise<void> {
+  const merged = normalizeCommerceTotals(stateData);
+  if (!merged.cart?.length) {
+    await sendWaText(phone, "Cart khali hai 😊 pehle product add karein.", waSettings, "cart_empty");
+    return;
+  }
+  const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+  const { sendNamePicker } = await import("../lib/waPremiumUi.js");
+  const lang = resolveWaLang(merged);
+  await setConversationState(phone, "wa_order_await_name", merged);
+  await sendNamePicker({ phone, contactName: merged.waContactName, lang, waSettings });
+}
+
 async function proceedAfterQuantityPick(
   phone: string,
   stateData: Record<string, any>,
@@ -3522,15 +3557,39 @@ async function proceedAfterQuantityPick(
   const product = stateData.product;
   const variant = stateData.variant;
   if (!product || !variant) return;
-  const nextState = await buildCommerceStateDataFromSelection({ product, variant, quantity: qty });
-  nextState.preferredLanguage = stateData.preferredLanguage ?? stateData.waLang;
-  nextState.waContactName = stateData.waContactName;
-  nextState.lastUserMessage = stateData.lastUserMessage;
+  const selection = await buildCommerceStateDataFromSelection({ product, variant, quantity: qty });
+  const lineItem = (selection.cart as any[])?.[0];
+  if (!lineItem) return;
+
+  const { mergeCartItems } = await import("../lib/waMultiProductCart.js");
+  const prior = Array.isArray(stateData.cart) ? stateData.cart : [];
+  const cart = mergeCartItems(prior, lineItem);
+  const merged = normalizeCommerceTotals({
+    ...stateData,
+    ...selection,
+    cart,
+    product,
+    variant,
+    preferredLanguage: stateData.preferredLanguage ?? stateData.waLang,
+    waContactName: stateData.waContactName,
+    lastUserMessage: stateData.lastUserMessage,
+  });
   const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
-  const { sendNamePicker } = await import("../lib/waPremiumUi.js");
-  const lang = resolveWaLang(nextState);
-  await setConversationState(phone, "wa_order_await_name", nextState);
-  await sendNamePicker({ phone, contactName: stateData.waContactName, lang, waSettings });
+  const { sendPostVariantCartChoice } = await import("../lib/waPremiumUi.js");
+  const lang = resolveWaLang(merged);
+  await setConversationState(phone, "wa_shopping_cart", merged);
+  await sendPostVariantCartChoice({
+    phone,
+    productName: lineItem.productName,
+    lang,
+    waSettings,
+  });
+  await logWaProcessingStep({
+    phone,
+    step: "cart_item_added",
+    detail: `Added ${lineItem.productName} to cart (${cart.length} items).`,
+    payload: { cartSize: cart.length, subtotal: merged.subtotal },
+  });
 }
 
 async function sendPaymentMethodButtons(phone: string, stateData: Record<string, any>, waSettings: any): Promise<void> {
@@ -3634,6 +3693,53 @@ async function handlePremiumCommerceButton(opts: {
   if (id === "wa_checkout_cancel") {
     await setConversationState(opts.phone, "idle", { preferredLanguage: stateData.preferredLanguage ?? stateData.waLang });
     await sendWaText(opts.phone, "Order cancel ho gaya 😊", opts.waSettings, "order_cancelled");
+    return true;
+  }
+
+  if (id === "wa_cart_add_more") {
+    const { sendPremiumMainMenu } = await import("../lib/waPremiumMenu.js");
+    const lang = resolveWaLang(stateData);
+    await setConversationState(opts.phone, "wa_shopping_cart", stateData);
+    await sendWaText(
+      opts.phone,
+      lang === "en"
+        ? "Product name bhejein (e.g. badam, pista) — ya category choose karein 👇"
+        : "Product naam bhejein (jaise badam, pista) — ya category neeche 👇",
+      opts.waSettings,
+      "cart_add_more_prompt",
+    );
+    await sendPremiumMainMenu({ phone: opts.phone, waSettings: opts.waSettings, lang });
+    return true;
+  }
+
+  if (id === "wa_cart_view") {
+    const { sendWaCartViewList } = await import("../lib/waMultiProductCart.js");
+    const cart = Array.isArray(stateData.cart) ? stateData.cart : [];
+    const lang = resolveWaLang(stateData);
+    await sendWaCartViewList({ phone: opts.phone, cart, lang, waSettings: opts.waSettings });
+    return true;
+  }
+
+  if (id === "wa_cart_checkout") {
+    await startCheckoutFromCart(opts.phone, stateData, opts.waSettings);
+    return true;
+  }
+
+  if (id.startsWith("wa_cart_rm_")) {
+    const idx = Number.parseInt(id.replace("wa_cart_rm_", ""), 10);
+    const cart = Array.isArray(stateData.cart) ? [...stateData.cart] : [];
+    if (Number.isFinite(idx) && idx >= 0 && idx < cart.length) {
+      cart.splice(idx, 1);
+      const merged = normalizeCommerceTotals({ ...stateData, cart });
+      await setConversationState(opts.phone, "wa_shopping_cart", merged);
+      const { sendWaCartActions } = await import("../lib/waMultiProductCart.js");
+      const lang = resolveWaLang(merged);
+      if (cart.length) {
+        await sendWaCartActions({ phone: opts.phone, cart, lang, waSettings: opts.waSettings });
+      } else {
+        await sendWaText(opts.phone, "Cart khali ho gaya 😊 product naam bhejein.", opts.waSettings, "cart_empty");
+      }
+    }
     return true;
   }
 
@@ -5902,6 +6008,11 @@ async function handleAiReply(opts: {
         await deliverSingleProductOffer({ phone, query: q, waSettings, showMore: false }).catch(() => {});
       }
     }
+
+    await setConversationState(phone, "ai_chat", {
+      ...(sessionMemory.stateData as Record<string, unknown> ?? {}),
+      lastAiReplyAt: new Date().toISOString(),
+    }).catch(() => {});
 
     const { attachQuickActions, resolveQuickActionContext } = await import("../lib/waQuickActions.js");
     await attachQuickActions({
