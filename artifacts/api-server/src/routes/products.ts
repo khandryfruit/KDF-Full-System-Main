@@ -633,7 +633,7 @@ async function invalidateCommerceSearchCache() {
   } catch { /* ok */ }
 }
 
-router.post("/products", adminMiddleware as any, async (req, res) => {
+async function createProductHandler(req: any, res: any) {
   try {
     const { name, price, stock, slug: rawSlug, ...rest } = req.body;
     if (!name || !price) { res.status(400).json({ error: "name and price are required" }); return; }
@@ -664,9 +664,9 @@ router.post("/products", adminMiddleware as any, async (req, res) => {
     req.log.error(err);
     res.status(500).json({ error: "Failed to create product" });
   }
-});
+}
 
-router.put("/products/:id", adminMiddleware as any, async (req, res) => {
+async function updateProductHandler(req: any, res: any) {
   try {
     const id = parseInt(req.params.id);
     const { slug: rawSlug, name, ...rest } = req.body;
@@ -718,9 +718,9 @@ router.put("/products/:id", adminMiddleware as any, async (req, res) => {
     req.log.error(err);
     res.status(500).json({ error: "Failed to update product" });
   }
-});
+}
 
-router.delete("/products/:id", adminMiddleware as any, async (req, res) => {
+async function deleteProductHandler(req: any, res: any) {
   try {
     await db.delete(productsTable).where(eq(productsTable.id, parseInt(req.params.id)));
     await invalidateCommerceSearchCache();
@@ -729,7 +729,15 @@ router.delete("/products/:id", adminMiddleware as any, async (req, res) => {
     req.log.error(err);
     res.status(500).json({ error: "Failed to delete product" });
   }
-});
+}
+
+router.post("/admin/products", adminMiddleware as any, createProductHandler);
+router.put("/admin/products/:id", adminMiddleware as any, updateProductHandler);
+router.delete("/admin/products/:id", adminMiddleware as any, deleteProductHandler);
+
+router.post("/products", adminMiddleware as any, createProductHandler);
+router.put("/products/:id", adminMiddleware as any, updateProductHandler);
+router.delete("/products/:id", adminMiddleware as any, deleteProductHandler);
 
 export { generateSlugFromName };
 export default router;

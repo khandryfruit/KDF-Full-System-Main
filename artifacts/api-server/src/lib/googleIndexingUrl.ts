@@ -13,13 +13,26 @@ export type UrlNormalizeResult = {
 /** Normalize admin-configured site base (always https, no trailing slash). */
 export function normalizeSiteUrl(input: string | null | undefined): string | null {
   if (!input?.trim()) return null;
-  const normalized = normalizeIndexingUrl(input.trim(), DEFAULT_INDEXING_SITE);
-  if (!normalized.url) return null;
+
+  let working = input.trim().replace(/\s+/g, "");
+  if (working.startsWith("//")) {
+    working = `https:${working}`;
+  } else if (!/^https?:\/\//i.test(working)) {
+    working = `https://${working.replace(/^\/+/, "")}`;
+  }
+  working = working.replace(/^http:\/\//i, "https://");
+
   try {
-    const u = new URL(normalized.url);
+    const u = new URL(working);
+    if (!u.hostname || u.hostname.includes(" ")) return null;
     return `https://${u.hostname.toLowerCase()}`;
   } catch {
-    return null;
+    const host = working
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/.*$/, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
+    return host ? `https://${host}` : null;
   }
 }
 

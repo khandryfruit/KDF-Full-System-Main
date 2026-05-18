@@ -1,10 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import {
-  useCreateProduct,
-  useUpdateProduct,
-  useDeleteProduct,
-  useListCategories,
-} from "@workspace/api-client-react";
+import { useListCategories } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
@@ -20,7 +15,7 @@ import {
   Tag, Package, Layers, DollarSign, Info, Palette, Sparkles,
   CheckCircle2, ExternalLink, Eye, ChevronDown, Globe,
   Star, RefreshCw, ZoomIn, ArrowUp, ArrowDown, ToggleLeft, ToggleRight,
-  EyeOff,
+  EyeOff, Zap,
 } from "lucide-react";
 import { AIGenerateButton, AIActionsMenu } from "@/components/AIGenerateButton";
 import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
@@ -705,6 +700,23 @@ function useAdminProducts(page: number, search: string, status: string) {
   });
 }
 
+async function adminProductRequest<T>(path: string, init: RequestInit): Promise<T> {
+  const token = localStorage.getItem("kdf_admin_token") ?? "";
+  const res = await fetch(apiPublicUrl(path), {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...init.headers,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || "Product request failed");
+  }
+  return res.json() as Promise<T>;
+}
+
 /* ─── Main Page ───────────────────────────────────────────── */
 export default function ProductsPage() {
   const [page, setPage] = useState(1);
@@ -723,9 +735,23 @@ export default function ProductsPage() {
   const { data: categoriesRes } = useListCategories();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const createMutation = useCreateProduct();
-  const updateMutation = useUpdateProduct();
-  const deleteMutation = useDeleteProduct();
+  const createMutation = useMutation({
+    mutationFn: (data: any) => adminProductRequest<any>("/api/admin/products", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => adminProductRequest<any>(`/api/admin/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminProductRequest<{ success: boolean }>(`/api/admin/products/${id}`, {
+      method: "DELETE",
+    }),
+  });
   const indexOneMutation = useMutation({
     mutationFn: (id: number) => indexContentNow("product", id),
     onSuccess: (data) => toast({ title: "Product queued for indexing", description: data.url }),
@@ -965,12 +991,12 @@ export default function ProductsPage() {
       onError: () => toast({ variant: "destructive", title: "Failed to save product" }),
     };
     if (editingId) updateMutation.mutate({ id: editingId, data: payload }, opts);
-    else createMutation.mutate({ data: payload as any }, opts);
+    else createMutation.mutate(payload, opts);
   };
 
   const handleDelete = (id: number) => {
     if (!confirm("Delete this product?")) return;
-    deleteMutation.mutate({ id }, {
+    deleteMutation.mutate(id, {
       onSuccess: () => { invalidateProducts(); toast({ title: "Deleted" }); },
       onError: () => toast({ variant: "destructive", title: "Failed to delete" }),
     });
@@ -1599,7 +1625,11 @@ export default function ProductsPage() {
                         <div>
                           <div className="font-medium text-sm leading-tight flex items-center gap-1.5">
                             {product.name}
-                            {!product.active && <EyeOff className="w-3 h-3 text-muted-foreground flex-shrink-0" title="Hidden from store" />}
+                            {!product.active && (
+                              <span title="Hidden from store" className="inline-flex">
+                                <EyeOff className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">{product.slug}</div>
                           {(product as any).tags?.length > 0 && (
