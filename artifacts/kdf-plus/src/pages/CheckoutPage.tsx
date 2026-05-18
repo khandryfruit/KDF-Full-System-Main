@@ -12,6 +12,7 @@ import { useUserLocation } from "@/context/LocationContext";
 import { useCreateOrder, useGetWalletBalance } from "@workspace/api-client-react";
 import { useProductRecommendations } from "@/components/ProductRecommendations";
 import { CheckoutUpsellRow } from "@/components/checkout/CheckoutUpsellRow";
+import { CheckoutOption } from "@/components/checkout/CheckoutOption";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
