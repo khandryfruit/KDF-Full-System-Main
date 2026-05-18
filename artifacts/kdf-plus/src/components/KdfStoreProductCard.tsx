@@ -105,7 +105,7 @@ function KdfStoreProductCardInner({
 
   return (
     <article
-      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-gray-100/90 bg-white ring-1 ring-black/[0.04] ${compact ? "kdf-store-card--compact" : ""} ${className}`}
+      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col rounded-[20px] border border-gray-100/90 bg-white ring-1 ring-black/[0.04] ${compact ? "kdf-store-card--compact" : ""} ${className}`}
       data-testid={`card-product-${product.id}`}
     >
       <Link
@@ -167,16 +167,14 @@ function KdfStoreProductCardInner({
       </Link>
 
       <div
-        className={`kdf-store-card__price-row relative shrink-0 ${compact ? "px-2.5 pb-2.5 pt-0.5" : "px-2.5 pb-2.5 pt-0.5"}`}
+        className="kdf-store-card__price-row relative shrink-0"
       >
-        <div className="min-w-0 pr-11">
-          <span
-            className={`block text-[15px] font-bold leading-none ${onSale ? "text-[#5FA800]" : "text-gray-900"}`}
-          >
+        <div className="kdf-store-card__prices min-w-0">
+          <span className={`kdf-store-card__price-sale ${onSale ? "kdf-store-card__price-sale--highlight" : ""}`}>
             Rs. {price.toLocaleString("en-PK")}
           </span>
           {onSale && originalPrice != null && (
-            <span className="mt-0.5 block text-[11px] text-gray-400 line-through">
+            <span className="kdf-store-card__price-compare">
               Rs. {originalPrice.toLocaleString("en-PK")}
             </span>
           )}

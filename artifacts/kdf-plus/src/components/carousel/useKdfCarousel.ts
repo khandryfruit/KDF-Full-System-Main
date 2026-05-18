@@ -34,6 +34,12 @@ export function useKdfCarousel({
     /** True once movement exceeds threshold — avoids eating button/link clicks */
     dragging: false,
   });
+  const touch = useRef({
+    startX: 0,
+    startY: 0,
+    startScroll: 0,
+    axis: null as "x" | "y" | null,
+  });
 
   const DRAG_THRESHOLD_PX = 8;
 
@@ -211,6 +217,59 @@ export function useKdfCarousel({
     [],
   );
 
+  /** Lock horizontal swipes inside the scroller so the page does not shift sideways */
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (isInteractiveTarget(e.target)) return;
+      if (e.touches.length !== 1) return;
+      pause();
+      const t = e.touches[0];
+      touch.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startScroll: el.scrollLeft,
+        axis: null,
+      };
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touch.current.startX;
+      const dy = t.clientY - touch.current.startY;
+
+      if (!touch.current.axis) {
+        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+        touch.current.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      }
+
+      if (touch.current.axis === "y") return;
+
+      e.preventDefault();
+      el.scrollLeft = touch.current.startScroll - dx;
+    };
+
+    const onTouchEnd = () => {
+      touch.current.axis = null;
+      scheduleResume();
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [itemCount, pause, scheduleResume]);
+
   const rootProps = pauseOnHover
     ? {
         onMouseEnter: () => setHoverPaused(true),
@@ -232,11 +291,6 @@ export function useKdfCarousel({
       onPointerMove,
       onPointerUp: endPointer,
       onPointerCancel: endPointer,
-      onTouchStart: (e) => {
-        if (isInteractiveTarget(e.target)) return;
-        pause();
-      },
-      onTouchEnd: scheduleResume,
       onWheel,
       style: { touchAction: "pan-x" as const },
     },
