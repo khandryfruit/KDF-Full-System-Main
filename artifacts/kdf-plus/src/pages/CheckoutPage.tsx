@@ -10,8 +10,6 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/context/LocationContext";
 import { useCreateOrder, useGetWalletBalance } from "@workspace/api-client-react";
-import { useProductRecommendations } from "@/components/ProductRecommendations";
-import { CheckoutUpsellRow } from "@/components/checkout/CheckoutUpsellRow";
 import { CheckoutOption } from "@/components/checkout/CheckoutOption";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { getProductImageSrc } from "@/lib/imageUrl";
@@ -83,14 +81,7 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const createOrder = useCreateOrder();
-  const { city: detectedCity, cities, detectLocation, isDetecting, mapsLoaded, initAutocomplete } = useUserLocation();
-  const cartProductIds = items.map((item) => item.product.id);
-  const { data: checkoutRecs } = useProductRecommendations({
-    context: "checkout",
-    cartProductIds,
-    limit: 2,
-    enabled: items.length > 0,
-  });
+  const { city: detectedCity, cities, mapsLoaded, initAutocomplete } = useUserLocation();
 
   const [referenceNumber, setReferenceNumber] = useState("");
   const [deliveryType, setDeliveryType] = useState<"standard" | "same_day">("standard");
@@ -376,7 +367,7 @@ export default function CheckoutPage() {
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
               {/* Left: Delivery → Shipping → Payment */}
-              <div className="kdf-checkout-left order-2 lg:order-1 lg:col-span-2">
+              <div className="kdf-checkout-left lg:col-span-2">
                 {/* Delivery Address */}
                 <section className="kdf-checkout-panel kdf-checkout-panel--address [&_input]:h-10 [&_input]:text-sm [&_textarea]:text-sm md:[&_input]:h-10">
                   <h2 className="kdf-checkout-panel__title">
@@ -577,9 +568,6 @@ export default function CheckoutPage() {
                     <FormField control={form.control} name="postalCode" render={({ field }) => (
                       <FormItem><FormLabel>Postal Code (optional)</FormLabel><FormControl><Input placeholder="75000" data-testid="input-postal" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
-                    <FormField control={form.control} name="notes" render={({ field }) => (
-                      <FormItem className="sm:col-span-2"><FormLabel>Order Notes (optional)</FormLabel><FormControl><Input placeholder="Special instructions for delivery..." data-testid="input-notes" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
                   </div>
                 </section>
 
@@ -693,66 +681,72 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </section>
+
+                {/* Order Notes */}
+                <section className="kdf-checkout-panel kdf-checkout-panel--notes">
+                  <h2 className="kdf-checkout-panel__title">
+                    Order Notes
+                  </h2>
+                  <FormField control={form.control} name="notes" render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input placeholder="Special instructions for delivery..." data-testid="input-notes" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </section>
               </div>
 
-              {/* Right: Order Summary — Total + Place Order first */}
-              <div className="order-1 lg:order-2 lg:sticky lg:top-20 lg:self-start">
+              {/* Right on desktop, natural bottom step on mobile */}
+              <div className="lg:sticky lg:top-20 lg:self-start">
                 <div className="kdf-checkout-summary">
                   <h2 className="kdf-checkout-summary__heading">Order Summary</h2>
 
-                  <div className="kdf-checkout-summary__hero">
-                    <div className="kdf-checkout-summary__total">
-                      <span>Total</span>
-                      <span data-testid="text-checkout-total">Rs {grandTotal.toLocaleString()}</span>
-                    </div>
-                    <Button
-                      type="submit"
-                      size="lg"
-                      className="kdf-checkout-summary__cta"
-                      style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
-                      disabled={createOrder.isPending}
-                      data-testid="button-place-order"
-                    >
-                      {createOrder.isPending ? "Placing Order…" : "Place Order"}
-                    </Button>
+                  <div className="kdf-checkout-summary__items">
+                    {items.map((item) => (
+                      <div key={`${item.product.id}-${item.variantId}`} className="kdf-checkout-summary__line">
+                        <img
+                          src={getProductImageSrc(item.product.images?.[0])}
+                          alt=""
+                          loading="lazy"
+                          className="kdf-checkout-summary__thumb"
+                        />
+                        <div className="kdf-checkout-summary__line-meta min-w-0 flex-1">
+                          <p className="kdf-checkout-summary__line-name">{item.product.name}</p>
+                          <p className="kdf-checkout-summary__line-qty">Qty {item.quantity}</p>
+                        </div>
+                        <p className="kdf-checkout-summary__line-price">
+                          Rs {(getCartItemUnitPrice(item) * item.quantity).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
                   </div>
 
-                  <details className="kdf-checkout-summary__breakdown">
-                    <summary>
-                      {items.length} item{items.length !== 1 ? "s" : ""} · Rs {totalPrice.toLocaleString()}
-                      {deliveryFee > 0 ? ` + Rs ${deliveryFee} delivery` : " · Free delivery"}
-                    </summary>
-                    <div className="kdf-checkout-summary__items">
-                      {items.map((item) => (
-                        <div key={`${item.product.id}-${item.variantId}`} className="kdf-checkout-summary__line">
-                          <img
-                            src={getProductImageSrc(item.product.images?.[0])}
-                            alt=""
-                            loading="lazy"
-                            className="kdf-checkout-summary__thumb"
-                          />
-                          <div className="kdf-checkout-summary__line-meta min-w-0 flex-1">
-                            <p className="kdf-checkout-summary__line-name">{item.product.name}</p>
-                            <p className="kdf-checkout-summary__line-qty">Qty {item.quantity}</p>
-                          </div>
-                          <p className="kdf-checkout-summary__line-price">
-                            Rs {(getCartItemUnitPrice(item) * item.quantity).toLocaleString()}
-                          </p>
-                        </div>
-                      ))}
+                  <div className="kdf-checkout-summary__lines">
+                    <div className="flex justify-between"><span>Subtotal</span><span>Rs {totalPrice.toLocaleString()}</span></div>
+                    <div className="flex justify-between">
+                      <span>Delivery</span>
+                      <span>{deliveryFee === 0 ? <span className="text-green-600 font-medium">FREE</span> : `Rs ${deliveryFee}`}</span>
                     </div>
-                    <div className="kdf-checkout-summary__lines">
-                      <div className="flex justify-between"><span>Subtotal</span><span>Rs {totalPrice.toLocaleString()}</span></div>
-                      <div className="flex justify-between">
-                        <span>Delivery</span>
-                        <span>{deliveryFee === 0 ? <span className="text-green-600 font-medium">FREE</span> : `Rs ${deliveryFee}`}</span>
-                      </div>
-                    </div>
-                  </details>
+                  </div>
 
-                  {checkoutRecs?.cartUpsells?.length ? (
-                    <CheckoutUpsellRow products={checkoutRecs.cartUpsells} />
-                  ) : null}
+                  <div className="kdf-checkout-summary__total">
+                    <span>Total</span>
+                    <span data-testid="text-checkout-total">Rs {grandTotal.toLocaleString()}</span>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="kdf-checkout-summary__cta"
+                    style={{ background: "linear-gradient(135deg, #5FA800 0%, #3d7000 100%)" }}
+                    disabled={createOrder.isPending}
+                    data-testid="button-place-order"
+                  >
+                    {createOrder.isPending ? "Placing Order…" : "Place Order"}
+                  </Button>
+
                   <p className="kdf-checkout-summary__secure">
                     <Lock className="mr-1 inline h-3 w-3" />
                     Secure checkout
