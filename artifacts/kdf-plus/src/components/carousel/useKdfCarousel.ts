@@ -8,7 +8,7 @@ export interface UseKdfCarouselOptions {
   autoScroll?: boolean;
   autoSpeed?: number;
   resumeMs?: number;
-  loopCopies?: 2 | 3;
+  loopCopies?: 1 | 2 | 3;
   /** Pause auto-scroll while pointer is over the carousel */
   pauseOnHover?: boolean;
 }
@@ -44,8 +44,8 @@ export function useKdfCarousel({
     );
   };
 
-  const canLoop = itemCount > 1;
   const copies = itemCount <= 1 ? 1 : loopCopies;
+  const canLoop = itemCount > 1 && copies > 1;
 
   const pause = useCallback(() => {
     setPaused(true);
@@ -226,7 +226,7 @@ export function useKdfCarousel({
     measure,
     scrollBy,
     rootProps,
-    scrollerClassName: "kdf-carousel-scroller is-auto",
+    scrollerClassName: canLoop ? "kdf-carousel-scroller is-auto" : "kdf-carousel-scroller is-snap",
     scrollerProps: {
       onPointerDown,
       onPointerMove,

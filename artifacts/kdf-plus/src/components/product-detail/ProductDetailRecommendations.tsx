@@ -45,14 +45,14 @@ export function ProductDetailRecommendations({ productId }: { productId: number 
   const { data, isLoading, isError } = useProductRecommendations({
     context: "product",
     productId,
-    limit: 4,
+    limit: 8,
     enabled: load && productId > 0,
   });
 
   const { fbt, related } = useMemo(() => {
-    const fbtList = (data?.frequentlyBoughtTogether ?? []).slice(0, 4);
+    const fbtList = (data?.frequentlyBoughtTogether ?? []).slice(0, 8);
     const fbtIds = new Set(fbtList.map((p) => p.id));
-    const relatedList = (data?.relatedProducts ?? []).filter((p) => !fbtIds.has(p.id)).slice(0, 4);
+    const relatedList = (data?.relatedProducts ?? []).filter((p) => !fbtIds.has(p.id)).slice(0, 8);
     return { fbt: fbtList, related: relatedList };
   }, [data]);
 
@@ -74,7 +74,7 @@ export function ProductDetailRecommendations({ productId }: { productId: number 
                 subtitle="Same category & popular pairings"
                 products={fbt}
                 carouselOnly
-                maxItems={4}
+                maxItems={8}
               />
             )}
             {related.length > 0 && (
@@ -83,7 +83,7 @@ export function ProductDetailRecommendations({ productId }: { productId: number 
                 subtitle="Similar category, tags & weight"
                 products={related}
                 carouselOnly
-                maxItems={4}
+                maxItems={8}
               />
             )}
           </div>

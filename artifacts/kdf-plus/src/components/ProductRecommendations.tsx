@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { Package, Sparkles, Tag } from "lucide-react";
 import type { Product } from "@workspace/api-client-react";
 import { ProductCard } from "@/components/ProductCard";
 import { KdfProductCarousel } from "@/components/carousel/KdfProductCarousel";
@@ -69,21 +69,33 @@ export function ProductRecommendationStrip({
   if (visible.length === 0) return null;
 
   return (
-    <section className="kdf-rec-strip w-full min-w-0 space-y-3">
-      <div className="flex items-end justify-between gap-2 px-0.5">
-        <div>
-          <p className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#5FA800] sm:text-[11px]">
-            <Sparkles className="h-3 w-3" />
-            {title}
-          </p>
-          {subtitle && <p className="text-xs font-medium text-muted-foreground">{subtitle}</p>}
+    <section className="kdf-rec-strip w-full min-w-0 space-y-4">
+      <header className="kdf-rec-strip__header px-0.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#5FA800]/10 ring-1 ring-[#5FA800]/15">
+            {/frequently|together/i.test(title) ? (
+              <Tag className="h-4 w-4 text-[#5FA800]" aria-hidden />
+            ) : /related/i.test(title) ? (
+              <Package className="h-4 w-4 text-[#5FA800]" aria-hidden />
+            ) : (
+              <Sparkles className="h-4 w-4 text-[#5FA800]" aria-hidden />
+            )}
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold tracking-tight text-gray-900 sm:text-base md:text-lg">{title}</h2>
+            {subtitle && (
+              <p className="mt-0.5 text-xs font-medium text-gray-500 sm:text-[13px]">{subtitle}</p>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
       <KdfProductCarousel
         products={visible}
         mode="peek"
-        resumeMs={4500}
+        loopCopies={1}
+        autoScroll={false}
+        resumeMs={5000}
         className={carouselOnly ? "kdf-pdp-rec-carousel kdf-carousel--rec" : "kdf-carousel--rec"}
         compact={compact}
       />

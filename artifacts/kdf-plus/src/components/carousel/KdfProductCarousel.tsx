@@ -11,8 +11,9 @@ export interface KdfProductCarouselProps {
   className?: string;
   mode?: KdfCarouselMode;
   fadeColor?: string;
-  loopCopies?: 2 | 3;
+  loopCopies?: 1 | 2 | 3;
   resumeMs?: number;
+  autoScroll?: boolean;
   /** Denser cards for recommendation strips */
   compact?: boolean;
 }
@@ -25,21 +26,25 @@ export function KdfProductCarousel({
   fadeColor = "#fff",
   loopCopies = 3,
   resumeMs = 4000,
+  autoScroll = true,
   compact = false,
 }: KdfProductCarouselProps) {
   const [centerMod, setCenterMod] = useState(0);
 
+  const effectiveCopies = products.length <= 1 ? 1 : loopCopies;
+
   const loop = useMemo(() => {
     if (products.length === 0) return [];
-    if (products.length === 1) return products;
-    const n = loopCopies === 2 ? 2 : 3;
+    if (effectiveCopies === 1) return products;
+    const n = effectiveCopies === 2 ? 2 : 3;
     return Array.from({ length: n }, () => products).flat();
-  }, [products, loopCopies]);
+  }, [products, effectiveCopies]);
 
   const { scrollerRef, scrollerClassName, scrollerProps, scrollBy, rootProps } = useKdfCarousel({
     itemCount: products.length,
-    loopCopies,
+    loopCopies: effectiveCopies === 1 ? 1 : (effectiveCopies as 2 | 3),
     resumeMs,
+    autoScroll: autoScroll && effectiveCopies > 1,
   });
 
   const updateCenter = useCallback(() => {
@@ -116,7 +121,7 @@ export function KdfProductCarousel({
                 : "kdf-carousel-slide kdf-carousel-slide--peek";
             return (
               <div key={product.id + "-" + i} data-slide-mod={mod} className={slideClass}>
-                <div className="kdf-carousel-card">
+                <div className="kdf-carousel-card h-full w-full min-w-0">
                   <ProductCard product={product} compact={compact} />
                 </div>
               </div>

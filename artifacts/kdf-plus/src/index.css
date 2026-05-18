@@ -1097,6 +1097,14 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 .kdf-carousel-scroller.is-auto {
   scroll-snap-type: none;
 }
+.kdf-carousel-scroller.is-snap {
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 8px;
+}
+.kdf-carousel-scroller.is-snap .kdf-carousel-slide--peek {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
 .kdf-carousel-scroller::-webkit-scrollbar {
   display: none;
 }
@@ -1105,9 +1113,15 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   align-items: stretch;
   gap: 12px;
   width: max-content;
+  min-width: 100%;
   padding: 6px 8px 14px;
 }
 .kdf-carousel-card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   border-radius: 20px;
   overflow: hidden;
@@ -1116,6 +1130,12 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
     0 4px 16px rgba(15, 23, 42, 0.07),
     0 1px 3px rgba(15, 23, 42, 0.04);
   transition: box-shadow 0.35s ease, transform 0.35s ease;
+}
+.kdf-carousel-card > * {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
 }
 .kdf-carousel-card:hover {
   box-shadow:
@@ -1130,9 +1150,12 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 .kdf-carousel-slide--peek {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   flex: 0 0 calc(50% - 6px);
   max-width: calc(50% - 6px);
-  min-width: 148px;
+  min-width: 0;
   scroll-snap-align: start;
   scroll-snap-stop: normal;
 }
@@ -1220,8 +1243,10 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 }
 
 .kdf-carousel-slide--peek .kdf-store-card {
-  height: auto;
-  align-self: flex-start;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
 }
 
 .kdf-store-card .kdf-store-card__wish {
@@ -1520,31 +1545,65 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   height: 0.65rem;
 }
 
-/* Related-products mobile carousel — always 2 cards visible */
+/* Recommendation carousels — 2 / 3 / 4 / 5 visible cards (container queries) */
 .kdf-carousel--rec .kdf-carousel-slide--peek,
+.kdf-pdp-rec-carousel .kdf-carousel-slide--peek,
 .kdf-pdp-ai-carousel .kdf-carousel-slide--peek {
-  flex: 0 0 calc(50% - 5px);
-  max-width: calc(50% - 5px);
+  flex: 0 0 calc((100cqi - 10px) / 2);
+  max-width: calc((100cqi - 10px) / 2);
   min-width: 0;
 }
 .kdf-carousel--rec .kdf-carousel-track,
+.kdf-pdp-rec-carousel .kdf-carousel-track,
 .kdf-pdp-ai-carousel .kdf-carousel-track {
   gap: 10px;
-  padding: 4px 4px 8px 2px;
+  padding: 4px 6px 12px 4px;
+  align-items: stretch;
 }
 .kdf-carousel--rec .kdf-carousel-slide--peek .kdf-store-card,
+.kdf-pdp-rec-carousel .kdf-carousel-slide--peek .kdf-store-card,
 .kdf-pdp-ai-carousel .kdf-carousel-slide--peek .kdf-store-card,
 .kdf-pdp-pairs-carousel .kdf-carousel-slide--peek .kdf-store-card {
   width: 100%;
+  height: 100%;
 }
-.kdf-carousel--rec .kdf-carousel-card {
-  border-radius: 16px;
+.kdf-carousel--rec .kdf-carousel-card,
+.kdf-pdp-rec-carousel .kdf-carousel-card {
+  border-radius: 18px;
 }
 .kdf-carousel--rec .kdf-product-card {
-  border-radius: 16px;
+  border-radius: 18px;
+  height: 100%;
 }
-.kdf-carousel--rec .kdf-product-card__media {
+.kdf-carousel--rec .kdf-product-card__media,
+.kdf-pdp-rec-carousel .kdf-store-card__media-wrap {
   aspect-ratio: 1 / 1;
+}
+@container kdf-carousel (min-width: 768px) {
+  .kdf-carousel--rec .kdf-carousel-slide--peek,
+  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek,
+  .kdf-pdp-ai-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100cqi - 20px) / 3);
+    max-width: calc((100cqi - 20px) / 3);
+  }
+}
+@container kdf-carousel (min-width: 1024px) {
+  .kdf-carousel--rec .kdf-carousel-slide--peek,
+  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek,
+  .kdf-pdp-ai-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100cqi - 36px) / 4);
+    max-width: calc((100cqi - 36px) / 4);
+  }
+}
+@container kdf-carousel (min-width: 1280px) {
+  .kdf-carousel--rec .kdf-carousel-slide--peek,
+  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
+    flex: 0 0 calc((100cqi - 48px) / 5);
+    max-width: calc((100cqi - 48px) / 5);
+  }
+}
+.kdf-rec-strip__header {
+  margin-bottom: 0.125rem;
 }
 
 /* Homepage hero banner — sharp imagery, lighter overlay */
@@ -1562,9 +1621,23 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   border-radius: 18px;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
+.kdf-store-card__title,
+.kdf-product-card__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.6em;
+  font-weight: 600;
+}
+@media (min-width: 768px) {
+  .kdf-store-card__title,
+  .kdf-product-card__title {
+    font-weight: 700;
+  }
+}
 .kdf-store-card--compact .kdf-store-card__media-wrap {
   aspect-ratio: 1 / 1;
-  max-height: 11.25rem;
   width: 100%;
   overflow: hidden;
 }
@@ -1728,30 +1801,7 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   margin-inline: auto;
 }
 
-.kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
-  flex: 0 0 calc(52% - 6px);
-  max-width: calc(52% - 6px);
-}
-@media (min-width: 640px) {
-  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
-    flex: 0 0 calc((100% - 14px) / 2);
-    max-width: calc((100% - 14px) / 2);
-  }
-}
-@media (min-width: 1024px) {
-  .kdf-pdp-rec-carousel .kdf-carousel-slide--peek {
-    flex: 0 0 calc((100% - 42px) / 4);
-    max-width: calc((100% - 42px) / 4);
-  }
-}
-.kdf-pdp-rec-carousel .kdf-store-card--compact .kdf-store-card__media-wrap {
-  max-height: 11.25rem;
-}
-@media (min-width: 1024px) {
-  .kdf-pdp-rec-carousel .kdf-store-card--compact .kdf-store-card__media-wrap {
-    max-height: 11.25rem;
-  }
-}
+/* PDP rec carousel widths — inherited from .kdf-carousel--rec container rules above */
 
 /* PDP safe zone above bottom nav (no duplicate sticky product bar) */
 .kdf-pdp-main {

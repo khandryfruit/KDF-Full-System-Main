@@ -36,13 +36,11 @@ function splitNameAndWeight(
 
 export interface KdfStoreProductCardProps {
   product: KdfStoreProductCardData;
-  /** Top-left badge text (e.g. discount % or "Pick") */
   topBadge?: string;
   hotDealBadge?: boolean;
   cartIcon?: "plus" | "cart";
   onQuickAdd?: (product: KdfStoreProductCardData) => void;
   className?: string;
-  /** Smaller card for PDP / sidebar carousels */
   compact?: boolean;
 }
 
@@ -66,6 +64,7 @@ function KdfStoreProductCardInner({
     originalPrice && originalPrice > price
       ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : null;
+  const onSale = originalPrice != null && originalPrice > price;
 
   const [displayName, weightLine] = splitNameAndWeight(
     product.name,
@@ -105,17 +104,23 @@ function KdfStoreProductCardInner({
   };
 
   return (
-    <div
-      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-gray-100/90 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.07)] ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)] hover:ring-[#5FA800]/20 ${compact ? "kdf-store-card--compact" : ""} ${className}`}
+    <article
+      className={`kdf-store-card group relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-gray-100/90 bg-white shadow-[0_4px_18px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.04] transition-[transform,box-shadow] duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_14px_32px_rgba(15,23,42,0.12)] hover:ring-[#5FA800]/25 md:rounded-[22px] ${compact ? "kdf-store-card--compact" : ""} ${className}`}
       data-testid={`card-product-${product.id}`}
     >
-      <Link href={href} className="flex min-h-0 flex-1 flex-col">
-        <div className={`kdf-store-card__media-wrap relative w-full shrink-0 overflow-hidden bg-white ${compact ? "" : "aspect-square"}`}>
+      <Link
+        href={href}
+        className="flex min-h-0 flex-1 flex-col outline-none focus-visible:ring-2 focus-visible:ring-[#5FA800]/40 focus-visible:ring-offset-2"
+      >
+        <div className="kdf-store-card__media-wrap relative aspect-square w-full shrink-0 overflow-hidden bg-gradient-to-b from-white to-gray-50/80">
           {badgeText && (
             <span
-              className={`absolute left-2 top-2 z-[8] rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ${
-                topBadge ? "bg-gray-900/75 backdrop-blur-sm" : "bg-[#F58300]"
-              } ${hotDealBadge && !topBadge ? "kdf-discount-badge kdf-discount-badge-hot" : ""}`}
+              className={`kdf-store-card__badge absolute left-2.5 top-2.5 z-[8] ${
+                topBadge
+                  ? "rounded-full bg-gray-900/80 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm"
+                  : "kdf-discount-badge"
+              } ${hotDealBadge && !topBadge ? " kdf-discount-badge-hot" : ""}`}
+              aria-label={topBadge ? badgeText : `${discount} percent off`}
             >
               {badgeText}
             </span>
@@ -123,7 +128,7 @@ function KdfStoreProductCardInner({
 
           {(!imageUrl || imgError) && (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-              <span className="text-3xl font-black opacity-20" style={{ color: "#5FA800" }}>
+              <span className="text-3xl font-black opacity-20 md:text-4xl" style={{ color: "#5FA800" }}>
                 {initial}
               </span>
             </div>
@@ -134,75 +139,81 @@ function KdfStoreProductCardInner({
               alt={displayName}
               loading="lazy"
               decoding="async"
-              sizes="(max-width: 640px) 49vw, (max-width: 1024px) 33vw, 240px"
+              width={400}
+              height={400}
+              sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 240px"
               onError={() => setImgError(true)}
-              className={`absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-[1.03] ${compact ? "object-cover p-0" : "object-contain p-1"}`}
+              className="absolute inset-0 h-full w-full object-contain p-2 transition-transform duration-500 ease-out group-hover:scale-[1.04]"
             />
           )}
 
           {outOfStock && (
             <div className="absolute inset-0 z-[5] flex items-center justify-center bg-white/80 backdrop-blur-[1px]">
-              <span className="rounded-full bg-gray-900/85 px-2.5 py-1 text-[10px] font-bold text-white">
+              <span className="rounded-full bg-gray-900/85 px-2.5 py-1 text-[10px] font-bold text-white md:text-xs">
                 Out of stock
               </span>
             </div>
           )}
         </div>
 
-        <div className={`kdf-store-card__body flex flex-col ${compact ? "px-3 pt-2" : "px-2.5 pt-2"}`}>
-          <h3 className={`line-clamp-2 font-semibold leading-snug text-gray-900 ${compact ? "text-[13px]" : "text-[13px] sm:text-[15px] md:text-[17px]"}`}>
+        <div
+          className={`kdf-store-card__body flex flex-col px-3 pt-2.5 ${compact ? "pb-0" : "pb-1"} md:px-4 md:pt-3`}
+        >
+          <h3 className="kdf-store-card__title line-clamp-2 font-semibold leading-snug text-gray-900 md:font-bold">
             {displayName}
           </h3>
           {weightLine && (
-            <p className="mt-0.5 text-[11px] font-medium text-gray-400">{weightLine}</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">{weightLine}</p>
           )}
         </div>
       </Link>
 
-      <div className={`kdf-store-card__price-row flex items-end justify-between gap-2 ${compact ? "px-3 pb-3" : "px-2.5 pb-2.5"}`}>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[15px] font-bold leading-none text-gray-900 sm:text-base">
-              Rs. {price.toLocaleString("en-PK")}
+      <div className="kdf-store-card__footer mt-auto flex items-end justify-between gap-2 px-3 pb-3 pt-0 md:px-4 md:pb-4">
+        <div className="min-w-0 flex-1 pr-1">
+          <span
+            className={`block text-[15px] font-bold leading-none md:text-base ${onSale ? "text-[#5FA800]" : "text-gray-900"}`}
+          >
+            Rs. {price.toLocaleString("en-PK")}
+          </span>
+          {onSale && originalPrice != null && (
+            <span className="mt-0.5 block text-[11px] font-medium text-gray-400 line-through decoration-gray-300/90 md:text-xs">
+              Rs. {originalPrice.toLocaleString("en-PK")}
             </span>
-            {originalPrice != null && originalPrice > price && (
-              <span className="text-[11px] text-gray-400 line-through">
-                Rs. {originalPrice.toLocaleString("en-PK")}
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
         <button
           type="button"
           onClick={handleCart}
           disabled={outOfStock}
-          className="kdf-store-card__cart flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-lg shadow-[#5FA800]/25 transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ backgroundColor: "#5FA800" }}
+          className="kdf-store-card__cart flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-full text-white shadow-[0_6px_16px_rgba(95,168,0,0.35)] transition-[transform,box-shadow] duration-200 hover:scale-105 hover:shadow-[0_8px_22px_rgba(95,168,0,0.45)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 md:h-11 md:min-w-[2.75rem] md:px-3.5"
+          style={{ background: "linear-gradient(135deg, #6bb80a 0%, #5FA800 48%, #4a8600 100%)" }}
           aria-label={`Add ${displayName} to cart`}
           data-testid={`button-add-cart-${product.id}`}
         >
           {cartIcon === "cart" ? (
-            <ShoppingCart className="h-4 w-4" strokeWidth={2.25} />
+            <ShoppingCart className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
           ) : (
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
+            <Plus className="h-4 w-4 shrink-0 md:h-[1.125rem] md:w-[1.125rem]" strokeWidth={2.5} aria-hidden />
           )}
+          <span className="hidden text-xs font-bold tracking-wide md:inline">Add</span>
         </button>
       </div>
 
       <button
         type="button"
         onClick={handleWish}
-        className="kdf-store-card__wish flex h-8 w-8 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm transition-transform hover:scale-105"
-        aria-label="Add to wishlist"
+        className="kdf-store-card__wish absolute right-2.5 top-2.5 z-[12] flex h-8 w-8 items-center justify-center rounded-full border border-gray-100/90 bg-white/95 shadow-sm transition-transform hover:scale-105 md:h-9 md:w-9"
+        aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
+        aria-pressed={wished}
         data-testid={`button-wish-${product.id}`}
       >
         <Heart
-          className={`h-3.5 w-3.5 ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`}
+          className={`h-3.5 w-3.5 md:h-4 md:w-4 ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`}
           strokeWidth={2}
         />
       </button>
-    </div>
+    </article>
   );
 }
 
