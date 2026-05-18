@@ -1113,6 +1113,7 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
             WA_ORDER_AWAIT_COD_CONFIRM: waCodConfirm,
           } = await import("../lib/waCheckoutFlow.js");
           const commerceTextStates = [
+            "wa_shopping_cart",
             "wa_catalog_pick_category", "wa_order_await_product", "wa_order_await_product_choice",
             "wa_order_await_variant", "wa_order_await_preconfirm", "wa_order_await_quantity",
             "wa_order_await_name", "wa_order_await_phone", "wa_order_await_city", waCitySearch,
@@ -1210,7 +1211,6 @@ export async function processWaWebhookBody(body: any, log: any = logger): Promis
               await setConversationState(phone, "idle", {
                 ...preservedIdleState(sd),
                 ...archiveCheckoutSnapshot(sd, "order_flow_escape"),
-                cartClearedAt: new Date().toISOString(),
               });
               if (await tryResolveWaCustomerMessage({ phone, textBody: commerceText, waSettings, currentState: "idle", detectedIntent: trappedIntent, log })) {
                 continue;
@@ -2166,11 +2166,16 @@ async function deliverSingleProductOffer(opts: {
       });
       if (i === 0) await new Promise((r) => setTimeout(r, 800));
     }
+    const convD = await getConversationState(opts.phone);
+    let priorD: Record<string, unknown> = {};
+    try { priorD = JSON.parse((convD as any)?.stateData ?? "{}"); } catch { /* ignore */ }
     await setConversationState(opts.phone, "wa_order_await_product_choice", {
+      ...priorD,
       productQuery: q,
       products: allMatches.slice(0, 2),
       lastUserMessage: rawQ,
       browseMode: "disambiguation",
+      cart: Array.isArray(priorD.cart) ? priorD.cart : [],
     });
     return true;
   }
@@ -2216,12 +2221,20 @@ async function deliverSingleProductOffer(opts: {
     price: parseCatalogUnitPrice(v.price),
   }));
 
+  const convBefore = await getConversationState(opts.phone);
+  let priorData: Record<string, unknown> = {};
+  try {
+    priorData = JSON.parse((convBefore as any)?.stateData ?? "{}");
+  } catch { /* ignore */ }
+  const existingCart = Array.isArray(priorData.cart) ? priorData.cart : [];
+
   await setConversationState(opts.phone, "wa_order_await_variant", {
+    ...priorData,
     productQuery: q,
     product,
     moreProducts: allMatches.slice(1),
     lastUserMessage: rawQ,
-    cart: [],
+    cart: existingCart,
     preferredLanguage: lang,
     commerceProductId: product.commerceProductId ?? product.shopifyProductId,
     productUrl: product.productUrl,
@@ -2637,7 +2650,15 @@ async function tryResolveWaCustomerMessage(opts: {
     return false;
   }
 
-  const { tryBuildMultiProductCart, sendWaCartActions, isMultiProductOrderMessage } = await import("../lib/waMultiProductCart.js");
+  const {
+    tryBuildMultiProductCart,
+    sendWaCartActions,
+    isMultiProductOrderMessage,
+    isAddToCartIntentMessage,
+    isViewCartIntentMessage,
+    isCheckoutIntentMessage,
+    tryAddSingleProductToCart,
+  } = await import("../lib/waMultiProductCart.js");
   if (isMultiProductOrderMessage(opts.textBody)) {
     const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
     const lang = resolveWaLang(stateData, opts.textBody);
@@ -2662,6 +2683,66 @@ async function tryResolveWaCustomerMessage(opts: {
         intro,
       });
       await persistConversationTurn(opts.phone, { intent: "order_start", topic: "multi_product_cart" });
+      return true;
+    }
+  }
+
+  const existingCart = Array.isArray(stateData.cart) ? (stateData.cart as import("../lib/waMultiProductCart.js").WaCartLineItem[]) : [];
+
+  if (isViewCartIntentMessage(opts.textBody) && existingCart.length) {
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const lang = resolveWaLang(stateData, opts.textBody);
+    await sendWaCartActions({ phone: opts.phone, cart: existingCart, lang, waSettings: opts.waSettings });
+    return true;
+  }
+  if (isCheckoutIntentMessage(opts.textBody) && existingCart.length) {
+    await startCheckoutFromCart(opts.phone, stateData, opts.waSettings);
+    return true;
+  }
+  if (
+    (isAddToCartIntentMessage(opts.textBody) || opts.currentState === "wa_shopping_cart") &&
+    (existingCart.length > 0 || isAddToCartIntentMessage(opts.textBody))
+  ) {
+    const added = await tryAddSingleProductToCart({
+      phone: opts.phone,
+      textBody: opts.textBody,
+      waSettings: opts.waSettings,
+      existingCart,
+    });
+    if (added) {
+      const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+      const lang = resolveWaLang(stateData, opts.textBody);
+      const merged = normalizeCommerceTotals({ ...stateData, cart: added.cart });
+      await setConversationState(opts.phone, "wa_shopping_cart", merged);
+      await sendWaCartActions({
+        phone: opts.phone,
+        cart: added.cart,
+        lang,
+        waSettings: opts.waSettings,
+        intro: `✅ *${added.line.productName}* (${added.line.variantTitle}) cart mein add ho gaya.`,
+      });
+      await persistConversationTurn(opts.phone, { intent: "order_start", topic: "cart_add_item" });
+      return true;
+    }
+    if (opts.currentState === "wa_shopping_cart") {
+      if (await deliverSingleProductOffer({ phone: opts.phone, query: opts.textBody, waSettings: opts.waSettings })) {
+        return true;
+      }
+    }
+  }
+
+  const { shouldPrioritizeProductDatabase, shouldDeferToOpenAI: deferProductDb } = await import("../lib/waCustomerPipeline.js");
+  if (
+    !deferProductDb(opts.textBody, classified) &&
+    shouldPrioritizeProductDatabase(opts.textBody, classified)
+  ) {
+    const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+    const searchQ =
+      extractProductSearchQuery(opts.textBody) ||
+      opts.detectedIntent.productQuery ||
+      extractProductQueryFromMessage(opts.textBody);
+    if (await deliverSingleProductOffer({ phone: opts.phone, query: searchQ, waSettings: opts.waSettings })) {
+      await persistConversationTurn(opts.phone, { intent: "product_search", topic: "product_card" });
       return true;
     }
   }
@@ -2868,8 +2949,7 @@ async function tryResolveWaCustomerMessage(opts: {
     return true;
   }
 
-  const { shouldDeferToOpenAI, shouldPrioritizeProductDatabase } = await import("../lib/waCustomerPipeline.js");
-  if (shouldDeferToOpenAI(opts.textBody, classified)) {
+  if (deferProductDb(opts.textBody, classified)) {
     return false;
   }
 
@@ -4776,6 +4856,32 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
   const trimmed = text.trim();
   const { WA_AWAIT_LANGUAGE_STATE } = await import("../lib/waPremiumJourney.js");
   const { WA_AWAIT_PRODUCT_INTENT_STATE } = await import("../lib/waSalesConversation.js");
+
+  if (state === "wa_shopping_cart") {
+    const intent = detectWaIntent(trimmed);
+    if (await tryResolveWaCustomerMessage({ phone, textBody: trimmed, waSettings, currentState: state, detectedIntent: intent, log })) {
+      return;
+    }
+    if (await deliverSingleProductOffer({ phone, query: trimmed, waSettings })) {
+      return;
+    }
+    const { sendWaCartActions } = await import("../lib/waMultiProductCart.js");
+    const { resolveWaLang } = await import("../lib/waPremiumJourney.js");
+    const cart = Array.isArray(stateData.cart) ? stateData.cart : [];
+    if (cart.length) {
+      await sendWaCartActions({
+        phone,
+        cart,
+        lang: resolveWaLang(stateData, trimmed),
+        waSettings,
+        intro: "Product naam bhejein add karne ke liye, ya neeche option choose karein 👇",
+      });
+      return;
+    }
+    await sendWaText(phone, "Cart khali hai 😊 product naam bhejein (jaise: badam, kaju).", waSettings, "cart_empty_hint");
+    return;
+  }
+
   if (state === WA_AWAIT_LANGUAGE_STATE) {
     const { handleLanguageTrapText } = await import("../lib/waSessionRecovery.js");
     await handleLanguageTrapText({
@@ -4889,11 +4995,13 @@ async function handleCommerceOrderFlow(phone: string, text: string, state: strin
     const lang = resolveWaLang(stateData, stateData.lastUserMessage);
     const imageUrl = resolveCommerceImageUrl(selected.imageUrl) ?? selected.imageUrl;
     await setConversationState(phone, "wa_order_await_variant", {
+      ...stateData,
       productQuery: stateData.productQuery,
       product: selected,
       categoryId: stateData.categoryId,
       lastUserMessage: stateData.lastUserMessage,
       preferredLanguage: lang,
+      cart: Array.isArray(stateData.cart) ? stateData.cart : [],
     });
     const variantOpts = (selected.variantOptions ?? []).map((v: any) => ({
       id: String(v.id),
@@ -5596,10 +5704,6 @@ async function handleAiReply(opts: {
     return;
   }
 
-  if (await tryResolveWaCustomerMessage({ phone, textBody, waSettings, currentState, detectedIntent: intent, log })) {
-    return;
-  }
-
   const classified = intent.classified ?? classifyWaMessage(textBody, {
     lastTopic: memIntent?.lastTopic,
     lastIntent: memIntent?.lastIntent,
@@ -5789,6 +5893,31 @@ async function handleAiReply(opts: {
           parameters: { type: "object", properties: {}, required: [] },
         },
       },
+      {
+        type: "function",
+        function: {
+          name: "auto_add_to_cart",
+          description: "Add products to cart when customer mentions product + weight/qty (e.g. 1kg badam aur 500g khajoor). Word map: badam=almond, pista=pistachio, kaju=cashew, khajoor=dates.",
+          parameters: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string" },
+                    variantHint: { type: "string" },
+                    qty: { type: "number" },
+                  },
+                  required: ["query"],
+                },
+              },
+            },
+            required: ["items"],
+          },
+        },
+      },
     ];
 
     let whatsappInstructions = `WhatsApp sales behavior (KDF MART human mode):
@@ -5939,36 +6068,74 @@ async function handleAiReply(opts: {
     await logWaProcessingStep({
       phone,
       step: "openai_request_sent",
-      detail: `OpenAI request sent with model ${chatbot.aiModel ?? "gpt-4o-mini"} using stable no-tools WhatsApp mode.`,
+      detail: `OpenAI request with tools (${tools.length} functions).`,
       payload: {
         model: chatbot.aiModel ?? "gpt-4o-mini",
         messages: messages.length,
         promptSource: brainPrompt.promptSource,
         promptLoaded: brainPrompt.promptLoaded,
         catalogContextLoaded: Boolean(catalogContextBlock),
+        toolCount: tools.length,
       },
     });
     const { resolveWaAiModel } = await import("../lib/waCustomerPipeline.js");
+    const { executeWaAiTool } = await import("../lib/waAiToolExecutor.js");
     const aiModel = chatbot?.aiModel ?? (await resolveWaAiModel());
-    const completion = await aiClient.chat.completions.create({
-      model: aiModel,
-      messages,
-      max_tokens: 500,
-      temperature: 0.65,
-    });
-    const choice = completion.choices[0];
-    reply = choice?.message?.content?.trim() ?? "";
-    await logWaProcessingStep({
-      phone,
-      step: "openai_response_returned",
-      status: "received",
-      detail: "OpenAI returned a text response in stable no-tools WhatsApp mode.",
-      payload: {
-        model: completion.model,
-        finishReason: choice?.finish_reason ?? null,
-        responsePreview: reply.slice(0, 1000),
-      },
-    });
+    let lastSearchQuery: string | null = null;
+    let currentMessages = [...messages];
+    const MAX_TOOL_ROUNDS = 4;
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const completion = await aiClient.chat.completions.create({
+        model: aiModel,
+        messages: currentMessages,
+        tools,
+        tool_choice: round === 0 ? "auto" : "auto",
+        max_tokens: 500,
+        temperature: 0.65,
+      });
+      const choice = completion.choices[0];
+      const msg = choice?.message;
+      if (!msg) break;
+
+      if (msg.tool_calls?.length) {
+        currentMessages.push(msg);
+        for (const tc of msg.tool_calls) {
+          if (tc.type !== "function") continue;
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(tc.function.arguments || "{}");
+          } catch {
+            args = {};
+          }
+          if (tc.function.name === "search_products") {
+            lastSearchQuery = String(args.query ?? textBody);
+          }
+          const toolResult = await executeWaAiTool(tc.function.name, args, { phone });
+          currentMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: toolResult,
+          });
+        }
+        continue;
+      }
+
+      reply = msg.content?.trim() ?? "";
+      await logWaProcessingStep({
+        phone,
+        step: "openai_response_returned",
+        status: "received",
+        detail: round > 0 ? `OpenAI reply after ${round} tool round(s).` : "OpenAI text reply.",
+        payload: {
+          model: completion.model,
+          finishReason: choice?.finish_reason ?? null,
+          responsePreview: reply.slice(0, 1000),
+          toolRounds: round,
+        },
+      });
+      break;
+    }
 
     if (!reply) {
       await logWaProcessingStep({
@@ -5996,15 +6163,17 @@ async function handleAiReply(opts: {
     const ok = await sendWhatsAppMessage({ phone, message: reply, templateName: "ai_reply" });
 
     const { isProductEducationMessage } = await import("../lib/waSalesConversation.js");
-    const { shouldDeferToOpenAI: deferGpt } = await import("../lib/waCustomerPipeline.js");
+    const { shouldDeferToOpenAI: deferGpt, shouldPrioritizeProductDatabase } = await import("../lib/waCustomerPipeline.js");
     if (isProductEducationMessage(textBody) || deferGpt(textBody, classified)) {
       const { attachEducationProductCard } = await import("../lib/waCommerceProductCard.js");
       await attachEducationProductCard({ phone, textBody, waSettings }).catch(() => {});
-    } else if (intent.productQuery && preloadedCatalogProducts.length === 0) {
-      const { shouldShowProductCatalogNow: showCatalog } = await import("../lib/waSalesConversation.js");
-      if (showCatalog({ text: textBody, intent: intent.intent, state: currentState })) {
-        const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
-        const q = extractProductSearchQuery(textBody) || intent.productQuery;
+    } else if (
+      lastSearchQuery ||
+      (intent.productQuery && (shouldPrioritizeProductDatabase(textBody, classified) || preloadedCatalogProducts.length === 0))
+    ) {
+      const { extractProductSearchQuery } = await import("../lib/waProductEntity.js");
+      const q = lastSearchQuery || extractProductSearchQuery(textBody) || intent.productQuery;
+      if (q) {
         await deliverSingleProductOffer({ phone, query: q, waSettings, showMore: false }).catch(() => {});
       }
     }

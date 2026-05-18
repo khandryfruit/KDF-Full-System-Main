@@ -171,7 +171,7 @@ export function archiveCheckoutSnapshot(stateData: Record<string, any>, reason: 
 }
 
 export function preservedIdleState(stateData: Record<string, any>): Record<string, any> {
-  return {
+  const base: Record<string, any> = {
     preferredLanguage: stateData.preferredLanguage ?? stateData.waLang,
     waLang: stateData.waLang ?? stateData.preferredLanguage,
     waContactName: stateData.waContactName,
@@ -179,6 +179,13 @@ export function preservedIdleState(stateData: Record<string, any>): Record<strin
     lastUserMessage: stateData.lastUserMessage,
     ...(stateData.archivedCheckout ? { archivedCheckout: stateData.archivedCheckout } : {}),
   };
+  if (Array.isArray(stateData.cart) && stateData.cart.length > 0) {
+    base.cart = stateData.cart;
+    if (stateData.subtotal != null) base.subtotal = stateData.subtotal;
+    if (stateData.total != null) base.total = stateData.total;
+    if (stateData.delivery != null) base.delivery = stateData.delivery;
+  }
+  return base;
 }
 
 function recoveryBody(lang: ReturnType<typeof resolveWaLang>, repeatCount: number): string {

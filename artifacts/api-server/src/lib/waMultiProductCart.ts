@@ -46,6 +46,97 @@ export function isMultiProductOrderMessage(text: string): boolean {
   return parseMultiProductQueries(text).length >= 2;
 }
 
+/** "بادام بھی add کرو", "500g dates add", "add to cart badam" */
+export function isAddToCartIntentMessage(text: string): boolean {
+  const t = String(text ?? "").trim().toLowerCase();
+  if (!t) return false;
+  if (/\b(cart|checkout|view cart|remove|delete)\b/i.test(t) && !/\b(add|shamil|include)\b/i.test(t)) {
+    return false;
+  }
+  return (
+    /\b(add|shamil|include|bhi|also|aur|more)\b/i.test(t) &&
+    (productRootTermsFromQuery(t).length > 0 ||
+      /\b(kg|g|gram|kilo|1kg|500g|250g)\b/i.test(t) ||
+      /\b(chahiye|chahye|dena|bhejo|order|buy)\b/i.test(t))
+  );
+}
+
+export function isViewCartIntentMessage(text: string): boolean {
+  return /\b(view cart|cart dikhao|mera cart|my cart|cart dekho|cart check)\b/i.test(String(text ?? ""));
+}
+
+export function isCheckoutIntentMessage(text: string): boolean {
+  return /\b(checkout|confirm order|place order|order confirm|bill banao)\b/i.test(String(text ?? ""));
+}
+
+function parseWeightFromMessage(text: string): { productQuery: string; quantity: number; variantHint?: string } {
+  const raw = String(text ?? "").trim();
+  const weightMatch = raw.match(/\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilogram|g|gm|gram|grams)\b/i);
+  const qtyMatch =
+    raw.match(/\b(?:qty|quantity|pack|pcs)\s*(\d+)\b/i) ?? raw.match(/\b(\d+)\s*(?:x|pcs|pack)\b/i);
+  const variantHint = weightMatch
+    ? `${weightMatch[1]}${weightMatch[2]!.toLowerCase().startsWith("k") ? "KG" : "g"}`
+    : undefined;
+  const quantity = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
+  const productQuery =
+    extractProductSearchQuery(
+      raw
+        .replace(/\b(add|shamil|bhi|also|aur|cart|karo|krdo|please|mujhe|chahiye)\b/gi, " ")
+        .replace(/\b\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gram|grams)\b/gi, " ")
+        .trim(),
+    ) || extractProductSearchQuery(raw);
+  return { productQuery, quantity, variantHint };
+}
+
+/** Resolve one product line (with optional weight) and merge into session cart */
+export async function tryAddSingleProductToCart(opts: {
+  phone: string;
+  textBody: string;
+  waSettings: WaSettings;
+  existingCart?: WaCartLineItem[];
+}): Promise<{ cart: WaCartLineItem[]; line: WaCartLineItem } | null> {
+  const parsed = parseWeightFromMessage(opts.textBody);
+  let productQuery = parsed.productQuery;
+  let quantity = parsed.quantity;
+  let variantHint = parsed.variantHint;
+
+  const roots = productRootTermsFromQuery(opts.textBody);
+  if (!productQuery && roots.length) productQuery = roots[0]!;
+  if (!productQuery || productQuery.length < 2) return null;
+
+  const ranked = await searchCommerceProductsRanked(productQuery, 3);
+  if (!ranked.products.length) return null;
+
+  const wa = commerceToWaCatalogProducts(ranked.products)[0];
+  if (!wa) return null;
+
+  let variant = (wa.variantOptions ?? [])[0];
+  if (variantHint && wa.variantOptions?.length) {
+    const wanted = variantHint.toLowerCase().replace(/\s/g, "");
+    variant =
+      wa.variantOptions.find((v) => {
+        const vt = String(v.title).toLowerCase().replace(/\s/g, "");
+        return vt.includes(wanted) || wanted.includes(vt);
+      }) ?? variant;
+  }
+
+  const unitPrice = variant ? parsePrice(variant.price) : parsePrice(wa.rawPrice);
+  const line: WaCartLineItem = {
+    productName: wa.name,
+    commerceProductId: wa.commerceProductId ?? wa.shopifyProductId ?? "",
+    shopifyProductId: String(wa.commerceProductId ?? wa.shopifyProductId ?? ""),
+    variantId: variant ? String(variant.id) : "default",
+    variantTitle: variant ? String(variant.title) : "Standard",
+    quantity,
+    unitPrice,
+    imageUrl: resolveCommerceImageUrl(wa.imageUrl) ?? wa.imageUrl,
+    sku: variant?.sku,
+  };
+
+  const cart = mergeCartItems(opts.existingCart ?? [], line);
+  return { cart, line };
+}
+
 function parsePrice(value: unknown): number {
   const n = Number.parseFloat(String(value ?? "0"));
   return Number.isFinite(n) ? n : 0;
