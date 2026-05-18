@@ -22,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Wallet, Package, Banknote, Building2, Smartphone, MapPin, Navigation, ChevronDown, Truck, Zap, Clock, Loader2, Sparkles, ShieldCheck, Lock } from "lucide-react";
+import { CreditCard, Package, Building2, MapPin, Navigation, Truck, Loader2, Sparkles, ShieldCheck, Lock } from "lucide-react";
 
 const checkoutSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -67,15 +67,6 @@ async function fetchSameDaySettings() {
     return null;
   }
 }
-
-const PAYMENT_ICONS: Record<string, React.ReactNode> = {
-  cod: <Banknote className="w-4 h-4 text-primary" />,
-  jazzcash: <Smartphone className="w-4 h-4 text-red-600" />,
-  easypaisa: <Smartphone className="w-4 h-4 text-emerald-600" />,
-  card: <CreditCard className="w-4 h-4 text-blue-600" />,
-  wallet: <Wallet className="w-4 h-4 text-purple-600" />,
-  bank_transfer: <Building2 className="w-4 h-4 text-amber-600" />,
-};
 
 const FALLBACK_GATEWAYS = [
   { type: "cod", displayName: "Cash on Delivery", description: "Pay when your order arrives" },
@@ -360,8 +351,8 @@ export default function CheckoutPage() {
         <title>Checkout — KDF Plus</title>
       </Helmet>
 
-      <main className="kdf-page-shell px-4 py-6 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-8">
-        <div className="mb-6 flex flex-col gap-4 md:mb-8 lg:flex-row lg:items-end lg:justify-between">
+      <main className="kdf-page-shell kdf-checkout-page px-4 py-5 pb-24 sm:px-6 sm:pb-6 lg:px-8 lg:py-6">
+        <div className="mb-4 flex flex-col gap-3 md:mb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tight md:text-3xl">Checkout</h1>
             <p className="mt-1 hidden text-sm text-muted-foreground md:block">Secure checkout — your details are encrypted in transit.</p>
@@ -385,16 +376,16 @@ export default function CheckoutPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-              {/* Left: Delivery + Payment */}
-              <div className="space-y-5 md:space-y-6 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
+              {/* Left: Delivery → Shipping → Payment */}
+              <div className="kdf-checkout-left lg:col-span-2">
                 {/* Delivery Address */}
-                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6 [&_input]:md:h-11 [&_input]:md:rounded-xl [&_textarea]:md:rounded-xl">
-                  <h2 className="mb-1 flex items-center gap-2 text-base font-bold md:text-lg">
-                    <Package className="h-4 w-4 text-[#5FA800]" /> Delivery Address
+                <section className="kdf-checkout-panel kdf-checkout-panel--address [&_input]:h-10 [&_input]:text-sm [&_textarea]:text-sm md:[&_input]:h-10">
+                  <h2 className="kdf-checkout-panel__title">
+                    <Package /> Delivery Address
                   </h2>
-                  <p className="mb-4 text-xs text-muted-foreground md:text-sm">We use this for delivery updates and order confirmation.</p>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <p className="kdf-checkout-panel__sub">Delivery updates and order confirmation.</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Your full name" data-testid="input-name" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -593,151 +584,103 @@ export default function CheckoutPage() {
                       <FormItem className="sm:col-span-2"><FormLabel>Order Notes (optional)</FormLabel><FormControl><Input placeholder="Special instructions for delivery..." data-testid="input-notes" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                   </div>
-                </div>
+                </section>
 
                 {/* Shipping Method */}
-                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
-                  <h2 className="mb-4 flex items-center gap-2 text-base font-bold md:text-lg">
-                    <Truck className="h-4 w-4 text-[#5FA800]" /> Shipping Method
+                <section className="kdf-checkout-panel">
+                  <h2 className="kdf-checkout-panel__title">
+                    <Truck /> Shipping Method
                   </h2>
-                  <div className="space-y-2">
-                    {/* Standard Delivery */}
-                    <button
-                      type="button"
+                  <div className="kdf-checkout-options">
+                    <CheckoutOption
+                      selected={deliveryType === "standard"}
                       onClick={() => setDeliveryType("standard")}
-                      className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${
-                        deliveryType === "standard"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/30"
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                        deliveryType === "standard" ? "border-primary bg-primary" : "border-muted-foreground/30"
-                      }`}>
-                        {deliveryType === "standard" && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                      <div className="w-9 h-9 rounded-xl bg-muted/30 flex items-center justify-center flex-shrink-0">
-                        <Truck className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold">{standardMethodName}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{standardDeliveryTime}</p>
-                      </div>
-                      <div className="flex-shrink-0 text-right">
-                        {standardFee === 0 ? (
-                          <span className="text-sm font-bold text-green-600">FREE</span>
-                        ) : (
-                          <span className="text-sm font-bold">Rs. {standardFee}</span>
-                        )}
-                      </div>
-                    </button>
-
-                    {/* Same-Day Delivery — shown only when enabled + eligible city */}
+                      title={standardMethodName}
+                      hint={standardDeliveryTime}
+                      trailing={
+                        <span className={standardFee === 0 ? "is-free" : ""}>
+                          {standardFee === 0 ? "FREE" : `Rs. ${standardFee}`}
+                        </span>
+                      }
+                    />
                     {showSameDay && (
-                      <button
-                        type="button"
-                        onClick={() => beforeCutoff && setDeliveryType("same_day")}
+                      <CheckoutOption
+                        selected={deliveryType === "same_day"}
                         disabled={!beforeCutoff}
-                        className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed ${
-                          deliveryType === "same_day"
-                            ? "border-orange-500 bg-orange-50"
-                            : "border-border hover:border-orange-300"
-                        }`}
-                      >
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                          deliveryType === "same_day" ? "border-orange-500 bg-orange-500" : "border-muted-foreground/30"
-                        }`}>
-                          {deliveryType === "same_day" && <div className="w-2 h-2 rounded-full bg-white" />}
-                        </div>
-                        <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-                          <Zap className="w-4 h-4 text-orange-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-semibold">Same-Day Delivery</p>
-                            <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-semibold">Express</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {beforeCutoff
-                              ? `Order before ${fmt12h(sdCutoff)} — delivered today`
-                              : `Cutoff time passed (${fmt12h(sdCutoff)})`}
-                          </p>
-                        </div>
-                        <span className="text-sm font-bold flex-shrink-0">Rs. {sdPrice}</span>
-                      </button>
+                        accent="orange"
+                        onClick={() => beforeCutoff && setDeliveryType("same_day")}
+                        title="Same-Day Delivery"
+                        hint={
+                          beforeCutoff
+                            ? `Before ${fmt12h(sdCutoff)} · delivered today`
+                            : `Cutoff passed (${fmt12h(sdCutoff)})`
+                        }
+                        trailing={
+                          <>
+                            <span className="kdf-checkout-option__badge">Express</span>
+                            <span>Rs. {sdPrice}</span>
+                          </>
+                        }
+                      />
                     )}
                   </div>
-                </div>
+                </section>
 
                 {/* Payment Method */}
-                <div className="rounded-2xl border border-gray-100/90 bg-white/90 p-5 shadow-lg shadow-slate-900/[0.04] ring-1 ring-black/[0.04] backdrop-blur-xl md:rounded-[1.75rem] md:p-6">
-                  <h2 className="mb-4 flex items-center gap-2 text-base font-bold md:text-lg">
-                    <CreditCard className="h-4 w-4 text-[#5FA800]" /> Payment Method
+                <section className="kdf-checkout-panel">
+                  <h2 className="kdf-checkout-panel__title">
+                    <CreditCard /> Payment Method
                   </h2>
                   <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-                    <FormItem>
-                      <div className="space-y-2" data-testid="radio-payment">
-                        {gateways.map((gw: any) => (
-                          <button
-                            type="button"
+                    <FormItem className="space-y-0">
+                      <div className="kdf-checkout-options" data-testid="radio-payment">
+                        {gateways.map((gw: { type: string; displayName: string; description?: string }) => (
+                          <CheckoutOption
                             key={gw.type}
-                            data-testid={`radio-${gw.type}`}
-                            onClick={() => { field.onChange(gw.type); setReferenceNumber(""); }}
-                            className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all text-left ${
-                              field.value === gw.type
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/30"
-                            }`}
-                          >
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                              field.value === gw.type ? "border-primary bg-primary" : "border-muted-foreground/30"
-                            }`}>
-                              {field.value === gw.type && <div className="w-2 h-2 rounded-full bg-white" />}
-                            </div>
-                            <div className="w-9 h-9 rounded-xl bg-muted/30 flex items-center justify-center flex-shrink-0">
-                              {PAYMENT_ICONS[gw.type] ?? <CreditCard className="w-4 h-4 text-muted-foreground" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold">{gw.displayName}</p>
-                              {gw.description && <p className="text-xs text-muted-foreground mt-0.5">{gw.description}</p>}
-                            </div>
-                            {gw.type === "wallet" && (
-                              <span className={`text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0 ${
-                                walletBalance >= grandTotal ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
-                              }`}>
-                                Rs. {walletBalance.toLocaleString()}
-                              </span>
-                            )}
-                          </button>
+                            testId={`radio-${gw.type}`}
+                            selected={field.value === gw.type}
+                            onClick={() => {
+                              field.onChange(gw.type);
+                              setReferenceNumber("");
+                            }}
+                            title={gw.displayName}
+                            hint={
+                              gw.type === "wallet"
+                                ? "Pay using your wallet balance"
+                                : gw.type === "cod"
+                                  ? "Pay when your order arrives"
+                                  : gw.description || undefined
+                            }
+                            trailing={
+                              gw.type === "wallet" ? (
+                                <span
+                                  className={
+                                    walletBalance >= grandTotal ? "is-balance-ok" : "is-balance-low"
+                                  }
+                                >
+                                  Rs. {walletBalance.toLocaleString()}
+                                </span>
+                              ) : gw.type === "cod" ? (
+                                <span>Rs. 0</span>
+                              ) : undefined
+                            }
+                          />
                         ))}
                       </div>
-                      <FormMessage />
+                      <FormMessage className="mt-2" />
                     </FormItem>
                   )} />
 
-                  {/* COD note */}
                   {selectedPayment === "cod" && (
-                    <div className="mt-4 flex items-start gap-2.5 bg-green-50 border border-green-100 rounded-xl p-3">
-                      <span className="text-lg leading-none">💵</span>
-                      <div>
-                        <p className="text-xs font-bold text-green-800">Cash on Delivery</p>
-                        <p className="text-xs text-green-700 mt-0.5">No advance payment required. Pay in cash when your order is delivered to you.</p>
-                      </div>
-                    </div>
+                    <p className="kdf-checkout-hint kdf-checkout-hint--success">
+                      Pay in cash when your order is delivered — no advance payment required.
+                    </p>
                   )}
 
-                  {/* Wallet balance warning */}
                   {selectedPayment === "wallet" && walletBalance < grandTotal && (
-                    <div className="mt-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-                      <Wallet className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-bold text-red-700">Insufficient Wallet Balance</p>
-                        <p className="text-xs text-red-600 mt-0.5">
-                          Your balance (Rs. {walletBalance.toLocaleString()}) is less than the order total (Rs. {grandTotal.toLocaleString()}). Please top up or choose another payment method.
-                        </p>
-                      </div>
-                    </div>
+                    <p className="kdf-checkout-hint kdf-checkout-hint--warn">
+                      Insufficient balance (Rs. {walletBalance.toLocaleString()}). Top up or choose another method.
+                    </p>
                   )}
 
                   {/* Bank transfer details + reference number */}
@@ -771,7 +714,7 @@ export default function CheckoutPage() {
                       </div>
                     </div>
                   )}
-                </div>
+                </section>
               </div>
 
               {/* Right: Order Summary */}

@@ -11,6 +11,7 @@ export function CheckoutOption({
   trailing,
   accent = "green",
   className = "",
+  testId,
 }: {
   selected: boolean;
   disabled?: boolean;
@@ -20,12 +21,14 @@ export function CheckoutOption({
   trailing?: ReactNode;
   accent?: Accent;
   className?: string;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
+      data-testid={testId}
       className={[
         "kdf-checkout-option",
         selected ? "is-selected" : "",
