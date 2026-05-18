@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
 import {
@@ -22,7 +22,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProductRecommendations } from "@/components/ProductRecommendations";
-import { ProductDetailRecommendations } from "@/components/product-detail/ProductDetailRecommendations";
+const ProductDetailRecommendations = lazy(() =>
+  import("@/components/product-detail/ProductDetailRecommendations").then((m) => ({
+    default: m.ProductDetailRecommendations,
+  })),
+);
 import { MobilePurchaseSheet, type PurchaseIntent } from "@/components/purchase/MobilePurchaseSheet";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -779,7 +783,9 @@ function ProductDetailPageView() {
           </div>
         </div>
 
-        <ProductDetailRecommendations productId={productId} />
+        <Suspense fallback={null}>
+          <ProductDetailRecommendations productId={productId} />
+        </Suspense>
 
         {/* ── Accordion: Description / Reviews / Shipping ── */}
         <div className="mt-10 space-y-3">

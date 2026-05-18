@@ -36,7 +36,7 @@ export function ProductDetailRecommendations({ productId }: { productId: number 
           obs.disconnect();
         }
       },
-      { rootMargin: "280px 0px" },
+      { rootMargin: "200px 0px", threshold: 0.01 },
     );
     obs.observe(el);
     return () => obs.disconnect();

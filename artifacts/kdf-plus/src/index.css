@@ -1036,8 +1036,8 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
 .kdf-carousel {
   position: relative;
   width: 100%;
+  max-width: 100%;
   overflow: hidden;
-  touch-action: pan-x;
   container-type: inline-size;
   container-name: kdf-carousel;
 }
@@ -1100,12 +1100,22 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   scrollbar-width: none;
   overscroll-behavior: contain;
   overscroll-behavior-x: contain;
-  touch-action: pan-x;
   cursor: grab;
   scroll-padding-inline: 4px;
   border-radius: 4px;
 }
-.kdf-carousel-scroller:active {
+/* PDP related / FBT — native momentum scroll; never block vertical page scroll */
+.kdf-carousel-scroller.is-native-scroll {
+  touch-action: manipulation;
+  cursor: default;
+  scroll-snap-type: x mandatory;
+}
+.kdf-carousel--rec .kdf-carousel-scroller,
+.kdf-pdp-rec-carousel .kdf-carousel-scroller {
+  touch-action: manipulation;
+  overscroll-behavior-x: contain;
+}
+.kdf-carousel-scroller:active:not(.is-native-scroll) {
   cursor: grabbing;
 }
 .kdf-carousel-scroller.is-auto {
@@ -1418,7 +1428,6 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   position: relative;
   width: 100%;
   overflow: hidden;
-  touch-action: pan-x;
 }
 .kdf-premium-carousel-fade {
   position: absolute;
@@ -1614,7 +1623,7 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  overflow-x: clip;
+  overflow-x: hidden;
   overscroll-behavior-x: contain;
 }
 .kdf-pdp-rec-lazy,
@@ -1622,8 +1631,12 @@ html.kdf-purchase-sheet-open .kdf-suppress-for-fullscreen-sheet {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  overflow-x: clip;
+  overflow-x: hidden;
   overscroll-behavior-x: contain;
+}
+.kdf-pdp-rec-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
 }
 
 /* Recommendation / related product grids */

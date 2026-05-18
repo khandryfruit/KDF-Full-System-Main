@@ -30,18 +30,13 @@ export function useKdfCarousel({
   const drag = useRef({
     pointerId: -1,
     startX: 0,
+    startY: 0,
     startScroll: 0,
     /** True once movement exceeds threshold — avoids eating button/link clicks */
     dragging: false,
   });
-  const touch = useRef({
-    startX: 0,
-    startY: 0,
-    startScroll: 0,
-    axis: null as "x" | "y" | null,
-  });
 
-  const DRAG_THRESHOLD_PX = 8;
+  const DRAG_THRESHOLD_PX = 10;
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) return false;
@@ -52,6 +47,8 @@ export function useKdfCarousel({
 
   const copies = itemCount <= 1 ? 1 : loopCopies;
   const canLoop = itemCount > 1 && copies > 1;
+  /** PDP related/FBT strips: native momentum scroll — avoids freezing vertical page scroll */
+  const nativeScrollOnly = !canLoop && !autoScroll;
 
   const pause = useCallback(() => {
     setPaused(true);
@@ -125,6 +122,7 @@ export function useKdfCarousel({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (nativeScrollOnly) return;
       if (e.button !== 0) return;
       if (isInteractiveTarget(e.target)) return;
 
@@ -135,32 +133,44 @@ export function useKdfCarousel({
       drag.current = {
         dragging: false,
         startX: e.clientX,
+        startY: e.clientY,
         startScroll: el.scrollLeft,
         pointerId: e.pointerId,
       };
     },
-    [pause],
+    [nativeScrollOnly, pause],
   );
 
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (drag.current.pointerId !== e.pointerId) return;
-    const el = scrollerRef.current;
-    if (!el) return;
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (nativeScrollOnly) return;
+      if (drag.current.pointerId !== e.pointerId) return;
+      const el = scrollerRef.current;
+      if (!el) return;
 
-    const dx = e.clientX - drag.current.startX;
-    if (!drag.current.dragging) {
-      if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
-      drag.current.dragging = true;
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
+      const dx = e.clientX - drag.current.startX;
+      const dy = e.clientY - drag.current.startY;
+
+      if (!drag.current.dragging) {
+        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          drag.current.pointerId = -1;
+          setPaused(false);
+          return;
+        }
+        drag.current.dragging = true;
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
       }
-    }
 
-    e.preventDefault();
-    el.scrollLeft = drag.current.startScroll - dx;
-  }, []);
+      e.preventDefault();
+      el.scrollLeft = drag.current.startScroll - dx;
+    },
+    [nativeScrollOnly],
+  );
 
   const endPointer = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -184,15 +194,17 @@ export function useKdfCarousel({
 
   const onWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
+      if (nativeScrollOnly) return;
       const el = scrollerRef.current;
       if (!el) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey) return;
       const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
       if (Math.abs(delta) < 1) return;
       pause();
       el.scrollLeft += delta;
       scheduleResume();
     },
-    [pause, scheduleResume],
+    [nativeScrollOnly, pause, scheduleResume],
   );
 
   const scrollBy = useCallback(
@@ -217,60 +229,7 @@ export function useKdfCarousel({
     [],
   );
 
-  /** Lock horizontal swipes inside the scroller so the page does not shift sideways */
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (isInteractiveTarget(e.target)) return;
-      if (e.touches.length !== 1) return;
-      pause();
-      const t = e.touches[0];
-      touch.current = {
-        startX: t.clientX,
-        startY: t.clientY,
-        startScroll: el.scrollLeft,
-        axis: null,
-      };
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const dx = t.clientX - touch.current.startX;
-      const dy = t.clientY - touch.current.startY;
-
-      if (!touch.current.axis) {
-        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
-        touch.current.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      }
-
-      if (touch.current.axis === "y") return;
-
-      e.preventDefault();
-      el.scrollLeft = touch.current.startScroll - dx;
-    };
-
-    const onTouchEnd = () => {
-      touch.current.axis = null;
-      scheduleResume();
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [itemCount, pause, scheduleResume]);
-
-  const rootProps = pauseOnHover
+  const rootProps = pauseOnHover && !nativeScrollOnly
     ? {
         onMouseEnter: () => setHoverPaused(true),
         onMouseLeave: () => setHoverPaused(false),
@@ -285,14 +244,17 @@ export function useKdfCarousel({
     measure,
     scrollBy,
     rootProps,
-    scrollerClassName: canLoop ? "kdf-carousel-scroller is-auto" : "kdf-carousel-scroller is-snap",
-    scrollerProps: {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp: endPointer,
-      onPointerCancel: endPointer,
-      onWheel,
-      style: { touchAction: "pan-x" as const },
-    },
+    scrollerClassName: canLoop
+      ? "kdf-carousel-scroller is-auto"
+      : "kdf-carousel-scroller is-snap" + (nativeScrollOnly ? " is-native-scroll" : ""),
+    scrollerProps: nativeScrollOnly
+      ? { "data-native-scroll": true }
+      : {
+          onPointerDown,
+          onPointerMove,
+          onPointerUp: endPointer,
+          onPointerCancel: endPointer,
+          onWheel,
+        },
   };
 }

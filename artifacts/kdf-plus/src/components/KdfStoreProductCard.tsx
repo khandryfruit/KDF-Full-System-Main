@@ -139,6 +139,7 @@ function KdfStoreProductCardInner({
               alt={displayName}
               loading="lazy"
               decoding="async"
+              fetchPriority={compact ? "low" : "auto"}
               width={400}
               height={400}
               sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 260px"
