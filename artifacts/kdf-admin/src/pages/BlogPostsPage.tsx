@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListBlogPosts,
   useCreateBlogPost,
@@ -45,12 +45,15 @@ import {
   Eye,
   FileText,
   Image as ImageIcon,
+  Loader2,
+  Zap,
 } from "lucide-react";
 import { AIGenerateWithPreview, AIGenerateButton } from "@/components/AIGenerateButton";
 import { RichDescriptionEditor } from "@/components/RichDescriptionEditor";
 import { uploadFile } from "@/lib/upload";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { getProductImageSrc } from "@/lib/imageUrl";
+import { indexContentNow, indexSelectedContent } from "@/lib/googleIndexingApi";
 
 const EMPTY_FORM = {
   title: "",
@@ -356,6 +359,7 @@ export default function BlogPostsPage() {
   const [editing, setEditing] = useState<BlogPost | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all");
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<number>>(() => new Set());
 
   const { data, isLoading } = useListBlogPosts(
     statusFilter !== "all" ? { status: statusFilter } : {}
@@ -363,6 +367,19 @@ export default function BlogPostsPage() {
   const createMutation = useCreateBlogPost();
   const updateMutation = useUpdateBlogPost();
   const deleteMutation = useDeleteBlogPost();
+  const indexOneMutation = useMutation({
+    mutationFn: (id: number) => indexContentNow("blog", id),
+    onSuccess: (result) => toast({ title: "Blog post queued for indexing", description: result.url }),
+    onError: (e: Error) => toast({ variant: "destructive", title: "Indexing failed", description: e.message }),
+  });
+  const indexSelectedMutation = useMutation({
+    mutationFn: (ids: number[]) => indexSelectedContent("blog", ids),
+    onSuccess: (result) => {
+      toast({ title: "Selected blog posts queued", description: result.message });
+      setSelectedPostIds(new Set());
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Bulk indexing failed", description: e.message }),
+  });
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: getListBlogPostsQueryKey() });
@@ -431,6 +448,26 @@ export default function BlogPostsPage() {
   }
 
   const posts = data?.posts ?? [];
+  const selectedVisible = posts.filter((post) => selectedPostIds.has(post.id)).length;
+  const allVisibleSelected = posts.length > 0 && selectedVisible === posts.length;
+  const togglePostSelection = (id: number, checked: boolean) => {
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllPosts = (checked: boolean) => {
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      posts.forEach((post) => {
+        if (checked) next.add(post.id);
+        else next.delete(post.id);
+      });
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -454,7 +491,7 @@ export default function BlogPostsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {(["all", "published", "draft"] as const).map((s) => (
           <Button
             key={s}
@@ -469,6 +506,28 @@ export default function BlogPostsPage() {
         <span className="text-sm text-muted-foreground ml-2">
           {data?.total ?? 0} post{data?.total !== 1 ? "s" : ""}
         </span>
+        {posts.length > 0 && (
+          <label className="ml-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={(e) => toggleAllPosts(e.target.checked)}
+            />
+            Select visible
+          </label>
+        )}
+        {selectedPostIds.size > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={indexSelectedMutation.isPending}
+            onClick={() => indexSelectedMutation.mutate(Array.from(selectedPostIds))}
+          >
+            {indexSelectedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+            Index Selected ({selectedPostIds.size})
+          </Button>
+        )}
       </div>
 
       {/* Posts list */}
@@ -498,6 +557,13 @@ export default function BlogPostsPage() {
               key={post.id}
               className="flex items-start gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
             >
+              <input
+                type="checkbox"
+                className="mt-5"
+                checked={selectedPostIds.has(post.id)}
+                onChange={(e) => togglePostSelection(post.id, e.target.checked)}
+                aria-label={`Select ${post.title}`}
+              />
               {post.featuredImagePath ? (
                 <img
                   src={`/api/storage${post.featuredImagePath}`}
@@ -548,6 +614,15 @@ export default function BlogPostsPage() {
                     <Eye className="h-4 w-4" />
                   </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Index Now"
+                  disabled={indexOneMutation.isPending}
+                  onClick={() => indexOneMutation.mutate(post.id)}
+                >
+                  <Zap className="h-4 w-4 text-blue-600" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

@@ -6,7 +6,7 @@ import {
   useListCategories,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
 
 import {
@@ -41,6 +41,7 @@ import { Separator } from "@/components/ui/separator";
 import { apiPublicUrl } from "@/lib/apiBase";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { optimizeCloudinaryDelivery } from "@/lib/imageDelivery";
+import { indexContentNow, indexSelectedContent } from "@/lib/googleIndexingApi";
 import {
   AutoWeightVariationPanel,
   defaultAutoVariationConfig,
@@ -716,6 +717,7 @@ export default function ProductsPage() {
   const [tagInput, setTagInput] = useState("");
   const [createdProduct, setCreatedProduct] = useState<{ id: number; slug: string; name: string } | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(() => new Set());
 
   const { data: response, isLoading } = useAdminProducts(page, search, statusFilter);
   const { data: categoriesRes } = useListCategories();
@@ -724,9 +726,44 @@ export default function ProductsPage() {
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
   const deleteMutation = useDeleteProduct();
+  const indexOneMutation = useMutation({
+    mutationFn: (id: number) => indexContentNow("product", id),
+    onSuccess: (data) => toast({ title: "Product queued for indexing", description: data.url }),
+    onError: (e: Error) => toast({ variant: "destructive", title: "Indexing failed", description: e.message }),
+  });
+  const indexSelectedMutation = useMutation({
+    mutationFn: (ids: number[]) => indexSelectedContent("product", ids),
+    onSuccess: (data) => {
+      toast({ title: "Selected products queued", description: data.message });
+      setSelectedProductIds(new Set());
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Bulk indexing failed", description: e.message }),
+  });
 
   const invalidateProducts = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+  };
+
+  const pageProducts = response?.items ?? [];
+  const selectedOnPage = pageProducts.filter((p) => selectedProductIds.has(p.id)).length;
+  const allOnPageSelected = pageProducts.length > 0 && selectedOnPage === pageProducts.length;
+  const toggleProductSelection = (id: number, checked: boolean) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllProductsOnPage = (checked: boolean) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      pageProducts.forEach((p) => {
+        if (checked) next.add(p.id);
+        else next.delete(p.id);
+      });
+      return next;
+    });
   };
 
   const handleToggleActive = async (product: any) => {
@@ -1486,6 +1523,18 @@ export default function ProductsPage() {
             <span>{response?.inactiveCount} product{response?.inactiveCount !== 1 ? "s" : ""} hidden from store</span>
           </div>
         )}
+        {selectedProductIds.size > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={indexSelectedMutation.isPending}
+            onClick={() => indexSelectedMutation.mutate(Array.from(selectedProductIds))}
+          >
+            {indexSelectedMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Index Selected ({selectedProductIds.size})
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -1493,6 +1542,14 @@ export default function ProductsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-9">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={(e) => toggleAllProductsOnPage(e.target.checked)}
+                  aria-label="Select all products on this page"
+                />
+              </TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>Stock</TableHead>
@@ -1505,7 +1562,7 @@ export default function ProductsPage() {
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <TableRow key={i}>
-                  {[200, 80, 50, 60, 60, 80].map((w, j) => (
+                  {[24, 200, 80, 50, 60, 60, 80].map((w, j) => (
                     <TableCell key={j}><Skeleton className={`h-4 w-[${w}px]`} /></TableCell>
                   ))}
                 </TableRow>
@@ -1516,6 +1573,14 @@ export default function ProductsPage() {
                 const varCount = variants?.length ?? 0;
                 return (
                   <TableRow key={product.id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.has(product.id)}
+                        onChange={(e) => toggleProductSelection(product.id, e.target.checked)}
+                        aria-label={`Select ${product.name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className={`flex items-center gap-3 ${!product.active ? "opacity-60" : ""}`}>
                         {(product as any).images?.[0] ? (
@@ -1619,6 +1684,16 @@ export default function ProductsPage() {
                           }
                         </Button>
                         <ProductWaChatTestDialog productId={product.id} productName={product.name} />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Index Now"
+                          disabled={indexOneMutation.isPending}
+                          onClick={() => indexOneMutation.mutate(product.id)}
+                        >
+                          <Zap className="w-4 h-4 text-blue-600" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(product)}>
                           <Edit className="w-4 h-4 text-muted-foreground" />
                         </Button>
@@ -1632,7 +1707,7 @@ export default function ProductsPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   No products found.
                 </TableCell>

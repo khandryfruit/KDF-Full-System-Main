@@ -25,7 +25,7 @@ router.post("/categories", adminMiddleware as any, async (req, res) => {
     import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
       getSafeSettings().then((s) => {
         if (!s.siteUrl || !s["autoIndexEnabled"]) return;
-        const url = buildIndexingPathUrl(s.siteUrl, "categories", slug);
+        const url = buildIndexingPathUrl(s.siteUrl, "category", slug);
         if (url) autoIndex(url, "category");
       }).catch(() => {});
     }).catch(() => {});
@@ -44,7 +44,7 @@ router.put("/categories/:id", adminMiddleware as any, async (req, res) => {
       import("../lib/googleIndexing").then(({ autoIndex, getSafeSettings, buildIndexingPathUrl }) => {
         getSafeSettings().then((s) => {
           if (!s.siteUrl || !s["autoIndexEnabled"]) return;
-          const url = buildIndexingPathUrl(s.siteUrl, "categories", cat.slug);
+          const url = buildIndexingPathUrl(s.siteUrl, "category", cat.slug);
           if (url) autoIndex(url, "category");
         }).catch(() => {});
       }).catch(() => {});

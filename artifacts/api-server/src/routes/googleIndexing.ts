@@ -24,6 +24,67 @@ import {
 
 const router: IRouter = Router();
 
+type IndexableType = "product" | "category" | "blog" | "page";
+
+const STATIC_PAGE_PATHS = [
+  { id: "home", label: "Homepage", path: "/", contentType: "page" as const },
+  { id: "products", label: "All Products", path: "/products", contentType: "page" as const },
+  { id: "categories", label: "Categories", path: "/categories", contentType: "page" as const },
+  { id: "blog", label: "Blog", path: "/blog", contentType: "blog" as const },
+  { id: "track", label: "Track Order", path: "/track", contentType: "page" as const },
+];
+
+async function getNormalizedIndexingSiteUrl(): Promise<string> {
+  const rows = await db.select().from(googleIndexingSettingsTable).limit(1);
+  const siteUrl = normalizeSiteUrl(rows[0]?.siteUrl);
+  if (!siteUrl) {
+    throw new Error("Site URL not configured — set https://khanbabadryfruits.com in Settings");
+  }
+  return siteUrl;
+}
+
+async function queueIndexingUrl(
+  url: string | null,
+  contentType: "product" | "category" | "blog" | "page",
+): Promise<boolean> {
+  if (!url) return false;
+  const result = await manualIndex(url, contentType);
+  return !result.error;
+}
+
+async function resolveIndexingUrl(type: IndexableType, id: number | string, siteUrl: string) {
+  if (type === "product") {
+    const [product] = await db
+      .select({ slug: productsTable.slug })
+      .from(productsTable)
+      .where(eq(productsTable.id, Number(id)))
+      .limit(1);
+    return { url: product?.slug ? buildIndexingPathUrl(siteUrl, "products", product.slug) : null, contentType: "product" as const };
+  }
+  if (type === "category") {
+    const [category] = await db
+      .select({ slug: categoriesTable.slug })
+      .from(categoriesTable)
+      .where(eq(categoriesTable.id, Number(id)))
+      .limit(1);
+    return { url: category?.slug ? buildIndexingPathUrl(siteUrl, "category", category.slug) : null, contentType: "category" as const };
+  }
+  if (type === "blog") {
+    const [post] = await db
+      .select({ slug: blogPostsTable.slug })
+      .from(blogPostsTable)
+      .where(eq(blogPostsTable.id, Number(id)))
+      .limit(1);
+    return { url: post?.slug ? buildIndexingPathUrl(siteUrl, "blog", post.slug) : null, contentType: "blog" as const };
+  }
+
+  const page = STATIC_PAGE_PATHS.find((p) => p.id === String(id));
+  return {
+    url: page ? normalizeIndexingUrl(page.path, siteUrl).url : null,
+    contentType: page?.contentType ?? ("page" as const),
+  };
+}
+
 router.get("/admin/seo/indexing/settings", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
     const safe = await getSafeSettings();
@@ -176,12 +237,13 @@ router.post("/admin/seo/indexing/retry/:id", adminMiddleware as any, async (req:
 
 router.get("/admin/seo/indexing/stats", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
-    const [total, success, failed, pending, rateL] = await Promise.all([
+    const [total, success, failed, pending, rateL, lastIndexed] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` }).from(indexingLogsTable),
       db.select({ count: sql<number>`count(*)::int` }).from(indexingLogsTable).where(eq(indexingLogsTable.status, "success")),
       db.select({ count: sql<number>`count(*)::int` }).from(indexingLogsTable).where(eq(indexingLogsTable.status, "failed")),
       db.select({ count: sql<number>`count(*)::int` }).from(indexingLogsTable).where(eq(indexingLogsTable.status, "pending")),
       db.select({ count: sql<number>`count(*)::int` }).from(indexingLogsTable).where(eq(indexingLogsTable.status, "rate_limited")),
+      db.select({ createdAt: indexingLogsTable.createdAt }).from(indexingLogsTable).orderBy(desc(indexingLogsTable.createdAt)).limit(1),
     ]);
 
     const safe = await getSafeSettings();
@@ -201,6 +263,7 @@ router.get("/admin/seo/indexing/stats", adminMiddleware as any, async (req: Requ
       dailyQuotaLimit: 180,
       quotaResetDate: safe.quotaResetDate,
       queueLength: getQueueLength(),
+      lastIndexedAt: lastIndexed[0]?.createdAt ?? null,
     });
   } catch (err) {
     req.log.error(err);
@@ -247,29 +310,85 @@ router.post("/admin/seo/indexing/submit", adminMiddleware as any, async (req: Re
   }
 });
 
-router.post("/admin/seo/indexing/bulk", adminMiddleware as any, async (req: Request, res: Response) => {
+router.post("/admin/seo/indexing/index-now", adminMiddleware as any, async (req: Request, res: Response) => {
   try {
-    const { type } = req.body as { type: "products" | "categories" | "blogs" | "all" };
-
-    const rows = await db.select().from(googleIndexingSettingsTable).limit(1);
-    const siteUrl = normalizeSiteUrl(rows[0]?.siteUrl);
-    if (!siteUrl) {
-      res.status(400).json({ error: "Site URL not configured — use https://khanbabadryfruits.com in Settings" });
+    const { type, id } = req.body as { type?: IndexableType; id?: number | string };
+    if (!type || id === undefined || id === null) {
+      res.status(400).json({ error: "type and id are required" });
       return;
     }
+
+    const siteUrl = await getNormalizedIndexingSiteUrl();
+    const resolved = await resolveIndexingUrl(type, id, siteUrl);
+    if (!resolved.url) {
+      res.status(404).json({ error: `Could not resolve ${type} URL for indexing` });
+      return;
+    }
+
+    const queued = await queueIndexingUrl(resolved.url, resolved.contentType);
+    res.json({
+      ok: queued,
+      queued: queued ? 1 : 0,
+      skipped: queued ? 0 : 1,
+      url: resolved.url,
+      message: queued ? "URL queued for indexing" : "URL was skipped",
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to index URL" });
+  }
+});
+
+router.post("/admin/seo/indexing/index-selected", adminMiddleware as any, async (req: Request, res: Response) => {
+  try {
+    const { type, ids } = req.body as { type?: Exclude<IndexableType, "page">; ids?: Array<number | string> };
+    const cleanIds = Array.from(new Set((ids ?? []).map((id) => Number(id)).filter(Number.isFinite)));
+    if (!type || cleanIds.length === 0) {
+      res.status(400).json({ error: "type and ids are required" });
+      return;
+    }
+
+    const siteUrl = await getNormalizedIndexingSiteUrl();
+    let queued = 0;
+    let skipped = 0;
+
+    for (const id of cleanIds.slice(0, 250)) {
+      const resolved = await resolveIndexingUrl(type, id, siteUrl);
+      const ok = await queueIndexingUrl(resolved.url, resolved.contentType);
+      if (ok) queued++;
+      else skipped++;
+    }
+
+    res.json({
+      ok: true,
+      queued,
+      skipped,
+      message: `${queued} selected URL(s) queued, ${skipped} skipped`,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to index selected URLs" });
+  }
+});
+
+router.post("/admin/seo/indexing/bulk", adminMiddleware as any, async (req: Request, res: Response) => {
+  try {
+    const { type } = req.body as { type: "products" | "categories" | "blogs" | "pages" | "all" };
+
+    const siteUrl = await getNormalizedIndexingSiteUrl();
 
     let queued = 0;
     let skipped = 0;
 
-    const queuePath = async (pathType: "products" | "categories" | "blog", slug: string) => {
-      const seg = pathType === "blog" ? "blog" : pathType;
+    const queuePath = async (pathType: "products" | "category" | "blog", slug: string) => {
+      const seg = pathType;
       const full = buildIndexingPathUrl(siteUrl, seg, slug);
       if (!full) {
         skipped++;
         return;
       }
-      const r = await manualIndex(full, pathType === "blog" ? "blog" : pathType === "products" ? "product" : "category");
-      if (!r.error) queued++;
+      const ok = await queueIndexingUrl(full, pathType === "blog" ? "blog" : pathType === "products" ? "product" : "category");
+      if (ok) queued++;
       else skipped++;
     };
 
@@ -291,7 +410,7 @@ router.post("/admin/seo/indexing/bulk", adminMiddleware as any, async (req: Requ
         .where(eq(categoriesTable.active, true))
         .limit(100);
       for (const c of cats) {
-        if (c.slug) await queuePath("categories", c.slug);
+        if (c.slug) await queuePath("category", c.slug);
       }
     }
 
@@ -303,6 +422,14 @@ router.post("/admin/seo/indexing/bulk", adminMiddleware as any, async (req: Requ
         .limit(200);
       for (const b of posts) {
         if (b.slug) await queuePath("blog", b.slug);
+      }
+    }
+
+    if (type === "pages" || type === "all") {
+      for (const page of STATIC_PAGE_PATHS) {
+        const ok = await queueIndexingUrl(normalizeIndexingUrl(page.path, siteUrl).url, page.contentType);
+        if (ok) queued++;
+        else skipped++;
       }
     }
 

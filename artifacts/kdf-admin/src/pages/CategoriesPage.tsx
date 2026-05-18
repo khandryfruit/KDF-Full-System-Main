@@ -6,14 +6,14 @@ import {
   useDeleteCategory,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Upload, X, Loader2, ImageIcon, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, X, Loader2, ImageIcon, Search, Zap } from "lucide-react";
 import { AIGenerateButton } from "@/components/AIGenerateButton";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { apiPublicUrl } from "@/lib/apiBase";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { indexContentNow, indexSelectedContent } from "@/lib/googleIndexingApi";
 
 function getImageUrl(path: string): string {
   if (!path) return "";
@@ -261,6 +262,7 @@ export default function CategoriesPage() {
   const [tab, setTab] = useState("general");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm());
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<number>>(() => new Set());
 
   const { data: response, isLoading } = useListCategories();
   const queryClient = useQueryClient();
@@ -268,11 +270,45 @@ export default function CategoriesPage() {
   const createMutation = useCreateCategory();
   const updateMutation = useUpdateCategory();
   const deleteMutation = useDeleteCategory();
+  const indexOneMutation = useMutation({
+    mutationFn: (id: number) => indexContentNow("category", id),
+    onSuccess: (data) => toast({ title: "Category queued for indexing", description: data.url }),
+    onError: (e: Error) => toast({ variant: "destructive", title: "Indexing failed", description: e.message }),
+  });
+  const indexSelectedMutation = useMutation({
+    mutationFn: (ids: number[]) => indexSelectedContent("category", ids),
+    onSuccess: (data) => {
+      toast({ title: "Selected categories queued", description: data.message });
+      setSelectedCategoryIds(new Set());
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Bulk indexing failed", description: e.message }),
+  });
 
   const allCategories = (response as any[]) ?? [];
   const filtered = search
     ? allCategories.filter((c: any) => c.name.toLowerCase().includes(search.toLowerCase()) || c.slug.toLowerCase().includes(search.toLowerCase()))
     : allCategories;
+  const selectedVisible = filtered.filter((c: any) => selectedCategoryIds.has(c.id)).length;
+  const allVisibleSelected = filtered.length > 0 && selectedVisible === filtered.length;
+
+  const toggleCategorySelection = (id: number, checked: boolean) => {
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllCategories = (checked: boolean) => {
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((cat: any) => {
+        if (checked) next.add(cat.id);
+        else next.delete(cat.id);
+      });
+      return next;
+    });
+  };
 
   const parentOptions = allCategories.filter((c: any) => !editingId || c.id !== editingId);
 
@@ -587,14 +623,28 @@ export default function CategoriesPage() {
       </div>
 
       {/* Search */}
-      <div className="relative w-full sm:w-80">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search categories…"
-          className="pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search categories…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {selectedCategoryIds.size > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={indexSelectedMutation.isPending}
+            onClick={() => indexSelectedMutation.mutate(Array.from(selectedCategoryIds))}
+          >
+            {indexSelectedMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Index Selected ({selectedCategoryIds.size})
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -602,6 +652,14 @@ export default function CategoriesPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-9">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(e) => toggleAllCategories(e.target.checked)}
+                  aria-label="Select all visible categories"
+                />
+              </TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Parent</TableHead>
               <TableHead>Image</TableHead>
@@ -614,7 +672,7 @@ export default function CategoriesPage() {
             {isLoading ? (
               [...Array(4)].map((_, i) => (
                 <TableRow key={i}>
-                  {[200, 100, 60, 80, 60, 80].map((w, j) => (
+                  {[24, 200, 100, 60, 80, 60, 80].map((w, j) => (
                     <TableCell key={j}><Skeleton className={`h-4 w-[${w}px]`} /></TableCell>
                   ))}
                 </TableRow>
@@ -625,6 +683,14 @@ export default function CategoriesPage() {
                 const hasSeo = !!(cat.metaTitle || cat.metaDescription);
                 return (
                   <TableRow key={cat.id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedCategoryIds.has(cat.id)}
+                        onChange={(e) => toggleCategorySelection(cat.id, e.target.checked)}
+                        aria-label={`Select ${cat.name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         {cat.color && (
@@ -672,6 +738,16 @@ export default function CategoriesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Index Now"
+                          disabled={indexOneMutation.isPending}
+                          onClick={() => indexOneMutation.mutate(cat.id)}
+                        >
+                          <Zap className="w-4 h-4 text-blue-600" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(cat)}>
                           <Edit className="w-4 h-4 text-muted-foreground" />
                         </Button>
@@ -685,7 +761,7 @@ export default function CategoriesPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   {search ? `No categories matching "${search}"` : "No categories yet."}
                 </TableCell>
               </TableRow>

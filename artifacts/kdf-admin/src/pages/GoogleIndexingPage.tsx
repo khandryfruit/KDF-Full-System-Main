@@ -64,6 +64,7 @@ interface Stats {
   dailyQuotaLimit: number;
   quotaResetDate?: string;
   queueLength: number;
+  lastIndexedAt?: string | null;
 }
 
 const DEFAULT_SITE = "https://khanbabadryfruits.com";
@@ -315,6 +316,7 @@ function DashboardTab({ stats, settings }: { stats?: Stats; settings?: IndexingS
           <div className="space-y-1 text-xs text-muted-foreground">
             <p>Site URL: <strong className="text-foreground">{settings?.siteUrl || "Not set"}</strong></p>
             <p>Auto-Index: <strong className={settings?.autoIndexEnabled ? "text-green-600" : "text-red-500"}>{settings?.autoIndexEnabled ? "Enabled" : "Disabled"}</strong></p>
+            <p>Last indexed: <strong className="text-foreground">{stats?.lastIndexedAt ? new Date(stats.lastIndexedAt).toLocaleString() : "Never"}</strong></p>
           </div>
         </div>
       </div>
@@ -624,6 +626,17 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
     onSuccess: (d: any) => { onDone(); toast({ title: `✅ ${d.queued} URLs queued`, description: d.message }); },
     onError: (e: any) => toast({ variant: "destructive", title: e.message ?? "Bulk submit failed" }),
   });
+  const quickPageMutation = useMutation({
+    mutationFn: (id: string) => apiFetch("/api/admin/seo/indexing/index-now", {
+      method: "POST",
+      body: JSON.stringify({ type: "page", id }),
+    }),
+    onSuccess: (d: { url?: string }) => {
+      onDone();
+      toast({ title: "✅ Page queued for indexing", description: d.url });
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: e.message ?? "Page indexing failed" }),
+  });
 
   const notConfigured = !settings?.hasCredentials || !settings?.siteUrl;
 
@@ -712,6 +725,7 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
               { type: "products",   label: "All Products",   icon: <Package className="w-4 h-4 text-blue-500" /> },
               { type: "categories", label: "All Categories", icon: <Tag className="w-4 h-4 text-purple-500" /> },
               { type: "blogs",      label: "All Blog Posts", icon: <FileText className="w-4 h-4 text-green-500" /> },
+              { type: "pages",      label: "Core Pages", icon: <Globe className="w-4 h-4 text-slate-500" /> },
               { type: "all",        label: "Submit All",     icon: <Zap className="w-4 h-4 text-amber-500" /> },
             ].map(b => (
               <button
@@ -724,6 +738,37 @@ function SubmitTab({ settings, onDone }: { settings?: IndexingSettings; onDone: 
                 <span className="text-xs font-semibold text-center">{b.label}</span>
                 {bulkMutation.isPending && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
               </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-slate-500" /> One-Click Pages</CardTitle>
+          <CardDescription className="text-xs">Quickly submit core storefront pages with canonical HTTPS URLs.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {[
+              { id: "home", label: "Homepage" },
+              { id: "products", label: "Products" },
+              { id: "categories", label: "Categories" },
+              { id: "blog", label: "Blog" },
+              { id: "track", label: "Track Order" },
+            ].map((page) => (
+              <Button
+                key={page.id}
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1"
+                disabled={quickPageMutation.isPending || !settings?.hasCredentials}
+                onClick={() => quickPageMutation.mutate(page.id)}
+              >
+                {quickPageMutation.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                {page.label}
+              </Button>
             ))}
           </div>
         </CardContent>
